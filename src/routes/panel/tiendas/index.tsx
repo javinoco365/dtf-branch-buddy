@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Store, ShoppingBag, Building2, Receipt, KeyRound } from "lucide-react";
+import { Plus, Store, ShoppingBag, Receipt, KeyRound, Building2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { guardarCredencialesWoo } from "@/lib/admin.functions";
 
@@ -36,16 +36,6 @@ type WizardForm = {
   nombre: string;
   slug: string;
   color: string;
-  // Empresa
-  razon_social: string;
-  cif: string;
-  direccion: string;
-  codigo_postal: string;
-  ciudad: string;
-  provincia: string;
-  pais: string;
-  email_fiscal: string;
-  telefono: string;
   // Facturación
   serie_factura: string;
   siguiente_numero_factura: number;
@@ -62,15 +52,6 @@ const FORM_INICIAL: WizardForm = {
   nombre: "",
   slug: "",
   color: "#3b82f6",
-  razon_social: "",
-  cif: "",
-  direccion: "",
-  codigo_postal: "",
-  ciudad: "",
-  provincia: "",
-  pais: "España",
-  email_fiscal: "",
-  telefono: "",
   serie_factura: "F",
   siguiente_numero_factura: 1,
   iva_default: 21,
@@ -215,15 +196,6 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
           nombre: f.nombre,
           slug,
           color: f.color || null,
-          razon_social: f.razon_social || null,
-          cif: f.cif || null,
-          direccion: f.direccion || null,
-          codigo_postal: f.codigo_postal || null,
-          ciudad: f.ciudad || null,
-          provincia: f.provincia || null,
-          pais: f.pais || null,
-          email_fiscal: f.email_fiscal || null,
-          telefono: f.telefono || null,
           serie_factura: f.serie_factura || "F",
           siguiente_numero_factura: Number(f.siguiente_numero_factura) || 1,
           iva_default: Number(f.iva_default) || 21,
@@ -272,9 +244,8 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
       </DialogHeader>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="identidad" className="gap-1"><Store className="h-3.5 w-3.5" />Identidad</TabsTrigger>
-          <TabsTrigger value="empresa" className="gap-1"><Building2 className="h-3.5 w-3.5" />Empresa</TabsTrigger>
           <TabsTrigger value="facturacion" className="gap-1"><Receipt className="h-3.5 w-3.5" />Facturación</TabsTrigger>
           <TabsTrigger value="woo" className="gap-1"><ShoppingBag className="h-3.5 w-3.5" />WooCommerce</TabsTrigger>
         </TabsList>
@@ -301,27 +272,22 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
               <span className="text-xs text-muted-foreground">Se usa en el sidebar y badges.</span>
             </div>
           </div>
-        </TabsContent>
-
-        {/* === EMPRESA === */}
-        <TabsContent value="empresa" className="space-y-3 mt-4">
-          <Row>
-            <FieldText label="Razón social" v={f.razon_social} on={(v) => set("razon_social", v)} />
-            <FieldText label="CIF / NIF" v={f.cif} on={(v) => set("cif", v)} placeholder="B12345678" />
-          </Row>
-          <Row>
-            <FieldText label="Email fiscal" v={f.email_fiscal} on={(v) => set("email_fiscal", v)} />
-            <FieldText label="Teléfono" v={f.telefono} on={(v) => set("telefono", v)} />
-          </Row>
-          <FieldText label="Dirección" v={f.direccion} on={(v) => set("direccion", v)} />
-          <Row>
-            <FieldText label="Código postal" v={f.codigo_postal} on={(v) => set("codigo_postal", v)} />
-            <FieldText label="Ciudad" v={f.ciudad} on={(v) => set("ciudad", v)} />
-          </Row>
-          <Row>
-            <FieldText label="Provincia" v={f.provincia} on={(v) => set("provincia", v)} />
-            <FieldText label="País" v={f.pais} on={(v) => set("pais", v)} />
-          </Row>
+          <div className="rounded-lg border bg-muted/30 p-3 flex items-start gap-3">
+            <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>
+                Esta tienda heredará automáticamente los datos fiscales de la SL
+                (razón social, CIF, dirección, etc.).
+              </p>
+              <p>
+                Si necesitas modificarlos, ve a{" "}
+                <Link to="/panel/configuracion-empresa" className="underline text-primary">
+                  Ajustes › Datos de la empresa
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
         </TabsContent>
 
         {/* === FACTURACIÓN === */}
@@ -388,9 +354,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
             <Button
               variant="ghost"
               onClick={() =>
-                setTab(
-                  tab === "empresa" ? "identidad" : tab === "facturacion" ? "empresa" : "facturacion",
-                )
+                setTab(tab === "facturacion" ? "identidad" : "facturacion")
               }
             >
               Anterior
@@ -399,9 +363,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
           {tab !== "woo" ? (
             <Button
               onClick={() =>
-                setTab(
-                  tab === "identidad" ? "empresa" : tab === "empresa" ? "facturacion" : "woo",
-                )
+                setTab(tab === "identidad" ? "facturacion" : "woo")
               }
             >
               Siguiente

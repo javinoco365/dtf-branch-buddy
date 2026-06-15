@@ -17,6 +17,7 @@ import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
 import { Route as PanelProyectosRouteImport } from './routes/panel/proyectos'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
+import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
 import { Route as PanelTiendasIndexRouteImport } from './routes/panel/tiendas/index'
@@ -71,6 +72,12 @@ const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
   path: '/facturacion-global',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelConfiguracionEmpresaRoute =
+  PanelConfiguracionEmpresaRouteImport.update({
+    id: '/configuracion-empresa',
+    path: '/configuracion-empresa',
+    getParentRoute: () => PanelRouteRoute,
+  } as any)
 const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
   id: '/configuracion',
   path: '/configuracion',
@@ -153,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/proyectos': typeof PanelProyectosRoute
@@ -175,6 +183,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/proyectos': typeof PanelProyectosRoute
@@ -198,6 +207,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/proyectos': typeof PanelProyectosRoute
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/cobros'
     | '/panel/configuracion'
+    | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
     | '/panel/proyectos'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/cobros'
     | '/panel/configuracion'
+    | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
     | '/panel/proyectos'
@@ -267,6 +279,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/cobros'
     | '/panel/configuracion'
+    | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
     | '/panel/proyectos'
@@ -347,6 +360,13 @@ declare module '@tanstack/react-router' {
       path: '/facturacion-global'
       fullPath: '/panel/facturacion-global'
       preLoaderRoute: typeof PanelFacturacionGlobalRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/configuracion-empresa': {
+      id: '/panel/configuracion-empresa'
+      path: '/configuracion-empresa'
+      fullPath: '/panel/configuracion-empresa'
+      preLoaderRoute: typeof PanelConfiguracionEmpresaRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/configuracion': {
@@ -476,6 +496,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 interface PanelRouteRouteChildren {
   PanelCobrosRoute: typeof PanelCobrosRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
+  PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
   PanelProyectosRoute: typeof PanelProyectosRoute
@@ -488,6 +509,7 @@ interface PanelRouteRouteChildren {
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelCobrosRoute: PanelCobrosRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
+  PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelPedidosRoute: PanelPedidosRoute,
   PanelProyectosRoute: PanelProyectosRoute,

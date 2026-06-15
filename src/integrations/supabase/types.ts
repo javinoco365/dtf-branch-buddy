@@ -79,6 +79,51 @@ export type Database = {
           },
         ]
       }
+      empresa_global: {
+        Row: {
+          cif: string | null
+          ciudad: string | null
+          codigo_postal: string | null
+          created_at: string
+          direccion: string | null
+          email_fiscal: string | null
+          id: boolean
+          pais: string | null
+          provincia: string | null
+          razon_social: string | null
+          telefono: string | null
+          updated_at: string
+        }
+        Insert: {
+          cif?: string | null
+          ciudad?: string | null
+          codigo_postal?: string | null
+          created_at?: string
+          direccion?: string | null
+          email_fiscal?: string | null
+          id?: boolean
+          pais?: string | null
+          provincia?: string | null
+          razon_social?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cif?: string | null
+          ciudad?: string | null
+          codigo_postal?: string | null
+          created_at?: string
+          direccion?: string | null
+          email_fiscal?: string | null
+          id?: boolean
+          pais?: string | null
+          provincia?: string | null
+          razon_social?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       enlaces_seguimiento: {
         Row: {
           codigo_seguimiento: string | null
