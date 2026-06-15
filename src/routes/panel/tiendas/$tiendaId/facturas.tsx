@@ -253,6 +253,7 @@ function NuevaFacturaDialog({
   tienda: any;
   onDone: () => void;
 }) {
+  const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
   const [notas, setNotas] = useState("");
   const [estado, setEstado] = useState<"emitida" | "borrador" | "pagada">("emitida");
@@ -327,45 +328,14 @@ function NuevaFacturaDialog({
         .update({ siguiente_numero_factura: numero + 1 })
         .eq("id", tiendaId);
 
-      const blob = await generarFacturaPDF({
-        serie,
-        numero,
-        fecha,
-        emisor: {
-          nombre: tienda?.razon_social ?? tienda?.nombre ?? "—",
-          cif: tienda?.cif ?? "—",
-          direccion: tienda?.direccion ?? "—",
-        },
-        cliente: { nombre: cliente.nombre, nif: cliente.nif, direccion: cliente.direccion },
-        items: filas.map((f) => ({
-          descripcion: f.descripcion,
-          cantidad: f.cantidad,
-          unidad: f.unidad,
-          precio_unitario: f.precio_unitario,
-          iva_rate: f.iva_rate,
-          subtotal: f.subtotal,
-          iva: f.iva,
-          total: f.total,
-        })),
-        base_imponible: totales.base,
-        iva_total: totales.iva,
-        total: totales.total,
-        notas,
-      });
-
-      const path = `${tiendaId}/${serie}-${String(numero).padStart(5, "0")}.pdf`;
-      const up = await supabase.storage
-        .from("facturas")
-        .upload(path, blob, { contentType: "application/pdf", upsert: true });
-      if (up.error) {
-        toast.warning(
-          "Factura creada, pero no se pudo subir el PDF (¿bucket 'facturas' no creado?). Se descarga localmente."
-        );
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-      } else {
-        await supabase.from("facturas").update({ pdf_url: path }).eq("id", factura.id);
+      try {
+        const res = await generarPDFFn({ data: { factura_id: factura.id } });
+        if (res?.url) window.open(res.url, "_blank");
         toast.success(`Factura ${serie}-${String(numero).padStart(5, "0")} emitida`);
+      } catch (errPdf: any) {
+        toast.warning(
+          `Factura creada, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
+        );
       }
       onDone();
     } catch (e: any) {
