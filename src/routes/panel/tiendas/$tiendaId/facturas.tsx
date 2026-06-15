@@ -33,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { eur, fechaCorta } from "@/lib/format";
-import { generarFacturaPDF } from "@/lib/pdf-factura";
 import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import { toast } from "sonner";
 import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
