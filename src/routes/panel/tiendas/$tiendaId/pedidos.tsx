@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PedidosTable } from "@/components/PedidosTable";
-import { TIENDAS_DEMO } from "@/lib/demo-data";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({
   component: Pedidos,
@@ -22,23 +21,17 @@ function Pedidos() {
     },
   });
 
-  let h = 0;
-  for (let i = 0; i < tiendaId.length; i++) h = (h * 31 + tiendaId.charCodeAt(i)) >>> 0;
-  const tiendaDemo =
-    (tienda && TIENDAS_DEMO.find((t) => t.toLowerCase() === tienda.toLowerCase())) ||
-    TIENDAS_DEMO[h % TIENDAS_DEMO.length];
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Pedidos · {tienda ?? tiendaDemo}
+          Pedidos · {tienda ?? "Tienda"}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Pedidos sincronizados desde WooCommerce.
+          Pedidos sincronizados con WooCommerce y manuales.
         </p>
       </div>
-      <PedidosTable tienda={tiendaDemo} />
+      <PedidosTable tiendaId={tiendaId} />
     </div>
   );
 }
