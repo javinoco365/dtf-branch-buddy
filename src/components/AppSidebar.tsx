@@ -26,6 +26,7 @@ import {
   Building2,
   Receipt,
   Wrench,
+  Wallet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -98,6 +99,14 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/cobros"}>
+                  <Link to="/panel/cobros">
+                    <Wallet />
+                    <span>Cobros Pendientes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -129,6 +138,7 @@ export function AppSidebar() {
                         <SubItem to="/panel/tiendas/$tiendaId/pedidos" tiendaId={t.id} label="Pedidos" icon={ShoppingCart} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/facturas" tiendaId={t.id} label="Facturas" icon={FileText} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/facturacion" tiendaId={t.id} label="Facturación" icon={Receipt} pathname={pathname} />
+                        <SubItem to="/panel/tiendas/$tiendaId/cobros" tiendaId={t.id} label="Cobros" icon={Wallet} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/clientes" tiendaId={t.id} label="Clientes" icon={Users} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/ajustes" tiendaId={t.id} label="Ajustes" icon={Settings} pathname={pathname} />
                       </SidebarMenuSub>
