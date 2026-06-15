@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Calendar as CalendarIcon, AlertTriangle, Trash2 } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Proyecto = {
@@ -431,6 +431,3 @@ function ProyectoForm({
     </Dialog>
   );
 }
-
-// avoid unused-warning when component used without Pencil
-export const _PencilUsed = Pencil;
