@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
+import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -34,16 +35,23 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
+  id: '/facturacion-global',
+  path: '/facturacion-global',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel': typeof PanelIndexRoute
 }
 export interface FileRoutesById {
@@ -51,14 +59,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/panel' | '/auth' | '/panel/'
+  fullPaths: '/' | '/panel' | '/auth' | '/panel/facturacion-global' | '/panel/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/panel'
-  id: '__root__' | '/' | '/panel' | '/auth' | '/panel/'
+  to: '/' | '/auth' | '/panel/facturacion-global' | '/panel'
+  id:
+    | '__root__'
+    | '/'
+    | '/panel'
+    | '/auth'
+    | '/panel/facturacion-global'
+    | '/panel/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -97,14 +112,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelIndexRouteImport
       parentRoute: typeof PanelRouteRoute
     }
+    '/panel/facturacion-global': {
+      id: '/panel/facturacion-global'
+      path: '/facturacion-global'
+      fullPath: '/panel/facturacion-global'
+      preLoaderRoute: typeof PanelFacturacionGlobalRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
   }
 }
 
 interface PanelRouteRouteChildren {
+  PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelIndexRoute: typeof PanelIndexRoute
 }
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
+  PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelIndexRoute: PanelIndexRoute,
 }
 
