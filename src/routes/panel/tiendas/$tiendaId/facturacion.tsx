@@ -390,15 +390,3 @@ function Bloque({
     </Card>
   );
 }
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {titulo}
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-        <div className="mt-3 text-3xl font-bold tracking-tight text-primary">{valor}</div>
-      </CardContent>
-    </Card>
-  );
-}
