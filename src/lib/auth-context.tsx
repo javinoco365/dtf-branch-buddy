@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { comprobarAdminActual } from "@/lib/admin.functions";
 
 type AuthCtx = {
   session: Session | null;
@@ -23,35 +24,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const refreshAdmin = async (s: Session | null) => {
+    if (!s?.user) {
+      setIsAdmin(false);
+      return;
+    }
+
+    try {
+      const result = await comprobarAdminActual();
+      setIsAdmin(result.isAdmin);
+    } catch {
+      setIsAdmin(false);
+    }
+  };
+
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      if (s?.user) {
-        setTimeout(async () => {
-          const { data } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", s.user.id)
-            .eq("role", "admin")
-            .maybeSingle();
-          setIsAdmin(!!data);
-        }, 0);
-      } else {
-        setIsAdmin(false);
-      }
+      setTimeout(() => refreshAdmin(s), 0);
     });
 
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      if (data.session?.user) {
-        const { data: r } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.session.user.id)
-          .eq("role", "admin")
-          .maybeSingle();
-        setIsAdmin(!!r);
-      }
+      await refreshAdmin(data.session);
       setLoading(false);
     });
 
