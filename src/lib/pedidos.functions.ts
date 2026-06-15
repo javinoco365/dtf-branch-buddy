@@ -273,7 +273,17 @@ export const updatePedido = createServerFn({ method: "POST" })
     if (!pedido) throw new Error("Pedido no encontrado");
     await ensureAccess(supabaseAdmin, context.userId, pedido.tienda_id);
 
-    const patch: Record<string, any> = {};
+    const patch: {
+      cliente_nombre?: string | null;
+      cliente_email?: string | null;
+      metodo_pago?: string | null;
+      envio?: number;
+      notas?: string | null;
+      subtotal?: number;
+      iva?: number;
+      metros_total?: number;
+      total?: number;
+    } = {};
     if (data.cliente_nombre !== undefined) patch.cliente_nombre = data.cliente_nombre;
     if (data.cliente_email !== undefined) patch.cliente_email = data.cliente_email;
     if (data.metodo_pago !== undefined) patch.metodo_pago = data.metodo_pago;
