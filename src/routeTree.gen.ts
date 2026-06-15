@@ -16,6 +16,7 @@ import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelTiendasIndexRouteImport } from './routes/panel/tiendas/index'
 import { Route as PanelTiendasTiendaIdRouteRouteImport } from './routes/panel/tiendas/$tiendaId/route'
+import { Route as PanelTiendasTiendaIdIndexRouteImport } from './routes/panel/tiendas/$tiendaId/index'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -53,6 +54,12 @@ const PanelTiendasTiendaIdRouteRoute =
     path: '/tiendas/$tiendaId',
     getParentRoute: () => PanelRouteRoute,
   } as any)
+const PanelTiendasTiendaIdIndexRoute =
+  PanelTiendasTiendaIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PanelTiendasTiendaIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,16 +67,17 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
-  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRoute
+  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
+  '/panel/tiendas/$tiendaId/': typeof PanelTiendasTiendaIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel': typeof PanelIndexRoute
-  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRoute
   '/panel/tiendas': typeof PanelTiendasIndexRoute
+  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -78,8 +86,9 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
-  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRoute
+  '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
+  '/panel/tiendas/$tiendaId/': typeof PanelTiendasTiendaIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,14 +100,15 @@ export interface FileRouteTypes {
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
     | '/panel/tiendas/'
+    | '/panel/tiendas/$tiendaId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/panel/facturacion-global'
     | '/panel'
-    | '/panel/tiendas/$tiendaId'
     | '/panel/tiendas'
+    | '/panel/tiendas/$tiendaId'
   id:
     | '__root__'
     | '/'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
     | '/panel/tiendas/'
+    | '/panel/tiendas/$tiendaId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -167,20 +178,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelTiendasTiendaIdRouteRouteImport
       parentRoute: typeof PanelRouteRoute
     }
+    '/panel/tiendas/$tiendaId/': {
+      id: '/panel/tiendas/$tiendaId/'
+      path: '/'
+      fullPath: '/panel/tiendas/$tiendaId/'
+      preLoaderRoute: typeof PanelTiendasTiendaIdIndexRouteImport
+      parentRoute: typeof PanelTiendasTiendaIdRouteRoute
+    }
   }
 }
+
+interface PanelTiendasTiendaIdRouteRouteChildren {
+  PanelTiendasTiendaIdIndexRoute: typeof PanelTiendasTiendaIdIndexRoute
+}
+
+const PanelTiendasTiendaIdRouteRouteChildren: PanelTiendasTiendaIdRouteRouteChildren =
+  {
+    PanelTiendasTiendaIdIndexRoute: PanelTiendasTiendaIdIndexRoute,
+  }
+
+const PanelTiendasTiendaIdRouteRouteWithChildren =
+  PanelTiendasTiendaIdRouteRoute._addFileChildren(
+    PanelTiendasTiendaIdRouteRouteChildren,
+  )
 
 interface PanelRouteRouteChildren {
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelIndexRoute: typeof PanelIndexRoute
-  PanelTiendasTiendaIdRouteRoute: typeof PanelTiendasTiendaIdRouteRoute
+  PanelTiendasTiendaIdRouteRoute: typeof PanelTiendasTiendaIdRouteRouteWithChildren
   PanelTiendasIndexRoute: typeof PanelTiendasIndexRoute
 }
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelIndexRoute: PanelIndexRoute,
-  PanelTiendasTiendaIdRouteRoute: PanelTiendasTiendaIdRouteRoute,
+  PanelTiendasTiendaIdRouteRoute: PanelTiendasTiendaIdRouteRouteWithChildren,
   PanelTiendasIndexRoute: PanelTiendasIndexRoute,
 }
 
