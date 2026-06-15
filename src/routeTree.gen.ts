@@ -19,6 +19,7 @@ import { Route as PanelTiendasTiendaIdRouteRouteImport } from './routes/panel/ti
 import { Route as PanelTiendasTiendaIdIndexRouteImport } from './routes/panel/tiendas/$tiendaId/index'
 import { Route as PanelTiendasTiendaIdProductosRouteImport } from './routes/panel/tiendas/$tiendaId/productos'
 import { Route as PanelTiendasTiendaIdPedidosRouteImport } from './routes/panel/tiendas/$tiendaId/pedidos'
+import { Route as PanelTiendasTiendaIdFacturasRouteImport } from './routes/panel/tiendas/$tiendaId/facturas'
 import { Route as PanelTiendasTiendaIdClientesRouteImport } from './routes/panel/tiendas/$tiendaId/clientes'
 
 const AuthRoute = AuthRouteImport.update({
@@ -75,6 +76,12 @@ const PanelTiendasTiendaIdPedidosRoute =
     path: '/pedidos',
     getParentRoute: () => PanelTiendasTiendaIdRouteRoute,
   } as any)
+const PanelTiendasTiendaIdFacturasRoute =
+  PanelTiendasTiendaIdFacturasRouteImport.update({
+    id: '/facturas',
+    path: '/facturas',
+    getParentRoute: () => PanelTiendasTiendaIdRouteRoute,
+  } as any)
 const PanelTiendasTiendaIdClientesRoute =
   PanelTiendasTiendaIdClientesRouteImport.update({
     id: '/clientes',
@@ -91,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
   '/panel/tiendas/$tiendaId/': typeof PanelTiendasTiendaIdIndexRoute
@@ -102,6 +110,7 @@ export interface FileRoutesByTo {
   '/panel': typeof PanelIndexRoute
   '/panel/tiendas': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdIndexRoute
@@ -116,6 +125,7 @@ export interface FileRoutesById {
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
   '/panel/tiendas/$tiendaId/': typeof PanelTiendasTiendaIdIndexRoute
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/$tiendaId'
     | '/panel/tiendas/'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
     | '/panel/tiendas/$tiendaId/'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/panel'
     | '/panel/tiendas'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
     | '/panel/tiendas/$tiendaId'
@@ -155,6 +167,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/$tiendaId'
     | '/panel/tiendas/'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
     | '/panel/tiendas/$tiendaId/'
@@ -238,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelTiendasTiendaIdPedidosRouteImport
       parentRoute: typeof PanelTiendasTiendaIdRouteRoute
     }
+    '/panel/tiendas/$tiendaId/facturas': {
+      id: '/panel/tiendas/$tiendaId/facturas'
+      path: '/facturas'
+      fullPath: '/panel/tiendas/$tiendaId/facturas'
+      preLoaderRoute: typeof PanelTiendasTiendaIdFacturasRouteImport
+      parentRoute: typeof PanelTiendasTiendaIdRouteRoute
+    }
     '/panel/tiendas/$tiendaId/clientes': {
       id: '/panel/tiendas/$tiendaId/clientes'
       path: '/clientes'
@@ -250,6 +270,7 @@ declare module '@tanstack/react-router' {
 
 interface PanelTiendasTiendaIdRouteRouteChildren {
   PanelTiendasTiendaIdClientesRoute: typeof PanelTiendasTiendaIdClientesRoute
+  PanelTiendasTiendaIdFacturasRoute: typeof PanelTiendasTiendaIdFacturasRoute
   PanelTiendasTiendaIdPedidosRoute: typeof PanelTiendasTiendaIdPedidosRoute
   PanelTiendasTiendaIdProductosRoute: typeof PanelTiendasTiendaIdProductosRoute
   PanelTiendasTiendaIdIndexRoute: typeof PanelTiendasTiendaIdIndexRoute
@@ -258,6 +279,7 @@ interface PanelTiendasTiendaIdRouteRouteChildren {
 const PanelTiendasTiendaIdRouteRouteChildren: PanelTiendasTiendaIdRouteRouteChildren =
   {
     PanelTiendasTiendaIdClientesRoute: PanelTiendasTiendaIdClientesRoute,
+    PanelTiendasTiendaIdFacturasRoute: PanelTiendasTiendaIdFacturasRoute,
     PanelTiendasTiendaIdPedidosRoute: PanelTiendasTiendaIdPedidosRoute,
     PanelTiendasTiendaIdProductosRoute: PanelTiendasTiendaIdProductosRoute,
     PanelTiendasTiendaIdIndexRoute: PanelTiendasTiendaIdIndexRoute,
