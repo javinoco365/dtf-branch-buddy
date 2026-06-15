@@ -244,9 +244,8 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
       </DialogHeader>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="identidad" className="gap-1"><Store className="h-3.5 w-3.5" />Identidad</TabsTrigger>
-          <TabsTrigger value="empresa" className="gap-1"><Building2 className="h-3.5 w-3.5" />Empresa</TabsTrigger>
           <TabsTrigger value="facturacion" className="gap-1"><Receipt className="h-3.5 w-3.5" />Facturación</TabsTrigger>
           <TabsTrigger value="woo" className="gap-1"><ShoppingBag className="h-3.5 w-3.5" />WooCommerce</TabsTrigger>
         </TabsList>
@@ -273,27 +272,22 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
               <span className="text-xs text-muted-foreground">Se usa en el sidebar y badges.</span>
             </div>
           </div>
-        </TabsContent>
-
-        {/* === EMPRESA === */}
-        <TabsContent value="empresa" className="space-y-3 mt-4">
-          <Row>
-            <FieldText label="Razón social" v={f.razon_social} on={(v) => set("razon_social", v)} />
-            <FieldText label="CIF / NIF" v={f.cif} on={(v) => set("cif", v)} placeholder="B12345678" />
-          </Row>
-          <Row>
-            <FieldText label="Email fiscal" v={f.email_fiscal} on={(v) => set("email_fiscal", v)} />
-            <FieldText label="Teléfono" v={f.telefono} on={(v) => set("telefono", v)} />
-          </Row>
-          <FieldText label="Dirección" v={f.direccion} on={(v) => set("direccion", v)} />
-          <Row>
-            <FieldText label="Código postal" v={f.codigo_postal} on={(v) => set("codigo_postal", v)} />
-            <FieldText label="Ciudad" v={f.ciudad} on={(v) => set("ciudad", v)} />
-          </Row>
-          <Row>
-            <FieldText label="Provincia" v={f.provincia} on={(v) => set("provincia", v)} />
-            <FieldText label="País" v={f.pais} on={(v) => set("pais", v)} />
-          </Row>
+          <div className="rounded-lg border bg-muted/30 p-3 flex items-start gap-3">
+            <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>
+                Esta tienda heredará automáticamente los datos fiscales de la SL
+                (razón social, CIF, dirección, etc.).
+              </p>
+              <p>
+                Si necesitas modificarlos, ve a{" "}
+                <Link to="/panel/configuracion-empresa" className="underline text-primary">
+                  Ajustes › Datos de la empresa
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
         </TabsContent>
 
         {/* === FACTURACIÓN === */}
