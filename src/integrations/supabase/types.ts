@@ -267,6 +267,57 @@ export type Database = {
           },
         ]
       }
+      pedido_devoluciones: {
+        Row: {
+          created_at: string
+          fecha: string
+          id: string
+          importe: number
+          motivo: string | null
+          pedido_id: string
+          tienda_id: string
+          updated_at: string
+          woo_refund_id: number | null
+        }
+        Insert: {
+          created_at?: string
+          fecha?: string
+          id?: string
+          importe?: number
+          motivo?: string | null
+          pedido_id: string
+          tienda_id: string
+          updated_at?: string
+          woo_refund_id?: number | null
+        }
+        Update: {
+          created_at?: string
+          fecha?: string
+          id?: string
+          importe?: number
+          motivo?: string | null
+          pedido_id?: string
+          tienda_id?: string
+          updated_at?: string
+          woo_refund_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedido_devoluciones_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_devoluciones_tienda_id_fkey"
+            columns: ["tienda_id"]
+            isOneToOne: false
+            referencedRelation: "tiendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_items: {
         Row: {
           cantidad: number
