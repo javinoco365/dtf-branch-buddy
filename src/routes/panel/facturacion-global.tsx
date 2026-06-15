@@ -40,7 +40,13 @@ function FacturacionGlobal() {
   const totalIva = facturas.reduce((s, f) => s + Number(f.iva_total), 0);
   const totalGeneral = facturas.reduce((s, f) => s + Number(f.total), 0);
 
-  const colores = ["hsl(var(--primary))", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+  const colores = [
+    "var(--color-primary)",
+    "var(--color-chart-2)",
+    "var(--color-chart-3)",
+    "var(--color-chart-4)",
+    "var(--color-chart-5)",
+  ];
 
   return (
     <div className="space-y-6">

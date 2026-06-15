@@ -59,6 +59,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-status-procesando: var(--status-procesando);
+  --color-status-completado: var(--status-completado);
+  --color-status-cancelado: var(--status-cancelado);
+  --color-status-pendiente: var(--status-pendiente);
 }
 
 :root {
@@ -139,6 +143,10 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --status-procesando: oklch(0.68 0.15 235);
+  --status-completado: oklch(0.72 0.16 150);
+  --status-cancelado: oklch(0.70 0.19 27);
+  --status-pendiente: oklch(0.78 0.15 80);
 }
 
 @layer base {
