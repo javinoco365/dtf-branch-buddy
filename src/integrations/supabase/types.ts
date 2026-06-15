@@ -432,6 +432,56 @@ export type Database = {
         }
         Relationships: []
       }
+      proyectos: {
+        Row: {
+          cliente_nombre: string | null
+          created_at: string
+          descripcion: string | null
+          estado: Database["public"]["Enums"]["proyecto_estado"]
+          fecha_prevista: string | null
+          id: string
+          nombre: string
+          notas: string | null
+          prioridad: Database["public"]["Enums"]["proyecto_prioridad"]
+          tienda_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          cliente_nombre?: string | null
+          created_at?: string
+          descripcion?: string | null
+          estado?: Database["public"]["Enums"]["proyecto_estado"]
+          fecha_prevista?: string | null
+          id?: string
+          nombre: string
+          notas?: string | null
+          prioridad?: Database["public"]["Enums"]["proyecto_prioridad"]
+          tienda_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cliente_nombre?: string | null
+          created_at?: string
+          descripcion?: string | null
+          estado?: Database["public"]["Enums"]["proyecto_estado"]
+          fecha_prevista?: string | null
+          id?: string
+          nombre?: string
+          notas?: string | null
+          prioridad?: Database["public"]["Enums"]["proyecto_prioridad"]
+          tienda_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proyectos_tienda_id_fkey"
+            columns: ["tienda_id"]
+            isOneToOne: false
+            referencedRelation: "tiendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tienda_credenciales: {
         Row: {
           consumer_key: string
@@ -602,6 +652,8 @@ export type Database = {
         | "enviado"
         | "entregado"
         | "cancelado"
+      proyecto_estado: "planificado" | "en_curso" | "completado" | "cancelado"
+      proyecto_prioridad: "baja" | "media" | "alta"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -740,6 +792,8 @@ export const Constants = {
         "entregado",
         "cancelado",
       ],
+      proyecto_estado: ["planificado", "en_curso", "completado", "cancelado"],
+      proyecto_prioridad: ["baja", "media", "alta"],
     },
   },
 } as const
