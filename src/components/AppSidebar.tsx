@@ -19,7 +19,6 @@ import {
   LayoutDashboard,
   Store,
   Users,
-  Package,
   ShoppingCart,
   FileText,
   Settings,
