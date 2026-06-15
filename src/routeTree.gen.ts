@@ -14,6 +14,7 @@ import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
+import { Route as PanelTiendasIndexRouteImport } from './routes/panel/tiendas/index'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -40,6 +41,11 @@ const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
   path: '/facturacion-global',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelTiendasIndexRoute = PanelTiendasIndexRouteImport.update({
+  id: '/tiendas/',
+  path: '/tiendas/',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,12 +53,14 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
+  '/panel/tiendas/': typeof PanelTiendasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel': typeof PanelIndexRoute
+  '/panel/tiendas': typeof PanelTiendasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,12 +69,19 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/': typeof PanelIndexRoute
+  '/panel/tiendas/': typeof PanelTiendasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/panel' | '/auth' | '/panel/facturacion-global' | '/panel/'
+  fullPaths:
+    | '/'
+    | '/panel'
+    | '/auth'
+    | '/panel/facturacion-global'
+    | '/panel/'
+    | '/panel/tiendas/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/panel/facturacion-global' | '/panel'
+  to: '/' | '/auth' | '/panel/facturacion-global' | '/panel' | '/panel/tiendas'
   id:
     | '__root__'
     | '/'
@@ -74,6 +89,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/facturacion-global'
     | '/panel/'
+    | '/panel/tiendas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,17 +135,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelFacturacionGlobalRouteImport
       parentRoute: typeof PanelRouteRoute
     }
+    '/panel/tiendas/': {
+      id: '/panel/tiendas/'
+      path: '/tiendas'
+      fullPath: '/panel/tiendas/'
+      preLoaderRoute: typeof PanelTiendasIndexRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
   }
 }
 
 interface PanelRouteRouteChildren {
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelIndexRoute: typeof PanelIndexRoute
+  PanelTiendasIndexRoute: typeof PanelTiendasIndexRoute
 }
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelIndexRoute: PanelIndexRoute,
+  PanelTiendasIndexRoute: PanelTiendasIndexRoute,
 }
 
 const PanelRouteRouteWithChildren = PanelRouteRoute._addFileChildren(
