@@ -30,7 +30,6 @@ import {
   Printer,
   Building2,
   Receipt,
-  Wrench,
   Wallet,
   CalendarClock,
   ChevronRight,
@@ -175,8 +174,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {isAdmin && (
-          <SidebarGroup>
+        <SidebarGroup>
             <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
               Sistema
             </SidebarGroupLabel>
@@ -193,15 +191,24 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
                     <Link to="/panel/configuracion">
-                      <Wrench />
-                      <span>Configuración general</span>
+                      <Settings />
+                      <span>Ajustes</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {isAdmin && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === "/panel/usuarios"}>
+                      <Link to="/panel/usuarios">
+                        <Users />
+                        <span>Usuarios</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed && (
