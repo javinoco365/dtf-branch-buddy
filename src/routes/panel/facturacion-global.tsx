@@ -1,116 +1,436 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo, useState } from "react";
+import {
+  addMonths,
+  addWeeks,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { eur, fechaCorta } from "@/lib/format";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { eur, metros, numero } from "@/lib/format";
+import {
+  generarPedidosRango,
+  descargarCSV,
+  TIENDAS_DEMO,
+  type PedidoDemo,
+} from "@/lib/demo-data";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Receipt,
+  Percent,
+  Truck,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Cell,
+} from "recharts";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
-  head: () => ({ meta: [{ title: "Facturación consolidada · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Facturación Consolidada · CRM DTF" }] }),
   component: FacturacionGlobal,
 });
 
-function FacturacionGlobal() {
-  const { data } = useQuery({
-    queryKey: ["facturacion-global"],
-    queryFn: async () => {
-      const [tiendas, facturas] = await Promise.all([
-        supabase.from("tiendas").select("id, nombre, color"),
-        supabase.from("facturas").select("id, tienda_id, fecha, total, base_imponible, iva_total, estado, numero, serie"),
-      ]);
-      return { tiendas: tiendas.data ?? [], facturas: facturas.data ?? [] };
-    },
-  });
+type Periodo = "mes" | "semana";
 
-  const facturas = (data?.facturas ?? []).filter((f) => f.estado !== "anulada" && f.estado !== "borrador");
+function rangoPeriodo(ref: Date, periodo: Periodo) {
+  if (periodo === "mes") return { desde: startOfMonth(ref), hasta: endOfMonth(ref) };
+  return {
+    desde: startOfWeek(ref, { weekStartsOn: 1 }),
+    hasta: endOfWeek(ref, { weekStartsOn: 1 }),
+  };
+}
 
-  // Agregado por mes
-  const porMes: Record<string, Record<string, number> & { mes: string }> = {};
-  for (const f of facturas) {
-    const d = new Date(f.fecha);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    porMes[k] = porMes[k] || ({ mes: k } as any);
-    const tienda = data?.tiendas.find((t) => t.id === f.tienda_id)?.nombre ?? "—";
-    porMes[k][tienda] = (porMes[k][tienda] ?? 0) + Number(f.total);
+function etiquetaPeriodo(ref: Date, periodo: Periodo) {
+  if (periodo === "mes") {
+    return format(ref, "LLLL yyyy", { locale: es }).replace(/^./, (c) => c.toUpperCase());
   }
-  const series = Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes));
+  const { desde, hasta } = rangoPeriodo(ref, periodo);
+  return `${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
+}
 
-  const totalBase = facturas.reduce((s, f) => s + Number(f.base_imponible), 0);
-  const totalIva = facturas.reduce((s, f) => s + Number(f.iva_total), 0);
-  const totalGeneral = facturas.reduce((s, f) => s + Number(f.total), 0);
+type Fila = {
+  tienda: string;
+  pedidos: number;
+  metros: number;
+  bruta: number;
+  iva: number;
+  envios: number;
+  total: number;
+};
 
-  const colores = [
-    "var(--color-primary)",
-    "var(--color-chart-2)",
-    "var(--color-chart-3)",
-    "var(--color-chart-4)",
-    "var(--color-chart-5)",
-  ];
+function agruparPorTienda(pedidos: PedidoDemo[]): Fila[] {
+  const map = new Map<string, Fila>();
+  for (const t of TIENDAS_DEMO) {
+    map.set(t, { tienda: t, pedidos: 0, metros: 0, bruta: 0, iva: 0, envios: 0, total: 0 });
+  }
+  for (const p of pedidos) {
+    if (p.estado === "cancelado") continue;
+    const f = map.get(p.tienda);
+    if (!f) continue;
+    f.pedidos += 1;
+    f.metros += p.metros;
+    f.bruta += p.bruto;
+    f.iva += p.iva;
+    f.envios += p.envio;
+    f.total += p.total;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+}
+
+function FacturacionGlobal() {
+  const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const [ref, setRef] = useState(new Date());
+
+  const { desde, hasta } = useMemo(() => rangoPeriodo(ref, periodo), [ref, periodo]);
+  const pedidos = useMemo(() => generarPedidosRango(desde, hasta), [desde, hasta]);
+  const filas = useMemo(() => agruparPorTienda(pedidos), [pedidos]);
+
+  const totales = useMemo(
+    () =>
+      filas.reduce(
+        (s, f) => ({
+          pedidos: s.pedidos + f.pedidos,
+          metros: s.metros + f.metros,
+          bruta: s.bruta + f.bruta,
+          iva: s.iva + f.iva,
+          envios: s.envios + f.envios,
+          total: s.total + f.total,
+        }),
+        { pedidos: 0, metros: 0, bruta: 0, iva: 0, envios: 0, total: 0 },
+      ),
+    [filas],
+  );
+
+  // Últimas 12 semanas
+  const semanas12 = useMemo(() => {
+    const arr: { semana: string; total: number; inicio: Date }[] = [];
+    const hoy = new Date();
+    const wEnd = endOfWeek(hoy, { weekStartsOn: 1 });
+    for (let i = 11; i >= 0; i--) {
+      const wRef = addWeeks(wEnd, -i);
+      const wDesde = startOfWeek(wRef, { weekStartsOn: 1 });
+      const wHasta = endOfWeek(wRef, { weekStartsOn: 1 });
+      const ps = generarPedidosRango(wDesde, wHasta);
+      const total = ps
+        .filter((p) => p.estado !== "cancelado")
+        .reduce((s, p) => s + p.total, 0);
+      arr.push({
+        semana: format(wDesde, "d MMM", { locale: es }),
+        total: Number(total.toFixed(2)),
+        inicio: wDesde,
+      });
+    }
+    return arr;
+  }, []);
+
+  const semanaActual = semanas12[semanas12.length - 1]?.total ?? 0;
+  const semanaAnterior = semanas12[semanas12.length - 2]?.total ?? 0;
+  const deltaSemana = semanaAnterior === 0 ? 0 : ((semanaActual - semanaAnterior) / semanaAnterior) * 100;
+
+  function navegar(dir: -1 | 1) {
+    setRef((r) => (periodo === "mes" ? addMonths(r, dir) : addWeeks(r, dir)));
+  }
+
+  function exportar() {
+    const fil: (string | number)[][] = [
+      ["Tienda", "Pedidos", "Metros", "Bruta", "IVA", "Envíos", "Total"],
+      ...filas.map((f) => [
+        f.tienda,
+        f.pedidos,
+        f.metros.toFixed(2),
+        f.bruta.toFixed(2),
+        f.iva.toFixed(2),
+        f.envios.toFixed(2),
+        f.total.toFixed(2),
+      ]),
+      [
+        "TOTAL",
+        totales.pedidos,
+        totales.metros.toFixed(2),
+        totales.bruta.toFixed(2),
+        totales.iva.toFixed(2),
+        totales.envios.toFixed(2),
+        totales.total.toFixed(2),
+      ],
+    ];
+    const nombre = `facturacion-consolidada_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}.csv`;
+    descargarCSV(nombre, fil);
+  }
+
+  const pctIva = totales.bruta === 0 ? 0 : (totales.iva / totales.bruta) * 100;
+
+  const comparativa = filas.map((f) => ({ tienda: f.tienda, total: Number(f.total.toFixed(2)), metros: Number(f.metros.toFixed(2)) }));
+  const coloresBarra = ["var(--color-primary)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Facturación consolidada</h1>
-        <p className="text-muted-foreground">Suma de la facturación de todas tus tiendas</p>
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Facturación Consolidada</h1>
+          <p className="text-muted-foreground">Contabilidad conjunta de todas las webs</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border bg-card p-0.5">
+            {(["mes", "semana"] as Periodo[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                className={`px-3 py-1.5 text-sm font-medium rounded ${
+                  periodo === p
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p === "mes" ? "Mes" : "Semana"}
+              </button>
+            ))}
+          </div>
+
+          <div className="inline-flex items-center gap-1 rounded-md border bg-card px-1">
+            <Button variant="ghost" size="icon" onClick={() => navegar(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="px-2 text-sm font-medium min-w-[160px] text-center">
+              {etiquetaPeriodo(ref, periodo)}
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => navegar(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <Button variant="outline" size="sm" onClick={() => setRef(new Date())}>
+            Hoy
+          </Button>
+
+          <Button onClick={exportar} size="sm">
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card><CardContent className="p-6"><div className="text-sm text-muted-foreground">Base imponible</div><div className="text-2xl font-bold">{eur(totalBase)}</div></CardContent></Card>
-        <Card><CardContent className="p-6"><div className="text-sm text-muted-foreground">IVA repercutido</div><div className="text-2xl font-bold">{eur(totalIva)}</div></CardContent></Card>
-        <Card><CardContent className="p-6"><div className="text-sm text-muted-foreground">Total facturado</div><div className="text-2xl font-bold">{eur(totalGeneral)}</div></CardContent></Card>
+      {/* Tarjetas totales */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <TarjetaTotal
+          titulo="Facturación bruta"
+          subtitulo="Solo metros vendidos"
+          valor={eur(totales.bruta)}
+          icon={Receipt}
+          tono="primary"
+        />
+        <TarjetaTotal
+          titulo="IVA repercutido"
+          subtitulo={`${numero(pctIva, 1)}% sobre bruta`}
+          valor={eur(totales.iva)}
+          icon={Percent}
+          tono="info"
+        />
+        <TarjetaTotal
+          titulo="Envíos"
+          subtitulo="Total cobrado en envíos"
+          valor={eur(totales.envios)}
+          icon={Truck}
+          tono="warn"
+        />
+        <TarjetaTotal
+          titulo="Total facturado"
+          subtitulo="Bruta + IVA + envíos"
+          valor={eur(totales.total)}
+          icon={Wallet}
+          tono="success"
+        />
       </div>
 
+      {/* Tabla desglose por tienda */}
       <Card>
-        <CardHeader><CardTitle>Evolución mensual por tienda</CardTitle></CardHeader>
-        <CardContent className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="mes" />
-              <YAxis tickFormatter={(v) => eur(v).replace(",00", "")} />
-              <Tooltip formatter={(v: number) => eur(v)} />
-              <Legend />
-              {(data?.tiendas ?? []).map((t, i) => (
-                <Line key={t.id} type="monotone" dataKey={t.nombre} stroke={colores[i % colores.length]} strokeWidth={2} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Últimas facturas (todas las tiendas)</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Desglose por tienda</CardTitle>
+        </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Fecha</TableHead>
                 <TableHead>Tienda</TableHead>
-                <TableHead>Nº</TableHead>
-                <TableHead className="text-right">Base</TableHead>
+                <TableHead className="text-right">Nº pedidos</TableHead>
+                <TableHead className="text-right">Metros</TableHead>
+                <TableHead className="text-right">Bruta</TableHead>
                 <TableHead className="text-right">IVA</TableHead>
+                <TableHead className="text-right">Envíos</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {facturas.slice(0, 30).map((f) => (
-                <TableRow key={f.id}>
-                  <TableCell>{fechaCorta(f.fecha)}</TableCell>
-                  <TableCell>{data?.tiendas.find((t) => t.id === f.tienda_id)?.nombre ?? "—"}</TableCell>
-                  <TableCell>{f.serie}-{f.numero}</TableCell>
-                  <TableCell className="text-right">{eur(f.base_imponible)}</TableCell>
-                  <TableCell className="text-right">{eur(f.iva_total)}</TableCell>
+              {filas.map((f) => (
+                <TableRow key={f.tienda}>
+                  <TableCell className="font-medium">{f.tienda}</TableCell>
+                  <TableCell className="text-right">{f.pedidos}</TableCell>
+                  <TableCell className="text-right">{metros(f.metros)}</TableCell>
+                  <TableCell className="text-right">{eur(f.bruta)}</TableCell>
+                  <TableCell className="text-right">{eur(f.iva)}</TableCell>
+                  <TableCell className="text-right">{eur(f.envios)}</TableCell>
                   <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
                 </TableRow>
               ))}
-              {facturas.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Aún no hay facturas emitidas</TableCell></TableRow>
-              )}
             </TableBody>
+            <TableFooter>
+              <TableRow className="font-bold">
+                <TableCell>TOTAL grupo</TableCell>
+                <TableCell className="text-right">{totales.pedidos}</TableCell>
+                <TableCell className="text-right">{metros(totales.metros)}</TableCell>
+                <TableCell className="text-right">{eur(totales.bruta)}</TableCell>
+                <TableCell className="text-right">{eur(totales.iva)}</TableCell>
+                <TableCell className="text-right">{eur(totales.envios)}</TableCell>
+                <TableCell className="text-right text-primary">{eur(totales.total)}</TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Comparativa entre tiendas + 12 semanas */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Comparativa entre tiendas</CardTitle>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={comparativa}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="tienda" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <Tooltip
+                  formatter={(v: number) => eur(v)}
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                  }}
+                />
+                <Bar dataKey="total" name="Total facturado" radius={[6, 6, 0, 0]}>
+                  {comparativa.map((_, i) => (
+                    <Cell key={i} fill={coloresBarra[i % coloresBarra.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base">Ventas semanales — últimas 12 semanas</CardTitle>
+            <div
+              className={`flex items-center gap-1 text-xs font-medium ${
+                deltaSemana >= 0 ? "text-status-completado" : "text-status-cancelado"
+              }`}
+            >
+              {deltaSemana >= 0 ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : (
+                <TrendingDown className="h-3 w-3" />
+              )}
+              {numero(Math.abs(deltaSemana), 1)}% vs anterior
+            </div>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={semanas12}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="semana" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <Tooltip
+                  formatter={(v: number) => eur(v)}
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                  }}
+                />
+                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                  {semanas12.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={
+                        i === semanas12.length - 1
+                          ? "var(--color-primary)"
+                          : "var(--color-primary)"
+                      }
+                      fillOpacity={i === semanas12.length - 1 ? 1 : 0.55}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  );
+}
+
+function TarjetaTotal({
+  titulo,
+  subtitulo,
+  valor,
+  icon: Icon,
+  tono,
+}: {
+  titulo: string;
+  subtitulo: string;
+  valor: string;
+  icon: any;
+  tono: "primary" | "info" | "warn" | "success";
+}) {
+  const tonos: Record<string, string> = {
+    primary: "bg-primary/10 text-primary",
+    info: "bg-status-procesando/15 text-status-procesando",
+    warn: "bg-status-pendiente/15 text-status-pendiente",
+    success: "bg-status-completado/15 text-status-completado",
+  };
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {titulo}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">{subtitulo}</div>
+          </div>
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${tonos[tono]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="mt-3 text-2xl font-bold tracking-tight">{valor}</div>
+      </CardContent>
+    </Card>
   );
 }
