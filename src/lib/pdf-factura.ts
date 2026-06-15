@@ -1,5 +1,3 @@
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { eur, fechaCorta } from "@/lib/format";
 
 export type FacturaPDFData = {
@@ -33,7 +31,12 @@ export type FacturaPDFData = {
   notas?: string | null;
 };
 
-export function generarFacturaPDF(d: FacturaPDFData): Blob {
+export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
+  const [{ jsPDF }, autoTableMod] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const autoTable = autoTableMod.default;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;
   let y = 18;

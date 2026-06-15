@@ -118,7 +118,7 @@ function Facturas() {
       .from("factura_items")
       .select("*")
       .eq("factura_id", f.id);
-    const blob = generarFacturaPDF({
+    const blob = await generarFacturaPDF({
       serie: f.serie,
       numero: f.numero,
       fecha: f.fecha,
@@ -340,7 +340,7 @@ function NuevaFacturaDialog({
         .update({ siguiente_numero_factura: numero + 1 })
         .eq("id", tiendaId);
 
-      const blob = generarFacturaPDF({
+      const blob = await generarFacturaPDF({
         serie,
         numero,
         fecha,
