@@ -281,6 +281,30 @@ function NuevaFacturaDialog({
       const serie = tienda?.serie_factura ?? "A";
       const fecha = new Date().toISOString().slice(0, 10);
 
+      // Empresa global como datos de emisor por defecto.
+      // Solo se sobrescriben los campos donde la tienda tenga un valor propio.
+      const { data: empresa } = await supabase
+        .from("empresa_global")
+        .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
+        .eq("id", true)
+        .maybeSingle();
+
+      const trim = (v: any) => (typeof v === "string" ? v.trim() : v) || null;
+      const empresaDireccion = [
+        empresa?.direccion,
+        [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
+        empresa?.provincia,
+        empresa?.pais,
+      ]
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean)
+        .join(", ") || null;
+
+      const emisor_nombre =
+        trim(tienda?.razon_social) ?? trim(empresa?.razon_social) ?? trim(tienda?.nombre);
+      const emisor_cif = trim(tienda?.cif) ?? trim(empresa?.cif);
+      const emisor_direccion = trim(tienda?.direccion) ?? empresaDireccion;
+
       const { data: factura, error: errF } = await supabase
         .from("facturas")
         .insert({
@@ -292,9 +316,9 @@ function NuevaFacturaDialog({
           cliente_nombre: cliente.nombre,
           cliente_nif: cliente.nif || null,
           cliente_direccion: cliente.direccion || null,
-          emisor_nombre: tienda?.razon_social ?? tienda?.nombre ?? null,
-          emisor_cif: tienda?.cif ?? null,
-          emisor_direccion: tienda?.direccion ?? null,
+          emisor_nombre,
+          emisor_cif,
+          emisor_direccion,
           base_imponible: totales.base,
           iva_total: totales.iva,
           total: totales.total,
