@@ -17,7 +17,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Plus, Store, ShoppingBag, Building2, Receipt, KeyRound } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -25,6 +25,9 @@ import { guardarCredencialesWoo } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    nueva: s.nueva === 1 || s.nueva === "1" ? 1 : undefined,
+  }),
   component: TiendasIndex,
 });
 
@@ -92,6 +95,15 @@ function TiendasIndex() {
   const { isAdmin } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const { nueva } = Route.useSearch();
+  const navigate = Route.useNavigate();
+
+  useEffect(() => {
+    if (nueva && isAdmin) {
+      setOpen(true);
+      navigate({ search: {} as any, replace: true });
+    }
+  }, [nueva, isAdmin, navigate]);
 
   const { data: tiendas = [] } = useQuery({
     queryKey: ["tiendas"],
