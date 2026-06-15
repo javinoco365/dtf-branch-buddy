@@ -46,6 +46,20 @@ export const adminExiste = createServerFn({ method: "GET" }).handler(async () =>
   return { existe: (count ?? 0) > 0 };
 });
 
+export const comprobarAdminActual = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    return { isAdmin: !!data };
+  });
+
 // Solo admins: crear usuario invitado y asignarlo a tiendas
 export const crearUsuarioInvitado = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
