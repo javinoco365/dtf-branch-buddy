@@ -22,7 +22,6 @@ import { toast } from "sonner";
 import { Plus, Store, ShoppingBag, Receipt, KeyRound, Building2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { guardarCredencialesWoo } from "@/lib/admin.functions";
-import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
