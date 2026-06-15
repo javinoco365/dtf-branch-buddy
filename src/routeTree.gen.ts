@@ -14,6 +14,7 @@ import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
+import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
 import { Route as PanelTiendasIndexRouteImport } from './routes/panel/tiendas/index'
@@ -49,6 +50,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
 const PanelUsuariosRoute = PanelUsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelPedidosRoute = PanelPedidosRouteImport.update({
+  id: '/pedidos',
+  path: '/pedidos',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel': typeof PanelIndexRoute
   '/panel/tiendas': typeof PanelTiendasIndexRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/configuracion'
     | '/panel/facturacion-global'
+    | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -193,6 +203,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/configuracion'
     | '/panel/facturacion-global'
+    | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel'
     | '/panel/tiendas'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/configuracion'
     | '/panel/facturacion-global'
+    | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -264,6 +276,13 @@ declare module '@tanstack/react-router' {
       path: '/usuarios'
       fullPath: '/panel/usuarios'
       preLoaderRoute: typeof PanelUsuariosRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/pedidos': {
+      id: '/panel/pedidos'
+      path: '/pedidos'
+      fullPath: '/panel/pedidos'
+      preLoaderRoute: typeof PanelPedidosRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/facturacion-global': {
@@ -375,6 +394,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 interface PanelRouteRouteChildren {
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
+  PanelPedidosRoute: typeof PanelPedidosRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
   PanelIndexRoute: typeof PanelIndexRoute
   PanelTiendasTiendaIdRouteRoute: typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -384,6 +404,7 @@ interface PanelRouteRouteChildren {
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelConfiguracionRoute: PanelConfiguracionRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
+  PanelPedidosRoute: PanelPedidosRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,
   PanelIndexRoute: PanelIndexRoute,
   PanelTiendasTiendaIdRouteRoute: PanelTiendasTiendaIdRouteRouteWithChildren,
