@@ -1,40 +1,44 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { eur, fechaCorta, metros } from "@/lib/format";
+import { PedidosTable } from "@/components/PedidosTable";
+import { TIENDAS_DEMO } from "@/lib/demo-data";
 
-export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({ component: Pedidos });
+export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({
+  component: Pedidos,
+});
 
 function Pedidos() {
   const { tiendaId } = Route.useParams();
-  const { data: pedidos = [] } = useQuery({
-    queryKey: ["pedidos", tiendaId],
+  const { data: tienda } = useQuery({
+    queryKey: ["tienda-nombre", tiendaId],
     queryFn: async () => {
-      const { data } = await supabase.from("pedidos").select("*, clientes(nombre)").eq("tienda_id", tiendaId).order("fecha_pedido", { ascending: false });
-      return data ?? [];
+      const { data } = await supabase
+        .from("tiendas")
+        .select("nombre")
+        .eq("id", tiendaId)
+        .maybeSingle();
+      return data?.nombre ?? null;
     },
   });
+
+  let h = 0;
+  for (let i = 0; i < tiendaId.length; i++) h = (h * 31 + tiendaId.charCodeAt(i)) >>> 0;
+  const tiendaDemo =
+    (tienda && TIENDAS_DEMO.find((t) => t.toLowerCase() === tienda.toLowerCase())) ||
+    TIENDAS_DEMO[h % TIENDAS_DEMO.length];
+
   return (
-    <Card><CardContent className="p-0">
-      <Table>
-        <TableHeader><TableRow><TableHead>Fecha</TableHead><TableHead>Nº</TableHead><TableHead>Cliente</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Metros</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
-        <TableBody>
-          {pedidos.map((p: any) => (
-            <TableRow key={p.id}>
-              <TableCell>{fechaCorta(p.fecha_pedido)}</TableCell>
-              <TableCell className="font-mono">{p.numero}</TableCell>
-              <TableCell>{p.clientes?.nombre ?? "—"}</TableCell>
-              <TableCell><Badge variant="secondary">{p.estado}</Badge></TableCell>
-              <TableCell className="text-right">{metros(p.metros_total)}</TableCell>
-              <TableCell className="text-right font-semibold">{eur(p.total)}</TableCell>
-            </TableRow>
-          ))}
-          {pedidos.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Sin pedidos. Sincroniza desde WooCommerce en Ajustes.</TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </CardContent></Card>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Pedidos · {tienda ?? tiendaDemo}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Pedidos sincronizados desde WooCommerce.
+        </p>
+      </div>
+      <PedidosTable tienda={tiendaDemo} />
+    </div>
   );
 }
