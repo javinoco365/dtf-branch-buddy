@@ -9,8 +9,6 @@ import {
   startOfMonth,
   startOfWeek,
   eachDayOfInterval,
-  differenceInCalendarDays,
-  isWithinInterval,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
