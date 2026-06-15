@@ -42,6 +42,7 @@ import {
   CalendarClock,
   ChevronRight,
   Plus,
+  List,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
