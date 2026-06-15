@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
+import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
 import { Route as PanelTiendasIndexRouteImport } from './routes/panel/tiendas/index'
 import { Route as PanelTiendasTiendaIdRouteRouteImport } from './routes/panel/tiendas/$tiendaId/route'
 import { Route as PanelTiendasTiendaIdIndexRouteImport } from './routes/panel/tiendas/$tiendaId/index'
@@ -52,6 +53,11 @@ const PanelUsuariosRoute = PanelUsuariosRouteImport.update({
 const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
   id: '/facturacion-global',
   path: '/facturacion-global',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
+  id: '/configuracion',
+  path: '/configuracion',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelTiendasIndexRoute = PanelTiendasIndexRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel': typeof PanelIndexRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/'
     | '/panel'
     | '/auth'
+    | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/usuarios'
     | '/panel/'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/usuarios'
     | '/panel'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/'
     | '/panel'
     | '/auth'
+    | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/usuarios'
     | '/panel/'
@@ -246,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/facturacion-global'
       fullPath: '/panel/facturacion-global'
       preLoaderRoute: typeof PanelFacturacionGlobalRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/configuracion': {
+      id: '/panel/configuracion'
+      path: '/configuracion'
+      fullPath: '/panel/configuracion'
+      preLoaderRoute: typeof PanelConfiguracionRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/tiendas/': {
@@ -332,6 +351,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
   )
 
 interface PanelRouteRouteChildren {
+  PanelConfiguracionRoute: typeof PanelConfiguracionRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
   PanelIndexRoute: typeof PanelIndexRoute
@@ -340,6 +360,7 @@ interface PanelRouteRouteChildren {
 }
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
+  PanelConfiguracionRoute: PanelConfiguracionRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,
   PanelIndexRoute: PanelIndexRoute,
@@ -359,3 +380,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
