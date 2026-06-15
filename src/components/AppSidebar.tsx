@@ -16,6 +16,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   LayoutDashboard,
   Store,
   Users,
@@ -28,9 +33,12 @@ import {
   Wrench,
   Wallet,
   CalendarClock,
+  ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
+
 
 export function AppSidebar() {
   const { state } = useSidebar();
