@@ -248,14 +248,46 @@ export function AppSidebar() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/panel/tiendas"}>
-                    <Link to="/panel/tiendas">
-                      <Building2 />
-                      <span>Gestión de Tiendas</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <Collapsible
+                  defaultOpen={pathname.startsWith("/panel/tiendas")}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton isActive={pathname.startsWith("/panel/tiendas")}>
+                        <Building2 />
+                        <span>Gestión de Tiendas</span>
+                        <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={pathname === "/panel/tiendas"}>
+                            <Link to="/panel/tiendas">
+                              <List className="h-4 w-4" />
+                              <span>Listado</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        {isAdmin && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton asChild>
+                              <button
+                                type="button"
+                                onClick={() => navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any })}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-primary"
+                              >
+                                <Plus className="h-4 w-4" />
+                                <span>Nueva tienda</span>
+                              </button>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
                     <Link to="/panel/configuracion">
