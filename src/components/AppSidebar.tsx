@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
@@ -21,6 +21,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   LayoutDashboard,
   Store,
   Users,
@@ -33,6 +41,7 @@ import {
   Wallet,
   CalendarClock,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -44,6 +53,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { isAdmin, user } = useAuth();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const navigate = useNavigate();
 
   const { data: tiendas = [] } = useQuery({
     queryKey: ["tiendas-sidebar", user?.id],
@@ -57,6 +67,12 @@ export function AppSidebar() {
       return data ?? [];
     },
   });
+
+  const currentTiendaId = pathname.match(/^\/panel\/tiendas\/([^/]+)/)?.[1];
+  const selectedValue =
+    currentTiendaId && tiendas.some((t) => t.id === currentTiendaId)
+      ? currentTiendaId
+      : "";
 
   return (
     <Sidebar collapsible="icon">
@@ -132,6 +148,57 @@ export function AppSidebar() {
             Tiendas
           </SidebarGroupLabel>
           <SidebarGroupContent>
+            {!collapsed && (
+              <div className="px-2 pb-2">
+                <Select
+                  value={selectedValue}
+                  onValueChange={(v) => {
+                    if (v === "__new__") {
+                      navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any });
+                    } else if (v === "__manage__") {
+                      navigate({ to: "/panel/tiendas" });
+                    } else {
+                      navigate({
+                        to: "/panel/tiendas/$tiendaId",
+                        params: { tiendaId: v },
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs bg-sidebar-accent/40 border-sidebar-border">
+                    <SelectValue placeholder="Selecciona una tienda…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiendas.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: t.color ?? "hsl(var(--primary))" }}
+                          />
+                          {t.nombre}
+                        </span>
+                      </SelectItem>
+                    ))}
+                    {tiendas.length > 0 && <SelectSeparator />}
+                    {isAdmin && (
+                      <SelectItem value="__new__">
+                        <span className="flex items-center gap-2 text-primary">
+                          <Plus className="h-3.5 w-3.5" />
+                          Nueva tienda
+                        </span>
+                      </SelectItem>
+                    )}
+                    <SelectItem value="__manage__">
+                      <span className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5" />
+                        Gestionar tiendas
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <SidebarMenu>
               {tiendas.length === 0 && !collapsed && (
                 <div className="px-3 py-2 text-xs text-sidebar-foreground/50">
