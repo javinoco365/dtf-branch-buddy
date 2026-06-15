@@ -79,6 +79,47 @@ export type Database = {
           },
         ]
       }
+      enlaces_seguimiento: {
+        Row: {
+          codigo_seguimiento: string | null
+          created_at: string
+          estado: string | null
+          id: string
+          pedido_id: string
+          transportista: string | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          codigo_seguimiento?: string | null
+          created_at?: string
+          estado?: string | null
+          id?: string
+          pedido_id: string
+          transportista?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          codigo_seguimiento?: string | null
+          created_at?: string
+          estado?: string | null
+          id?: string
+          pedido_id?: string
+          transportista?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enlaces_seguimiento_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factura_items: {
         Row: {
           cantidad: number
@@ -290,14 +331,17 @@ export type Database = {
         Row: {
           cliente_id: string | null
           created_at: string
+          envio: number
           estado: Database["public"]["Enums"]["pedido_estado"]
           fecha_entrega: string | null
           fecha_pedido: string
           id: string
           iva: number
+          metodo_pago: string | null
           metros_total: number
           notas: string | null
           numero: string
+          origen: string | null
           subtotal: number
           tienda_id: string
           total: number
@@ -307,14 +351,17 @@ export type Database = {
         Insert: {
           cliente_id?: string | null
           created_at?: string
+          envio?: number
           estado?: Database["public"]["Enums"]["pedido_estado"]
           fecha_entrega?: string | null
           fecha_pedido?: string
           id?: string
           iva?: number
+          metodo_pago?: string | null
           metros_total?: number
           notas?: string | null
           numero: string
+          origen?: string | null
           subtotal?: number
           tienda_id: string
           total?: number
@@ -324,14 +371,17 @@ export type Database = {
         Update: {
           cliente_id?: string | null
           created_at?: string
+          envio?: number
           estado?: Database["public"]["Enums"]["pedido_estado"]
           fecha_entrega?: string | null
           fecha_pedido?: string
           id?: string
           iva?: number
+          metodo_pago?: string | null
           metros_total?: number
           notas?: string | null
           numero?: string
+          origen?: string | null
           subtotal?: number
           tienda_id?: string
           total?: number
@@ -601,6 +651,7 @@ export type Database = {
           razon_social: string | null
           serie_factura: string
           siguiente_numero_factura: number
+          slug: string | null
           sync_enabled: boolean
           telefono: string | null
           updated_at: string
@@ -625,6 +676,7 @@ export type Database = {
           razon_social?: string | null
           serie_factura?: string
           siguiente_numero_factura?: number
+          slug?: string | null
           sync_enabled?: boolean
           telefono?: string | null
           updated_at?: string
@@ -649,6 +701,7 @@ export type Database = {
           razon_social?: string | null
           serie_factura?: string
           siguiente_numero_factura?: number
+          slug?: string | null
           sync_enabled?: boolean
           telefono?: string | null
           updated_at?: string
