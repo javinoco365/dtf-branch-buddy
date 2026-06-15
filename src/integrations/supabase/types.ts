@@ -511,6 +511,50 @@ export type Database = {
           },
         ]
       }
+      tienda_seguimiento_config: {
+        Row: {
+          activo: boolean
+          api_key_ref: string | null
+          codigo_cuenta: string | null
+          created_at: string
+          id: string
+          tienda_id: string
+          tracking_url_template: string | null
+          transportista: string | null
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          api_key_ref?: string | null
+          codigo_cuenta?: string | null
+          created_at?: string
+          id?: string
+          tienda_id: string
+          tracking_url_template?: string | null
+          transportista?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          api_key_ref?: string | null
+          codigo_cuenta?: string | null
+          created_at?: string
+          id?: string
+          tienda_id?: string
+          tracking_url_template?: string | null
+          transportista?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tienda_seguimiento_config_tienda_id_fkey"
+            columns: ["tienda_id"]
+            isOneToOne: true
+            referencedRelation: "tiendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tienda_usuarios: {
         Row: {
           created_at: string
@@ -547,7 +591,10 @@ export type Database = {
           created_by: string | null
           direccion: string | null
           email_fiscal: string | null
+          gastos_envio_default: number
           id: string
+          iva_default: number
+          logo_url: string | null
           nombre: string
           pais: string | null
           provincia: string | null
@@ -568,7 +615,10 @@ export type Database = {
           created_by?: string | null
           direccion?: string | null
           email_fiscal?: string | null
+          gastos_envio_default?: number
           id?: string
+          iva_default?: number
+          logo_url?: string | null
           nombre: string
           pais?: string | null
           provincia?: string | null
@@ -589,7 +639,10 @@ export type Database = {
           created_by?: string | null
           direccion?: string | null
           email_fiscal?: string | null
+          gastos_envio_default?: number
           id?: string
+          iva_default?: number
+          logo_url?: string | null
           nombre?: string
           pais?: string | null
           provincia?: string | null
