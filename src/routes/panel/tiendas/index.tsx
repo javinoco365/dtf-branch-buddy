@@ -354,9 +354,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
             <Button
               variant="ghost"
               onClick={() =>
-                setTab(
-                  tab === "empresa" ? "identidad" : tab === "facturacion" ? "empresa" : "facturacion",
-                )
+                setTab(tab === "facturacion" ? "identidad" : "facturacion")
               }
             >
               Anterior
@@ -365,9 +363,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
           {tab !== "woo" ? (
             <Button
               onClick={() =>
-                setTab(
-                  tab === "identidad" ? "empresa" : tab === "empresa" ? "facturacion" : "woo",
-                )
+                setTab(tab === "identidad" ? "facturacion" : "woo")
               }
             >
               Siguiente
