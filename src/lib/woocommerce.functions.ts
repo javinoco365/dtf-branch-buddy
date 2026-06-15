@@ -186,3 +186,85 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
 
     return { ok: true, ...importados };
   });
+
+/**
+ * Sincronizar devoluciones (refunds) desde WooCommerce.
+ * Recorre los pedidos ya importados de la tienda y trae sus refunds.
+ */
+export const sincronizarWooDevoluciones = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: miembro } = await supabaseAdmin
+      .from("tienda_usuarios")
+      .select("tienda_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url, sync_enabled")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
+    if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
+
+    const { data: creds } = await supabaseAdmin
+      .from("tienda_credenciales")
+      .select("consumer_key, consumer_secret")
+      .eq("tienda_id", data.tienda_id)
+      .maybeSingle();
+    if (!creds) throw new Error("Faltan credenciales de WooCommerce");
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const auth = btoa(`${creds.consumer_key}:${creds.consumer_secret}`);
+    const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
+
+    const { data: pedidos } = await supabaseAdmin
+      .from("pedidos")
+      .select("id, woo_order_id")
+      .eq("tienda_id", data.tienda_id)
+      .not("woo_order_id", "is", null)
+      .order("fecha_pedido", { ascending: false })
+      .limit(200);
+
+    let importadas = 0;
+    for (const p of pedidos ?? []) {
+      try {
+        const r = await fetch(
+          `${base}/wp-json/wc/v3/orders/${p.woo_order_id}/refunds?per_page=50`,
+          { headers },
+        );
+        if (!r.ok) continue;
+        const refunds = (await r.json()) as any[];
+        for (const rf of refunds) {
+          await supabaseAdmin.from("pedido_devoluciones").upsert(
+            {
+              tienda_id: data.tienda_id,
+              pedido_id: p.id,
+              woo_refund_id: rf.id,
+              importe: Math.abs(Number(rf.amount || rf.total || 0)),
+              motivo: rf.reason || null,
+              fecha: rf.date_created || new Date().toISOString(),
+            },
+            { onConflict: "tienda_id,woo_refund_id" },
+          );
+          importadas++;
+        }
+      } catch (e) {
+        console.error("Woo refunds error", p.woo_order_id, e);
+      }
+    }
+
+    return { ok: true, devoluciones: importadas };
+  });
