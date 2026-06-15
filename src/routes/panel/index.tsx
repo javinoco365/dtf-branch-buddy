@@ -78,7 +78,7 @@ function PanelGlobal() {
               <YAxis tickFormatter={(v) => eur(v).replace(",00", "")} />
               <Tooltip formatter={(v: number) => eur(v)} />
               <Legend />
-              <Bar dataKey="total" name="Facturado" fill="hsl(var(--primary))" />
+              <Bar dataKey="total" name="Facturado" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -90,14 +90,17 @@ function PanelGlobal() {
 function KPI({ titulo, valor, icon: Icon }: { titulo: string; valor: string; icon: any }) {
   return (
     <Card>
-      <CardContent className="p-6 flex items-center gap-4">
-        <div className="h-12 w-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-          <Icon className="h-6 w-6" />
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {titulo}
+          </div>
+          <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <Icon className="h-5 w-5" />
+          </div>
         </div>
-        <div>
-          <div className="text-sm text-muted-foreground">{titulo}</div>
-          <div className="text-2xl font-bold">{valor}</div>
-        </div>
+        <div className="mt-3 text-3xl font-bold tracking-tight text-primary">{valor}</div>
+        <div className="mt-1 text-xs text-muted-foreground">Total acumulado</div>
       </CardContent>
     </Card>
   );

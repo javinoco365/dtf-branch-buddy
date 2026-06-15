@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -50,20 +51,26 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        <div className="px-3 py-4 flex items-center gap-2 border-b">
-          <div className="h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+        <div className="px-3 py-4 flex items-center gap-2 border-b border-sidebar-border">
+          <div className="h-9 w-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
             <Printer className="h-4 w-4" />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <div className="font-semibold text-sm truncate">CRM DTF</div>
-              <div className="text-xs text-muted-foreground truncate">Gestión multi-tienda</div>
+              <div className="font-bold text-sm truncate text-sidebar-foreground tracking-wide">
+                CRM DTF
+              </div>
+              <div className="text-[11px] text-sidebar-foreground/60 truncate">
+                Gestión multi-tienda
+              </div>
             </div>
           )}
         </div>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Global</SidebarGroupLabel>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Global
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -107,11 +114,13 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Tiendas</SidebarGroupLabel>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Tiendas
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {tiendas.length === 0 && !collapsed && (
-                <div className="px-3 py-2 text-xs text-muted-foreground">
+                <div className="px-3 py-2 text-xs text-sidebar-foreground/50">
                   {isAdmin ? "Crea tu primera tienda" : "Sin tiendas asignadas"}
                 </div>
               )}
@@ -142,6 +151,13 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border">
+        {!collapsed && (
+          <div className="px-3 py-2 text-[10px] text-sidebar-foreground/40 tracking-wider">
+            v1.0.0
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }
