@@ -30,7 +30,6 @@ import {
   Printer,
   Building2,
   Receipt,
-  Wrench,
   Wallet,
   CalendarClock,
   ChevronRight,
