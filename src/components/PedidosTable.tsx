@@ -9,6 +9,8 @@ import {
   startOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,29 +31,79 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Download,
+  MoreVertical,
+  Plus,
   Search,
+  Truck,
 } from "lucide-react";
-import { eur, metros } from "@/lib/format";
+import { toast } from "sonner";
+import { eur } from "@/lib/format";
 import {
-  descargarCSV,
-  generarPedidosRango,
-  TIENDAS_DEMO,
-  type PedidoDemo,
-} from "@/lib/demo-data";
+  deletePedido,
+  listPedidos,
+  updatePedidoEstado,
+} from "@/lib/pedidos.functions";
+import { PedidoFormDialog } from "@/components/PedidoFormDialog";
+import { PedidoTrackingDialog } from "@/components/PedidoTrackingDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Periodo = "mes" | "semana";
 
-type PedidoFila = PedidoDemo & {
+export type PedidoFila = {
+  id: string;
+  tienda_id: string;
+  tienda_nombre: string | null;
+  woo_order_id: number | null;
   numero: string;
-  cliente: string;
-  email: string;
-  origen: string;
-  lineas: { producto: string; metros: number; precio: number; subtotal: number }[];
+  estado: string;
+  metros_total: number;
+  subtotal: number;
+  iva: number;
+  total: number;
+  fecha_pedido: string;
+  notas: string | null;
+  cliente_id: string | null;
+  cliente_nombre: string | null;
+  cliente_email: string | null;
+  origen: string | null;
+  metodo_pago: string | null;
+  envio: number;
+  items: {
+    id: string;
+    descripcion: string;
+    cantidad: number;
+    unidad: string;
+    precio_unitario: number;
+    subtotal: number;
+    iva: number;
+    total: number;
+  }[];
+  tracking: {
+    id: string;
+    transportista: string | null;
+    codigo_seguimiento: string | null;
+    url: string | null;
+  } | null;
 };
 
 function rango(ref: Date, p: Periodo) {
@@ -60,88 +112,138 @@ function rango(ref: Date, p: Periodo) {
     : { desde: startOfWeek(ref, { weekStartsOn: 1 }), hasta: endOfWeek(ref, { weekStartsOn: 1 }) };
 }
 
-function nombreCliente(seed: string) {
-  const nombres = ["Marta López", "Juan García", "Lucía Ruiz", "Pablo Sanz", "Ana Vidal", "Sergio Romero", "Elena Soto", "Iván Cano", "Clara Mora", "Diego Vega"];
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const n = nombres[h % nombres.length];
-  return { nombre: n, email: n.toLowerCase().replace(/[^a-z]/g, ".") + "@mail.com" };
+const ESTADO_LABEL: Record<string, string> = {
+  pendiente: "Pendiente",
+  en_produccion: "Procesando",
+  imprimiendo: "Imprimiendo",
+  listo: "Listo",
+  enviado: "Enviado",
+  entregado: "Completado",
+  cancelado: "Cancelado",
+};
+
+const ESTADOS = Object.keys(ESTADO_LABEL);
+
+function estadoVariant(estado: string): "default" | "secondary" | "destructive" | "outline" {
+  if (estado === "entregado") return "default";
+  if (estado === "cancelado") return "destructive";
+  if (estado === "pendiente") return "outline";
+  return "secondary";
 }
 
-function enriquecer(pedidos: PedidoDemo[]): PedidoFila[] {
-  return pedidos.map((p, i) => {
-    const seed = `${p.fecha.toISOString().slice(0, 10)}-${i}-${p.tienda}`;
-    const c = nombreCliente(seed);
-    const numero = `${p.tienda.slice(0, 3).toUpperCase()}-${(10000 + i).toString().slice(-4)}-${p.fecha.getMonth() + 1}`;
-    const precio = Number((p.bruto / Math.max(p.metros, 0.01)).toFixed(2));
-    return {
-      ...p,
-      numero,
-      cliente: c.nombre,
-      email: c.email,
-      origen: "WooCommerce",
-      lineas: [{ producto: p.producto, metros: p.metros, precio, subtotal: p.bruto }],
-    };
-  });
-}
-
-export function PedidosTable({ tienda }: { tienda?: string }) {
+export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
+  const queryClient = useQueryClient();
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [ref, setRef] = useState(new Date());
   const [busqueda, setBusqueda] = useState("");
-  const [estado, setEstado] = useState<string>("todos");
-  const [tiendaFiltro, setTiendaFiltro] = useState<string>("todas");
+  const [estadoFiltro, setEstadoFiltro] = useState<string>("todos");
   const [expandida, setExpandida] = useState<string | null>(null);
 
-  const { desde, hasta } = rango(ref, periodo);
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [editar, setEditar] = useState<PedidoFila | null>(null);
+  const [tracking, setTracking] = useState<PedidoFila | null>(null);
+  const [borrar, setBorrar] = useState<PedidoFila | null>(null);
 
-  const pedidos = useMemo(() => {
-    let base = generarPedidosRango(desde, hasta);
-    if (tienda) base = base.filter((p) => p.tienda === tienda);
-    return enriquecer(base);
-  }, [desde, hasta, tienda]);
+  const { desde, hasta } = rango(ref, periodo);
+  const list = useServerFn(listPedidos);
+  const setEstadoFn = useServerFn(updatePedidoEstado);
+  const delFn = useServerFn(deletePedido);
+
+  const queryKey = ["pedidos", tiendaId ?? "all", desde.toISOString(), hasta.toISOString()];
+
+  const { data, isLoading } = useQuery({
+    queryKey,
+    queryFn: () =>
+      list({
+        data: { tiendaId, desde: desde.toISOString(), hasta: hasta.toISOString() },
+      }),
+  });
+
+  const pedidos: PedidoFila[] = (data?.pedidos ?? []) as any;
+
+  const estadoMut = useMutation({
+    mutationFn: (vars: { id: string; estado: string }) =>
+      setEstadoFn({ data: { id: vars.id, estado: vars.estado as any } }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+      if (res?.woo_synced) toast.success("Estado actualizado y sincronizado con WooCommerce");
+      else toast.success("Estado actualizado");
+    },
+    onError: (e: any) => toast.error(e?.message || "Error al actualizar estado"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => delFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+      toast.success("Pedido borrado");
+      setBorrar(null);
+    },
+    onError: (e: any) => toast.error(e?.message || "Error al borrar"),
+  });
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return pedidos.filter((p) => {
-      if (estado !== "todos" && p.estado !== estado) return false;
-      if (!tienda && tiendaFiltro !== "todas" && p.tienda !== tiendaFiltro) return false;
+      if (estadoFiltro !== "todos" && p.estado !== estadoFiltro) return false;
       if (!q) return true;
       return (
-        p.cliente.toLowerCase().includes(q) ||
-        p.email.toLowerCase().includes(q) ||
+        (p.cliente_nombre ?? "").toLowerCase().includes(q) ||
+        (p.cliente_email ?? "").toLowerCase().includes(q) ||
         p.numero.toLowerCase().includes(q)
       );
     });
-  }, [pedidos, busqueda, estado, tiendaFiltro, tienda]);
+  }, [pedidos, busqueda, estadoFiltro]);
 
-  const totalImporte = filtrados.reduce((s, p) => s + p.total, 0);
-
-  function exportar() {
-    const filas: (string | number)[][] = [
-      ["Fecha", "Nº", "Tienda", "Cliente", "Email", "Estado", "Origen", "Metros", "Bruto", "IVA", "Envío", "Total"],
-      ...filtrados.map((p) => [
-        format(p.fecha, "yyyy-MM-dd"),
-        p.numero,
-        p.tienda,
-        p.cliente,
-        p.email,
-        p.estado,
-        p.origen,
-        p.metros,
-        p.bruto,
-        p.iva,
-        p.envio,
-        p.total,
-      ]),
-    ];
-    descargarCSV(`pedidos-${format(desde, "yyyy-MM-dd")}.csv`, filas);
-  }
+  // Agrupar por día
+  const grupos = useMemo(() => {
+    const map = new Map<string, PedidoFila[]>();
+    for (const p of filtrados) {
+      const k = format(new Date(p.fecha_pedido), "yyyy-MM-dd");
+      const arr = map.get(k) ?? [];
+      arr.push(p);
+      map.set(k, arr);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([fecha, lista]) => ({
+        fecha,
+        lista,
+        total: lista.reduce((s, p) => s + Number(p.total), 0),
+      }));
+  }, [filtrados]);
 
   const tituloPeriodo =
     periodo === "mes"
       ? format(ref, "MMMM yyyy", { locale: es })
       : `Semana ${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
+
+  function exportar() {
+    const filas: (string | number)[][] = [
+      ["Fecha", "Nº", "Tienda", "Cliente", "Email", "Estado", "Origen", "Pago", "Total"],
+      ...filtrados.map((p) => [
+        format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+        p.numero,
+        p.tienda_nombre ?? "",
+        p.cliente_nombre ?? "",
+        p.cliente_email ?? "",
+        ESTADO_LABEL[p.estado] ?? p.estado,
+        p.origen ?? "",
+        p.metodo_pago ?? "",
+        p.total,
+      ]),
+    ];
+    const csv = filas
+      .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pedidos-${format(desde, "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="space-y-4">
@@ -186,10 +288,15 @@ export function PedidosTable({ tienda }: { tienda?: string }) {
             Hoy
           </Button>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" onClick={exportar}>
             <Download className="h-4 w-4 mr-2" /> Exportar CSV
           </Button>
+          {tiendaId && (
+            <Button size="sm" onClick={() => setNuevoOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+            </Button>
+          )}
         </div>
       </div>
 
@@ -204,73 +311,143 @@ export function PedidosTable({ tienda }: { tienda?: string }) {
               className="pl-9"
             />
           </div>
-          <Select value={estado} onValueChange={setEstado}>
-            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+          <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los estados</SelectItem>
-              <SelectItem value="completado">Completado</SelectItem>
-              <SelectItem value="procesando">Procesando</SelectItem>
-              <SelectItem value="cancelado">Cancelado</SelectItem>
+              {ESTADOS.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {ESTADO_LABEL[e]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          {!tienda && (
-            <Select value={tiendaFiltro} onValueChange={setTiendaFiltro}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Tienda" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas las tiendas</SelectItem>
-                {TIENDAS_DEMO.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           <div className="text-xs text-muted-foreground ml-auto">
-            {filtrados.length} pedidos · <span className="font-semibold text-foreground">{eur(totalImporte)}</span>
+            {filtrados.length} pedidos ·{" "}
+            <span className="font-semibold text-foreground">
+              {eur(filtrados.reduce((s, p) => s + Number(p.total), 0))}
+            </span>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10" />
-                <TableHead>Fecha</TableHead>
-                <TableHead>Nº</TableHead>
-                {!tienda && <TableHead>Tienda</TableHead>}
-                <TableHead>Cliente</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Origen</TableHead>
-                <TableHead className="text-right">Metros</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtrados.map((p) => {
-                const key = p.numero;
-                const abierta = expandida === key;
-                return (
-                  <FilaPedido
-                    key={key}
-                    pedido={p}
-                    abierta={abierta}
-                    mostrarTienda={!tienda}
-                    onToggle={() => setExpandida(abierta ? null : key)}
-                  />
-                );
-              })}
-              {filtrados.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={tienda ? 8 : 9} className="text-center py-8 text-muted-foreground">
-                    Sin pedidos en este periodo.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {isLoading && (
+          <Card>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Cargando pedidos…
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && grupos.length === 0 && (
+          <Card>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Sin pedidos en este periodo.
+            </CardContent>
+          </Card>
+        )}
+        {grupos.map((g) => (
+          <div key={g.fecha}>
+            <div className="flex items-center justify-between pb-2 border-b mb-2">
+              <div className="text-sm font-semibold uppercase tracking-wider text-primary">
+                {format(new Date(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold">{eur(g.total)}</span>
+                <Badge variant="outline">
+                  {g.lista.length} {g.lista.length === 1 ? "pedido" : "pedidos"}
+                </Badge>
+              </div>
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Nº Pedido</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      {!tiendaId && <TableHead>Tienda</TableHead>}
+                      <TableHead>Origen</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Pago</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="w-10">Env.</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {g.lista.map((p) => {
+                      const abierta = expandida === p.id;
+                      return (
+                        <FilaPedido
+                          key={p.id}
+                          pedido={p}
+                          abierta={abierta}
+                          mostrarTienda={!tiendaId}
+                          onToggle={() => setExpandida(abierta ? null : p.id)}
+                          onEstadoChange={(estado) =>
+                            estadoMut.mutate({ id: p.id, estado })
+                          }
+                          onEditar={() => setEditar(p)}
+                          onTracking={() => setTracking(p)}
+                          onBorrar={() => setBorrar(p)}
+                        />
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
+      </div>
+
+      {tiendaId && (
+        <PedidoFormDialog
+          open={nuevoOpen}
+          onOpenChange={setNuevoOpen}
+          tiendaId={tiendaId}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ["pedidos"] })}
+        />
+      )}
+      <PedidoFormDialog
+        open={!!editar}
+        onOpenChange={(o) => !o && setEditar(null)}
+        tiendaId={editar?.tienda_id ?? ""}
+        pedido={editar ?? undefined}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+          setEditar(null);
+        }}
+      />
+      <PedidoTrackingDialog
+        open={!!tracking}
+        onOpenChange={(o) => !o && setTracking(null)}
+        pedido={tracking}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+          setTracking(null);
+        }}
+      />
+      <AlertDialog open={!!borrar} onOpenChange={(o) => !o && setBorrar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar pedido {borrar?.numero}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminarán también las líneas asociadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => borrar && deleteMut.mutate(borrar.id)}>
+              Borrar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -280,40 +457,92 @@ function FilaPedido({
   abierta,
   mostrarTienda,
   onToggle,
+  onEstadoChange,
+  onEditar,
+  onTracking,
+  onBorrar,
 }: {
   pedido: PedidoFila;
   abierta: boolean;
   mostrarTienda: boolean;
   onToggle: () => void;
+  onEstadoChange: (estado: string) => void;
+  onEditar: () => void;
+  onTracking: () => void;
+  onBorrar: () => void;
 }) {
-  const variant =
-    pedido.estado === "completado"
-      ? "default"
-      : pedido.estado === "procesando"
-      ? "secondary"
-      : "destructive";
+  const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
+  const numeroLabel = pedido.woo_order_id ? `#${pedido.woo_order_id}` : pedido.numero;
+
   return (
     <>
-      <TableRow className="cursor-pointer" onClick={onToggle}>
-        <TableCell>
+      <TableRow>
+        <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
-        <TableCell>{format(pedido.fecha, "dd/MM/yyyy")}</TableCell>
-        <TableCell className="font-mono text-xs">{pedido.numero}</TableCell>
-        {mostrarTienda && <TableCell>{pedido.tienda}</TableCell>}
+        <TableCell className="font-mono text-sm">{numeroLabel}</TableCell>
         <TableCell>
-          <div className="font-medium">{pedido.cliente}</div>
-          <div className="text-xs text-muted-foreground">{pedido.email}</div>
+          <div className="font-medium">{pedido.cliente_nombre ?? "—"}</div>
+          {pedido.cliente_email && (
+            <div className="text-xs text-muted-foreground">{pedido.cliente_email}</div>
+          )}
         </TableCell>
-        <TableCell><Badge variant={variant as any}>{pedido.estado}</Badge></TableCell>
-        <TableCell className="text-xs text-muted-foreground">{pedido.origen}</TableCell>
-        <TableCell className="text-right">{metros(pedido.metros)}</TableCell>
+        {mostrarTienda && (
+          <TableCell className="text-xs text-muted-foreground">{pedido.tienda_nombre ?? "—"}</TableCell>
+        )}
+        <TableCell>
+          <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
+            {origenLabel}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <Select value={pedido.estado} onValueChange={onEstadoChange}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue>
+                <Badge variant={estadoVariant(pedido.estado)}>
+                  {ESTADO_LABEL[pedido.estado] ?? pedido.estado}
+                </Badge>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {ESTADOS.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {ESTADO_LABEL[e]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground max-w-[140px]">
+          {pedido.metodo_pago ?? "—"}
+        </TableCell>
         <TableCell className="text-right font-semibold">{eur(pedido.total)}</TableCell>
+        <TableCell>
+          <Truck
+            className={`h-4 w-4 ${pedido.tracking?.codigo_seguimiento ? "text-primary" : "text-muted-foreground"}`}
+          />
+        </TableCell>
+        <TableCell>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
+              <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
+              <DropdownMenuItem onClick={onBorrar} className="text-destructive">
+                Borrar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
       </TableRow>
       {abierta && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
-          <TableCell colSpan={mostrarTienda ? 8 : 7}>
+          <TableCell colSpan={mostrarTienda ? 9 : 8}>
             <div className="py-2 space-y-2">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Líneas del pedido
@@ -322,27 +551,59 @@ function FilaPedido({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Producto</TableHead>
-                    <TableHead className="text-right">Metros</TableHead>
-                    <TableHead className="text-right">€ / m</TableHead>
+                    <TableHead className="text-right">Cantidad</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pedido.lineas.map((l, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{l.producto}</TableCell>
-                      <TableCell className="text-right">{metros(l.metros)}</TableCell>
-                      <TableCell className="text-right">{eur(l.precio)}</TableCell>
+                  {pedido.items.map((l) => (
+                    <TableRow key={l.id}>
+                      <TableCell>{l.descripcion}</TableCell>
+                      <TableCell className="text-right">
+                        {l.cantidad} {l.unidad}
+                      </TableCell>
+                      <TableCell className="text-right">{eur(l.precio_unitario)}</TableCell>
                       <TableCell className="text-right font-medium">{eur(l.subtotal)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <div className="grid grid-cols-3 gap-4 pt-2 text-sm">
-                <div><span className="text-muted-foreground">Bruto:</span> <span className="font-medium">{eur(pedido.bruto)}</span></div>
-                <div><span className="text-muted-foreground">IVA (21%):</span> <span className="font-medium">{eur(pedido.iva)}</span></div>
-                <div><span className="text-muted-foreground">Envío:</span> <span className="font-medium">{eur(pedido.envio)}</span></div>
+              <div className="grid grid-cols-4 gap-4 pt-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Subtotal:</span>{" "}
+                  <span className="font-medium">{eur(pedido.subtotal)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">IVA:</span>{" "}
+                  <span className="font-medium">{eur(pedido.iva)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Envío:</span>{" "}
+                  <span className="font-medium">{eur(pedido.envio)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total:</span>{" "}
+                  <span className="font-semibold">{eur(pedido.total)}</span>
+                </div>
               </div>
+              {pedido.tracking?.codigo_seguimiento && (
+                <div className="text-xs text-muted-foreground">
+                  Envío: {pedido.tracking.transportista} ·{" "}
+                  <span className="font-mono">{pedido.tracking.codigo_seguimiento}</span>
+                  {pedido.tracking.url && (
+                    <>
+                      {" · "}
+                      <a href={pedido.tracking.url} target="_blank" rel="noreferrer" className="underline">
+                        Seguir envío
+                      </a>
+                    </>
+                  )}
+                </div>
+              )}
+              {pedido.notas && (
+                <div className="text-xs text-muted-foreground">Notas: {pedido.notas}</div>
+              )}
             </div>
           </TableCell>
         </TableRow>

@@ -425,7 +425,9 @@ export type Database = {
       }
       pedidos: {
         Row: {
+          cliente_email: string | null
           cliente_id: string | null
+          cliente_nombre: string | null
           created_at: string
           envio: number
           estado: Database["public"]["Enums"]["pedido_estado"]
@@ -445,7 +447,9 @@ export type Database = {
           woo_order_id: number | null
         }
         Insert: {
+          cliente_email?: string | null
           cliente_id?: string | null
+          cliente_nombre?: string | null
           created_at?: string
           envio?: number
           estado?: Database["public"]["Enums"]["pedido_estado"]
@@ -465,7 +469,9 @@ export type Database = {
           woo_order_id?: number | null
         }
         Update: {
+          cliente_email?: string | null
           cliente_id?: string | null
+          cliente_nombre?: string | null
           created_at?: string
           envio?: number
           estado?: Database["public"]["Enums"]["pedido_estado"]
