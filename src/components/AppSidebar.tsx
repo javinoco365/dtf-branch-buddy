@@ -25,6 +25,8 @@ import {
   Settings,
   Printer,
   Building2,
+  Receipt,
+  Wrench,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -69,7 +71,7 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Global
+            Global / Consolidado
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -77,38 +79,18 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild isActive={pathname === "/panel"}>
                   <Link to="/panel">
                     <LayoutDashboard />
-                    <span>Panel global</span>
+                    <span>Dashboard Global</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/facturacion-global")}>
                   <Link to="/panel/facturacion-global">
-                    <FileText />
-                    <span>Facturación consolidada</span>
+                    <Receipt />
+                    <span>Facturación Consolidada</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/panel/tiendas"}>
-                    <Link to="/panel/tiendas">
-                      <Building2 />
-                      <span>Tiendas</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/panel/usuarios"}>
-                    <Link to="/panel/usuarios">
-                      <Users />
-                      <span>Usuarios</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -139,8 +121,8 @@ export function AppSidebar() {
                       <SidebarMenuSub>
                         <SubItem to="/panel/tiendas/$tiendaId/pedidos" tiendaId={t.id} label="Pedidos" icon={ShoppingCart} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/facturas" tiendaId={t.id} label="Facturas" icon={FileText} pathname={pathname} />
+                        <SubItem to="/panel/tiendas/$tiendaId/facturacion" tiendaId={t.id} label="Facturación" icon={Receipt} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/clientes" tiendaId={t.id} label="Clientes" icon={Users} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/productos" tiendaId={t.id} label="Catálogo" icon={Package} pathname={pathname} />
                         <SubItem to="/panel/tiendas/$tiendaId/ajustes" tiendaId={t.id} label="Ajustes" icon={Settings} pathname={pathname} />
                       </SidebarMenuSub>
                     )}
@@ -150,6 +132,34 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+              Sistema
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === "/panel/tiendas"}>
+                    <Link to="/panel/tiendas">
+                      <Building2 />
+                      <span>Gestión de Tiendas</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
+                    <Link to="/panel/configuracion">
+                      <Wrench />
+                      <span>Configuración general</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed && (

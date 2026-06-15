@@ -22,6 +22,7 @@ import { Route as PanelTiendasTiendaIdIndexRouteImport } from './routes/panel/ti
 import { Route as PanelTiendasTiendaIdProductosRouteImport } from './routes/panel/tiendas/$tiendaId/productos'
 import { Route as PanelTiendasTiendaIdPedidosRouteImport } from './routes/panel/tiendas/$tiendaId/pedidos'
 import { Route as PanelTiendasTiendaIdFacturasRouteImport } from './routes/panel/tiendas/$tiendaId/facturas'
+import { Route as PanelTiendasTiendaIdFacturacionRouteImport } from './routes/panel/tiendas/$tiendaId/facturacion'
 import { Route as PanelTiendasTiendaIdClientesRouteImport } from './routes/panel/tiendas/$tiendaId/clientes'
 import { Route as PanelTiendasTiendaIdAjustesRouteImport } from './routes/panel/tiendas/$tiendaId/ajustes'
 
@@ -95,6 +96,12 @@ const PanelTiendasTiendaIdFacturasRoute =
     path: '/facturas',
     getParentRoute: () => PanelTiendasTiendaIdRouteRoute,
   } as any)
+const PanelTiendasTiendaIdFacturacionRoute =
+  PanelTiendasTiendaIdFacturacionRouteImport.update({
+    id: '/facturacion',
+    path: '/facturacion',
+    getParentRoute: () => PanelTiendasTiendaIdRouteRoute,
+  } as any)
 const PanelTiendasTiendaIdClientesRoute =
   PanelTiendasTiendaIdClientesRouteImport.update({
     id: '/clientes',
@@ -120,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/ajustes': typeof PanelTiendasTiendaIdAjustesRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturacion': typeof PanelTiendasTiendaIdFacturacionRoute
   '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
@@ -135,6 +143,7 @@ export interface FileRoutesByTo {
   '/panel/tiendas': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/ajustes': typeof PanelTiendasTiendaIdAjustesRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturacion': typeof PanelTiendasTiendaIdFacturacionRoute
   '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
@@ -153,6 +162,7 @@ export interface FileRoutesById {
   '/panel/tiendas/': typeof PanelTiendasIndexRoute
   '/panel/tiendas/$tiendaId/ajustes': typeof PanelTiendasTiendaIdAjustesRoute
   '/panel/tiendas/$tiendaId/clientes': typeof PanelTiendasTiendaIdClientesRoute
+  '/panel/tiendas/$tiendaId/facturacion': typeof PanelTiendasTiendaIdFacturacionRoute
   '/panel/tiendas/$tiendaId/facturas': typeof PanelTiendasTiendaIdFacturasRoute
   '/panel/tiendas/$tiendaId/pedidos': typeof PanelTiendasTiendaIdPedidosRoute
   '/panel/tiendas/$tiendaId/productos': typeof PanelTiendasTiendaIdProductosRoute
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/'
     | '/panel/tiendas/$tiendaId/ajustes'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturacion'
     | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas'
     | '/panel/tiendas/$tiendaId/ajustes'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturacion'
     | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
@@ -204,6 +216,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/'
     | '/panel/tiendas/$tiendaId/ajustes'
     | '/panel/tiendas/$tiendaId/clientes'
+    | '/panel/tiendas/$tiendaId/facturacion'
     | '/panel/tiendas/$tiendaId/facturas'
     | '/panel/tiendas/$tiendaId/pedidos'
     | '/panel/tiendas/$tiendaId/productos'
@@ -309,6 +322,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelTiendasTiendaIdFacturasRouteImport
       parentRoute: typeof PanelTiendasTiendaIdRouteRoute
     }
+    '/panel/tiendas/$tiendaId/facturacion': {
+      id: '/panel/tiendas/$tiendaId/facturacion'
+      path: '/facturacion'
+      fullPath: '/panel/tiendas/$tiendaId/facturacion'
+      preLoaderRoute: typeof PanelTiendasTiendaIdFacturacionRouteImport
+      parentRoute: typeof PanelTiendasTiendaIdRouteRoute
+    }
     '/panel/tiendas/$tiendaId/clientes': {
       id: '/panel/tiendas/$tiendaId/clientes'
       path: '/clientes'
@@ -329,6 +349,7 @@ declare module '@tanstack/react-router' {
 interface PanelTiendasTiendaIdRouteRouteChildren {
   PanelTiendasTiendaIdAjustesRoute: typeof PanelTiendasTiendaIdAjustesRoute
   PanelTiendasTiendaIdClientesRoute: typeof PanelTiendasTiendaIdClientesRoute
+  PanelTiendasTiendaIdFacturacionRoute: typeof PanelTiendasTiendaIdFacturacionRoute
   PanelTiendasTiendaIdFacturasRoute: typeof PanelTiendasTiendaIdFacturasRoute
   PanelTiendasTiendaIdPedidosRoute: typeof PanelTiendasTiendaIdPedidosRoute
   PanelTiendasTiendaIdProductosRoute: typeof PanelTiendasTiendaIdProductosRoute
@@ -339,6 +360,7 @@ const PanelTiendasTiendaIdRouteRouteChildren: PanelTiendasTiendaIdRouteRouteChil
   {
     PanelTiendasTiendaIdAjustesRoute: PanelTiendasTiendaIdAjustesRoute,
     PanelTiendasTiendaIdClientesRoute: PanelTiendasTiendaIdClientesRoute,
+    PanelTiendasTiendaIdFacturacionRoute: PanelTiendasTiendaIdFacturacionRoute,
     PanelTiendasTiendaIdFacturasRoute: PanelTiendasTiendaIdFacturasRoute,
     PanelTiendasTiendaIdPedidosRoute: PanelTiendasTiendaIdPedidosRoute,
     PanelTiendasTiendaIdProductosRoute: PanelTiendasTiendaIdProductosRoute,
@@ -380,13 +402,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
