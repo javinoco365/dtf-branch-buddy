@@ -14,6 +14,7 @@ import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
+import { Route as PanelProyectosRouteImport } from './routes/panel/proyectos'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
@@ -52,6 +53,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
 const PanelUsuariosRoute = PanelUsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelProyectosRoute = PanelProyectosRouteImport.update({
+  id: '/proyectos',
+  path: '/proyectos',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelPedidosRoute = PanelPedidosRouteImport.update({
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
+  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
+  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel': typeof PanelIndexRoute
   '/panel/tiendas': typeof PanelTiendasIndexRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
+  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -206,6 +215,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
+    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
+    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel'
     | '/panel/tiendas'
@@ -246,6 +257,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
+    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -301,6 +313,13 @@ declare module '@tanstack/react-router' {
       path: '/usuarios'
       fullPath: '/panel/usuarios'
       preLoaderRoute: typeof PanelUsuariosRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/proyectos': {
+      id: '/panel/proyectos'
+      path: '/proyectos'
+      fullPath: '/panel/proyectos'
+      preLoaderRoute: typeof PanelProyectosRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/pedidos': {
@@ -437,6 +456,7 @@ interface PanelRouteRouteChildren {
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
+  PanelProyectosRoute: typeof PanelProyectosRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
   PanelIndexRoute: typeof PanelIndexRoute
   PanelTiendasTiendaIdRouteRoute: typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -448,6 +468,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelConfiguracionRoute: PanelConfiguracionRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelPedidosRoute: PanelPedidosRoute,
+  PanelProyectosRoute: PanelProyectosRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,
   PanelIndexRoute: PanelIndexRoute,
   PanelTiendasTiendaIdRouteRoute: PanelTiendasTiendaIdRouteRouteWithChildren,
