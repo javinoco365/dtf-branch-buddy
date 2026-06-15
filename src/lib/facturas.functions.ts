@@ -43,15 +43,42 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
       .select("descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total")
       .eq("factura_id", factura.id);
 
+    // Fallback a empresa_global cuando la factura no tiene snapshot de emisor.
+    const { data: empresa } = await supabaseAdmin
+      .from("empresa_global")
+      .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
+      .eq("id", true)
+      .maybeSingle();
+    const empresaDireccion =
+      [
+        empresa?.direccion,
+        [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
+        empresa?.provincia,
+        empresa?.pais,
+      ]
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean)
+        .join(", ") || "";
+
+    const emisorNombre =
+      (factura.emisor_nombre && factura.emisor_nombre.trim()) ||
+      empresa?.razon_social ||
+      "";
+    const emisorCif =
+      (factura.emisor_cif && factura.emisor_cif.trim()) || empresa?.cif || "";
+    const emisorDireccion =
+      (factura.emisor_direccion && factura.emisor_direccion.trim()) ||
+      empresaDireccion;
+
     const pdfData: FacturaPDFData = {
       serie: factura.serie ?? "",
       numero: factura.numero ?? 0,
       fecha: factura.fecha ?? new Date().toISOString(),
       fecha_vencimiento: factura.fecha_vencimiento,
       emisor: {
-        nombre: factura.emisor_nombre ?? "",
-        cif: factura.emisor_cif ?? "",
-        direccion: factura.emisor_direccion ?? "",
+        nombre: emisorNombre,
+        cif: emisorCif,
+        direccion: emisorDireccion,
       },
       cliente: {
         nombre: factura.cliente_nombre ?? "",
