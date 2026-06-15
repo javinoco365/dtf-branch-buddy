@@ -143,25 +143,32 @@ export function AppSidebar() {
                 const base = `/panel/tiendas/${t.id}`;
                 const isOpen = pathname.startsWith(base);
                 return (
-                  <SidebarMenuItem key={t.id}>
-                    <SidebarMenuButton asChild isActive={isOpen}>
-                      <Link to="/panel/tiendas/$tiendaId" params={{ tiendaId: t.id }}>
-                        <Store style={{ color: t.color ?? undefined }} />
-                        <span className="truncate">{t.nombre}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    {isOpen && !collapsed && (
-                      <SidebarMenuSub>
-                        <SubItem to="/panel/tiendas/$tiendaId/pedidos" tiendaId={t.id} label="Pedidos" icon={ShoppingCart} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/facturas" tiendaId={t.id} label="Facturas" icon={FileText} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/facturacion" tiendaId={t.id} label="Facturación" icon={Receipt} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/cobros" tiendaId={t.id} label="Cobros" icon={Wallet} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/proyectos" tiendaId={t.id} label="Proyectos" icon={CalendarClock} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/clientes" tiendaId={t.id} label="Clientes" icon={Users} pathname={pathname} />
-                        <SubItem to="/panel/tiendas/$tiendaId/ajustes" tiendaId={t.id} label="Ajustes" icon={Settings} pathname={pathname} />
-                      </SidebarMenuSub>
-                    )}
-                  </SidebarMenuItem>
+                  <Collapsible
+                    key={t.id}
+                    defaultOpen={isOpen}
+                    className="group/collapsible"
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton isActive={isOpen}>
+                          <Store style={{ color: t.color ?? undefined }} />
+                          <span className="truncate">{t.nombre}</span>
+                          <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          <SubItem to="/panel/tiendas/$tiendaId/pedidos" tiendaId={t.id} label="Pedidos" icon={ShoppingCart} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/facturas" tiendaId={t.id} label="Facturas" icon={FileText} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/facturacion" tiendaId={t.id} label="Facturación" icon={Receipt} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/cobros" tiendaId={t.id} label="Cobros" icon={Wallet} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/proyectos" tiendaId={t.id} label="Proyectos" icon={CalendarClock} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/clientes" tiendaId={t.id} label="Clientes" icon={Users} pathname={pathname} />
+                          <SubItem to="/panel/tiendas/$tiendaId/ajustes" tiendaId={t.id} label="Ajustes" icon={Settings} pathname={pathname} />
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
                 );
               })}
             </SidebarMenu>
