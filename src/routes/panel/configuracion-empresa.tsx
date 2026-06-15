@@ -10,7 +10,7 @@ import { ArrowLeft, Building2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 
-export const Route = createFileRoute("/panel/configuracion/empresa")({
+export const Route = createFileRoute("/panel/configuracion-empresa")({
   head: () => ({ meta: [{ title: "Datos de la empresa · CRM DTF" }] }),
   component: EmpresaPage,
 });
