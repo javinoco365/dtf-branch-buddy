@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,8 +34,9 @@ import {
 } from "@/components/ui/select";
 import { eur, fechaCorta } from "@/lib/format";
 import { generarFacturaPDF } from "@/lib/pdf-factura";
+import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import { toast } from "sonner";
-import { Download, FileText, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
@@ -67,6 +69,8 @@ function Facturas() {
   const { tiendaId } = Route.useParams();
   const qc = useQueryClient();
   const [abierto, setAbierto] = useState(false);
+  const [generandoId, setGenerandoId] = useState<string | null>(null);
+  const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda", tiendaId],
@@ -101,55 +105,28 @@ function Facturas() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // Si pdf_url es una URL firmada absoluta y no ha expirado, abrirla directamente.
+  // Si no, llamar a la server function para generar + subir el PDF y obtener URL firmada.
   async function descargar(f: any) {
-    if (f.pdf_url) {
-      const { data, error } = await supabase.storage
-        .from("facturas")
-        .createSignedUrl(f.pdf_url, 60);
-      if (error || !data) {
-        toast.error("No se pudo obtener el PDF");
-        return;
-      }
-      window.open(data.signedUrl, "_blank");
+    if (f.pdf_url && /^https?:\/\//.test(f.pdf_url)) {
+      window.open(f.pdf_url, "_blank");
       return;
     }
-    toast.message("Regenerando PDF…");
-    const { data: items } = await supabase
-      .from("factura_items")
-      .select("*")
-      .eq("factura_id", f.id);
-    const blob = await generarFacturaPDF({
-      serie: f.serie,
-      numero: f.numero,
-      fecha: f.fecha,
-      fecha_vencimiento: f.fecha_vencimiento,
-      emisor: {
-        nombre: f.emisor_nombre ?? tienda?.razon_social ?? tienda?.nombre ?? "—",
-        cif: f.emisor_cif ?? tienda?.cif ?? "—",
-        direccion: f.emisor_direccion ?? tienda?.direccion ?? "—",
-      },
-      cliente: {
-        nombre: f.cliente_nombre ?? "—",
-        nif: f.cliente_nif,
-        direccion: f.cliente_direccion,
-      },
-      items: (items ?? []).map((it: any) => ({
-        descripcion: it.descripcion,
-        cantidad: Number(it.cantidad),
-        unidad: it.unidad,
-        precio_unitario: Number(it.precio_unitario),
-        iva_rate: Number(it.iva_rate),
-        subtotal: Number(it.subtotal),
-        iva: Number(it.iva),
-        total: Number(it.total),
-      })),
-      base_imponible: Number(f.base_imponible),
-      iva_total: Number(f.iva_total),
-      total: Number(f.total),
-      notas: f.notas,
-    });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
+    setGenerandoId(f.id);
+    try {
+      const res = await generarPDFFn({ data: { factura_id: f.id } });
+      if (res?.url) {
+        window.open(res.url, "_blank");
+        toast.success("PDF generado");
+        qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+      } else {
+        toast.error("No se pudo generar el PDF");
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error generando el PDF");
+    } finally {
+      setGenerandoId(null);
+    }
   }
 
   return (
@@ -223,8 +200,18 @@ function Facturas() {
                   <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => descargar(f)}>
-                        <Download className="h-4 w-4" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => descargar(f)}
+                        disabled={generandoId === f.id}
+                        title={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
+                      >
+                        {generandoId === f.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
                       </Button>
                       {f.estado !== "pagada" && (
                         <Button
