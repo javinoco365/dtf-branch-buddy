@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Store, ShoppingBag, Building2, Receipt, KeyRound } from "lucide-react";
+import { Plus, Store, ShoppingBag, Receipt, KeyRound, Building2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { guardarCredencialesWoo } from "@/lib/admin.functions";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
@@ -36,16 +37,6 @@ type WizardForm = {
   nombre: string;
   slug: string;
   color: string;
-  // Empresa
-  razon_social: string;
-  cif: string;
-  direccion: string;
-  codigo_postal: string;
-  ciudad: string;
-  provincia: string;
-  pais: string;
-  email_fiscal: string;
-  telefono: string;
   // Facturación
   serie_factura: string;
   siguiente_numero_factura: number;
@@ -62,15 +53,6 @@ const FORM_INICIAL: WizardForm = {
   nombre: "",
   slug: "",
   color: "#3b82f6",
-  razon_social: "",
-  cif: "",
-  direccion: "",
-  codigo_postal: "",
-  ciudad: "",
-  provincia: "",
-  pais: "España",
-  email_fiscal: "",
-  telefono: "",
   serie_factura: "F",
   siguiente_numero_factura: 1,
   iva_default: 21,
