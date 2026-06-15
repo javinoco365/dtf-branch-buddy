@@ -35,10 +35,19 @@ function ConfiguracionPage() {
       <Section title="Sistema" desc="Gestión global del CRM">
         {isAdmin && (
           <ConfigCard
+            to="/panel/configuracion-empresa"
+            icon={Building2}
+            title="Datos de la empresa"
+            desc="Razón social, CIF, dirección y contacto fiscal. Únicos para toda la SL; se aplican a todas las sucursales y facturas."
+            badge="Admin"
+          />
+        )}
+        {isAdmin && (
+          <ConfigCard
             to="/panel/tiendas"
             icon={Building2}
             title="Gestión de tiendas"
-            desc="Alta de nuevas tiendas con asistente completo (datos fiscales, facturación y WooCommerce) y edición de las existentes."
+            desc="Alta de nuevas sucursales (identidad, facturación y WooCommerce) y edición de las existentes."
             badge="Admin"
           />
         )}
