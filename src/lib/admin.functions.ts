@@ -131,3 +131,36 @@ export const tieneCredencialesWoo = createServerFn({ method: "GET" })
       .maybeSingle();
     return { tiene: !!row };
   });
+
+function mask(value: string | null): string | null {
+  if (!value) return null;
+  if (value.length <= 8) return "•".repeat(value.length);
+  return `${value.slice(0, 5)}${"•".repeat(4)}${value.slice(-4)}`;
+}
+
+// Solo admins: devuelve credenciales WooCommerce enmascaradas (sin valores en claro)
+export const credencialesWooMascaradas = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rolCheck } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!rolCheck) throw new Error("Solo administradores");
+    const { data: row } = await supabaseAdmin
+      .from("tienda_credenciales")
+      .select("consumer_key, consumer_secret, updated_at")
+      .eq("tienda_id", data.tienda_id)
+      .maybeSingle();
+    if (!row) return { tiene: false, ck_mask: null, cs_mask: null, updated_at: null };
+    return {
+      tiene: true,
+      ck_mask: mask(row.consumer_key),
+      cs_mask: mask(row.consumer_secret),
+      updated_at: row.updated_at,
+    };
+  });
