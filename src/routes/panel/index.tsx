@@ -15,6 +15,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { eur, metros, numero } from "@/lib/format";
 import {
+  generarPedidosRango,
+  descargarCSV,
+  type PedidoDemo,
+} from "@/lib/demo-data";
+import {
   ChevronLeft,
   ChevronRight,
   Download,
@@ -42,78 +47,7 @@ export const Route = createFileRoute("/panel/")({
 });
 
 type Periodo = "mes" | "semana";
-
-// ---------- Demo data ----------
-const TIENDAS = ["DTF Pro", "Print&Go", "TextilDTF"] as const;
-const PRODUCTOS = [
-  "DTF Premium 60cm",
-  "DTF Económico 60cm",
-  "DTF Glitter 30cm",
-  "DTF Reflectante",
-  "DTF Glow 60cm",
-  "DTF UV",
-];
-
-// Deterministic pseudo-random based on a seed (date string)
-function hash(str: string) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return ((h >>> 0) % 1000) / 1000;
-}
-
-type Pedido = {
-  fecha: Date;
-  tienda: string;
-  bruto: number; // base imponible (sin IVA, sin envío)
-  iva: number;
-  envio: number;
-  total: number;
-  metros: number;
-  estado: "completado" | "procesando" | "cancelado";
-  producto: string;
-};
-
-function generarPedidosRango(desde: Date, hasta: Date): Pedido[] {
-  const out: Pedido[] = [];
-  const dias = eachDayOfInterval({ start: desde, end: hasta });
-  for (const dia of dias) {
-    const key = format(dia, "yyyy-MM-dd");
-    // 3-12 pedidos/día (variación por DoW)
-    const dow = dia.getDay();
-    const factor = dow === 0 || dow === 6 ? 0.5 : 1;
-    const n = Math.floor(3 + hash(key) * 9 * factor);
-    for (let i = 0; i < n; i++) {
-      const seed = `${key}-${i}`;
-      const r = hash(seed);
-      const r2 = hash(seed + "x");
-      const tienda = TIENDAS[Math.floor(r * TIENDAS.length)];
-      const producto = PRODUCTOS[Math.floor(r2 * PRODUCTOS.length)];
-      const mts = Number((2 + r * 18).toFixed(2));
-      const precioM = 8 + r2 * 6;
-      const bruto = Number((mts * precioM).toFixed(2));
-      const envio = r2 < 0.3 ? 0 : Number((3 + r2 * 4).toFixed(2));
-      const iva = Number((bruto * 0.21).toFixed(2));
-      const total = Number((bruto + iva + envio).toFixed(2));
-      const estado: Pedido["estado"] =
-        r2 < 0.06 ? "cancelado" : r < 0.15 ? "procesando" : "completado";
-      out.push({
-        fecha: dia,
-        tienda,
-        bruto,
-        iva,
-        envio,
-        total,
-        metros: mts,
-        estado,
-        producto,
-      });
-    }
-  }
-  return out;
-}
+type Pedido = PedidoDemo;
 
 function rangoPeriodo(ref: Date, periodo: Periodo) {
   if (periodo === "mes") {
@@ -141,19 +75,6 @@ function etiquetaPeriodo(ref: Date, periodo: Periodo) {
 function pct(actual: number, anterior: number) {
   if (anterior === 0) return actual === 0 ? 0 : 100;
   return ((actual - anterior) / anterior) * 100;
-}
-
-function descargarCSV(nombre: string, filas: (string | number)[][]) {
-  const csv = filas
-    .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombre;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 function DashboardGlobal() {
