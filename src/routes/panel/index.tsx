@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   addMonths,
   addWeeks,
@@ -30,6 +32,7 @@ import {
   XCircle,
   TrendingUp,
   TrendingDown,
+  Percent,
 } from "lucide-react";
 import {
   BarChart,
@@ -81,6 +84,22 @@ function DashboardGlobal() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [ref, setRef] = useState(new Date());
 
+  const { data: empresa } = useQuery({
+    queryKey: ["empresa_global_costes"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("empresa_global")
+        .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
+        .eq("id", true)
+        .maybeSingle();
+      return data;
+    },
+  });
+  const costeMetro =
+    Number(empresa?.coste_consumibles_metro ?? 0) +
+    Number(empresa?.coste_packaging_metro ?? 0) +
+    Number(empresa?.coste_electricidad_metro ?? 0);
+
   const { desde, hasta } = useMemo(() => rangoPeriodo(ref, periodo), [ref, periodo]);
   const ant = useMemo(() => rangoAnterior(ref, periodo), [ref, periodo]);
 
@@ -92,6 +111,11 @@ function DashboardGlobal() {
 
   const k = useMemo(() => calcularKPIs(pedidos), [pedidos]);
   const kPrev = useMemo(() => calcularKPIs(pedidosAnt), [pedidosAnt]);
+
+  const costePer = costeMetro * k.metros;
+  const margenPer = k.bruto - costePer;
+  const costePrev = costeMetro * kPrev.metros;
+  const margenPrev = kPrev.bruto - costePrev;
 
   const ingresosDiarios = useMemo(() => {
     const dias = eachDayOfInterval({ start: desde, end: hasta });
@@ -192,7 +216,7 @@ function DashboardGlobal() {
       </div>
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <KPI
           titulo="Total periodo"
           valor={eur(k.total)}
@@ -229,7 +253,19 @@ function DashboardGlobal() {
           color="destructive"
           deltaInverso
         />
+        <KPI
+          titulo="Margen estimado"
+          valor={eur(margenPer)}
+          delta={pct(margenPer, margenPrev)}
+          icon={Percent}
+          color="primary"
+        />
       </div>
+      {costeMetro === 0 && (
+        <p className="text-xs text-muted-foreground -mt-2">
+          Configura los costes por metro en Ajustes › Datos de la empresa para calcular el margen.
+        </p>
+      )}
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
