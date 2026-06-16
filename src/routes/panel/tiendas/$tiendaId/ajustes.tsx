@@ -27,6 +27,7 @@ import {
   Truck,
   ShoppingBag,
   Construction,
+  Calculator,
 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
@@ -51,6 +52,9 @@ type TiendaForm = {
   siguiente_numero_factura?: number;
   iva_default?: number;
   gastos_envio_default?: number;
+  coste_consumibles_metro?: number;
+  coste_packaging_metro?: number;
+  coste_electricidad_metro?: number;
 };
 
 function Ajustes() {
@@ -101,6 +105,9 @@ function Ajustes() {
         siguiente_numero_factura: Number(form.siguiente_numero_factura) || 1,
         iva_default: Number(form.iva_default) || 21,
         gastos_envio_default: Number(form.gastos_envio_default) || 0,
+        coste_consumibles_metro: Number(form.coste_consumibles_metro) || 0,
+        coste_packaging_metro: Number(form.coste_packaging_metro) || 0,
+        coste_electricidad_metro: Number(form.coste_electricidad_metro) || 0,
       };
       const { error } = await supabase.from("tiendas").update(payload).eq("id", tiendaId);
       if (error) throw error;
@@ -133,10 +140,11 @@ function Ajustes() {
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto">
           <TabsTrigger value="woo" className="gap-2"><ShoppingBag className="h-4 w-4" />WooCommerce</TabsTrigger>
           <TabsTrigger value="empresa" className="gap-2"><Building2 className="h-4 w-4" />Mi empresa</TabsTrigger>
           <TabsTrigger value="facturacion" className="gap-2"><Receipt className="h-4 w-4" />Facturación</TabsTrigger>
+          <TabsTrigger value="costes" className="gap-2"><Calculator className="h-4 w-4" />Costes</TabsTrigger>
           <TabsTrigger value="seguimiento" className="gap-2"><Truck className="h-4 w-4" />Seguimiento</TabsTrigger>
         </TabsList>
 
