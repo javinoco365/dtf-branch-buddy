@@ -14,25 +14,25 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
-      const [pedidos, facturas, tienda] = await Promise.all([
+      const [pedidos, facturas, empresa] = await Promise.all([
         supabase.from("pedidos").select("total, metros_total, fecha_pedido, estado").eq("tienda_id", tiendaId),
         supabase.from("facturas").select("total, estado").eq("tienda_id", tiendaId),
         supabase
-          .from("tiendas")
+          .from("empresa_global")
           .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-          .eq("id", tiendaId)
+          .eq("id", true)
           .maybeSingle(),
       ]);
-      return { pedidos: pedidos.data ?? [], facturas: facturas.data ?? [], tienda: tienda.data };
+      return { pedidos: pedidos.data ?? [], facturas: facturas.data ?? [], empresa: empresa.data };
     },
   });
   const pedidos = data?.pedidos ?? [];
   const facturas = data?.facturas ?? [];
-  const t = data?.tienda;
+  const eg = data?.empresa;
   const costeMetro =
-    Number(t?.coste_consumibles_metro ?? 0) +
-    Number(t?.coste_packaging_metro ?? 0) +
-    Number(t?.coste_electricidad_metro ?? 0);
+    Number(eg?.coste_consumibles_metro ?? 0) +
+    Number(eg?.coste_packaging_metro ?? 0) +
+    Number(eg?.coste_electricidad_metro ?? 0);
   const fact = facturas.filter((f) => f.estado !== "anulada" && f.estado !== "borrador").reduce((s, f) => s + Number(f.total), 0);
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
 
@@ -94,7 +94,7 @@ function Dashboard() {
           v={eur(margenMes)}
           sub={
             costeMetro === 0
-              ? "Configura los costes en Ajustes › Costes"
+              ? "Configura los costes en Ajustes › Datos de la empresa"
               : `Coste ${eur(costeMes)} (${costeMetro.toFixed(3)} €/m × ${metros(metrosMes)})${
                   margenPct !== null ? ` · ${margenPct.toFixed(1)}% margen` : ""
                 }`
