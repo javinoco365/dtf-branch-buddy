@@ -84,6 +84,9 @@ export type Database = {
           cif: string | null
           ciudad: string | null
           codigo_postal: string | null
+          coste_consumibles_metro: number
+          coste_electricidad_metro: number
+          coste_packaging_metro: number
           created_at: string
           direccion: string | null
           email_fiscal: string | null
@@ -98,6 +101,9 @@ export type Database = {
           cif?: string | null
           ciudad?: string | null
           codigo_postal?: string | null
+          coste_consumibles_metro?: number
+          coste_electricidad_metro?: number
+          coste_packaging_metro?: number
           created_at?: string
           direccion?: string | null
           email_fiscal?: string | null
@@ -112,6 +118,9 @@ export type Database = {
           cif?: string | null
           ciudad?: string | null
           codigo_postal?: string | null
+          coste_consumibles_metro?: number
+          coste_electricidad_metro?: number
+          coste_packaging_metro?: number
           created_at?: string
           direccion?: string | null
           email_fiscal?: string | null
@@ -739,9 +748,6 @@ export type Database = {
           ciudad: string | null
           codigo_postal: string | null
           color: string | null
-          coste_consumibles_metro: number
-          coste_electricidad_metro: number
-          coste_packaging_metro: number
           created_at: string
           created_by: string | null
           direccion: string | null
@@ -767,9 +773,6 @@ export type Database = {
           ciudad?: string | null
           codigo_postal?: string | null
           color?: string | null
-          coste_consumibles_metro?: number
-          coste_electricidad_metro?: number
-          coste_packaging_metro?: number
           created_at?: string
           created_by?: string | null
           direccion?: string | null
@@ -795,9 +798,6 @@ export type Database = {
           ciudad?: string | null
           codigo_postal?: string | null
           color?: string | null
-          coste_consumibles_metro?: number
-          coste_electricidad_metro?: number
-          coste_packaging_metro?: number
           created_at?: string
           created_by?: string | null
           direccion?: string | null

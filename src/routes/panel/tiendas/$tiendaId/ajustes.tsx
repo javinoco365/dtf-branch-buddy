@@ -27,7 +27,6 @@ import {
   Truck,
   ShoppingBag,
   Construction,
-  Calculator,
 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
@@ -52,9 +51,6 @@ type TiendaForm = {
   siguiente_numero_factura?: number;
   iva_default?: number;
   gastos_envio_default?: number;
-  coste_consumibles_metro?: number;
-  coste_packaging_metro?: number;
-  coste_electricidad_metro?: number;
 };
 
 function Ajustes() {
@@ -105,9 +101,6 @@ function Ajustes() {
         siguiente_numero_factura: Number(form.siguiente_numero_factura) || 1,
         iva_default: Number(form.iva_default) || 21,
         gastos_envio_default: Number(form.gastos_envio_default) || 0,
-        coste_consumibles_metro: Number(form.coste_consumibles_metro) || 0,
-        coste_packaging_metro: Number(form.coste_packaging_metro) || 0,
-        coste_electricidad_metro: Number(form.coste_electricidad_metro) || 0,
       };
       const { error } = await supabase.from("tiendas").update(payload).eq("id", tiendaId);
       if (error) throw error;
@@ -140,11 +133,10 @@ function Ajustes() {
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto">
           <TabsTrigger value="woo" className="gap-2"><ShoppingBag className="h-4 w-4" />WooCommerce</TabsTrigger>
           <TabsTrigger value="empresa" className="gap-2"><Building2 className="h-4 w-4" />Mi empresa</TabsTrigger>
           <TabsTrigger value="facturacion" className="gap-2"><Receipt className="h-4 w-4" />Facturación</TabsTrigger>
-          <TabsTrigger value="costes" className="gap-2"><Calculator className="h-4 w-4" />Costes</TabsTrigger>
           <TabsTrigger value="seguimiento" className="gap-2"><Truck className="h-4 w-4" />Seguimiento</TabsTrigger>
         </TabsList>
 
@@ -298,55 +290,6 @@ function Ajustes() {
         </TabsContent>
 
         {/* === SEGUIMIENTO === */}
-        {/* === COSTES === */}
-        <TabsContent value="costes" className="space-y-4 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Calculator className="h-4 w-4" />
-                Costes de producción por metro
-              </CardTitle>
-              <CardDescription>
-                Importes en € por metro producido. Se utilizan para calcular el margen estimado del mes en el dashboard de la tienda.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3">
-              <FieldNumber
-                label="Consumibles (€/m)"
-                v={form.coste_consumibles_metro}
-                on={(v) => set("coste_consumibles_metro", v)}
-                step="0.001"
-              />
-              <FieldNumber
-                label="Packaging (€/m)"
-                v={form.coste_packaging_metro}
-                on={(v) => set("coste_packaging_metro", v)}
-                step="0.001"
-              />
-              <FieldNumber
-                label="Electricidad (€/m)"
-                v={form.coste_electricidad_metro}
-                on={(v) => set("coste_electricidad_metro", v)}
-                step="0.001"
-              />
-              <div className="md:col-span-3 text-sm text-muted-foreground border-t pt-3">
-                Coste total estimado:{" "}
-                <span className="font-semibold text-foreground">
-                  {(
-                    (Number(form.coste_consumibles_metro) || 0) +
-                    (Number(form.coste_packaging_metro) || 0) +
-                    (Number(form.coste_electricidad_metro) || 0)
-                  ).toFixed(3)}{" "}
-                  €/m
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-          <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-            Guardar cambios
-          </Button>
-        </TabsContent>
-
         <TabsContent value="seguimiento" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
