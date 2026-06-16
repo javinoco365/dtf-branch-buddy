@@ -119,27 +119,6 @@ function TiendasIndex() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {isAdmin && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Card className="border-dashed hover:border-primary transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[180px]">
-                <CardContent className="flex flex-col items-center gap-3 text-muted-foreground">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Plus className="h-6 w-6 text-primary" />
-                  </div>
-                  <span className="font-medium">Crear tienda</span>
-                </CardContent>
-              </Card>
-            </DialogTrigger>
-            <NuevaTiendaWizard
-              onDone={() => {
-                setOpen(false);
-                qc.invalidateQueries({ queryKey: ["tiendas"] });
-                qc.invalidateQueries({ queryKey: ["tiendas-sidebar"] });
-              }}
-            />
-          </Dialog>
-        )}
         {tiendas.map((t) => (
           <Link key={t.id} to="/panel/tiendas/$tiendaId" params={{ tiendaId: t.id }}>
             <Card className="hover:border-primary transition-colors cursor-pointer">
