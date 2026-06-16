@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Building2, Save } from "lucide-react";
+import { ArrowLeft, Building2, Save, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 
@@ -25,6 +25,9 @@ type EmpresaForm = {
   pais: string;
   email_fiscal: string;
   telefono: string;
+  coste_consumibles_metro: number;
+  coste_packaging_metro: number;
+  coste_electricidad_metro: number;
 };
 
 const EMPTY: EmpresaForm = {
@@ -37,6 +40,9 @@ const EMPTY: EmpresaForm = {
   pais: "España",
   email_fiscal: "",
   telefono: "",
+  coste_consumibles_metro: 0,
+  coste_packaging_metro: 0,
+  coste_electricidad_metro: 0,
 };
 
 function EmpresaPage() {
@@ -70,6 +76,9 @@ function EmpresaPage() {
         pais: data.pais ?? "España",
         email_fiscal: data.email_fiscal ?? "",
         telefono: data.telefono ?? "",
+        coste_consumibles_metro: Number(data.coste_consumibles_metro ?? 0),
+        coste_packaging_metro: Number(data.coste_packaging_metro ?? 0),
+        coste_electricidad_metro: Number(data.coste_electricidad_metro ?? 0),
       });
     }
   }, [data]);
@@ -157,6 +166,90 @@ function EmpresaPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calculator className="h-4 w-4" />
+            Costes de producción por metro
+          </CardTitle>
+          <CardDescription>
+            Importes en € por metro producido, compartidos por todas las tiendas. Se usan para calcular el margen estimado del mes en cada dashboard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Cargando…</div>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <NumberField
+                  label="Consumibles (€/m)"
+                  v={f.coste_consumibles_metro}
+                  on={(v) => set("coste_consumibles_metro", v)}
+                  disabled={!isAdmin}
+                />
+                <NumberField
+                  label="Packaging (€/m)"
+                  v={f.coste_packaging_metro}
+                  on={(v) => set("coste_packaging_metro", v)}
+                  disabled={!isAdmin}
+                />
+                <NumberField
+                  label="Electricidad (€/m)"
+                  v={f.coste_electricidad_metro}
+                  on={(v) => set("coste_electricidad_metro", v)}
+                  disabled={!isAdmin}
+                />
+              </div>
+              <div className="text-sm text-muted-foreground border-t pt-3">
+                Coste total estimado:{" "}
+                <span className="font-semibold text-foreground">
+                  {(
+                    (Number(f.coste_consumibles_metro) || 0) +
+                    (Number(f.coste_packaging_metro) || 0) +
+                    (Number(f.coste_electricidad_metro) || 0)
+                  ).toFixed(3)}{" "}
+                  €/m
+                </span>
+              </div>
+              {isAdmin && (
+                <div className="flex justify-end pt-2">
+                  <Button onClick={guardar} disabled={saving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {saving ? "Guardando…" : "Guardar cambios"}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  v,
+  on,
+  disabled,
+}: {
+  label: string;
+  v: number;
+  on: (v: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        type="number"
+        step="0.001"
+        value={v}
+        onChange={(e) => on(Number(e.target.value))}
+        disabled={disabled}
+      />
     </div>
   );
 }
