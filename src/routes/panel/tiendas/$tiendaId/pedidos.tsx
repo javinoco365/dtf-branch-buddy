@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { PedidosTable } from "@/components/PedidosTable";
+import { PedidosTableLazy } from "@/components/PedidosTableLazy";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({
   component: Pedidos,
@@ -31,7 +31,7 @@ function Pedidos() {
           Pedidos sincronizados con WooCommerce y manuales.
         </p>
       </div>
-      <PedidosTable tiendaId={tiendaId} />
+      <PedidosTableLazy tiendaId={tiendaId} />
     </div>
   );
 }

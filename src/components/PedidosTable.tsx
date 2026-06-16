@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import {
   addMonths,
   addWeeks,
@@ -54,8 +54,12 @@ import {
   listPedidos,
   updatePedidoEstado,
 } from "@/lib/pedidos.functions";
-import { PedidoFormDialog } from "@/components/PedidoFormDialog";
-import { PedidoTrackingDialog } from "@/components/PedidoTrackingDialog";
+const PedidoFormDialog = lazy(() =>
+  import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog }))
+);
+const PedidoTrackingDialog = lazy(() =>
+  import("@/components/PedidoTrackingDialog").then((m) => ({ default: m.PedidoTrackingDialog }))
+);
 import {
   AlertDialog,
   AlertDialogAction,
@@ -405,33 +409,39 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         ))}
       </div>
 
-      {tiendaId && (
-        <PedidoFormDialog
-          open={nuevoOpen}
-          onOpenChange={setNuevoOpen}
-          tiendaId={tiendaId}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ["pedidos"] })}
-        />
-      )}
-      <PedidoFormDialog
-        open={!!editar}
-        onOpenChange={(o) => !o && setEditar(null)}
-        tiendaId={editar?.tienda_id ?? ""}
-        pedido={editar ?? undefined}
-        onSaved={() => {
-          queryClient.invalidateQueries({ queryKey: ["pedidos"] });
-          setEditar(null);
-        }}
-      />
-      <PedidoTrackingDialog
-        open={!!tracking}
-        onOpenChange={(o) => !o && setTracking(null)}
-        pedido={tracking}
-        onSaved={() => {
-          queryClient.invalidateQueries({ queryKey: ["pedidos"] });
-          setTracking(null);
-        }}
-      />
+      <Suspense fallback={null}>
+        {tiendaId && nuevoOpen && (
+          <PedidoFormDialog
+            open={nuevoOpen}
+            onOpenChange={setNuevoOpen}
+            tiendaId={tiendaId}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ["pedidos"] })}
+          />
+        )}
+        {editar && (
+          <PedidoFormDialog
+            open={!!editar}
+            onOpenChange={(o) => !o && setEditar(null)}
+            tiendaId={editar?.tienda_id ?? ""}
+            pedido={editar ?? undefined}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+              setEditar(null);
+            }}
+          />
+        )}
+        {tracking && (
+          <PedidoTrackingDialog
+            open={!!tracking}
+            onOpenChange={(o) => !o && setTracking(null)}
+            pedido={tracking}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+              setTracking(null);
+            }}
+          />
+        )}
+      </Suspense>
       <AlertDialog open={!!borrar} onOpenChange={(o) => !o && setBorrar(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
