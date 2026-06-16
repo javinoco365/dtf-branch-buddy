@@ -17,7 +17,7 @@ function Pedidos() {
         .select("nombre")
         .eq("id", tiendaId)
         .maybeSingle();
-      return data?.nombre ?? null;
+      return data;
     },
   });
 
@@ -25,7 +25,7 @@ function Pedidos() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Pedidos · {tienda ?? "Tienda"}
+          Pedidos · {tienda?.nombre ?? "Tienda"}
         </h1>
         <p className="text-sm text-muted-foreground">
           Pedidos sincronizados con WooCommerce y manuales.
