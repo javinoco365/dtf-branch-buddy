@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import {
   addMonths,
   addWeeks,
@@ -54,8 +54,12 @@ import {
   listPedidos,
   updatePedidoEstado,
 } from "@/lib/pedidos.functions";
-import { PedidoFormDialog } from "@/components/PedidoFormDialog";
-import { PedidoTrackingDialog } from "@/components/PedidoTrackingDialog";
+const PedidoFormDialog = lazy(() =>
+  import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog }))
+);
+const PedidoTrackingDialog = lazy(() =>
+  import("@/components/PedidoTrackingDialog").then((m) => ({ default: m.PedidoTrackingDialog }))
+);
 import {
   AlertDialog,
   AlertDialogAction,
