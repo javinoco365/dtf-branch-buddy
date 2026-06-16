@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PedidosTable } from "@/components/PedidosTable";
+import { PedidosTableLazy } from "@/components/PedidosTableLazy";
 
 export const Route = createFileRoute("/panel/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos Consolidados · CRM DTF" }] }),
@@ -15,7 +15,7 @@ function PedidosGlobal() {
           Vista unificada de pedidos de todas las tiendas. Filtra y exporta.
         </p>
       </div>
-      <PedidosTable />
+      <PedidosTableLazy />
     </div>
   );
 }
