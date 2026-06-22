@@ -105,7 +105,10 @@ function TiendasIndex() {
         {isAdmin && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Nueva tienda</Button>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva tienda
+              </Button>
             </DialogTrigger>
             <NuevaTiendaWizard
               onDone={() => {
@@ -139,7 +142,11 @@ function TiendasIndex() {
           </Link>
         ))}
         {tiendas.length === 0 && (
-          <Card className="md:col-span-2 lg:col-span-3"><CardContent className="text-center py-12 text-muted-foreground">No hay tiendas. {isAdmin && "Crea la primera."}</CardContent></Card>
+          <Card className="md:col-span-2 lg:col-span-3">
+            <CardContent className="text-center py-12 text-muted-foreground">
+              No hay tiendas. {isAdmin && "Crea la primera."}
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
@@ -161,14 +168,17 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
       setTab("identidad");
       return;
     }
-    if (f.sync_enabled && (!f.woo_url.trim() || !f.consumer_key.trim() || !f.consumer_secret.trim())) {
+    if (
+      f.sync_enabled &&
+      (!f.woo_url.trim() || !f.consumer_key.trim() || !f.consumer_secret.trim())
+    ) {
       toast.error("Para activar la sincronización necesitas URL + Consumer Key + Secret");
       setTab("woo");
       return;
     }
     setSaving(true);
     try {
-      const slug = (f.slug || slugify(f.nombre)) || null;
+      const slug = f.slug || slugify(f.nombre) || null;
       const { data: tienda, error } = await supabase
         .from("tiendas")
         .insert({
@@ -224,19 +234,38 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="identidad" className="gap-1"><Store className="h-3.5 w-3.5" />Identidad</TabsTrigger>
-          <TabsTrigger value="facturacion" className="gap-1"><Receipt className="h-3.5 w-3.5" />Facturación</TabsTrigger>
-          <TabsTrigger value="woo" className="gap-1"><ShoppingBag className="h-3.5 w-3.5" />WooCommerce</TabsTrigger>
+          <TabsTrigger value="identidad" className="gap-1">
+            <Store className="h-3.5 w-3.5" />
+            Identidad
+          </TabsTrigger>
+          <TabsTrigger value="facturacion" className="gap-1">
+            <Receipt className="h-3.5 w-3.5" />
+            Facturación
+          </TabsTrigger>
+          <TabsTrigger value="woo" className="gap-1">
+            <ShoppingBag className="h-3.5 w-3.5" />
+            WooCommerce
+          </TabsTrigger>
         </TabsList>
 
         {/* === IDENTIDAD === */}
         <TabsContent value="identidad" className="space-y-3 mt-4">
           <Row>
-            <FieldText label="Nombre comercial *" v={f.nombre} on={(v) => {
-              set("nombre", v);
-              if (!f.slug) set("slug", slugify(v));
-            }} placeholder="DTFTextil.es" />
-            <FieldText label="Slug" v={f.slug} on={(v) => set("slug", slugify(v))} placeholder="dtftextil" />
+            <FieldText
+              label="Nombre comercial *"
+              v={f.nombre}
+              on={(v) => {
+                set("nombre", v);
+                if (!f.slug) set("slug", slugify(v));
+              }}
+              placeholder="DTFTextil.es"
+            />
+            <FieldText
+              label="Slug"
+              v={f.slug}
+              on={(v) => set("slug", slugify(v))}
+              placeholder="dtftextil"
+            />
           </Row>
           <div className="space-y-1">
             <Label className="text-xs">Color identificativo</Label>
@@ -247,7 +276,11 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
                 onChange={(e) => set("color", e.target.value)}
                 className="h-9 w-12 rounded border bg-background cursor-pointer"
               />
-              <Input value={f.color} onChange={(e) => set("color", e.target.value)} className="w-32 font-mono" />
+              <Input
+                value={f.color}
+                onChange={(e) => set("color", e.target.value)}
+                className="w-32 font-mono"
+              />
               <span className="text-xs text-muted-foreground">Se usa en el sidebar y badges.</span>
             </div>
           </div>
@@ -255,8 +288,8 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
             <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
             <div className="text-xs text-muted-foreground space-y-1">
               <p>
-                Esta tienda heredará automáticamente los datos fiscales de la SL
-                (razón social, CIF, dirección, etc.).
+                Esta tienda heredará automáticamente los datos fiscales de la SL (razón social, CIF,
+                dirección, etc.).
               </p>
               <p>
                 Si necesitas modificarlos, ve a{" "}
@@ -272,12 +305,31 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
         {/* === FACTURACIÓN === */}
         <TabsContent value="facturacion" className="space-y-3 mt-4">
           <Row>
-            <FieldText label="Serie de factura" v={f.serie_factura} on={(v) => set("serie_factura", v)} placeholder="F" />
-            <FieldNum label="Siguiente nº de factura" v={f.siguiente_numero_factura} on={(v) => set("siguiente_numero_factura", v)} />
+            <FieldText
+              label="Serie de factura"
+              v={f.serie_factura}
+              on={(v) => set("serie_factura", v)}
+              placeholder="F"
+            />
+            <FieldNum
+              label="Siguiente nº de factura"
+              v={f.siguiente_numero_factura}
+              on={(v) => set("siguiente_numero_factura", v)}
+            />
           </Row>
           <Row>
-            <FieldNum label="IVA por defecto (%)" v={f.iva_default} on={(v) => set("iva_default", v)} step="0.01" />
-            <FieldNum label="Gastos de envío (€)" v={f.gastos_envio_default} on={(v) => set("gastos_envio_default", v)} step="0.01" />
+            <FieldNum
+              label="IVA por defecto (%)"
+              v={f.iva_default}
+              on={(v) => set("iva_default", v)}
+              step="0.01"
+            />
+            <FieldNum
+              label="Gastos de envío (€)"
+              v={f.gastos_envio_default}
+              on={(v) => set("gastos_envio_default", v)}
+              step="0.01"
+            />
           </Row>
         </TabsContent>
 
@@ -326,25 +378,25 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
 
       <DialogFooter className="mt-4 flex !justify-between items-center w-full">
         <div className="text-xs text-muted-foreground">
-          {f.nombre ? <>Creando <strong>{f.nombre}</strong></> : "Empieza por el nombre"}
+          {f.nombre ? (
+            <>
+              Creando <strong>{f.nombre}</strong>
+            </>
+          ) : (
+            "Empieza por el nombre"
+          )}
         </div>
         <div className="flex gap-2">
           {tab !== "identidad" && (
             <Button
               variant="ghost"
-              onClick={() =>
-                setTab(tab === "facturacion" ? "identidad" : "facturacion")
-              }
+              onClick={() => setTab(tab === "facturacion" ? "identidad" : "facturacion")}
             >
               Anterior
             </Button>
           )}
           {tab !== "woo" ? (
-            <Button
-              onClick={() =>
-                setTab(tab === "identidad" ? "facturacion" : "woo")
-              }
-            >
+            <Button onClick={() => setTab(tab === "identidad" ? "facturacion" : "woo")}>
               Siguiente
             </Button>
           ) : (

@@ -49,16 +49,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
-import {
-  deletePedido,
-  listPedidos,
-  updatePedidoEstado,
-} from "@/lib/pedidos.functions";
+import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
 const PedidoFormDialog = lazy(() =>
-  import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog }))
+  import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
 const PedidoTrackingDialog = lazy(() =>
-  import("@/components/PedidoTrackingDialog").then((m) => ({ default: m.PedidoTrackingDialog }))
+  import("@/components/PedidoTrackingDialog").then((m) => ({ default: m.PedidoTrackingDialog })),
 );
 import {
   AlertDialog,
@@ -392,9 +388,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                           abierta={abierta}
                           mostrarTienda={!tiendaId}
                           onToggle={() => setExpandida(abierta ? null : p.id)}
-                          onEstadoChange={(estado) =>
-                            estadoMut.mutate({ id: p.id, estado })
-                          }
+                          onEstadoChange={(estado) => estadoMut.mutate({ id: p.id, estado })}
                           onEditar={() => setEditar(p)}
                           onTracking={() => setTracking(p)}
                           onBorrar={() => setBorrar(p)}
@@ -498,7 +492,9 @@ function FilaPedido({
           )}
         </TableCell>
         {mostrarTienda && (
-          <TableCell className="text-xs text-muted-foreground">{pedido.tienda_nombre ?? "—"}</TableCell>
+          <TableCell className="text-xs text-muted-foreground">
+            {pedido.tienda_nombre ?? "—"}
+          </TableCell>
         )}
         <TableCell>
           <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
@@ -604,7 +600,12 @@ function FilaPedido({
                   {pedido.tracking.url && (
                     <>
                       {" · "}
-                      <a href={pedido.tracking.url} target="_blank" rel="noreferrer" className="underline">
+                      <a
+                        href={pedido.tracking.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
                         Seguir envío
                       </a>
                     </>

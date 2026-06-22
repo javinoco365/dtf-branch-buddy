@@ -75,38 +75,38 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.025 260);
   /* Acento primario: naranja coral #FF6B45 */
-  --primary: oklch(0.70 0.18 35);
+  --primary: oklch(0.7 0.18 35);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.96 0.005 255);
   --secondary-foreground: oklch(0.24 0.025 260);
   --muted: oklch(0.96 0.005 255);
   --muted-foreground: oklch(0.52 0.02 258);
   --accent: oklch(0.96 0.01 35);
-  --accent-foreground: oklch(0.30 0.10 35);
-  --destructive: oklch(0.60 0.22 27);
+  --accent-foreground: oklch(0.3 0.1 35);
+  --destructive: oklch(0.6 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(0.92 0.008 255);
   --input: oklch(0.92 0.008 255);
-  --ring: oklch(0.70 0.18 35);
+  --ring: oklch(0.7 0.18 35);
   /* Charts: naranja coral primario + complementarios sobrios */
-  --chart-1: oklch(0.70 0.18 35);
+  --chart-1: oklch(0.7 0.18 35);
   --chart-2: oklch(0.65 0.12 220);
-  --chart-3: oklch(0.70 0.14 150);
+  --chart-3: oklch(0.7 0.14 150);
   --chart-4: oklch(0.75 0.15 75);
   --chart-5: oklch(0.55 0.18 300);
   /* Sidebar: azul marino/slate muy oscuro #1B2433 */
   --sidebar: oklch(0.24 0.025 255);
   --sidebar-foreground: oklch(0.92 0.01 255);
-  --sidebar-primary: oklch(0.70 0.18 35);
+  --sidebar-primary: oklch(0.7 0.18 35);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.30 0.03 255);
+  --sidebar-accent: oklch(0.3 0.03 255);
   --sidebar-accent-foreground: oklch(0.98 0.005 255);
   --sidebar-border: oklch(0.32 0.03 255);
-  --sidebar-ring: oklch(0.70 0.18 35);
+  --sidebar-ring: oklch(0.7 0.18 35);
   /* Estados */
   --status-procesando: oklch(0.65 0.15 235);
   --status-completado: oklch(0.65 0.16 150);
-  --status-cancelado: oklch(0.60 0.22 27);
+  --status-cancelado: oklch(0.6 0.22 27);
   --status-pendiente: oklch(0.78 0.15 80);
 }
 
@@ -145,7 +145,7 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
   --status-procesando: oklch(0.68 0.15 235);
   --status-completado: oklch(0.72 0.16 150);
-  --status-cancelado: oklch(0.70 0.19 27);
+  --status-cancelado: oklch(0.7 0.19 27);
   --status-pendiente: oklch(0.78 0.15 80);
 }
 

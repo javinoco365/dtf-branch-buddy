@@ -87,7 +87,11 @@ function ConfigCard({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="font-semibold">{title}</div>
-              {badge && <Badge variant="secondary" className="text-[10px] py-0">{badge}</Badge>}
+              {badge && (
+                <Badge variant="secondary" className="text-[10px] py-0">
+                  {badge}
+                </Badge>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">{desc}</div>
           </div>
@@ -96,4 +100,3 @@ function ConfigCard({
     </Link>
   );
 }
-

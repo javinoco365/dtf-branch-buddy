@@ -13,10 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
-import {
-  guardarCredencialesWoo,
-  credencialesWooMascaradas,
-} from "@/lib/admin.functions";
+import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 import {
   RefreshCw,
@@ -134,10 +131,22 @@ function Ajustes() {
 
       <Tabs defaultValue="woo">
         <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto">
-          <TabsTrigger value="woo" className="gap-2"><ShoppingBag className="h-4 w-4" />WooCommerce</TabsTrigger>
-          <TabsTrigger value="empresa" className="gap-2"><Building2 className="h-4 w-4" />Mi empresa</TabsTrigger>
-          <TabsTrigger value="facturacion" className="gap-2"><Receipt className="h-4 w-4" />Facturación</TabsTrigger>
-          <TabsTrigger value="seguimiento" className="gap-2"><Truck className="h-4 w-4" />Seguimiento</TabsTrigger>
+          <TabsTrigger value="woo" className="gap-2">
+            <ShoppingBag className="h-4 w-4" />
+            WooCommerce
+          </TabsTrigger>
+          <TabsTrigger value="empresa" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Mi empresa
+          </TabsTrigger>
+          <TabsTrigger value="facturacion" className="gap-2">
+            <Receipt className="h-4 w-4" />
+            Facturación
+          </TabsTrigger>
+          <TabsTrigger value="seguimiento" className="gap-2">
+            <Truck className="h-4 w-4" />
+            Seguimiento
+          </TabsTrigger>
         </TabsList>
 
         {/* === WOOCOMMERCE === */}
@@ -177,7 +186,9 @@ function Ajustes() {
             csMask={creds?.cs_mask ?? null}
             updatedAt={creds?.updated_at ?? null}
             onSave={async (ck, cs) => {
-              await guardarCreds({ data: { tienda_id: tiendaId, consumer_key: ck, consumer_secret: cs } });
+              await guardarCreds({
+                data: { tienda_id: tiendaId, consumer_key: ck, consumer_secret: cs },
+              });
               await refetchCreds();
             }}
           />
@@ -191,7 +202,9 @@ function Ajustes() {
               onClick={async () => {
                 try {
                   const r = await sync({ data: { tienda_id: tiendaId } });
-                  toast.success(`Sincronizado: ${r.pedidos} pedidos, ${r.clientes} clientes, ${r.productos} productos`);
+                  toast.success(
+                    `Sincronizado: ${r.pedidos} pedidos, ${r.clientes} clientes, ${r.productos} productos`,
+                  );
                   qc.invalidateQueries();
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -214,9 +227,17 @@ function Ajustes() {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <Field label="Nombre comercial" v={form.nombre} on={(v) => set("nombre", v)} />
-              <Field label="Razón social" v={form.razon_social} on={(v) => set("razon_social", v)} />
+              <Field
+                label="Razón social"
+                v={form.razon_social}
+                on={(v) => set("razon_social", v)}
+              />
               <Field label="CIF / NIF" v={form.cif} on={(v) => set("cif", v)} />
-              <Field label="Email fiscal" v={form.email_fiscal} on={(v) => set("email_fiscal", v)} />
+              <Field
+                label="Email fiscal"
+                v={form.email_fiscal}
+                on={(v) => set("email_fiscal", v)}
+              />
               <Field label="Teléfono" v={form.telefono} on={(v) => set("telefono", v)} />
               <Field
                 label="URL del logo"
@@ -225,7 +246,11 @@ function Ajustes() {
                 placeholder="https://…/logo.png"
               />
               <Field label="Dirección" v={form.direccion} on={(v) => set("direccion", v)} />
-              <Field label="Código postal" v={form.codigo_postal} on={(v) => set("codigo_postal", v)} />
+              <Field
+                label="Código postal"
+                v={form.codigo_postal}
+                on={(v) => set("codigo_postal", v)}
+              />
               <Field label="Ciudad" v={form.ciudad} on={(v) => set("ciudad", v)} />
               <Field label="Provincia" v={form.provincia} on={(v) => set("provincia", v)} />
               <Field label="País" v={form.pais} on={(v) => set("pais", v)} />
@@ -306,7 +331,9 @@ function Ajustes() {
               <Alert>
                 <Construction className="h-4 w-4" />
                 <AlertDescription>
-                  Esta sección está preparada como placeholder. Cuando definas qué empresas de transporte (Correos Express, SEUR, GLS, MRW, …) usaréis, configuraremos la generación automática de URLs de tracking para incluir en emails y facturas.
+                  Esta sección está preparada como placeholder. Cuando definas qué empresas de
+                  transporte (Correos Express, SEUR, GLS, MRW, …) usaréis, configuraremos la
+                  generación automática de URLs de tracking para incluir en emails y facturas.
                 </AlertDescription>
               </Alert>
               <div className="grid gap-4 md:grid-cols-2 opacity-50 pointer-events-none">
@@ -397,7 +424,9 @@ function CredencialesCard({
         <div className="grid md:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">
-              {tieneCreds ? "Nueva Consumer Key (dejar vacío para mantener la actual)" : "Consumer Key"}
+              {tieneCreds
+                ? "Nueva Consumer Key (dejar vacío para mantener la actual)"
+                : "Consumer Key"}
             </Label>
             <Input
               placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxx"
@@ -408,7 +437,9 @@ function CredencialesCard({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">
-              {tieneCreds ? "Nuevo Consumer Secret (dejar vacío para mantener la actual)" : "Consumer Secret"}
+              {tieneCreds
+                ? "Nuevo Consumer Secret (dejar vacío para mantener la actual)"
+                : "Consumer Secret"}
             </Label>
             <Input
               type="password"
@@ -420,11 +451,7 @@ function CredencialesCard({
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          onClick={handleSave}
-          disabled={!ck || !cs || saving}
-        >
+        <Button variant="outline" onClick={handleSave} disabled={!ck || !cs || saving}>
           {saving ? "Guardando…" : tieneCreds ? "Actualizar credenciales" : "Guardar credenciales"}
         </Button>
       </CardContent>
@@ -446,11 +473,7 @@ function Field({
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
-      <Input
-        value={v ?? ""}
-        onChange={(e) => on(e.target.value)}
-        placeholder={placeholder}
-      />
+      <Input value={v ?? ""} onChange={(e) => on(e.target.value)} placeholder={placeholder} />
     </div>
   );
 }

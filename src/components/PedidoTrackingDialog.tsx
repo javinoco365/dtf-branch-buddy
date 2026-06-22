@@ -78,11 +78,7 @@ export function PedidoTrackingDialog({
           </div>
           <div className="space-y-1">
             <Label>URL de seguimiento</Label>
-            <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://…"
-            />
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
           </div>
         </div>
         <DialogFooter>

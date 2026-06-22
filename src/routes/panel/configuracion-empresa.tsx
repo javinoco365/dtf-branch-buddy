@@ -89,9 +89,7 @@ function EmpresaPage() {
   async function guardar() {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("empresa_global")
-        .upsert({ id: true, ...f });
+      const { error } = await supabase.from("empresa_global").upsert({ id: true, ...f });
       if (error) throw error;
       toast.success("Datos de la empresa guardados");
       qc.invalidateQueries({ queryKey: ["empresa_global"] });
@@ -137,18 +135,59 @@ function EmpresaPage() {
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Razón social" v={f.razon_social} on={(v) => set("razon_social", v)} disabled={!isAdmin} />
-                <Field label="CIF / NIF" v={f.cif} on={(v) => set("cif", v)} placeholder="B12345678" disabled={!isAdmin} />
+                <Field
+                  label="Razón social"
+                  v={f.razon_social}
+                  on={(v) => set("razon_social", v)}
+                  disabled={!isAdmin}
+                />
+                <Field
+                  label="CIF / NIF"
+                  v={f.cif}
+                  on={(v) => set("cif", v)}
+                  placeholder="B12345678"
+                  disabled={!isAdmin}
+                />
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Email fiscal" v={f.email_fiscal} on={(v) => set("email_fiscal", v)} disabled={!isAdmin} />
-                <Field label="Teléfono" v={f.telefono} on={(v) => set("telefono", v)} disabled={!isAdmin} />
+                <Field
+                  label="Email fiscal"
+                  v={f.email_fiscal}
+                  on={(v) => set("email_fiscal", v)}
+                  disabled={!isAdmin}
+                />
+                <Field
+                  label="Teléfono"
+                  v={f.telefono}
+                  on={(v) => set("telefono", v)}
+                  disabled={!isAdmin}
+                />
               </div>
-              <Field label="Dirección" v={f.direccion} on={(v) => set("direccion", v)} disabled={!isAdmin} />
+              <Field
+                label="Dirección"
+                v={f.direccion}
+                on={(v) => set("direccion", v)}
+                disabled={!isAdmin}
+              />
               <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Código postal" v={f.codigo_postal} on={(v) => set("codigo_postal", v)} disabled={!isAdmin} />
-                <Field label="Ciudad" v={f.ciudad} on={(v) => set("ciudad", v)} disabled={!isAdmin} />
-                <Field label="Provincia" v={f.provincia} on={(v) => set("provincia", v)} disabled={!isAdmin} />
+                <Field
+                  label="Código postal"
+                  v={f.codigo_postal}
+                  on={(v) => set("codigo_postal", v)}
+                  disabled={!isAdmin}
+                />
+                <Field
+                  label="Ciudad"
+                  v={f.ciudad}
+                  on={(v) => set("ciudad", v)}
+                  disabled={!isAdmin}
+                />
+                <Field
+                  label="Provincia"
+                  v={f.provincia}
+                  on={(v) => set("provincia", v)}
+                  disabled={!isAdmin}
+                />
               </div>
               <Field label="País" v={f.pais} on={(v) => set("pais", v)} disabled={!isAdmin} />
 
@@ -160,7 +199,9 @@ function EmpresaPage() {
                   </Button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Solo los administradores pueden modificar estos datos.</p>
+                <p className="text-xs text-muted-foreground">
+                  Solo los administradores pueden modificar estos datos.
+                </p>
               )}
             </>
           )}
@@ -174,7 +215,8 @@ function EmpresaPage() {
             Costes de producción por metro
           </CardTitle>
           <CardDescription>
-            Importes en € por metro producido, compartidos por todas las tiendas. Se usan para calcular el margen estimado del mes en cada dashboard.
+            Importes en € por metro producido, compartidos por todas las tiendas. Se usan para
+            calcular el margen estimado del mes en cada dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -273,8 +273,7 @@ function ProductoForm({
   onSave: () => void;
   saving: boolean;
 }) {
-  const set = <K extends keyof Producto>(k: K, v: Producto[K]) =>
-    onChange({ ...producto, [k]: v });
+  const set = <K extends keyof Producto>(k: K, v: Producto[K]) => onChange({ ...producto, [k]: v });
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -289,10 +288,7 @@ function ProductoForm({
           </div>
           <div>
             <Label>Unidad</Label>
-            <Select
-              value={producto.unidad ?? "m"}
-              onValueChange={(v) => set("unidad", v)}
-            >
+            <Select value={producto.unidad ?? "m"} onValueChange={(v) => set("unidad", v)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -307,10 +303,7 @@ function ProductoForm({
           </div>
           <div className="col-span-2">
             <Label>Nombre *</Label>
-            <Input
-              value={producto.nombre ?? ""}
-              onChange={(e) => set("nombre", e.target.value)}
-            />
+            <Input value={producto.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
           </div>
           <div className="col-span-2">
             <Label>Descripción</Label>
@@ -341,14 +334,9 @@ function ProductoForm({
           <div className="col-span-2 flex items-center justify-between pt-2 border-t">
             <div>
               <Label>Activo</Label>
-              <p className="text-xs text-muted-foreground">
-                Disponible para pedidos y facturas
-              </p>
+              <p className="text-xs text-muted-foreground">Disponible para pedidos y facturas</p>
             </div>
-            <Switch
-              checked={producto.activo ?? true}
-              onCheckedChange={(v) => set("activo", v)}
-            />
+            <Switch checked={producto.activo ?? true} onCheckedChange={(v) => set("activo", v)} />
           </div>
         </div>
         <DialogFooter>

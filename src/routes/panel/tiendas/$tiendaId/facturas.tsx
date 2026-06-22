@@ -91,10 +91,7 @@ function Facturas() {
 
   const marcarPagada = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("facturas")
-        .update({ estado: "pagada" })
-        .eq("id", id);
+      const { error } = await supabase.from("facturas").update({ estado: "pagada" }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -187,8 +184,8 @@ function Facturas() {
                         f.estado === "pagada"
                           ? "default"
                           : f.estado === "vencida" || f.estado === "anulada"
-                          ? "destructive"
-                          : "secondary"
+                            ? "destructive"
+                            : "secondary"
                       }
                     >
                       {f.estado}
@@ -290,15 +287,16 @@ function NuevaFacturaDialog({
         .maybeSingle();
 
       const trim = (v: any) => (typeof v === "string" ? v.trim() : v) || null;
-      const empresaDireccion = [
-        empresa?.direccion,
-        [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
-        empresa?.provincia,
-        empresa?.pais,
-      ]
-        .map((s) => (typeof s === "string" ? s.trim() : ""))
-        .filter(Boolean)
-        .join(", ") || null;
+      const empresaDireccion =
+        [
+          empresa?.direccion,
+          [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
+          empresa?.provincia,
+          empresa?.pais,
+        ]
+          .map((s) => (typeof s === "string" ? s.trim() : ""))
+          .filter(Boolean)
+          .join(", ") || null;
 
       const emisor_nombre =
         trim(tienda?.razon_social) ?? trim(empresa?.razon_social) ?? trim(tienda?.nombre);
@@ -448,9 +446,7 @@ function NuevaFacturaDialog({
                     type="number"
                     step="0.01"
                     value={it.precio_unitario}
-                    onChange={(e) =>
-                      actualizarItem(i, { precio_unitario: Number(e.target.value) })
-                    }
+                    onChange={(e) => actualizarItem(i, { precio_unitario: Number(e.target.value) })}
                   />
                 </div>
                 <div className="col-span-2">
@@ -482,7 +478,9 @@ function NuevaFacturaDialog({
           <div className="space-y-1.5">
             <Label>Estado</Label>
             <Select value={estado} onValueChange={(v) => setEstado(v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="borrador">Borrador</SelectItem>
                 <SelectItem value="emitida">Emitida</SelectItem>

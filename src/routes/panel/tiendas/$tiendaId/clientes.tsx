@@ -23,7 +23,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, User, Mail, Phone, MapPin, FileText, ShoppingCart, Receipt } from "lucide-react";
+import {
+  Plus,
+  Search,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  FileText,
+  ShoppingCart,
+  Receipt,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/clientes")({
@@ -251,11 +261,18 @@ function ClienteForm({
           </div>
           <div>
             <Label>Email</Label>
-            <Input type="email" value={cliente.email ?? ""} onChange={(e) => set("email", e.target.value)} />
+            <Input
+              type="email"
+              value={cliente.email ?? ""}
+              onChange={(e) => set("email", e.target.value)}
+            />
           </div>
           <div>
             <Label>Teléfono</Label>
-            <Input value={cliente.telefono ?? ""} onChange={(e) => set("telefono", e.target.value)} />
+            <Input
+              value={cliente.telefono ?? ""}
+              onChange={(e) => set("telefono", e.target.value)}
+            />
           </div>
           <div>
             <Label>NIF / CIF</Label>
@@ -267,11 +284,17 @@ function ClienteForm({
           </div>
           <div className="col-span-2">
             <Label>Dirección</Label>
-            <Input value={cliente.direccion ?? ""} onChange={(e) => set("direccion", e.target.value)} />
+            <Input
+              value={cliente.direccion ?? ""}
+              onChange={(e) => set("direccion", e.target.value)}
+            />
           </div>
           <div>
             <Label>Código postal</Label>
-            <Input value={cliente.codigo_postal ?? ""} onChange={(e) => set("codigo_postal", e.target.value)} />
+            <Input
+              value={cliente.codigo_postal ?? ""}
+              onChange={(e) => set("codigo_postal", e.target.value)}
+            />
           </div>
           <div>
             <Label>Ciudad</Label>
@@ -279,7 +302,10 @@ function ClienteForm({
           </div>
           <div>
             <Label>Provincia</Label>
-            <Input value={cliente.provincia ?? ""} onChange={(e) => set("provincia", e.target.value)} />
+            <Input
+              value={cliente.provincia ?? ""}
+              onChange={(e) => set("provincia", e.target.value)}
+            />
           </div>
           <div>
             <Label>País</Label>
@@ -287,7 +313,11 @@ function ClienteForm({
           </div>
           <div className="col-span-2">
             <Label>Notas</Label>
-            <Textarea rows={3} value={cliente.notas ?? ""} onChange={(e) => set("notas", e.target.value)} />
+            <Textarea
+              rows={3}
+              value={cliente.notas ?? ""}
+              onChange={(e) => set("notas", e.target.value)}
+            />
           </div>
         </div>
         <DialogFooter>
@@ -388,7 +418,13 @@ function ClienteDetalle({
           {(cliente.direccion || cliente.ciudad) && (
             <div className="flex items-center gap-2 col-span-2">
               <MapPin className="h-4 w-4 text-muted-foreground" />
-              {[cliente.direccion, cliente.codigo_postal, cliente.ciudad, cliente.provincia, cliente.pais]
+              {[
+                cliente.direccion,
+                cliente.codigo_postal,
+                cliente.ciudad,
+                cliente.provincia,
+                cliente.pais,
+              ]
                 .filter(Boolean)
                 .join(", ")}
             </div>
@@ -444,7 +480,10 @@ function ClienteDetalle({
                   ))}
                   {pedidos.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
+                      <TableCell
+                        colSpan={4}
+                        className="text-center py-6 text-muted-foreground text-sm"
+                      >
                         Sin pedidos
                       </TableCell>
                     </TableRow>
@@ -485,7 +524,10 @@ function ClienteDetalle({
                   ))}
                   {facturas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
+                      <TableCell
+                        colSpan={4}
+                        className="text-center py-6 text-muted-foreground text-sm"
+                      >
                         Sin facturas
                       </TableCell>
                     </TableRow>

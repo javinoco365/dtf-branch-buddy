@@ -47,7 +47,9 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
     queryFn: async () => {
       let q = supabase
         .from("facturas")
-        .select("id,tienda_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)")
+        .select(
+          "id,tienda_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)",
+        )
         .in("estado", ["emitida", "vencida", "borrador"])
         .order("fecha", { ascending: true });
       if (tiendaId) q = q.eq("tienda_id", tiendaId);
@@ -59,10 +61,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
 
   const marcar = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("facturas")
-        .update({ estado: "pagada" })
-        .eq("id", id);
+      const { error } = await supabase.from("facturas").update({ estado: "pagada" }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -156,7 +155,9 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                         <span className="inline-flex items-center gap-1.5">
                           <span
                             className="h-2 w-2 rounded-full"
-                            style={{ background: f.tiendas?.color ?? "hsl(var(--muted-foreground))" }}
+                            style={{
+                              background: f.tiendas?.color ?? "hsl(var(--muted-foreground))",
+                            }}
                           />
                           {f.tiendas?.nombre ?? "—"}
                         </span>
@@ -192,7 +193,10 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
               })}
               {!isLoading && filtradas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={tiendaId ? 7 : 8} className="text-center py-8 text-muted-foreground">
+                  <TableCell
+                    colSpan={tiendaId ? 7 : 8}
+                    className="text-center py-8 text-muted-foreground"
+                  >
                     <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
                     Sin cobros pendientes.
                   </TableCell>
@@ -234,8 +238,8 @@ function KPI({
     tone === "danger"
       ? "border-destructive/30 bg-destructive/5"
       : tone === "muted"
-      ? "bg-muted/30"
-      : "";
+        ? "bg-muted/30"
+        : "";
   return (
     <Card className={toneCls}>
       <CardContent className="p-4">

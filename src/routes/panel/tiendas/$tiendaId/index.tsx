@@ -3,7 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { eur, metros } from "@/lib/format";
-import { ShoppingCart, Euro, Ruler, FileText, TrendingUp, TrendingDown, Receipt, Package, Percent } from "lucide-react";
+import {
+  ShoppingCart,
+  Euro,
+  Ruler,
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  Receipt,
+  Package,
+  Percent,
+} from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
@@ -15,7 +25,10 @@ function Dashboard() {
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
       const [pedidos, facturas, empresa] = await Promise.all([
-        supabase.from("pedidos").select("total, metros_total, fecha_pedido, estado").eq("tienda_id", tiendaId),
+        supabase
+          .from("pedidos")
+          .select("total, metros_total, fecha_pedido, estado")
+          .eq("tienda_id", tiendaId),
         supabase.from("facturas").select("total, estado").eq("tienda_id", tiendaId),
         supabase
           .from("empresa_global")
@@ -33,7 +46,9 @@ function Dashboard() {
     Number(eg?.coste_consumibles_metro ?? 0) +
     Number(eg?.coste_packaging_metro ?? 0) +
     Number(eg?.coste_electricidad_metro ?? 0);
-  const fact = facturas.filter((f) => f.estado !== "anulada" && f.estado !== "borrador").reduce((s, f) => s + Number(f.total), 0);
+  const fact = facturas
+    .filter((f) => f.estado !== "anulada" && f.estado !== "borrador")
+    .reduce((s, f) => s + Number(f.total), 0);
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
 
   // Mes actual vs mes anterior
@@ -47,12 +62,17 @@ function Dashboard() {
     const d = new Date(f);
     return d >= ini && d < fin;
   };
-  const pedidosMes = pedidosValidos.filter((p) => inRange(p.fecha_pedido!, inicioMes, new Date(now.getFullYear(), now.getMonth() + 1, 1)));
-  const pedidosMesAnt = pedidosValidos.filter((p) => inRange(p.fecha_pedido!, inicioMesAnt, finMesAnt));
+  const pedidosMes = pedidosValidos.filter((p) =>
+    inRange(p.fecha_pedido!, inicioMes, new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+  );
+  const pedidosMesAnt = pedidosValidos.filter((p) =>
+    inRange(p.fecha_pedido!, inicioMesAnt, finMesAnt),
+  );
 
   const facturadoMes = pedidosMes.reduce((s, p) => s + Number(p.total ?? 0), 0);
   const facturadoMesAnt = pedidosMesAnt.reduce((s, p) => s + Number(p.total ?? 0), 0);
-  const variacion = facturadoMesAnt > 0 ? ((facturadoMes - facturadoMesAnt) / facturadoMesAnt) * 100 : null;
+  const variacion =
+    facturadoMesAnt > 0 ? ((facturadoMes - facturadoMesAnt) / facturadoMesAnt) * 100 : null;
 
   const numPedidosMes = pedidosMes.length;
   const ticketMedio = numPedidosMes > 0 ? facturadoMes / numPedidosMes : 0;
@@ -126,11 +146,7 @@ function KPI({
   tone?: "up" | "down" | "neutral";
 }) {
   const toneClass =
-    tone === "up"
-      ? "text-emerald-600"
-      : tone === "down"
-        ? "text-red-600"
-        : "text-muted-foreground";
+    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-muted-foreground";
   return (
     <Card>
       <CardContent className="p-6 flex items-center gap-4">

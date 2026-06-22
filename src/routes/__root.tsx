@@ -80,17 +80,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Lovable App" },
-      { name: "description", content: "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores." },
+      {
+        name: "description",
+        content:
+          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores." },
+      {
+        property: "og:description",
+        content:
+          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png" },
+      {
+        name: "twitter:description",
+        content:
+          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png",
+      },
     ],
     links: [
       {

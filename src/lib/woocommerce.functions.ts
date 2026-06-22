@@ -47,7 +47,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     const auth = btoa(`${creds.consumer_key}:${creds.consumer_secret}`);
     const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
 
-    let importados = { pedidos: 0, clientes: 0, productos: 0 };
+    const importados = { pedidos: 0, clientes: 0, productos: 0 };
 
     // Productos
     try {
@@ -82,7 +82,8 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
       if (r.ok) {
         const items = (await r.json()) as any[];
         for (const c of items) {
-          const nombre = `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.username || c.email;
+          const nombre =
+            `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.username || c.email;
           await supabaseAdmin.from("clientes").upsert(
             {
               tienda_id: data.tienda_id,
@@ -91,7 +92,8 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
               email: c.email || null,
               telefono: c.billing?.phone || null,
               empresa: c.billing?.company || null,
-              direccion: [c.billing?.address_1, c.billing?.address_2].filter(Boolean).join(" ") || null,
+              direccion:
+                [c.billing?.address_1, c.billing?.address_2].filter(Boolean).join(" ") || null,
               codigo_postal: c.billing?.postcode || null,
               ciudad: c.billing?.city || null,
               provincia: c.billing?.state || null,
@@ -108,7 +110,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
 
     // Pedidos (últimos 100)
     try {
-      const r = await fetch(`${base}/wp-json/wc/v3/orders?per_page=100&orderby=date&order=desc`, { headers });
+      const r = await fetch(`${base}/wp-json/wc/v3/orders?per_page=100&orderby=date&order=desc`, {
+        headers,
+      });
       if (r.ok) {
         const orders = (await r.json()) as any[];
         for (const o of orders) {

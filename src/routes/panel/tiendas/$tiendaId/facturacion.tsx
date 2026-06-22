@@ -16,12 +16,7 @@ import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { eur, metros, numero } from "@/lib/format";
-import {
-  generarPedidosRango,
-  descargarCSV,
-  TIENDAS_DEMO,
-  type PedidoDemo,
-} from "@/lib/demo-data";
+import { generarPedidosRango, descargarCSV, TIENDAS_DEMO, type PedidoDemo } from "@/lib/demo-data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -37,15 +32,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · CRM DTF" }] }),
@@ -76,7 +63,11 @@ function pct(a: number, b: number) {
   return ((a - b) / b) * 100;
 }
 function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 function calcKPIs(pedidos: PedidoDemo[]) {
@@ -180,7 +171,10 @@ function FacturacionTienda() {
       ]),
     ];
     const slug = (tienda?.nombre ?? tiendaDemo).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    descargarCSV(`facturacion-${slug}_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}.csv`, filas);
+    descargarCSV(
+      `facturacion-${slug}_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}.csv`,
+      filas,
+    );
   }
 
   return (
@@ -189,9 +183,7 @@ function FacturacionTienda() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold">Facturación</h2>
-          <p className="text-sm text-muted-foreground">
-            Vista contable filtrada a esta tienda
-          </p>
+          <p className="text-sm text-muted-foreground">Vista contable filtrada a esta tienda</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -236,10 +228,30 @@ function FacturacionTienda() {
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KPI titulo="Total periodo" valor={eur(k.total)} delta={pct(k.total, kPrev.total)} icon={Euro} />
-        <KPI titulo="Facturación bruta" valor={eur(k.bruta)} delta={pct(k.bruta, kPrev.bruta)} icon={Receipt} />
-        <KPI titulo="Ticket medio" valor={eur(k.ticket)} delta={pct(k.ticket, kPrev.ticket)} icon={ShoppingCart} />
-        <KPI titulo="Metros vendidos" valor={metros(k.metros)} delta={pct(k.metros, kPrev.metros)} icon={Ruler} />
+        <KPI
+          titulo="Total periodo"
+          valor={eur(k.total)}
+          delta={pct(k.total, kPrev.total)}
+          icon={Euro}
+        />
+        <KPI
+          titulo="Facturación bruta"
+          valor={eur(k.bruta)}
+          delta={pct(k.bruta, kPrev.bruta)}
+          icon={Receipt}
+        />
+        <KPI
+          titulo="Ticket medio"
+          valor={eur(k.ticket)}
+          delta={pct(k.ticket, kPrev.ticket)}
+          icon={ShoppingCart}
+        />
+        <KPI
+          titulo="Metros vendidos"
+          valor={metros(k.metros)}
+          delta={pct(k.metros, kPrev.metros)}
+          icon={Ruler}
+        />
         <KPI
           titulo="Cancelados"
           valor={String(k.cancelados)}
@@ -252,10 +264,34 @@ function FacturacionTienda() {
 
       {/* Desglose de facturación */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Bloque titulo="Bruta" subtitulo="Solo metros vendidos" valor={eur(k.bruta)} icon={Receipt} tono="primary" />
-        <Bloque titulo="IVA" subtitulo={`${numero(pctIva, 1)}% sobre bruta`} valor={eur(k.iva)} icon={Percent} tono="info" />
-        <Bloque titulo="Envíos" subtitulo="Total cobrado en envíos" valor={eur(k.envios)} icon={Truck} tono="warn" />
-        <Bloque titulo="Total" subtitulo="Bruta + IVA + envíos" valor={eur(k.total)} icon={Wallet} tono="success" />
+        <Bloque
+          titulo="Bruta"
+          subtitulo="Solo metros vendidos"
+          valor={eur(k.bruta)}
+          icon={Receipt}
+          tono="primary"
+        />
+        <Bloque
+          titulo="IVA"
+          subtitulo={`${numero(pctIva, 1)}% sobre bruta`}
+          valor={eur(k.iva)}
+          icon={Percent}
+          tono="info"
+        />
+        <Bloque
+          titulo="Envíos"
+          subtitulo="Total cobrado en envíos"
+          valor={eur(k.envios)}
+          icon={Truck}
+          tono="warn"
+        />
+        <Bloque
+          titulo="Total"
+          subtitulo="Bruta + IVA + envíos"
+          valor={eur(k.total)}
+          icon={Wallet}
+          tono="success"
+        />
       </div>
 
       {/* Charts */}
@@ -329,13 +365,16 @@ function KPI({
 }) {
   const subiendo = delta >= 0;
   const positivo = deltaInverso ? !subiendo : subiendo;
-  const iconBg = color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
+  const iconBg =
+    color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
   const valorColor = color === "destructive" ? "text-destructive" : "text-foreground";
   return (
     <Card>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{titulo}</div>
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {titulo}
+          </div>
           <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
             <Icon className="h-5 w-5" />
           </div>
@@ -378,10 +417,14 @@ function Bloque({
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{titulo}</div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {titulo}
+            </div>
             <div className="text-xs text-muted-foreground mt-0.5">{subtitulo}</div>
           </div>
-          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${tonos[tono]}`}>
+          <div
+            className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${tonos[tono]}`}
+          >
             <Icon className="h-5 w-5" />
           </div>
         </div>
