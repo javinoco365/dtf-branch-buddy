@@ -47,7 +47,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     const auth = btoa(`${creds.consumer_key}:${creds.consumer_secret}`);
     const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
 
-    let importados = { pedidos: 0, clientes: 0, productos: 0 };
+    const importados = { pedidos: 0, clientes: 0, productos: 0 };
 
     // Productos
     try {
