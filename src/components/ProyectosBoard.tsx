@@ -260,10 +260,7 @@ function ProyectoCard({
     new Date(proyecto.fecha_prevista) < new Date(new Date().toDateString());
 
   return (
-    <Card
-      className="cursor-pointer hover:shadow-md transition-shadow"
-      onClick={onEdit}
-    >
+    <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={onEdit}>
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="font-medium text-sm leading-tight">{proyecto.nombre}</div>
@@ -282,7 +279,11 @@ function ProyectoCard({
             <span
               className={`flex items-center gap-1 ${vencido ? "text-destructive font-medium" : "text-muted-foreground"}`}
             >
-              {vencido ? <AlertTriangle className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+              {vencido ? (
+                <AlertTriangle className="h-3 w-3" />
+              ) : (
+                <CalendarIcon className="h-3 w-3" />
+              )}
               {new Date(proyecto.fecha_prevista).toLocaleDateString("es-ES")}
             </span>
           ) : (
@@ -322,8 +323,7 @@ function ProyectoForm({
   onDelete?: () => void;
   saving: boolean;
 }) {
-  const set = <K extends keyof Proyecto>(k: K, v: Proyecto[K]) =>
-    onChange({ ...proyecto, [k]: v });
+  const set = <K extends keyof Proyecto>(k: K, v: Proyecto[K]) => onChange({ ...proyecto, [k]: v });
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -365,10 +365,14 @@ function ProyectoForm({
               value={proyecto.estado ?? "planificado"}
               onValueChange={(v) => set("estado", v as Proyecto["estado"])}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {ESTADOS.map((e) => (
-                  <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+                  <SelectItem key={e.value} value={e.value}>
+                    {e.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -379,10 +383,14 @@ function ProyectoForm({
               value={proyecto.prioridad ?? "media"}
               onValueChange={(v) => set("prioridad", v as Proyecto["prioridad"])}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {PRIORIDADES.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -394,11 +402,15 @@ function ProyectoForm({
                 value={proyecto.tienda_id ?? "global"}
                 onValueChange={(v) => set("tienda_id", v === "global" ? null : v)}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="global">Sin tienda (global)</SelectItem>
                   {tiendas.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.nombre}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -419,9 +431,13 @@ function ProyectoForm({
               <Trash2 className="h-4 w-4 mr-1" />
               Eliminar
             </Button>
-          ) : <span />}
+          ) : (
+            <span />
+          )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
             <Button onClick={onSave} disabled={saving}>
               {saving ? "Guardando…" : "Guardar"}
             </Button>

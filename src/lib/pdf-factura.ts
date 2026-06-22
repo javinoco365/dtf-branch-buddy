@@ -32,10 +32,7 @@ export type FacturaPDFData = {
 };
 
 export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
+  const [{ jsPDF }, autoTableMod] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
   const autoTable = autoTableMod.default;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = 210;

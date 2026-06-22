@@ -16,11 +16,7 @@ import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { eur, metros, numero } from "@/lib/format";
-import {
-  generarPedidosRango,
-  descargarCSV,
-  type PedidoDemo,
-} from "@/lib/demo-data";
+import { generarPedidosRango, descargarCSV, type PedidoDemo } from "@/lib/demo-data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,15 +30,7 @@ import {
   TrendingDown,
   Percent,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Dashboard Global · CRM DTF" }] }),
@@ -168,9 +156,7 @@ function DashboardGlobal() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Dashboard Global</h1>
-          <p className="text-muted-foreground">
-            Vista consolidada agregando todas las tiendas
-          </p>
+          <p className="text-muted-foreground">Vista consolidada agregando todas las tiendas</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -278,10 +264,7 @@ function DashboardGlobal() {
               <BarChart data={ingresosDiarios}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                <YAxis
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
                 <Tooltip
                   formatter={(v: number) => eur(v)}
                   labelStyle={{ color: "var(--color-foreground)" }}
@@ -291,11 +274,7 @@ function DashboardGlobal() {
                     borderRadius: 8,
                   }}
                 />
-                <Bar
-                  dataKey="total"
-                  fill="var(--color-primary)"
-                  radius={[6, 6, 0, 0]}
-                />
+                <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -309,17 +288,8 @@ function DashboardGlobal() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => `${v} m`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="producto"
-                  width={140}
-                  tick={{ fontSize: 11 }}
-                />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} m`} />
+                <YAxis type="category" dataKey="producto" width={140} tick={{ fontSize: 11 }} />
                 <Tooltip
                   formatter={(v: number) => metros(v)}
                   contentStyle={{
@@ -328,11 +298,7 @@ function DashboardGlobal() {
                     borderRadius: 8,
                   }}
                 />
-                <Bar
-                  dataKey="metros"
-                  fill="var(--color-primary)"
-                  radius={[0, 6, 6, 0]}
-                />
+                <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -379,9 +345,7 @@ function KPI({
   // En "inverso" (p. ej. cancelados), subir es malo
   const positivo = deltaInverso ? !subiendo : subiendo;
   const iconBg =
-    color === "destructive"
-      ? "bg-destructive/10 text-destructive"
-      : "bg-primary/10 text-primary";
+    color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
   const valorColor = color === "destructive" ? "text-destructive" : "text-foreground";
   return (
     <Card>
@@ -390,25 +354,17 @@ function KPI({
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {titulo}
           </div>
-          <div
-            className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}
-          >
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
             <Icon className="h-5 w-5" />
           </div>
         </div>
-        <div className={`mt-3 text-3xl font-bold tracking-tight ${valorColor}`}>
-          {valor}
-        </div>
+        <div className={`mt-3 text-3xl font-bold tracking-tight ${valorColor}`}>{valor}</div>
         <div
           className={`mt-1 flex items-center gap-1 text-xs font-medium ${
             positivo ? "text-status-completado" : "text-status-cancelado"
           }`}
         >
-          {subiendo ? (
-            <TrendingUp className="h-3 w-3" />
-          ) : (
-            <TrendingDown className="h-3 w-3" />
-          )}
+          {subiendo ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
           {numero(Math.abs(delta), 1)}% vs periodo anterior
         </div>
       </CardContent>

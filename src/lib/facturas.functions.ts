@@ -61,14 +61,10 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
         .join(", ") || "";
 
     const emisorNombre =
-      (factura.emisor_nombre && factura.emisor_nombre.trim()) ||
-      empresa?.razon_social ||
-      "";
-    const emisorCif =
-      (factura.emisor_cif && factura.emisor_cif.trim()) || empresa?.cif || "";
+      (factura.emisor_nombre && factura.emisor_nombre.trim()) || empresa?.razon_social || "";
+    const emisorCif = (factura.emisor_cif && factura.emisor_cif.trim()) || empresa?.cif || "";
     const emisorDireccion =
-      (factura.emisor_direccion && factura.emisor_direccion.trim()) ||
-      empresaDireccion;
+      (factura.emisor_direccion && factura.emisor_direccion.trim()) || empresaDireccion;
 
     const pdfData: FacturaPDFData = {
       serie: factura.serie ?? "",
@@ -119,10 +115,7 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
       .createSignedUrl(path, 60 * 60 * 24 * 365);
     if (sErr || !signed) throw new Error("No se pudo generar la URL firmada");
 
-    await supabaseAdmin
-      .from("facturas")
-      .update({ pdf_url: signed.signedUrl })
-      .eq("id", factura.id);
+    await supabaseAdmin.from("facturas").update({ pdf_url: signed.signedUrl }).eq("id", factura.id);
 
     return { ok: true, path, url: signed.signedUrl };
   });

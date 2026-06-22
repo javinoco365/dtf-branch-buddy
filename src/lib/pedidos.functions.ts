@@ -94,14 +94,13 @@ export const listPedidos = createServerFn({ method: "POST" })
       await Promise.all([
         supabase
           .from("pedido_items")
-          .select("id, pedido_id, descripcion, cantidad, unidad, precio_unitario, subtotal, iva, total")
+          .select(
+            "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, subtotal, iva, total",
+          )
           .in("pedido_id", ids),
         supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
         clienteIds.length
-          ? supabase
-              .from("clientes")
-              .select("id, nombre, email")
-              .in("id", clienteIds)
+          ? supabase.from("clientes").select("id, nombre, email").in("id", clienteIds)
           : Promise.resolve({ data: [] as any[] }),
         supabase
           .from("enlaces_seguimiento")

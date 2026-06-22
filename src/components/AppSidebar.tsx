@@ -15,11 +15,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -48,7 +44,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -71,9 +66,7 @@ export function AppSidebar() {
 
   const currentTiendaId = pathname.match(/^\/panel\/tiendas\/([^/]+)/)?.[1];
   const selectedValue =
-    currentTiendaId && tiendas.some((t) => t.id === currentTiendaId)
-      ? currentTiendaId
-      : "";
+    currentTiendaId && tiendas.some((t) => t.id === currentTiendaId) ? currentTiendaId : "";
 
   return (
     <Sidebar collapsible="icon">
@@ -109,7 +102,10 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/facturacion-global")}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith("/panel/facturacion-global")}
+                >
                   <Link to="/panel/facturacion-global">
                     <Receipt />
                     <span>Facturación Consolidada</span>
@@ -210,11 +206,7 @@ export function AppSidebar() {
                 const base = `/panel/tiendas/${t.id}`;
                 const isOpen = pathname.startsWith(base);
                 return (
-                  <Collapsible
-                    key={t.id}
-                    defaultOpen={isOpen}
-                    className="group/collapsible"
-                  >
+                  <Collapsible key={t.id} defaultOpen={isOpen} className="group/collapsible">
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>
                         <SidebarMenuButton isActive={isOpen}>
@@ -225,13 +217,55 @@ export function AppSidebar() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          <SubItem to="/panel/tiendas/$tiendaId/pedidos" tiendaId={t.id} label="Pedidos" icon={ShoppingCart} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/facturas" tiendaId={t.id} label="Facturas" icon={FileText} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/facturacion" tiendaId={t.id} label="Facturación" icon={Receipt} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/cobros" tiendaId={t.id} label="Cobros" icon={Wallet} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/proyectos" tiendaId={t.id} label="Proyectos" icon={CalendarClock} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/clientes" tiendaId={t.id} label="Clientes" icon={Users} pathname={pathname} />
-                          <SubItem to="/panel/tiendas/$tiendaId/ajustes" tiendaId={t.id} label="Ajustes" icon={Settings} pathname={pathname} />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/pedidos"
+                            tiendaId={t.id}
+                            label="Pedidos"
+                            icon={ShoppingCart}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/facturas"
+                            tiendaId={t.id}
+                            label="Facturas"
+                            icon={FileText}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/facturacion"
+                            tiendaId={t.id}
+                            label="Facturación"
+                            icon={Receipt}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/cobros"
+                            tiendaId={t.id}
+                            label="Cobros"
+                            icon={Wallet}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/proyectos"
+                            tiendaId={t.id}
+                            label="Proyectos"
+                            icon={CalendarClock}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/clientes"
+                            tiendaId={t.id}
+                            label="Clientes"
+                            icon={Users}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/ajustes"
+                            tiendaId={t.id}
+                            label="Ajustes"
+                            icon={Settings}
+                            pathname={pathname}
+                          />
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>
@@ -243,71 +277,73 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-            <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-              Sistema
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <Collapsible
-                  defaultOpen={pathname.startsWith("/panel/tiendas")}
-                  className="group/collapsible"
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton isActive={pathname.startsWith("/panel/tiendas")}>
-                        <Building2 />
-                        <span>Gestión de Tiendas</span>
-                        <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Sistema
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                defaultOpen={pathname.startsWith("/panel/tiendas")}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={pathname.startsWith("/panel/tiendas")}>
+                      <Building2 />
+                      <span>Gestión de Tiendas</span>
+                      <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === "/panel/tiendas"}>
+                          <Link to="/panel/tiendas">
+                            <List className="h-4 w-4" />
+                            <span>Listado</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      {isAdmin && (
                         <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={pathname === "/panel/tiendas"}>
-                            <Link to="/panel/tiendas">
-                              <List className="h-4 w-4" />
-                              <span>Listado</span>
-                            </Link>
+                          <SidebarMenuSubButton asChild>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any })
+                              }
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-primary"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Nueva tienda</span>
+                            </button>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
-                        {isAdmin && (
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton asChild>
-                              <button
-                                type="button"
-                                onClick={() => navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any })}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-primary"
-                              >
-                                <Plus className="h-4 w-4" />
-                                <span>Nueva tienda</span>
-                              </button>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        )}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
+                      )}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
+                  <Link to="/panel/configuracion">
+                    <Settings />
+                    <span>Ajustes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {isAdmin && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
-                    <Link to="/panel/configuracion">
-                      <Settings />
-                      <span>Ajustes</span>
+                  <SidebarMenuButton asChild isActive={pathname === "/panel/usuarios"}>
+                    <Link to="/panel/usuarios">
+                      <Users />
+                      <span>Usuarios</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {isAdmin && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/panel/usuarios"}>
-                      <Link to="/panel/usuarios">
-                        <Users />
-                        <span>Usuarios</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">

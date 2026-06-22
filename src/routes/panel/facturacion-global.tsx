@@ -22,12 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { eur, metros, numero } from "@/lib/format";
-import {
-  generarPedidosRango,
-  descargarCSV,
-  TIENDAS_DEMO,
-  type PedidoDemo,
-} from "@/lib/demo-data";
+import { generarPedidosRango, descargarCSV, TIENDAS_DEMO, type PedidoDemo } from "@/lib/demo-data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -136,9 +131,7 @@ function FacturacionGlobal() {
       const wDesde = startOfWeek(wRef, { weekStartsOn: 1 });
       const wHasta = endOfWeek(wRef, { weekStartsOn: 1 });
       const ps = generarPedidosRango(wDesde, wHasta);
-      const total = ps
-        .filter((p) => p.estado !== "cancelado")
-        .reduce((s, p) => s + p.total, 0);
+      const total = ps.filter((p) => p.estado !== "cancelado").reduce((s, p) => s + p.total, 0);
       arr.push({
         semana: format(wDesde, "d MMM", { locale: es }),
         total: Number(total.toFixed(2)),
@@ -150,7 +143,8 @@ function FacturacionGlobal() {
 
   const semanaActual = semanas12[semanas12.length - 1]?.total ?? 0;
   const semanaAnterior = semanas12[semanas12.length - 2]?.total ?? 0;
-  const deltaSemana = semanaAnterior === 0 ? 0 : ((semanaActual - semanaAnterior) / semanaAnterior) * 100;
+  const deltaSemana =
+    semanaAnterior === 0 ? 0 : ((semanaActual - semanaAnterior) / semanaAnterior) * 100;
 
   function navegar(dir: -1 | 1) {
     setRef((r) => (periodo === "mes" ? addMonths(r, dir) : addWeeks(r, dir)));
@@ -184,8 +178,18 @@ function FacturacionGlobal() {
 
   const pctIva = totales.bruta === 0 ? 0 : (totales.iva / totales.bruta) * 100;
 
-  const comparativa = filas.map((f) => ({ tienda: f.tienda, total: Number(f.total.toFixed(2)), metros: Number(f.metros.toFixed(2)) }));
-  const coloresBarra = ["var(--color-primary)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+  const comparativa = filas.map((f) => ({
+    tienda: f.tienda,
+    total: Number(f.total.toFixed(2)),
+    metros: Number(f.metros.toFixed(2)),
+  }));
+  const coloresBarra = [
+    "var(--color-primary)",
+    "var(--color-chart-2)",
+    "var(--color-chart-3)",
+    "var(--color-chart-4)",
+    "var(--color-chart-5)",
+  ];
 
   return (
     <div className="space-y-6">
@@ -364,7 +368,14 @@ function FacturacionGlobal() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={semanas12}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="semana" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+                <XAxis
+                  dataKey="semana"
+                  tick={{ fontSize: 10 }}
+                  interval={0}
+                  angle={-30}
+                  textAnchor="end"
+                  height={50}
+                />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
                 <Tooltip
                   formatter={(v: number) => eur(v)}
@@ -379,9 +390,7 @@ function FacturacionGlobal() {
                     <Cell
                       key={i}
                       fill={
-                        i === semanas12.length - 1
-                          ? "var(--color-primary)"
-                          : "var(--color-primary)"
+                        i === semanas12.length - 1 ? "var(--color-primary)" : "var(--color-primary)"
                       }
                       fillOpacity={i === semanas12.length - 1 ? 1 : 0.55}
                     />
@@ -425,7 +434,9 @@ function TarjetaTotal({
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">{subtitulo}</div>
           </div>
-          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${tonos[tono]}`}>
+          <div
+            className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${tonos[tono]}`}
+          >
             <Icon className="h-5 w-5" />
           </div>
         </div>

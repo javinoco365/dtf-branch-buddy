@@ -73,19 +73,41 @@ function AuthPage() {
             {needsBootstrap && (
               <div className="space-y-2">
                 <Label htmlFor="fullName">Nombre completo</Label>
-                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                <Input
+                  id="fullName"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
               </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={loading || needsBootstrap === null}>
-              {loading ? "Procesando…" : needsBootstrap ? "Crear administrador y entrar" : "Iniciar sesión"}
+              {loading
+                ? "Procesando…"
+                : needsBootstrap
+                  ? "Crear administrador y entrar"
+                  : "Iniciar sesión"}
             </Button>
           </form>
         </CardContent>
