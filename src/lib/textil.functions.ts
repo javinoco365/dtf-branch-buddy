@@ -332,6 +332,10 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { items, id, ...header } = data;
     const totals = calcularTotales(items);
+
+    // Alerta (no reserva) de stock disponible al crear presupuestos
+    await validarDisponibilidad(context.supabase, agruparStock(items));
+
     const payload = {
       ...header,
       subtotal: totals.subtotal,
@@ -518,6 +522,19 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { items, id, ...header } = data;
     const totals = calcularTotales(items);
+
+    // Cantidades ya reservadas previamente (para no doblar contabilidad al editar)
+    let previos = new Map<string, number>();
+    if (id) {
+      const { data: prevItems } = await context.supabase
+        .from("textil_pedido_items")
+        .select("stock_id, cantidad")
+        .eq("pedido_id", id);
+      previos = agruparStock((prevItems ?? []) as any);
+    }
+    const nuevos = agruparStock(items);
+    await validarDisponibilidad(context.supabase, nuevos, previos);
+
     const payload = {
       ...header,
       subtotal: totals.subtotal,
@@ -554,6 +571,16 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
       })),
     );
     if (itErr) throw itErr;
+
+    // Reservar stock: descontar la diferencia (nuevo - previo) por cada stock_id
+    const delta = new Map<string, number>();
+    const keys = new Set([...nuevos.keys(), ...previos.keys()]);
+    for (const k of keys) {
+      const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
+      if (d !== 0) delta.set(k, d);
+    }
+    await ajustarStock(context.supabase, delta);
+
     return { id: pedidoId };
   });
 
@@ -563,6 +590,19 @@ export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), estado: z.string() }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    // Si se cancela un pedido, devolver el stock reservado
+    if (data.estado === "cancelado") {
+      const { data: prev } = await context.supabase
+        .from("textil_pedidos").select("estado").eq("id", data.id).single();
+      if (prev && prev.estado !== "cancelado") {
+        const { data: prevItems } = await context.supabase
+          .from("textil_pedido_items").select("stock_id, cantidad").eq("pedido_id", data.id);
+        const restore = agruparStock((prevItems ?? []) as any);
+        const delta = new Map<string, number>();
+        for (const [k, v] of restore.entries()) delta.set(k, -v);
+        await ajustarStock(context.supabase, delta);
+      }
+    }
     const { error } = await context.supabase
       .from("textil_pedidos")
       .update({ estado: data.estado })
@@ -575,6 +615,17 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    // Devolver stock reservado antes de borrar (si no estaba cancelado)
+    const { data: ped } = await context.supabase
+      .from("textil_pedidos").select("estado").eq("id", data.id).single();
+    if (ped && ped.estado !== "cancelado") {
+      const { data: prevItems } = await context.supabase
+        .from("textil_pedido_items").select("stock_id, cantidad").eq("pedido_id", data.id);
+      const restore = agruparStock((prevItems ?? []) as any);
+      const delta = new Map<string, number>();
+      for (const [k, v] of restore.entries()) delta.set(k, -v);
+      await ajustarStock(context.supabase, delta);
+    }
     const { error } = await context.supabase
       .from("textil_pedidos")
       .delete()
