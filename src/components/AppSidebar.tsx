@@ -426,3 +426,29 @@ function SubItem({
     </SidebarMenuSubItem>
   );
 }
+
+function TextilSub({
+  to,
+  label,
+  icon: Icon,
+  pathname,
+  exact,
+}: {
+  to: string;
+  label: string;
+  icon: any;
+  pathname: string;
+  exact?: boolean;
+}) {
+  const active = exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton asChild isActive={active}>
+        <Link to={to as any}>
+          <Icon className="h-4 w-4" />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
+  );
+}
