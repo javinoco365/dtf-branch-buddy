@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Pencil, Trash2, FileText } from "lucide-react";
 import {
   listPresupuestos, upsertPresupuesto, deletePresupuesto, updatePresupuestoEstado,
-  convertirPresupuestoEnFactura, listMarcas, listTextilClientes, getEmpresaGlobal,
+  convertirPresupuestoEnFactura, listMarcas, listTextilClientes, getEmpresaGlobal, listStock,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
@@ -46,11 +46,13 @@ function PresupuestosPage() {
   const marcasFn = useServerFn(listMarcas);
   const cliFn = useServerFn(listTextilClientes);
   const empFn = useServerFn(getEmpresaGlobal);
+  const stockFn = useServerFn(listStock);
 
   const { data = [] } = useQuery({ queryKey: ["textil-presupuestos"], queryFn: () => listFn() });
   const { data: marcas = [] } = useQuery({ queryKey: ["textil-marcas"], queryFn: () => marcasFn() });
   const { data: clientes = [] } = useQuery({ queryKey: ["textil-clientes"], queryFn: () => cliFn() });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
+  const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -147,6 +149,7 @@ function PresupuestosPage() {
           presupuesto={editing}
           clientes={clientes}
           marcas={marcas}
+          stock={stock}
           defaultMarcaId={defaultMarcaId}
           onSave={(v: any) => save.mutate(v)}
           loading={save.isPending}
@@ -156,7 +159,7 @@ function PresupuestosPage() {
   );
 }
 
-function PresupuestoDialog({ open, onOpenChange, presupuesto, clientes, marcas, defaultMarcaId, onSave, loading }: any) {
+function PresupuestoDialog({ open, onOpenChange, presupuesto, clientes, marcas, stock, defaultMarcaId, onSave, loading }: any) {
   const initial = presupuesto ?? {
     fecha: new Date().toISOString().slice(0, 10),
     validez_dias: 30,
@@ -166,7 +169,7 @@ function PresupuestoDialog({ open, onOpenChange, presupuesto, clientes, marcas, 
   const [f, setF] = useState<any>({
     ...initial,
     items: (initial.items ?? []).map((it: any) => ({
-      descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), iva_pct: Number(it.iva_pct),
+      descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), iva_pct: Number(it.iva_pct), stock_id: it.stock_id ?? null,
     })),
   });
 
@@ -217,7 +220,7 @@ function PresupuestoDialog({ open, onOpenChange, presupuesto, clientes, marcas, 
               <Input type="number" value={f.validez_dias} onChange={(e) => setF({ ...f, validez_dias: Number(e.target.value) })} />
             </div>
           </div>
-          <LineasEditor items={f.items} onChange={(items: Linea[]) => setF({ ...f, items })} />
+          <LineasEditor stock={stock} items={f.items} onChange={(items: Linea[]) => setF({ ...f, items })} />
           <div>
             <Label>Notas</Label>
             <Textarea value={f.notas ?? ""} onChange={(e) => setF({ ...f, notas: e.target.value })} />
