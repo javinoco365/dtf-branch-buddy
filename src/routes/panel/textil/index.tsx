@@ -10,7 +10,7 @@ import {
   listTextilFacturas,
   listTextilClientes,
 } from "@/lib/textil.functions";
-import { fmtEUR } from "@/lib/format";
+import { eur as fmtEUR } from "@/lib/format";
 
 export const Route = createFileRoute("/panel/textil/")({
   head: () => ({ meta: [{ title: "Textil Personalizado · CRM DTF" }] }),

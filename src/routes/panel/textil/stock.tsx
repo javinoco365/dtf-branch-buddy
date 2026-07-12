@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { listStock, upsertStockItem, deleteStockItem } from "@/lib/textil.functions";
 import { toast } from "sonner";
-import { fmtEUR } from "@/lib/format";
+import { eur as fmtEUR } from "@/lib/format";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · CRM DTF" }] }),
@@ -130,7 +130,7 @@ function StockPage() {
         open={open}
         onOpenChange={setOpen}
         item={editing}
-        onSave={(v) => upsert.mutate(v)}
+        onSave={(v: any) => upsert.mutate(v)}
         loading={upsert.isPending}
       />
     </div>
