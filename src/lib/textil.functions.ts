@@ -255,6 +255,63 @@ function calcularTotales(items: z.infer<typeof itemSchema>[]) {
   return { itemsCalc, subtotal, iva, total: subtotal + iva };
 }
 
+// Suma cantidades por stock_id
+function agruparStock(items: { stock_id?: string | null; cantidad: number }[]) {
+  const map = new Map<string, number>();
+  for (const it of items) {
+    if (!it.stock_id) continue;
+    map.set(it.stock_id, (map.get(it.stock_id) ?? 0) + Number(it.cantidad));
+  }
+  return map;
+}
+
+async function validarDisponibilidad(
+  supabase: any,
+  nuevos: Map<string, number>,
+  previos: Map<string, number> = new Map(),
+) {
+  if (nuevos.size === 0) return;
+  const ids = Array.from(nuevos.keys());
+  const { data, error } = await supabase
+    .from("textil_stock")
+    .select("id, nombre, cantidad")
+    .in("id", ids);
+  if (error) throw error;
+  const faltantes: string[] = [];
+  for (const s of data ?? []) {
+    const pedido = nuevos.get(s.id) ?? 0;
+    const yaReservado = previos.get(s.id) ?? 0;
+    const disponible = Number(s.cantidad) + yaReservado;
+    if (pedido > disponible) {
+      faltantes.push(`${s.nombre}: solicitado ${pedido}, disponible ${disponible}`);
+    }
+  }
+  if (faltantes.length) {
+    throw new Error(`Stock insuficiente — ${faltantes.join("; ")}`);
+  }
+}
+
+async function ajustarStock(
+  supabase: any,
+  delta: Map<string, number>, // positivo = descontar, negativo = devolver
+) {
+  for (const [id, cant] of delta.entries()) {
+    if (!cant) continue;
+    const { data, error } = await supabase
+      .from("textil_stock")
+      .select("cantidad")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    const nueva = Number(data.cantidad) - cant;
+    const { error: uErr } = await supabase
+      .from("textil_stock")
+      .update({ cantidad: nueva })
+      .eq("id", id);
+    if (uErr) throw uErr;
+  }
+}
+
 async function nextNumero(supabase: any, table: string, prefix: string) {
   const { data } = await supabase
     .from(table)
