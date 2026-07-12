@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, AlertTriangle, CheckCircle2, PackageX } from "lucide-react";
 import { eur } from "@/lib/format";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export type Linea = {
   descripcion: string;
@@ -51,6 +51,13 @@ export function LineasEditor({
     });
   };
 
+  // Agregado por stock_id considerando TODAS las líneas — indicador en tiempo real
+  const totalPorStock = new Map<string, number>();
+  for (const it of items) {
+    if (!it.stock_id) continue;
+    totalPorStock.set(it.stock_id, (totalPorStock.get(it.stock_id) ?? 0) + Number(it.cantidad || 0));
+  }
+
   const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
   const iva = items.reduce(
     (s, it) => s + it.cantidad * it.precio_unitario * (it.iva_pct / 100),
@@ -63,7 +70,17 @@ export function LineasEditor({
       <div className="space-y-2">
         {items.map((it, i) => {
           const s = it.stock_id ? stock.find((x) => x.id === it.stock_id) : null;
-          const excede = !!s && it.cantidad > Number(s.cantidad);
+          const disp = s ? Number(s.cantidad) : 0;
+          const solicitadoTotal = s ? (totalPorStock.get(s.id) ?? 0) : 0;
+          const restante = disp - solicitadoTotal;
+          const excede = !!s && restante < 0;
+          const critico = !!s && !excede && restante <= disp * 0.1; // <=10% restante
+          const tono = excede
+            ? "bg-destructive/10 text-destructive border-destructive/30"
+            : critico
+              ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+              : "bg-emerald-500/10 text-emerald-700 border-emerald-500/30";
+          const Icon = excede ? PackageX : critico ? AlertTriangle : CheckCircle2;
           return (
             <div key={i} className="space-y-1">
               <div className="grid grid-cols-12 gap-2 items-center">
@@ -118,10 +135,21 @@ export function LineasEditor({
                 </Button>
               </div>
               {s && (
-                <div className={`text-xs flex items-center gap-1 pl-1 ${excede ? "text-destructive" : "text-muted-foreground"}`}>
-                  {excede && <AlertTriangle className="h-3 w-3" />}
-                  Disponible: {s.cantidad}
-                  {excede && ` · Solicitado ${it.cantidad} (excede stock)`}
+                <div className="flex items-center gap-2 pl-1">
+                  <Badge variant="outline" className={`text-[11px] gap-1 ${tono}`}>
+                    <Icon className="h-3 w-3" />
+                    {excede
+                      ? `Faltan ${Math.abs(restante)} uds`
+                      : `Restante ${restante} / ${disp}`}
+                  </Badge>
+                  {solicitadoTotal !== Number(it.cantidad) && (
+                    <span className="text-[11px] text-muted-foreground">
+                      · en este documento: {solicitadoTotal}
+                    </span>
+                  )}
+                  {critico && !excede && (
+                    <span className="text-[11px] text-amber-700">· stock bajo</span>
+                  )}
                 </div>
               )}
             </div>
