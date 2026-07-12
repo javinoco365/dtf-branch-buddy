@@ -82,7 +82,7 @@ export const setMarcaPredeterminada = createServerFn({ method: "POST" })
     } else {
       const { error } = await context.supabase
         .from("empresa_global")
-        .insert({ textil_marca_predeterminada_id: data.marca_id, nombre_fiscal: "Empresa" });
+        .insert({ textil_marca_predeterminada_id: data.marca_id, nombre_fiscal: "Empresa" } as any);
       if (error) throw error;
     }
     return { ok: true };
@@ -303,7 +303,7 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
 
     const { error: itErr } = await context.supabase.from("textil_presupuesto_items").insert(
       totals.itemsCalc.map((it) => ({
-        presupuesto_id: presupuestoId,
+        presupuesto_id: presupuestoId!,
         descripcion: it.descripcion,
         cantidad: it.cantidad,
         precio_unitario: it.precio_unitario,
@@ -487,7 +487,7 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
     }
     const { error: itErr } = await context.supabase.from("textil_pedido_items").insert(
       totals.itemsCalc.map((it) => ({
-        pedido_id: pedidoId,
+        pedido_id: pedidoId!,
         descripcion: it.descripcion,
         cantidad: it.cantidad,
         precio_unitario: it.precio_unitario,
