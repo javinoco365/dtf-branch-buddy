@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
   listTextilPedidos, upsertTextilPedido, updateTextilPedidoEstado, deleteTextilPedido,
-  listTextilClientes, listMarcas, getEmpresaGlobal,
+  listTextilClientes, listMarcas, getEmpresaGlobal, listStock,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
@@ -37,11 +37,13 @@ function PedidosPage() {
   const cliFn = useServerFn(listTextilClientes);
   const marcasFn = useServerFn(listMarcas);
   const empFn = useServerFn(getEmpresaGlobal);
+  const stockFn = useServerFn(listStock);
 
   const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
   const { data: clientes = [] } = useQuery({ queryKey: ["textil-clientes"], queryFn: () => cliFn() });
   const { data: marcas = [] } = useQuery({ queryKey: ["textil-marcas"], queryFn: () => marcasFn() });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
+  const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -49,13 +51,23 @@ function PedidosPage() {
   const inv = () => qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
   const save = useMutation({
     mutationFn: (d: any) => upsertFn({ data: d }),
-    onSuccess: () => { inv(); toast.success("Guardado"); setOpen(false); setEditing(null); },
+    onSuccess: () => {
+      inv();
+      qc.invalidateQueries({ queryKey: ["textil-stock"] });
+      toast.success("Guardado");
+      setOpen(false);
+      setEditing(null);
+    },
     onError: (e: any) => toast.error(e.message),
   });
-  const setEst = useMutation({ mutationFn: ({ id, estado }: any) => estFn({ data: { id, estado } }), onSuccess: inv });
+  const setEst = useMutation({
+    mutationFn: ({ id, estado }: any) => estFn({ data: { id, estado } }),
+    onSuccess: () => { inv(); qc.invalidateQueries({ queryKey: ["textil-stock"] }); },
+    onError: (e: any) => toast.error(e.message),
+  });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
-    onSuccess: () => { inv(); toast.success("Eliminado"); },
+    onSuccess: () => { inv(); qc.invalidateQueries({ queryKey: ["textil-stock"] }); toast.success("Eliminado"); },
   });
 
   const defaultMarcaId = (empresa as any)?.textil_marca_predeterminada_id ?? null;
@@ -112,6 +124,7 @@ function PedidosPage() {
           pedido={editing}
           clientes={clientes}
           marcas={marcas}
+          stock={stock}
           defaultMarcaId={defaultMarcaId}
           onSave={(v: any) => save.mutate(v)}
           loading={save.isPending}
@@ -121,7 +134,7 @@ function PedidosPage() {
   );
 }
 
-function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, defaultMarcaId, onSave, loading }: any) {
+function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, stock, defaultMarcaId, onSave, loading }: any) {
   const initial = pedido ?? {
     fecha: new Date().toISOString().slice(0, 10),
     estado: "pendiente",
@@ -132,7 +145,7 @@ function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, defaultMar
   const [f, setF] = useState<any>({
     ...initial,
     items: (initial.items ?? []).map((it: any) => ({
-      descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), iva_pct: Number(it.iva_pct),
+      descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), iva_pct: Number(it.iva_pct), stock_id: it.stock_id ?? null,
     })),
   });
 
@@ -184,7 +197,7 @@ function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, defaultMar
               </Select>
             </div>
           </div>
-          <LineasEditor items={f.items} onChange={(items: Linea[]) => setF({ ...f, items })} />
+          <LineasEditor stock={stock} items={f.items} onChange={(items: Linea[]) => setF({ ...f, items })} />
           <div>
             <Label>Notas</Label>
             <Textarea value={f.notas ?? ""} onChange={(e) => setF({ ...f, notas: e.target.value })} />
