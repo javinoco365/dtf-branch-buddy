@@ -280,12 +280,6 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Sistema
-          </SidebarGroupLabel>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
             Textil Personalizado
           </SidebarGroupLabel>
           <SidebarGroupContent>
