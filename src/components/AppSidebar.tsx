@@ -321,7 +321,7 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Sistema (2)
+            Sistema
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
