@@ -39,6 +39,9 @@ import {
   ChevronRight,
   Plus,
   List,
+  Shirt,
+  Boxes,
+  FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -278,6 +281,47 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
             Sistema
+          </SidebarGroupLabel>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Textil Personalizado
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                defaultOpen={pathname.startsWith("/panel/textil")}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={pathname.startsWith("/panel/textil")}>
+                      <Shirt />
+                      <span>Textil Personalizado</span>
+                      <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <TextilSub to="/panel/textil" label="Resumen" icon={LayoutDashboard} pathname={pathname} exact />
+                      <TextilSub to="/panel/textil/stock" label="Stock" icon={Boxes} pathname={pathname} />
+                      <TextilSub to="/panel/textil/pedidos" label="Pedidos" icon={ShoppingCart} pathname={pathname} />
+                      <TextilSub to="/panel/textil/presupuestos" label="Presupuestos" icon={FileSpreadsheet} pathname={pathname} />
+                      <TextilSub to="/panel/textil/facturas" label="Facturas" icon={FileText} pathname={pathname} />
+                      <TextilSub to="/panel/textil/clientes" label="Clientes" icon={Users} pathname={pathname} />
+                      <TextilSub to="/panel/textil/ajustes" label="Ajustes" icon={Settings} pathname={pathname} />
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Sistema (2)
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
