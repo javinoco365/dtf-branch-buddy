@@ -95,6 +95,7 @@ export type Database = {
           provincia: string | null
           razon_social: string | null
           telefono: string | null
+          textil_marca_predeterminada_id: string | null
           updated_at: string
         }
         Insert: {
@@ -112,6 +113,7 @@ export type Database = {
           provincia?: string | null
           razon_social?: string | null
           telefono?: string | null
+          textil_marca_predeterminada_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -129,9 +131,18 @@ export type Database = {
           provincia?: string | null
           razon_social?: string | null
           telefono?: string | null
+          textil_marca_predeterminada_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresa_global_textil_marca_predeterminada_id_fkey"
+            columns: ["textil_marca_predeterminada_id"]
+            isOneToOne: false
+            referencedRelation: "textil_marcas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       enlaces_seguimiento: {
         Row: {
@@ -643,6 +654,535 @@ export type Database = {
           },
         ]
       }
+      textil_clientes: {
+        Row: {
+          created_at: string
+          direccion: string | null
+          email: string | null
+          id: string
+          nif: string | null
+          nombre: string
+          notas: string | null
+          telefono: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          nif?: string | null
+          nombre: string
+          notas?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          nif?: string | null
+          nombre?: string
+          notas?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      textil_factura_items: {
+        Row: {
+          cantidad: number
+          created_at: string
+          descripcion: string
+          factura_id: string
+          id: string
+          iva_pct: number
+          precio_unitario: number
+          subtotal: number
+        }
+        Insert: {
+          cantidad?: number
+          created_at?: string
+          descripcion: string
+          factura_id: string
+          id?: string
+          iva_pct?: number
+          precio_unitario?: number
+          subtotal?: number
+        }
+        Update: {
+          cantidad?: number
+          created_at?: string
+          descripcion?: string
+          factura_id?: string
+          id?: string
+          iva_pct?: number
+          precio_unitario?: number
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_factura_items_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "textil_facturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_facturas: {
+        Row: {
+          cliente_direccion: string | null
+          cliente_email: string | null
+          cliente_id: string | null
+          cliente_nif: string | null
+          cliente_nombre: string | null
+          created_at: string
+          estado: string
+          fecha: string
+          id: string
+          iva: number
+          marca_id: string | null
+          metodo_pago: string | null
+          notas: string | null
+          numero: string
+          pdf_path: string | null
+          presupuesto_id: string | null
+          serie: string | null
+          subtotal: number
+          total: number
+          updated_at: string
+          vencimiento: string | null
+        }
+        Insert: {
+          cliente_direccion?: string | null
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nif?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          estado?: string
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          metodo_pago?: string | null
+          notas?: string | null
+          numero: string
+          pdf_path?: string | null
+          presupuesto_id?: string | null
+          serie?: string | null
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          vencimiento?: string | null
+        }
+        Update: {
+          cliente_direccion?: string | null
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nif?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          estado?: string
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          metodo_pago?: string | null
+          notas?: string | null
+          numero?: string
+          pdf_path?: string | null
+          presupuesto_id?: string | null
+          serie?: string | null
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          vencimiento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_facturas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "textil_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_facturas_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "textil_marcas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_facturas_presupuesto_id_fkey"
+            columns: ["presupuesto_id"]
+            isOneToOne: false
+            referencedRelation: "textil_presupuestos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_marcas: {
+        Row: {
+          activa: boolean
+          color: string | null
+          created_at: string
+          direccion: string | null
+          email: string | null
+          id: string
+          logo_url: string | null
+          nombre: string
+          notas: string | null
+          telefono: string | null
+          updated_at: string
+        }
+        Insert: {
+          activa?: boolean
+          color?: string | null
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          nombre: string
+          notas?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activa?: boolean
+          color?: string | null
+          created_at?: string
+          direccion?: string | null
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          nombre?: string
+          notas?: string | null
+          telefono?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      textil_pedido_items: {
+        Row: {
+          cantidad: number
+          created_at: string
+          descripcion: string
+          id: string
+          iva_pct: number
+          pedido_id: string
+          precio_unitario: number
+          stock_id: string | null
+          subtotal: number
+        }
+        Insert: {
+          cantidad?: number
+          created_at?: string
+          descripcion: string
+          id?: string
+          iva_pct?: number
+          pedido_id: string
+          precio_unitario?: number
+          stock_id?: string | null
+          subtotal?: number
+        }
+        Update: {
+          cantidad?: number
+          created_at?: string
+          descripcion?: string
+          id?: string
+          iva_pct?: number
+          pedido_id?: string
+          precio_unitario?: number
+          stock_id?: string | null
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_pedido_items_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "textil_pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_pedido_items_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "textil_stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_pedidos: {
+        Row: {
+          cliente_email: string | null
+          cliente_id: string | null
+          cliente_nombre: string | null
+          created_at: string
+          envio: number
+          estado: string
+          fecha: string
+          id: string
+          iva: number
+          marca_id: string | null
+          metodo_pago: string | null
+          notas: string | null
+          numero: string
+          subtotal: number
+          total: number
+          tracking_empresa: string | null
+          tracking_numero: string | null
+          tracking_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          envio?: number
+          estado?: string
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          metodo_pago?: string | null
+          notas?: string | null
+          numero: string
+          subtotal?: number
+          total?: number
+          tracking_empresa?: string | null
+          tracking_numero?: string | null
+          tracking_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          envio?: number
+          estado?: string
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          metodo_pago?: string | null
+          notas?: string | null
+          numero?: string
+          subtotal?: number
+          total?: number
+          tracking_empresa?: string | null
+          tracking_numero?: string | null
+          tracking_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "textil_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_pedidos_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "textil_marcas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_presupuesto_items: {
+        Row: {
+          cantidad: number
+          created_at: string
+          descripcion: string
+          id: string
+          iva_pct: number
+          precio_unitario: number
+          presupuesto_id: string
+          stock_id: string | null
+          subtotal: number
+        }
+        Insert: {
+          cantidad?: number
+          created_at?: string
+          descripcion: string
+          id?: string
+          iva_pct?: number
+          precio_unitario?: number
+          presupuesto_id: string
+          stock_id?: string | null
+          subtotal?: number
+        }
+        Update: {
+          cantidad?: number
+          created_at?: string
+          descripcion?: string
+          id?: string
+          iva_pct?: number
+          precio_unitario?: number
+          presupuesto_id?: string
+          stock_id?: string | null
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_presupuesto_items_presupuesto_id_fkey"
+            columns: ["presupuesto_id"]
+            isOneToOne: false
+            referencedRelation: "textil_presupuestos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_presupuesto_items_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "textil_stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_presupuestos: {
+        Row: {
+          cliente_direccion: string | null
+          cliente_email: string | null
+          cliente_id: string | null
+          cliente_nif: string | null
+          cliente_nombre: string | null
+          created_at: string
+          estado: Database["public"]["Enums"]["textil_presupuesto_estado"]
+          factura_id: string | null
+          fecha: string
+          id: string
+          iva: number
+          marca_id: string | null
+          notas: string | null
+          numero: string
+          subtotal: number
+          total: number
+          updated_at: string
+          validez_dias: number
+        }
+        Insert: {
+          cliente_direccion?: string | null
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nif?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          estado?: Database["public"]["Enums"]["textil_presupuesto_estado"]
+          factura_id?: string | null
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          notas?: string | null
+          numero: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          validez_dias?: number
+        }
+        Update: {
+          cliente_direccion?: string | null
+          cliente_email?: string | null
+          cliente_id?: string | null
+          cliente_nif?: string | null
+          cliente_nombre?: string | null
+          created_at?: string
+          estado?: Database["public"]["Enums"]["textil_presupuesto_estado"]
+          factura_id?: string | null
+          fecha?: string
+          id?: string
+          iva?: number
+          marca_id?: string | null
+          notas?: string | null
+          numero?: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          validez_dias?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "textil_presupuestos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "textil_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_presupuestos_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "textil_facturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "textil_presupuestos_marca_id_fkey"
+            columns: ["marca_id"]
+            isOneToOne: false
+            referencedRelation: "textil_marcas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      textil_stock: {
+        Row: {
+          cantidad: number
+          cantidad_minima: number
+          categoria: string | null
+          color: string | null
+          coste_unitario: number
+          created_at: string
+          id: string
+          nombre: string
+          notas: string | null
+          precio_venta: number
+          sku: string | null
+          talla: string | null
+          updated_at: string
+        }
+        Insert: {
+          cantidad?: number
+          cantidad_minima?: number
+          categoria?: string | null
+          color?: string | null
+          coste_unitario?: number
+          created_at?: string
+          id?: string
+          nombre: string
+          notas?: string | null
+          precio_venta?: number
+          sku?: string | null
+          talla?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cantidad?: number
+          cantidad_minima?: number
+          categoria?: string | null
+          color?: string | null
+          coste_unitario?: number
+          created_at?: string
+          id?: string
+          nombre?: string
+          notas?: string | null
+          precio_venta?: number
+          sku?: string | null
+          talla?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tienda_credenciales: {
         Row: {
           consumer_key: string
@@ -871,6 +1411,12 @@ export type Database = {
         | "cancelado"
       proyecto_estado: "planificado" | "en_curso" | "completado" | "cancelado"
       proyecto_prioridad: "baja" | "media" | "alta"
+      textil_presupuesto_estado:
+        | "borrador"
+        | "enviado"
+        | "aceptado"
+        | "rechazado"
+        | "facturado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1011,6 +1557,13 @@ export const Constants = {
       ],
       proyecto_estado: ["planificado", "en_curso", "completado", "cancelado"],
       proyecto_prioridad: ["baja", "media", "alta"],
+      textil_presupuesto_estado: [
+        "borrador",
+        "enviado",
+        "aceptado",
+        "rechazado",
+        "facturado",
+      ],
     },
   },
 } as const

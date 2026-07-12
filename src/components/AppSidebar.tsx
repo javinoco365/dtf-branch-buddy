@@ -39,6 +39,9 @@ import {
   ChevronRight,
   Plus,
   List,
+  Shirt,
+  Boxes,
+  FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -277,6 +280,41 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
+            Textil Personalizado
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                defaultOpen={pathname.startsWith("/panel/textil")}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={pathname.startsWith("/panel/textil")}>
+                      <Shirt />
+                      <span>Textil Personalizado</span>
+                      <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      <TextilSub to="/panel/textil" label="Resumen" icon={LayoutDashboard} pathname={pathname} exact />
+                      <TextilSub to="/panel/textil/stock" label="Stock" icon={Boxes} pathname={pathname} />
+                      <TextilSub to="/panel/textil/pedidos" label="Pedidos" icon={ShoppingCart} pathname={pathname} />
+                      <TextilSub to="/panel/textil/presupuestos" label="Presupuestos" icon={FileSpreadsheet} pathname={pathname} />
+                      <TextilSub to="/panel/textil/facturas" label="Facturas" icon={FileText} pathname={pathname} />
+                      <TextilSub to="/panel/textil/clientes" label="Clientes" icon={Users} pathname={pathname} />
+                      <TextilSub to="/panel/textil/ajustes" label="Ajustes" icon={Settings} pathname={pathname} />
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
             Sistema
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -375,6 +413,32 @@ function SubItem({
     <SidebarMenuSubItem>
       <SidebarMenuSubButton asChild isActive={active}>
         <Link to={to as any} params={{ tiendaId } as any}>
+          <Icon className="h-4 w-4" />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
+  );
+}
+
+function TextilSub({
+  to,
+  label,
+  icon: Icon,
+  pathname,
+  exact,
+}: {
+  to: string;
+  label: string;
+  icon: any;
+  pathname: string;
+  exact?: boolean;
+}) {
+  const active = exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton asChild isActive={active}>
+        <Link to={to as any}>
           <Icon className="h-4 w-4" />
           <span>{label}</span>
         </Link>
