@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/button";
 import { setPedidoTracking } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
 
+const CTT = "CTT Express";
+const cttUrl = (codigo: string) =>
+  `https://www.cttexpress.com/localizador-de-envios/?sc=${encodeURIComponent(codigo.trim())}`;
+
 export function PedidoTrackingDialog({
   open,
   onOpenChange,
@@ -38,6 +42,16 @@ export function PedidoTrackingDialog({
   }, [open, pedido]);
 
   const fn = useServerFn(setPedidoTracking);
+
+  const aplicarCtt = () => {
+    setTransportista(CTT);
+    if (codigo.trim()) setUrl(cttUrl(codigo));
+  };
+
+  const onCodigoChange = (v: string) => {
+    setCodigo(v);
+    if (transportista === CTT && v.trim()) setUrl(cttUrl(v));
+  };
   const mut = useMutation({
     mutationFn: async () => {
       if (!pedido) return;
@@ -71,14 +85,25 @@ export function PedidoTrackingDialog({
               onChange={(e) => setTransportista(e.target.value)}
               placeholder="SEUR, MRW, Correos Express…"
             />
+            <Button type="button" variant="secondary" size="sm" onClick={aplicarCtt}>
+              Usar CTT Express
+            </Button>
           </div>
           <div className="space-y-1">
             <Label>Número de seguimiento</Label>
-            <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+            <Input
+              value={codigo}
+              onChange={(e) => onCodigoChange(e.target.value)}
+              placeholder="0034050034059700104370"
+            />
           </div>
           <div className="space-y-1">
             <Label>URL de seguimiento</Label>
             <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+            <p className="text-xs text-muted-foreground">
+              Con CTT Express el enlace se genera solo desde el número de envío. Si recibes por
+              correo un enlace propio de CTT, pégalo aquí para sustituirlo.
+            </p>
           </div>
         </div>
         <DialogFooter>
