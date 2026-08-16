@@ -524,9 +524,21 @@ function FilaPedido({
         </TableCell>
         <TableCell className="text-right font-semibold">{eur(pedido.total)}</TableCell>
         <TableCell>
-          <Truck
-            className={`h-4 w-4 ${pedido.tracking?.codigo_seguimiento ? "text-primary" : "text-muted-foreground"}`}
-          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={
+              pedido.tracking?.codigo_seguimiento
+                ? `Tracking: ${pedido.tracking.codigo_seguimiento}`
+                : "Añadir tracking del envío"
+            }
+            onClick={onTracking}
+          >
+            <Truck
+              className={`h-4 w-4 ${pedido.tracking?.codigo_seguimiento ? "text-primary" : "text-muted-foreground"}`}
+            />
+          </Button>
         </TableCell>
         <TableCell>
           <DropdownMenu>
