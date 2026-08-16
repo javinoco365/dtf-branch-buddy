@@ -25,9 +25,8 @@ import { guardarCredencialesWoo } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
-  validateSearch: (s: Record<string, unknown>) => ({
-    nueva: s.nueva === 1 || s.nueva === "1" ? 1 : undefined,
-  }),
+  validateSearch: (s: Record<string, unknown>): { nueva?: 1 } =>
+    s.nueva === 1 || s.nueva === "1" ? { nueva: 1 } : {},
   component: TiendasIndex,
 });
 
