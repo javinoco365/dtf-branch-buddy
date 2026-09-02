@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { llamarRpc } from "./rpc";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 
 /**
@@ -166,24 +167,6 @@ type ResultadoEmision = {
   iva_total: number;
   total: number;
 };
-
-async function llamarRpc<T>(
-  cliente: unknown,
-  funcion: string,
-  argumentos: Record<string, unknown>,
-): Promise<T> {
-  const rpc = (
-    cliente as {
-      rpc: (
-        f: string,
-        a: Record<string, unknown>,
-      ) => Promise<{ data: T; error: { message: string } | null }>;
-    }
-  ).rpc;
-  const { data, error } = await rpc.call(cliente, funcion, argumentos);
-  if (error) throw new Error(error.message);
-  return data;
-}
 
 /** Emite una factura ordinaria. El número lo pone la base, no esta función. */
 export const emitirFactura = createServerFn({ method: "POST" })

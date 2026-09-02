@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { calcularLinea, calcularTotales, redondear } from "@/dominio/importes";
 
 const ESTADO_VALUES = [
@@ -47,16 +48,12 @@ async function getWooCreds(supabaseAdmin: any, tiendaId: string) {
     .eq("id", tiendaId)
     .maybeSingle();
   if (!tienda?.woo_url || !tienda.sync_enabled) return null;
-  const { data: creds } = await supabaseAdmin
-    .from("tienda_credenciales")
-    .select("woo_consumer_key, woo_consumer_secret")
-    .eq("tienda_id", tiendaId)
-    .maybeSingle();
-  if (!creds?.woo_consumer_key || !creds.woo_consumer_secret) return null;
-  const auth =
-    "Basic " +
-    Buffer.from(`${creds.woo_consumer_key}:${creds.woo_consumer_secret}`).toString("base64");
-  return { base: tienda.woo_url.replace(/\/$/, ""), auth };
+  // Iba por woo_consumer_key/woo_consumer_secret, columnas que no existen: se
+  // llaman consumer_key/consumer_secret. Devolvía null siempre, así que el
+  // empuje del estado del pedido a WooCommerce no ha funcionado nunca.
+  const creds = await leerCredencialesWoo(supabaseAdmin, tiendaId);
+  if (!creds) return null;
+  return { base: tienda.woo_url.replace(/\/$/, ""), auth: autorizacionWoo(creds) };
 }
 
 export const listPedidos = createServerFn({ method: "POST" })

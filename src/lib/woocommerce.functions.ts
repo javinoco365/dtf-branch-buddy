@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 
 /**
  * Sincronizar pedidos, clientes y productos desde WooCommerce.
@@ -37,16 +38,11 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
     if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
 
-    const { data: creds } = await supabaseAdmin
-      .from("tienda_credenciales")
-      .select("consumer_key, consumer_secret")
-      .eq("tienda_id", data.tienda_id)
-      .maybeSingle();
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
     if (!creds) throw new Error("Faltan credenciales de WooCommerce");
 
     const base = tienda.woo_url.replace(/\/$/, "");
-    const auth = btoa(`${creds.consumer_key}:${creds.consumer_secret}`);
-    const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
+    const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
 
     const importados = { pedidos: 0, clientes: 0, productos: 0 };
 
@@ -225,16 +221,11 @@ export const sincronizarWooDevoluciones = createServerFn({ method: "POST" })
     if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
     if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
 
-    const { data: creds } = await supabaseAdmin
-      .from("tienda_credenciales")
-      .select("consumer_key, consumer_secret")
-      .eq("tienda_id", data.tienda_id)
-      .maybeSingle();
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
     if (!creds) throw new Error("Faltan credenciales de WooCommerce");
 
     const base = tienda.woo_url.replace(/\/$/, "");
-    const auth = btoa(`${creds.consumer_key}:${creds.consumer_secret}`);
-    const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
+    const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
 
     const { data: pedidos } = await supabaseAdmin
       .from("pedidos")

@@ -74,10 +74,20 @@ $PSQL -f "$RAIZ/supabase/pruebas/20_auditoria_autor.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
 
 echo
-if $PSQL -tAc "SELECT count(*) FROM public.facturas_huecos_en_serie();" | grep -qx 0 &&
-   $PSQL -tAc "SELECT count(*) FROM public.auditoria_verificar();" | grep -qx 0; then
+echo "== Credenciales de WooCommerce en Vault =="
+$PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
+huecos=$($PSQL -tAc "SELECT count(*) FROM public.facturas_huecos_en_serie();")
+rotos=$($PSQL -tAc "SELECT count(*) FROM public.auditoria_verificar();")
+if [ "$huecos" = "0" ] && [ "$rotos" = "0" ]; then
   echo "TODO EN VERDE: sin huecos en la serie y con la cadena de auditoría intacta."
 else
-  echo "FALLO: hay huecos en la serie o la cadena de auditoría está rota."
+  [ "$huecos" = "0" ] || echo "FALLO: $huecos hueco(s) en la numeración de facturas."
+  [ "$rotos" = "0" ] || {
+    echo "FALLO: $rotos eslabón(es) rotos en la cadena de auditoría."
+    $PSQL -c "SELECT * FROM public.auditoria_verificar() LIMIT 5;"
+  }
   exit 1
 fi
