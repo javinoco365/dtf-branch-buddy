@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { calcularLinea, calcularTotales, redondear } from "@/dominio/importes";
 
 const ESTADO_VALUES = [
   "pendiente",
@@ -150,13 +151,12 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await ensureAccess(supabaseAdmin, context.userId, data.tiendaId);
 
-    const subtotal = data.items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-    const iva = data.items.reduce(
-      (s, it) => s + it.cantidad * it.precio_unitario * (it.iva_rate / 100),
-      0,
-    );
+    // Mismo módulo que la pantalla, para que lo que se ve y lo que se guarda
+    // coincidan. Sobre el envío, ver la nota de PedidoFormDialog: hoy se suma
+    // después del IVA y ese criterio se conserva aquí.
+    const totales = calcularTotales(data.items);
     const metros_total = data.items.reduce((s, it) => s + it.cantidad, 0);
-    const total = subtotal + iva + (data.envio || 0);
+    const total = redondear(totales.total + (data.envio || 0));
 
     const numero = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
       Math.random() * 9000 + 1000,
@@ -175,17 +175,16 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         cliente_email: data.cliente_email ?? null,
         notas: data.notas ?? null,
         metros_total,
-        subtotal: Number(subtotal.toFixed(2)),
-        iva: Number(iva.toFixed(2)),
-        total: Number(total.toFixed(2)),
+        subtotal: totales.base_imponible,
+        iva: totales.iva_total,
+        total,
       })
       .select("id")
       .single();
     if (pErr || !pedido) throw new Error(pErr?.message || "Error creando pedido");
 
     const itemRows = data.items.map((it) => {
-      const sub = it.cantidad * it.precio_unitario;
-      const ivaLi = sub * (it.iva_rate / 100);
+      const linea = calcularLinea(it);
       return {
         pedido_id: pedido.id,
         descripcion: it.descripcion,
@@ -193,9 +192,9 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         unidad: "ud",
         precio_unitario: it.precio_unitario,
         iva_rate: it.iva_rate,
-        subtotal: Number(sub.toFixed(2)),
-        iva: Number(ivaLi.toFixed(2)),
-        total: Number((sub + ivaLi).toFixed(2)),
+        subtotal: linea.base,
+        iva: linea.cuota,
+        total: linea.total,
       };
     });
     await supabaseAdmin.from("pedido_items").insert(itemRows);

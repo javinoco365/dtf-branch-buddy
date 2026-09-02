@@ -77,22 +77,26 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'admin write marcas', v_tabla);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'auth all stock', v_tabla);
 
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_tabla || '_lectura', v_tabla);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated '
       'USING (public.es_miembro_empresa(auth.uid(), empresa_id))',
       v_tabla || '_lectura', v_tabla);
 
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_tabla || '_alta', v_tabla);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated '
       'WITH CHECK (public.es_miembro_empresa(auth.uid(), empresa_id))',
       v_tabla || '_alta', v_tabla);
 
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_tabla || '_modificacion', v_tabla);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated '
       'USING (public.es_miembro_empresa(auth.uid(), empresa_id)) '
       'WITH CHECK (public.es_miembro_empresa(auth.uid(), empresa_id))',
       v_tabla || '_modificacion', v_tabla);
 
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_tabla || '_borrado', v_tabla);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated '
       'USING (public.es_miembro_empresa(auth.uid(), empresa_id))',
@@ -115,6 +119,8 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I',
       'auth all ' || v_lineas.tabla, v_lineas.tabla);
 
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I',
+      v_lineas.tabla || '_por_documento', v_lineas.tabla);
     EXECUTE format(
       'CREATE POLICY %I ON public.%I FOR ALL TO authenticated '
       'USING (EXISTS (SELECT 1 FROM public.%I p WHERE p.id = %I.%I '

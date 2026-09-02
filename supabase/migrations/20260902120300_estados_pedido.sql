@@ -51,27 +51,39 @@
 --   columna estado no se toca en ningún momento.
 -- ============================================================================
 
-CREATE TYPE public.estado_pago AS ENUM (
-  'pendiente',    -- todavía no se ha cobrado nada
-  'parcial',      -- anticipo o pago a cuenta
-  'pagado',
-  'reembolsado'
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_pago AS ENUM (
+    'pendiente',    -- todavía no se ha cobrado nada
+    'parcial',      -- anticipo o pago a cuenta
+    'pagado',
+    'reembolsado'
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_pago ya existe, se omite';
+END $$;
 
-CREATE TYPE public.estado_produccion AS ENUM (
-  'sin_empezar',
-  'en_cola',      -- asignado a una tirada, aún no impreso
-  'imprimiendo',
-  'listo'         -- impreso y empaquetado
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_produccion AS ENUM (
+    'sin_empezar',
+    'en_cola',      -- asignado a una tirada, aún no impreso
+    'imprimiendo',
+    'listo'         -- impreso y empaquetado
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_produccion ya existe, se omite';
+END $$;
 
-CREATE TYPE public.estado_envio AS ENUM (
-  'sin_enviar',
-  'preparado',    -- etiqueta generada, pendiente de recogida
-  'en_transito',
-  'entregado',
-  'devuelto'
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_envio AS ENUM (
+    'sin_enviar',
+    'preparado',    -- etiqueta generada, pendiente de recogida
+    'en_transito',
+    'entregado',
+    'devuelto'
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_envio ya existe, se omite';
+END $$;
 
 ALTER TABLE public.pedidos
   ADD COLUMN IF NOT EXISTS estado_pago public.estado_pago NOT NULL DEFAULT 'pendiente',
@@ -115,39 +127,89 @@ UPDATE public.pedidos SET
 -- todavía leen pedidos.estado sigan viendo lo que esperan. Va en las dos
 -- direcciones: si alguien escribe estado (la aplicación actual), se derivan los
 -- tres; si alguien escribe los tres (la aplicación nueva), se deriva estado.
+-- ---------------------------------------------------------------------------
+-- La correspondencia, en un solo sitio
+-- ---------------------------------------------------------------------------
+-- El segundo argumento es lo que se devuelve para «cancelado», que no dice nada
+-- de en qué punto estaba el pedido: al insertar es el valor inicial, y al
+-- actualizar es el que ya tenía.
+CREATE OR REPLACE FUNCTION public.pedido_estado_a_pago(
+  _estado public.pedido_estado, _si_cancelado public.estado_pago)
+RETURNS public.estado_pago LANGUAGE sql IMMUTABLE SET search_path = public AS $$
+  SELECT CASE _estado
+    WHEN 'pendiente' THEN 'pendiente'::public.estado_pago
+    WHEN 'cancelado' THEN _si_cancelado
+    ELSE 'pagado'::public.estado_pago END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.pedido_estado_a_produccion(
+  _estado public.pedido_estado, _si_cancelado public.estado_produccion)
+RETURNS public.estado_produccion LANGUAGE sql IMMUTABLE SET search_path = public AS $$
+  SELECT CASE _estado
+    WHEN 'pendiente'     THEN 'sin_empezar'::public.estado_produccion
+    WHEN 'cancelado'     THEN _si_cancelado
+    WHEN 'en_produccion' THEN 'en_cola'::public.estado_produccion
+    WHEN 'imprimiendo'   THEN 'imprimiendo'::public.estado_produccion
+    ELSE 'listo'::public.estado_produccion END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.pedido_estado_a_envio(
+  _estado public.pedido_estado, _si_cancelado public.estado_envio)
+RETURNS public.estado_envio LANGUAGE sql IMMUTABLE SET search_path = public AS $$
+  SELECT CASE _estado
+    WHEN 'enviado'   THEN 'en_transito'::public.estado_envio
+    WHEN 'entregado' THEN 'entregado'::public.estado_envio
+    WHEN 'cancelado' THEN _si_cancelado
+    ELSE 'sin_enviar'::public.estado_envio END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.pedido_sincronizar_estados()
 RETURNS TRIGGER
 LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE
+  -- Cierto cuando los tres campos nuevos están tal y como los deja el DEFAULT,
+  -- es decir, cuando quien escribe no los ha tocado.
+  v_nuevos_intactos BOOLEAN;
 BEGIN
-  -- Escritura por la vía antigua: solo cambió estado.
+  v_nuevos_intactos :=
+        NEW.estado_pago = 'pendiente'
+    AND NEW.estado_produccion = 'sin_empezar'
+    AND NEW.estado_envio = 'sin_enviar'
+    AND NEW.cancelado_en IS NULL;
+
+  -- ---- Alta por la vía antigua -------------------------------------------
+  -- La sincronización de WooCommerce inserta el pedido con su estado ya
+  -- mapeado y sin tocar los tres campos nuevos. Sin esta rama, el trigger
+  -- derivaría estado de unos campos que están a cero y machacaría en silencio
+  -- el estado que venía: todos los pedidos sincronizados acabarían en
+  -- «pendiente».
+  IF TG_OP = 'INSERT' AND v_nuevos_intactos AND NEW.estado IS DISTINCT FROM 'pendiente' THEN
+    NEW.estado_pago := public.pedido_estado_a_pago(NEW.estado, 'pendiente');
+    NEW.estado_produccion := public.pedido_estado_a_produccion(NEW.estado, 'sin_empezar');
+    NEW.estado_envio := public.pedido_estado_a_envio(NEW.estado, 'sin_enviar');
+    NEW.cancelado_en := CASE WHEN NEW.estado = 'cancelado' THEN now() END;
+    RETURN NEW;
+  END IF;
+
+  -- ---- Cambio por la vía antigua -----------------------------------------
+  -- Solo cambió estado: se derivan los tres. Al cancelar se conserva el punto
+  -- en el que estaba el pedido, porque cancelar no lo devuelve al principio.
   IF TG_OP = 'UPDATE'
      AND NEW.estado IS DISTINCT FROM OLD.estado
      AND NEW.estado_pago IS NOT DISTINCT FROM OLD.estado_pago
      AND NEW.estado_produccion IS NOT DISTINCT FROM OLD.estado_produccion
      AND NEW.estado_envio IS NOT DISTINCT FROM OLD.estado_envio
   THEN
-    NEW.estado_pago := CASE NEW.estado
-      WHEN 'pendiente' THEN 'pendiente'::public.estado_pago
-      WHEN 'cancelado' THEN OLD.estado_pago
-      ELSE 'pagado'::public.estado_pago END;
-    NEW.estado_produccion := CASE NEW.estado
-      WHEN 'pendiente'     THEN 'sin_empezar'::public.estado_produccion
-      WHEN 'cancelado'     THEN OLD.estado_produccion
-      WHEN 'en_produccion' THEN 'en_cola'::public.estado_produccion
-      WHEN 'imprimiendo'   THEN 'imprimiendo'::public.estado_produccion
-      ELSE 'listo'::public.estado_produccion END;
-    NEW.estado_envio := CASE NEW.estado
-      WHEN 'enviado'   THEN 'en_transito'::public.estado_envio
-      WHEN 'entregado' THEN 'entregado'::public.estado_envio
-      WHEN 'cancelado' THEN OLD.estado_envio
-      ELSE 'sin_enviar'::public.estado_envio END;
+    NEW.estado_pago := public.pedido_estado_a_pago(NEW.estado, OLD.estado_pago);
+    NEW.estado_produccion := public.pedido_estado_a_produccion(NEW.estado, OLD.estado_produccion);
+    NEW.estado_envio := public.pedido_estado_a_envio(NEW.estado, OLD.estado_envio);
     NEW.cancelado_en := CASE
       WHEN NEW.estado = 'cancelado' THEN COALESCE(OLD.cancelado_en, now())
       ELSE NULL END;
     RETURN NEW;
   END IF;
 
-  -- Escritura por la vía nueva: se deriva el enum antiguo.
+  -- ---- Escritura por la vía nueva ----------------------------------------
   NEW.estado := CASE
     WHEN NEW.cancelado_en IS NOT NULL THEN 'cancelado'::public.pedido_estado
     WHEN NEW.estado_envio = 'entregado' THEN 'entregado'::public.pedido_estado

@@ -25,17 +25,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { eur, fechaCorta } from "@/lib/format";
-import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
+import { calcularTotales } from "@/dominio/importes";
+import {
+  anularFactura,
+  cambiarEstadoCobro,
+  emitirFactura,
+  generarYSubirFacturaPDF,
+} from "@/lib/facturas.functions";
 import { toast } from "sonner";
-import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
+import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2, Undo2 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
@@ -49,27 +48,14 @@ type Linea = {
   iva_rate: number;
 };
 
-function calcTotales(items: Linea[]) {
-  let base = 0;
-  let iva = 0;
-  for (const it of items) {
-    const sub = it.cantidad * it.precio_unitario;
-    base += sub;
-    iva += sub * (it.iva_rate / 100);
-  }
-  return {
-    base: Number(base.toFixed(2)),
-    iva: Number(iva.toFixed(2)),
-    total: Number((base + iva).toFixed(2)),
-  };
-}
-
 function Facturas() {
   const { tiendaId } = Route.useParams();
   const qc = useQueryClient();
   const [abierto, setAbierto] = useState(false);
   const [generandoId, setGenerandoId] = useState<string | null>(null);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
+  const cambiarEstadoCobroFn = useServerFn(cambiarEstadoCobro);
+  const anularFacturaFn = useServerFn(anularFactura);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda", tiendaId],
@@ -89,16 +75,29 @@ function Facturas() {
       ).data ?? [],
   });
 
+  // El navegador ya no puede escribir en facturas: perdió el permiso cuando la
+  // factura pasó a ser inmutable. El estado de cobro no es parte del documento
+  // fiscal, así que se cambia por una función de servidor que sí queda auditada.
   const marcarPagada = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("facturas").update({ estado: "pagada" }).eq("id", id);
-      if (error) throw error;
+      await cambiarEstadoCobroFn({ data: { factura_id: id, estado: "pagada" } });
     },
     onSuccess: () => {
       toast.success("Factura marcada como pagada");
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => toast.error(e.message),
+  });
+
+  // Anular no borra ni modifica la original: emite una rectificativa con las
+  // mismas líneas en negativo. Las dos quedan en el libro y suman cero.
+  const anular = useMutation({
+    mutationFn: async (id: string) => anularFacturaFn({ data: { factura_id: id, motivo: "R1" } }),
+    onSuccess: (r: any) => {
+      toast.success(`Anulada con la rectificativa ${r.serie}-${String(r.numero).padStart(5, "0")}`);
+      qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+    },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo anular"),
   });
 
   // Si pdf_url es una URL firmada absoluta y no ha expirado, abrirla directamente.
@@ -145,11 +144,9 @@ function Facturas() {
           </DialogTrigger>
           <NuevaFacturaDialog
             tiendaId={tiendaId}
-            tienda={tienda}
             onDone={() => {
               setAbierto(false);
               qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
-              qc.invalidateQueries({ queryKey: ["tienda", tiendaId] });
             }}
           />
         </Dialog>
@@ -220,6 +217,25 @@ function Facturas() {
                           <CheckCircle2 className="h-4 w-4 text-green-600" />
                         </Button>
                       )}
+                      {f.tipo !== "rectificativa" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Se emitirá una factura rectificativa que anula la ${f.serie}-${String(f.numero).padStart(5, "0")}. La original no se borra ni se modifica. ¿Continuar?`,
+                              )
+                            ) {
+                              anular.mutate(f.id);
+                            }
+                          }}
+                          disabled={anular.isPending}
+                          title="Anular con una rectificativa"
+                        >
+                          <Undo2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -240,24 +256,16 @@ function Facturas() {
   );
 }
 
-function NuevaFacturaDialog({
-  tiendaId,
-  tienda,
-  onDone,
-}: {
-  tiendaId: string;
-  tienda: any;
-  onDone: () => void;
-}) {
+function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: () => void }) {
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
+  const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
   const [notas, setNotas] = useState("");
-  const [estado, setEstado] = useState<"emitida" | "borrador" | "pagada">("emitida");
   const [items, setItems] = useState<Linea[]>([
     { descripcion: "", cantidad: 1, unidad: "ud", precio_unitario: 0, iva_rate: 21 },
   ]);
   const [enviando, setEnviando] = useState(false);
-  const totales = calcTotales(items);
+  const totales = calcularTotales(items);
 
   function actualizarItem(i: number, patch: Partial<Linea>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -274,88 +282,39 @@ function NuevaFacturaDialog({
     }
     setEnviando(true);
     try {
-      const numero = tienda?.siguiente_numero_factura ?? 1;
-      const serie = tienda?.serie_factura ?? "A";
-      const fecha = new Date().toISOString().slice(0, 10);
-
-      // Empresa global como datos de emisor por defecto.
-      // Solo se sobrescriben los campos donde la tienda tenga un valor propio.
-      const { data: empresa } = await supabase
-        .from("empresa_global")
-        .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
-        .eq("id", true)
-        .maybeSingle();
-
-      const trim = (v: any) => (typeof v === "string" ? v.trim() : v) || null;
-      const empresaDireccion =
-        [
-          empresa?.direccion,
-          [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
-          empresa?.provincia,
-          empresa?.pais,
-        ]
-          .map((s) => (typeof s === "string" ? s.trim() : ""))
-          .filter(Boolean)
-          .join(", ") || null;
-
-      const emisor_nombre =
-        trim(tienda?.razon_social) ?? trim(empresa?.razon_social) ?? trim(tienda?.nombre);
-      const emisor_cif = trim(tienda?.cif) ?? trim(empresa?.cif);
-      const emisor_direccion = trim(tienda?.direccion) ?? empresaDireccion;
-
-      const { data: factura, error: errF } = await supabase
-        .from("facturas")
-        .insert({
+      // El número de factura NO se calcula aquí. Lo asigna emitir_factura() en
+      // la base, dentro de una transacción con la fila de la serie bloqueada.
+      // Antes se leía siguiente_numero_factura de la tienda desde el navegador
+      // y se incrementaba después, así que dos pestañas a la vez producían un
+      // número repetido o un hueco en la serie.
+      const factura = await emitirFacturaFn({
+        data: {
           tienda_id: tiendaId,
-          serie,
-          numero,
-          fecha,
-          estado,
-          cliente_nombre: cliente.nombre,
-          cliente_nif: cliente.nif || null,
-          cliente_direccion: cliente.direccion || null,
-          emisor_nombre,
-          emisor_cif,
-          emisor_direccion,
-          base_imponible: totales.base,
-          iva_total: totales.iva,
-          total: totales.total,
-          notas: notas || null,
-        })
-        .select()
-        .single();
-      if (errF) throw errF;
-
-      const filas = items.map((it) => {
-        const sub = Number((it.cantidad * it.precio_unitario).toFixed(2));
-        const ivaImp = Number((sub * (it.iva_rate / 100)).toFixed(2));
-        return {
-          factura_id: factura.id,
-          descripcion: it.descripcion,
-          cantidad: it.cantidad,
-          unidad: it.unidad,
-          precio_unitario: it.precio_unitario,
-          iva_rate: it.iva_rate,
-          subtotal: sub,
-          iva: ivaImp,
-          total: Number((sub + ivaImp).toFixed(2)),
-        };
+          receptor: {
+            nombre: cliente.nombre.trim(),
+            nif: cliente.nif.trim() || null,
+            direccion: cliente.direccion.trim() || null,
+          },
+          lineas: items.map((it) => ({
+            descripcion: it.descripcion.trim(),
+            cantidad: it.cantidad,
+            unidad: it.unidad,
+            precio_unitario: it.precio_unitario,
+            iva_rate: it.iva_rate,
+          })),
+          notas: notas.trim() || null,
+        },
       });
-      const { error: errI } = await supabase.from("factura_items").insert(filas);
-      if (errI) throw errI;
 
-      await supabase
-        .from("tiendas")
-        .update({ siguiente_numero_factura: numero + 1 })
-        .eq("id", tiendaId);
+      const referencia = `${factura.serie}-${String(factura.numero).padStart(5, "0")}`;
 
       try {
         const res = await generarPDFFn({ data: { factura_id: factura.id } });
         if (res?.url) window.open(res.url, "_blank");
-        toast.success(`Factura ${serie}-${String(numero).padStart(5, "0")} emitida`);
+        toast.success(`Factura ${referencia} emitida`);
       } catch (errPdf: any) {
         toast.warning(
-          `Factura creada, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
+          `Factura ${referencia} emitida, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
         );
       }
       onDone();
@@ -477,16 +436,11 @@ function NuevaFacturaDialog({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Estado</Label>
-            <Select value={estado} onValueChange={(v) => setEstado(v as any)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="borrador">Borrador</SelectItem>
-                <SelectItem value="emitida">Emitida</SelectItem>
-                <SelectItem value="pagada">Pagada</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Ya no se elige: emitir una factura la emite. El cobro se marca
+                después, desde el listado, y anular es una rectificativa. */}
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              Se emitirá con número correlativo de la serie
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Notas</Label>
@@ -497,11 +451,11 @@ function NuevaFacturaDialog({
         <div className="border-t pt-3 grid grid-cols-3 gap-3 text-sm">
           <div>
             <div className="text-xs text-muted-foreground">Base imponible</div>
-            <div className="font-semibold">{eur(totales.base)}</div>
+            <div className="font-semibold">{eur(totales.base_imponible)}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">IVA</div>
-            <div className="font-semibold">{eur(totales.iva)}</div>
+            <div className="font-semibold">{eur(totales.iva_total)}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Total</div>

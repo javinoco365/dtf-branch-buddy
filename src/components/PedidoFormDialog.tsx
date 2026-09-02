@@ -23,6 +23,8 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { createPedidoManual, updatePedido } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
+import { eur } from "@/lib/format";
+import { calcularTotales, redondear } from "@/dominio/importes";
 
 type Linea = {
   descripcion: string;
@@ -135,9 +137,15 @@ export function PedidoFormDialog({
     setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
-  const subtotal = lineas.reduce((s, l) => s + l.cantidad * l.precio_unitario, 0);
-  const iva = lineas.reduce((s, l) => s + l.cantidad * l.precio_unitario * (l.iva_rate / 100), 0);
-  const total = subtotal + iva + (envio || 0);
+  // OJO, criterio fiscal pendiente de decidir: hoy el envío se suma DESPUÉS del
+  // IVA, es decir, no tributa. El artículo 78 de la Ley del IVA dice que los
+  // gastos de transporte repercutidos forman parte de la base imponible.
+  // Cambiarlo altera el total de todos los pedidos manuales, así que se conserva
+  // el criterio actual y la decisión va aparte. Cuando se cambie, basta con
+  // pasar { envio } a calcularTotales y quitar la suma de abajo, aquí y en
+  // createPedidoManual.
+  const totales = calcularTotales(lineas);
+  const total = redondear(totales.total + (envio || 0));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -255,13 +263,13 @@ export function PedidoFormDialog({
 
           <div className="grid grid-cols-3 gap-3 text-sm pt-2 border-t">
             <div>
-              Subtotal: <span className="font-medium">{subtotal.toFixed(2)} €</span>
+              Subtotal: <span className="font-medium">{eur(totales.base_imponible)}</span>
             </div>
             <div>
-              IVA: <span className="font-medium">{iva.toFixed(2)} €</span>
+              IVA: <span className="font-medium">{eur(totales.iva_total)}</span>
             </div>
             <div>
-              Total: <span className="font-semibold">{total.toFixed(2)} €</span>
+              Total: <span className="font-semibold">{eur(total)}</span>
             </div>
           </div>
 

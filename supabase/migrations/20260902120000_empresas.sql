@@ -32,6 +32,22 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
+-- 0. Requisito previo: touch_updated_at()
+-- ---------------------------------------------------------------------------
+-- La crea la migración base (20260615144900) y la usan los triggers de
+-- updated_at de media docena de tablas. Se define aquí también porque esta
+-- migración no debe dar por hecho que existe: si falta, cualquier
+-- CREATE TRIGGER ... EXECUTE FUNCTION public.touch_updated_at() falla con
+-- 42883 y la migración se queda a medias.
+--
+-- El cuerpo es idéntico al original, así que recrearla no cambia nada donde ya
+-- estaba.
+CREATE OR REPLACE FUNCTION public.touch_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 1. La tabla
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.empresas (
@@ -63,6 +79,7 @@ GRANT ALL ON public.empresas TO service_role;
 
 ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
 
+DROP TRIGGER IF EXISTS empresas_touch ON public.empresas;
 CREATE TRIGGER empresas_touch BEFORE UPDATE ON public.empresas
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
