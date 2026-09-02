@@ -52,6 +52,7 @@ GRANT ALL ON public.cliente_tiendas TO service_role;
 
 ALTER TABLE public.cliente_tiendas ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "cliente_tiendas por pertenencia" ON public.cliente_tiendas;
 CREATE POLICY "cliente_tiendas por pertenencia" ON public.cliente_tiendas
   FOR ALL TO authenticated
   USING (public.is_tienda_member(auth.uid(), tienda_id))

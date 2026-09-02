@@ -62,6 +62,7 @@ COMMENT ON TABLE public.series_facturacion IS
 COMMENT ON COLUMN public.series_facturacion.ultimo_numero IS
   'Último número emitido. Nunca se decrementa: un hueco en la serie no se arregla reutilizando el número.';
 
+DROP TRIGGER IF EXISTS series_facturacion_touch ON public.series_facturacion;
 CREATE TRIGGER series_facturacion_touch BEFORE UPDATE ON public.series_facturacion
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
@@ -71,6 +72,7 @@ GRANT ALL ON public.series_facturacion TO service_role;
 
 ALTER TABLE public.series_facturacion ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "series lectura miembros" ON public.series_facturacion;
 CREATE POLICY "series lectura miembros" ON public.series_facturacion
   FOR SELECT TO authenticated
   USING (public.es_miembro_empresa(auth.uid(), empresa_id));
@@ -115,7 +117,11 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- 3. Lo que la factura tiene que congelar
 -- ---------------------------------------------------------------------------
-CREATE TYPE public.factura_tipo AS ENUM ('ordinaria', 'rectificativa');
+DO $$ BEGIN
+  CREATE TYPE public.factura_tipo AS ENUM ('ordinaria', 'rectificativa');
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.factura_tipo ya existe, se omite';
+END $$;
 
 ALTER TABLE public.facturas
   ADD COLUMN IF NOT EXISTS tipo public.factura_tipo NOT NULL DEFAULT 'ordinaria',
@@ -390,11 +396,13 @@ REVOKE DELETE ON public.factura_items FROM service_role;
 
 -- La RLS FOR ALL se sustituye por lectura, y nada más.
 DROP POLICY IF EXISTS "facturas member access" ON public.facturas;
+DROP POLICY IF EXISTS "facturas lectura miembros" ON public.facturas;
 CREATE POLICY "facturas lectura miembros" ON public.facturas
   FOR SELECT TO authenticated
   USING (public.is_tienda_member(auth.uid(), tienda_id));
 
 DROP POLICY IF EXISTS "factura_items member access" ON public.factura_items;
+DROP POLICY IF EXISTS "factura_items lectura miembros" ON public.factura_items;
 CREATE POLICY "factura_items lectura miembros" ON public.factura_items
   FOR SELECT TO authenticated
   USING (EXISTS (

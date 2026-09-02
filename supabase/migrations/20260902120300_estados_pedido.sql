@@ -51,27 +51,39 @@
 --   columna estado no se toca en ningún momento.
 -- ============================================================================
 
-CREATE TYPE public.estado_pago AS ENUM (
-  'pendiente',    -- todavía no se ha cobrado nada
-  'parcial',      -- anticipo o pago a cuenta
-  'pagado',
-  'reembolsado'
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_pago AS ENUM (
+    'pendiente',    -- todavía no se ha cobrado nada
+    'parcial',      -- anticipo o pago a cuenta
+    'pagado',
+    'reembolsado'
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_pago ya existe, se omite';
+END $$;
 
-CREATE TYPE public.estado_produccion AS ENUM (
-  'sin_empezar',
-  'en_cola',      -- asignado a una tirada, aún no impreso
-  'imprimiendo',
-  'listo'         -- impreso y empaquetado
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_produccion AS ENUM (
+    'sin_empezar',
+    'en_cola',      -- asignado a una tirada, aún no impreso
+    'imprimiendo',
+    'listo'         -- impreso y empaquetado
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_produccion ya existe, se omite';
+END $$;
 
-CREATE TYPE public.estado_envio AS ENUM (
-  'sin_enviar',
-  'preparado',    -- etiqueta generada, pendiente de recogida
-  'en_transito',
-  'entregado',
-  'devuelto'
-);
+DO $$ BEGIN
+  CREATE TYPE public.estado_envio AS ENUM (
+    'sin_enviar',
+    'preparado',    -- etiqueta generada, pendiente de recogida
+    'en_transito',
+    'entregado',
+    'devuelto'
+  );
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'El tipo public.estado_envio ya existe, se omite';
+END $$;
 
 ALTER TABLE public.pedidos
   ADD COLUMN IF NOT EXISTS estado_pago public.estado_pago NOT NULL DEFAULT 'pendiente',
