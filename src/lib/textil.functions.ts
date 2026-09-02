@@ -54,19 +54,14 @@ export const deleteMarca = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("textil_marcas")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_marcas").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
 
 export const setMarcaPredeterminada = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z.object({ marca_id: z.string().uuid().nullable() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ marca_id: z.string().uuid().nullable() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: existing } = await context.supabase
       .from("empresa_global")
@@ -92,10 +87,7 @@ export const setMarcaPredeterminada = createServerFn({ method: "POST" })
 export const listStock = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("textil_stock")
-      .select("*")
-      .order("nombre");
+    const { data, error } = await context.supabase.from("textil_stock").select("*").order("nombre");
     if (error) throw error;
     return data ?? [];
   });
@@ -142,10 +134,7 @@ export const deleteStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("textil_stock")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_stock").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -200,10 +189,7 @@ export const deleteTextilCliente = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("textil_clientes")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_clientes").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -381,10 +367,7 @@ export const deletePresupuesto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("textil_presupuestos")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_presupuestos").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -452,9 +435,7 @@ export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
       subtotal: it.subtotal,
     }));
     if (items.length) {
-      const { error: itErr } = await context.supabase
-        .from("textil_factura_items")
-        .insert(items);
+      const { error: itErr } = await context.supabase.from("textil_factura_items").insert(items);
       if (itErr) throw itErr;
     }
 
@@ -482,10 +463,7 @@ export const deleteTextilFactura = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("textil_facturas")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_facturas").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -543,10 +521,7 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
     };
     let pedidoId = id;
     if (id) {
-      const { error } = await context.supabase
-        .from("textil_pedidos")
-        .update(payload)
-        .eq("id", id);
+      const { error } = await context.supabase.from("textil_pedidos").update(payload).eq("id", id);
       if (error) throw error;
       await context.supabase.from("textil_pedido_items").delete().eq("pedido_id", id);
     } else {
@@ -586,17 +561,20 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
 
 export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z.object({ id: z.string().uuid(), estado: z.string() }).parse(d),
-  )
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), estado: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
     // Si se cancela un pedido, devolver el stock reservado
     if (data.estado === "cancelado") {
       const { data: prev } = await context.supabase
-        .from("textil_pedidos").select("estado").eq("id", data.id).single();
+        .from("textil_pedidos")
+        .select("estado")
+        .eq("id", data.id)
+        .single();
       if (prev && prev.estado !== "cancelado") {
         const { data: prevItems } = await context.supabase
-          .from("textil_pedido_items").select("stock_id, cantidad").eq("pedido_id", data.id);
+          .from("textil_pedido_items")
+          .select("stock_id, cantidad")
+          .eq("pedido_id", data.id);
         const restore = agruparStock((prevItems ?? []) as any);
         const delta = new Map<string, number>();
         for (const [k, v] of restore.entries()) delta.set(k, -v);
@@ -617,19 +595,21 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     // Devolver stock reservado antes de borrar (si no estaba cancelado)
     const { data: ped } = await context.supabase
-      .from("textil_pedidos").select("estado").eq("id", data.id).single();
+      .from("textil_pedidos")
+      .select("estado")
+      .eq("id", data.id)
+      .single();
     if (ped && ped.estado !== "cancelado") {
       const { data: prevItems } = await context.supabase
-        .from("textil_pedido_items").select("stock_id, cantidad").eq("pedido_id", data.id);
+        .from("textil_pedido_items")
+        .select("stock_id, cantidad")
+        .eq("pedido_id", data.id);
       const restore = agruparStock((prevItems ?? []) as any);
       const delta = new Map<string, number>();
       for (const [k, v] of restore.entries()) delta.set(k, -v);
       await ajustarStock(context.supabase, delta);
     }
-    const { error } = await context.supabase
-      .from("textil_pedidos")
-      .delete()
-      .eq("id", data.id);
+    const { error } = await context.supabase.from("textil_pedidos").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });

@@ -3,7 +3,11 @@ import { Input } from "@/components/ui/input";
 import { Trash2, Plus, AlertTriangle, CheckCircle2, PackageX } from "lucide-react";
 import { eur } from "@/lib/format";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
@@ -40,7 +44,10 @@ export function LineasEditor({
     onChange([...items, { descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }]);
 
   const pickStock = (i: number, id: string) => {
-    if (id === "__none__") { update(i, { stock_id: null }); return; }
+    if (id === "__none__") {
+      update(i, { stock_id: null });
+      return;
+    }
     const s = stock.find((x) => x.id === id);
     if (!s) return;
     const label = [s.nombre, s.color, s.talla].filter(Boolean).join(" · ");
@@ -55,14 +62,14 @@ export function LineasEditor({
   const totalPorStock = new Map<string, number>();
   for (const it of items) {
     if (!it.stock_id) continue;
-    totalPorStock.set(it.stock_id, (totalPorStock.get(it.stock_id) ?? 0) + Number(it.cantidad || 0));
+    totalPorStock.set(
+      it.stock_id,
+      (totalPorStock.get(it.stock_id) ?? 0) + Number(it.cantidad || 0),
+    );
   }
 
   const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-  const iva = items.reduce(
-    (s, it) => s + it.cantidad * it.precio_unitario * (it.iva_pct / 100),
-    0,
-  );
+  const iva = items.reduce((s, it) => s + it.cantidad * it.precio_unitario * (it.iva_pct / 100), 0);
 
   return (
     <div className="space-y-2">
@@ -85,10 +92,7 @@ export function LineasEditor({
             <div key={i} className="space-y-1">
               <div className="grid grid-cols-12 gap-2 items-center">
                 {stock.length > 0 && (
-                  <Select
-                    value={it.stock_id ?? "__none__"}
-                    onValueChange={(v) => pickStock(i, v)}
-                  >
+                  <Select value={it.stock_id ?? "__none__"} onValueChange={(v) => pickStock(i, v)}>
                     <SelectTrigger className="col-span-3 h-9 text-xs">
                       <SelectValue placeholder="Stock…" />
                     </SelectTrigger>
@@ -138,9 +142,7 @@ export function LineasEditor({
                 <div className="flex items-center gap-2 pl-1">
                   <Badge variant="outline" className={`text-[11px] gap-1 ${tono}`}>
                     <Icon className="h-3 w-3" />
-                    {excede
-                      ? `Faltan ${Math.abs(restante)} uds`
-                      : `Restante ${restante} / ${disp}`}
+                    {excede ? `Faltan ${Math.abs(restante)} uds` : `Restante ${restante} / ${disp}`}
                   </Badge>
                   {solicitadoTotal !== Number(it.cantidad) && (
                     <span className="text-[11px] text-muted-foreground">
@@ -160,8 +162,12 @@ export function LineasEditor({
         <Plus className="h-4 w-4 mr-2" /> Añadir línea
       </Button>
       <div className="text-right text-sm space-y-0.5 pt-2 border-t">
-        <div>Subtotal: <span className="font-medium">{eur(subtotal)}</span></div>
-        <div>IVA: <span className="font-medium">{eur(iva)}</span></div>
+        <div>
+          Subtotal: <span className="font-medium">{eur(subtotal)}</span>
+        </div>
+        <div>
+          IVA: <span className="font-medium">{eur(iva)}</span>
+        </div>
         <div className="text-base font-bold">Total: {eur(subtotal + iva)}</div>
       </div>
     </div>

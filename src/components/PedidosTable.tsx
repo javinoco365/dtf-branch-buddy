@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
+import { descargarCSV } from "@/lib/csv";
 import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
@@ -233,16 +234,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         p.total,
       ]),
     ];
-    const csv = filas
-      .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pedidos-${format(desde, "yyyy-MM-dd")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    descargarCSV(`pedidos-${format(desde, "yyyy-MM-dd")}.csv`, filas);
   }
 
   return (

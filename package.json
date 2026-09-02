@@ -10,8 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write .",
-    "verify": "npm run lint && npm run typecheck && npm run build:dev"
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build:dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -87,6 +89,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.11"
   }
 }

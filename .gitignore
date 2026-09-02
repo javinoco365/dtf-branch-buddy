@@ -30,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Variables de entorno — nunca se versionan.
+# Copia .env.example a .env y rellena los valores en local.
+.env
+.env.*
+!.env.example
