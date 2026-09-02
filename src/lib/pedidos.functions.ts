@@ -148,7 +148,8 @@ export const createPedidoManual = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     await ensureAccess(supabaseAdmin, context.userId, data.tiendaId);
 
     // Mismo módulo que la pantalla, para que lo que se ve y lo que se guarda
@@ -212,7 +213,8 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: pedido } = await supabaseAdmin
       .from("pedidos")
       .select("id, tienda_id, woo_order_id, origen")
@@ -262,7 +264,8 @@ export const updatePedido = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: pedido } = await supabaseAdmin
       .from("pedidos")
       .select("id, tienda_id")
@@ -338,7 +341,8 @@ export const setPedidoTracking = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: pedido } = await supabaseAdmin
       .from("pedidos")
       .select("id, tienda_id, woo_order_id, origen")
@@ -402,7 +406,8 @@ export const deletePedido = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: pedido } = await supabaseAdmin
       .from("pedidos")
       .select("id, tienda_id")
