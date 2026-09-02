@@ -13,6 +13,11 @@ DO $r$ BEGIN
   CREATE ROLE service_role NOLOGIN;
 EXCEPTION WHEN duplicate_object THEN NULL; END $r$;
 
+-- En Supabase service_role salta la RLS; anon y authenticated no. Sin esto el
+-- simulador no reproduce el camino de supabaseAdmin, que es justo el que las
+-- pruebas de autoría necesitan ejercitar.
+ALTER ROLE service_role BYPASSRLS;
+
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS storage;
 CREATE SCHEMA IF NOT EXISTS extensions;

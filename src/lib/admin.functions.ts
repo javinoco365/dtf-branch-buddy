@@ -15,7 +15,8 @@ export const bootstrapPrimerAdmin = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { supabaseAdmin, adminComoUsuario } =
+      await import("@/integrations/supabase/client.server");
     const { count } = await supabaseAdmin
       .from("user_roles")
       .select("*", { count: "exact", head: true })
@@ -30,7 +31,7 @@ export const bootstrapPrimerAdmin = createServerFn({ method: "POST" })
       user_metadata: { full_name: data.full_name },
     });
     if (error || !u.user) throw new Error(error?.message ?? "No se pudo crear el usuario");
-    const { error: rErr } = await supabaseAdmin
+    const { error: rErr } = await adminComoUsuario(u.user.id)
       .from("user_roles")
       .insert({ user_id: u.user.id, role: "admin" });
     if (rErr) throw new Error(rErr.message);
@@ -75,7 +76,8 @@ export const crearUsuarioInvitado = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: rolCheck } = await supabaseAdmin
       .from("user_roles")
       .select("role")
@@ -116,7 +118,8 @@ export const guardarCredencialesWoo = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: rolCheck } = await supabaseAdmin
       .from("user_roles")
       .select("role")

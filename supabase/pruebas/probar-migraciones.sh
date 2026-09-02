@@ -69,6 +69,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/10_motor_facturacion.sql" 2>&1 \
   | sed 's/^/  /'
 
 echo
+echo "== Auditoría: de quién es cada escritura =="
+$PSQL -f "$RAIZ/supabase/pruebas/20_auditoria_autor.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
 if $PSQL -tAc "SELECT count(*) FROM public.facturas_huecos_en_serie();" | grep -qx 0 &&
    $PSQL -tAc "SELECT count(*) FROM public.auditoria_verificar();" | grep -qx 0; then
   echo "TODO EN VERDE: sin huecos en la serie y con la cadena de auditoría intacta."
