@@ -37,12 +37,40 @@ function TextilHome() {
     .reduce((s: number, f: any) => s + Number(f.total), 0);
 
   const cards = [
-    { to: "/panel/textil/stock", label: "Stock", icon: Boxes, value: stock.data?.length ?? 0, hint: `${stockBajo} bajo mínimo` },
-    { to: "/panel/textil/pedidos", label: "Pedidos", icon: ShoppingCart, value: pedidos.data?.length ?? 0 },
-    { to: "/panel/textil/presupuestos", label: "Presupuestos", icon: FileSpreadsheet, value: pres.data?.length ?? 0 },
-    { to: "/panel/textil/facturas", label: "Facturas", icon: FileText, value: fac.data?.length ?? 0, hint: `${fmtEUR(facturadoMes)} este mes` },
+    {
+      to: "/panel/textil/stock",
+      label: "Stock",
+      icon: Boxes,
+      value: stock.data?.length ?? 0,
+      hint: `${stockBajo} bajo mínimo`,
+    },
+    {
+      to: "/panel/textil/pedidos",
+      label: "Pedidos",
+      icon: ShoppingCart,
+      value: pedidos.data?.length ?? 0,
+    },
+    {
+      to: "/panel/textil/presupuestos",
+      label: "Presupuestos",
+      icon: FileSpreadsheet,
+      value: pres.data?.length ?? 0,
+    },
+    {
+      to: "/panel/textil/facturas",
+      label: "Facturas",
+      icon: FileText,
+      value: fac.data?.length ?? 0,
+      hint: `${fmtEUR(facturadoMes)} este mes`,
+    },
     { to: "/panel/textil/clientes", label: "Clientes", icon: Users, value: cli.data?.length ?? 0 },
-    { to: "/panel/textil/ajustes", label: "Ajustes", icon: Settings, value: "", hint: "Marcas comerciales" },
+    {
+      to: "/panel/textil/ajustes",
+      label: "Ajustes",
+      icon: Settings,
+      value: "",
+      hint: "Marcas comerciales",
+    },
   ];
 
   return (

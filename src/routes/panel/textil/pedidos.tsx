@@ -7,15 +7,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
-  listTextilPedidos, upsertTextilPedido, updateTextilPedidoEstado, deleteTextilPedido,
-  listTextilClientes, listMarcas, getEmpresaGlobal, listStock,
+  listTextilPedidos,
+  upsertTextilPedido,
+  updateTextilPedidoEstado,
+  deleteTextilPedido,
+  listTextilClientes,
+  listMarcas,
+  getEmpresaGlobal,
+  listStock,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
@@ -40,8 +63,14 @@ function PedidosPage() {
   const stockFn = useServerFn(listStock);
 
   const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
-  const { data: clientes = [] } = useQuery({ queryKey: ["textil-clientes"], queryFn: () => cliFn() });
-  const { data: marcas = [] } = useQuery({ queryKey: ["textil-marcas"], queryFn: () => marcasFn() });
+  const { data: clientes = [] } = useQuery({
+    queryKey: ["textil-clientes"],
+    queryFn: () => cliFn(),
+  });
+  const { data: marcas = [] } = useQuery({
+    queryKey: ["textil-marcas"],
+    queryFn: () => marcasFn(),
+  });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
 
@@ -62,12 +91,19 @@ function PedidosPage() {
   });
   const setEst = useMutation({
     mutationFn: ({ id, estado }: any) => estFn({ data: { id, estado } }),
-    onSuccess: () => { inv(); qc.invalidateQueries({ queryKey: ["textil-stock"] }); },
+    onSuccess: () => {
+      inv();
+      qc.invalidateQueries({ queryKey: ["textil-stock"] });
+    },
     onError: (e: any) => toast.error(e.message),
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
-    onSuccess: () => { inv(); qc.invalidateQueries({ queryKey: ["textil-stock"] }); toast.success("Eliminado"); },
+    onSuccess: () => {
+      inv();
+      qc.invalidateQueries({ queryKey: ["textil-stock"] });
+      toast.success("Eliminado");
+    },
   });
 
   const defaultMarcaId = (empresa as any)?.textil_marca_predeterminada_id ?? null;
@@ -79,20 +115,37 @@ function PedidosPage() {
           <h1 className="text-2xl font-bold">Pedidos textil</h1>
           <p className="text-sm text-muted-foreground">Pedidos manuales del módulo textil.</p>
         </div>
-        <Button onClick={() => { setEditing(null); setOpen(true); }}>
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setOpen(true);
+          }}
+        >
           <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
         </Button>
       </div>
       <Card>
         <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Nº</TableHead><TableHead>Fecha</TableHead><TableHead>Cliente</TableHead>
-              <TableHead>Marca</TableHead><TableHead>Estado</TableHead>
-              <TableHead className="text-right">Total</TableHead><TableHead />
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nº</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Marca</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {data.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin pedidos.</TableCell></TableRow>}
+              {data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    Sin pedidos.
+                  </TableCell>
+                </TableRow>
+              )}
               {data.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-mono text-xs">{p.numero}</TableCell>
@@ -100,15 +153,43 @@ function PedidosPage() {
                   <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
                   <TableCell>{p.marca?.nombre ?? "—"}</TableCell>
                   <TableCell>
-                    <Select value={p.estado} onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}>
-                      <SelectTrigger className="h-7 w-36 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{ESTADOS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                    <Select
+                      value={p.estado}
+                      onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
+                    >
+                      <SelectTrigger className="h-7 w-36 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ESTADOS.map((e) => (
+                          <SelectItem key={e} value={e}>
+                            {e}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => { setEditing(p); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => { if (confirm("¿Eliminar?")) del.mutate(p.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditing(p);
+                        setOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (confirm("¿Eliminar?")) del.mutate(p.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -134,7 +215,17 @@ function PedidosPage() {
   );
 }
 
-function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, stock, defaultMarcaId, onSave, loading }: any) {
+function PedidoDialog({
+  open,
+  onOpenChange,
+  pedido,
+  clientes,
+  marcas,
+  stock,
+  defaultMarcaId,
+  onSave,
+  loading,
+}: any) {
   const initial = pedido ?? {
     fecha: new Date().toISOString().slice(0, 10),
     estado: "pendiente",
@@ -145,7 +236,11 @@ function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, stock, def
   const [f, setF] = useState<any>({
     ...initial,
     items: (initial.items ?? []).map((it: any) => ({
-      descripcion: it.descripcion, cantidad: Number(it.cantidad), precio_unitario: Number(it.precio_unitario), iva_pct: Number(it.iva_pct), stock_id: it.stock_id ?? null,
+      descripcion: it.descripcion,
+      cantidad: Number(it.cantidad),
+      precio_unitario: Number(it.precio_unitario),
+      iva_pct: Number(it.iva_pct),
+      stock_id: it.stock_id ?? null,
     })),
   });
 
@@ -157,67 +252,122 @@ function PedidoDialog({ open, onOpenChange, pedido, clientes, marcas, stock, def
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{pedido ? `Editar ${pedido.numero}` : "Nuevo pedido"}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{pedido ? `Editar ${pedido.numero}` : "Nuevo pedido"}</DialogTitle>
+        </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label>Cliente</Label>
               <Select value={f.cliente_id ?? ""} onValueChange={setCliente}>
-                <SelectTrigger><SelectValue placeholder="Selecciona…" /></SelectTrigger>
-                <SelectContent>{clientes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientes.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Marca</Label>
-              <Select value={f.marca_id ?? "__none__"} onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={f.marca_id ?? "__none__"}
+                onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Ninguna</SelectItem>
-                  {marcas.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>)}
+                  {marcas.map((m: any) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Fecha</Label>
-              <Input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+              <Input
+                type="date"
+                value={f.fecha}
+                onChange={(e) => setF({ ...f, fecha: e.target.value })}
+              />
             </div>
             <div>
               <Label>Método pago</Label>
-              <Input value={f.metodo_pago ?? ""} onChange={(e) => setF({ ...f, metodo_pago: e.target.value })} />
+              <Input
+                value={f.metodo_pago ?? ""}
+                onChange={(e) => setF({ ...f, metodo_pago: e.target.value })}
+              />
             </div>
             <div>
               <Label>Envío</Label>
-              <Input type="number" step="0.01" value={f.envio} onChange={(e) => setF({ ...f, envio: Number(e.target.value) })} />
+              <Input
+                type="number"
+                step="0.01"
+                value={f.envio}
+                onChange={(e) => setF({ ...f, envio: Number(e.target.value) })}
+              />
             </div>
             <div>
               <Label>Estado</Label>
               <Select value={f.estado} onValueChange={(v) => setF({ ...f, estado: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{ESTADOS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ESTADOS.map((e) => (
+                    <SelectItem key={e} value={e}>
+                      {e}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           </div>
-          <LineasEditor stock={stock} items={f.items} onChange={(items: Linea[]) => setF({ ...f, items })} />
+          <LineasEditor
+            stock={stock}
+            items={f.items}
+            onChange={(items: Linea[]) => setF({ ...f, items })}
+          />
           <div>
             <Label>Notas</Label>
-            <Textarea value={f.notas ?? ""} onChange={(e) => setF({ ...f, notas: e.target.value })} />
+            <Textarea
+              value={f.notas ?? ""}
+              onChange={(e) => setF({ ...f, notas: e.target.value })}
+            />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button disabled={loading || f.items.length === 0} onClick={() => onSave({
-            id: pedido?.id,
-            cliente_id: f.cliente_id || null,
-            cliente_nombre: f.cliente_nombre || null,
-            cliente_email: f.cliente_email || null,
-            marca_id: f.marca_id || null,
-            fecha: f.fecha,
-            estado: f.estado,
-            metodo_pago: f.metodo_pago || null,
-            envio: Number(f.envio) || 0,
-            notas: f.notas || null,
-            items: f.items,
-          })}>Guardar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={loading || f.items.length === 0}
+            onClick={() =>
+              onSave({
+                id: pedido?.id,
+                cliente_id: f.cliente_id || null,
+                cliente_nombre: f.cliente_nombre || null,
+                cliente_email: f.cliente_email || null,
+                marca_id: f.marca_id || null,
+                fecha: f.fecha,
+                estado: f.estado,
+                metodo_pago: f.metodo_pago || null,
+                envio: Number(f.envio) || 0,
+                notas: f.notas || null,
+                items: f.items,
+              })
+            }
+          >
+            Guardar
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -298,13 +298,49 @@ export function AppSidebar() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      <TextilSub to="/panel/textil" label="Resumen" icon={LayoutDashboard} pathname={pathname} exact />
-                      <TextilSub to="/panel/textil/stock" label="Stock" icon={Boxes} pathname={pathname} />
-                      <TextilSub to="/panel/textil/pedidos" label="Pedidos" icon={ShoppingCart} pathname={pathname} />
-                      <TextilSub to="/panel/textil/presupuestos" label="Presupuestos" icon={FileSpreadsheet} pathname={pathname} />
-                      <TextilSub to="/panel/textil/facturas" label="Facturas" icon={FileText} pathname={pathname} />
-                      <TextilSub to="/panel/textil/clientes" label="Clientes" icon={Users} pathname={pathname} />
-                      <TextilSub to="/panel/textil/ajustes" label="Ajustes" icon={Settings} pathname={pathname} />
+                      <TextilSub
+                        to="/panel/textil"
+                        label="Resumen"
+                        icon={LayoutDashboard}
+                        pathname={pathname}
+                        exact
+                      />
+                      <TextilSub
+                        to="/panel/textil/stock"
+                        label="Stock"
+                        icon={Boxes}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/pedidos"
+                        label="Pedidos"
+                        icon={ShoppingCart}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/presupuestos"
+                        label="Presupuestos"
+                        icon={FileSpreadsheet}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/facturas"
+                        label="Facturas"
+                        icon={FileText}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/clientes"
+                        label="Clientes"
+                        icon={Users}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/ajustes"
+                        label="Ajustes"
+                        icon={Settings}
+                        pathname={pathname}
+                      />
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
