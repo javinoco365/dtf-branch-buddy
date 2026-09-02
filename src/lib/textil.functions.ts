@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { calcularLinea, calcularTotales as calcularTotalesDominio } from "@/dominio/importes";
 
 // ============ MARCAS ============
 export const listMarcas = createServerFn({ method: "GET" })
@@ -229,16 +230,22 @@ const presupuestoSchema = z.object({
   items: z.array(itemSchema).min(1),
 });
 
+// Delega en src/dominio/importes.ts: es el único cálculo válido del proyecto.
+// Antes esta función no redondeaba en ningún momento, así que los importes que
+// acababan en textil_facturas arrastraban el ruido de la coma flotante (un
+// 12.087900000000001 dentro de un documento fiscal).
 function calcularTotales(items: z.infer<typeof itemSchema>[]) {
-  let subtotal = 0;
-  let iva = 0;
-  const itemsCalc = items.map((it) => {
-    const st = it.cantidad * it.precio_unitario;
-    subtotal += st;
-    iva += st * (it.iva_pct / 100);
-    return { ...it, subtotal: st };
-  });
-  return { itemsCalc, subtotal, iva, total: subtotal + iva };
+  const totales = calcularTotalesDominio(items.map((it) => ({ ...it, iva_rate: it.iva_pct })));
+  const itemsCalc = items.map((it) => ({
+    ...it,
+    subtotal: calcularLinea({ ...it, iva_rate: it.iva_pct }).base,
+  }));
+  return {
+    itemsCalc,
+    subtotal: totales.base_imponible,
+    iva: totales.iva_total,
+    total: totales.total,
+  };
 }
 
 // Suma cantidades por stock_id

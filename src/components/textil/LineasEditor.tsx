@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Trash2, Plus, AlertTriangle, CheckCircle2, PackageX } from "lucide-react";
 import { eur } from "@/lib/format";
+import { calcularTotales } from "@/dominio/importes";
 import {
   Select,
   SelectContent,
@@ -68,8 +69,8 @@ export function LineasEditor({
     );
   }
 
-  const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-  const iva = items.reduce((s, it) => s + it.cantidad * it.precio_unitario * (it.iva_pct / 100), 0);
+  // Mismo cálculo que al guardar: lo que se ve aquí es lo que se graba.
+  const totales = calcularTotales(items.map((it) => ({ ...it, iva_rate: it.iva_pct })));
 
   return (
     <div className="space-y-2">
@@ -163,12 +164,12 @@ export function LineasEditor({
       </Button>
       <div className="text-right text-sm space-y-0.5 pt-2 border-t">
         <div>
-          Subtotal: <span className="font-medium">{eur(subtotal)}</span>
+          Subtotal: <span className="font-medium">{eur(totales.base_imponible)}</span>
         </div>
         <div>
-          IVA: <span className="font-medium">{eur(iva)}</span>
+          IVA: <span className="font-medium">{eur(totales.iva_total)}</span>
         </div>
-        <div className="text-base font-bold">Total: {eur(subtotal + iva)}</div>
+        <div className="text-base font-bold">Total: {eur(totales.total)}</div>
       </div>
     </div>
   );

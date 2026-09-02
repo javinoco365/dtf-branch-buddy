@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { eur, fechaCorta } from "@/lib/format";
+import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import { toast } from "sonner";
 import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2 } from "lucide-react";
@@ -48,21 +49,6 @@ type Linea = {
   precio_unitario: number;
   iva_rate: number;
 };
-
-function calcTotales(items: Linea[]) {
-  let base = 0;
-  let iva = 0;
-  for (const it of items) {
-    const sub = it.cantidad * it.precio_unitario;
-    base += sub;
-    iva += sub * (it.iva_rate / 100);
-  }
-  return {
-    base: Number(base.toFixed(2)),
-    iva: Number(iva.toFixed(2)),
-    total: Number((base + iva).toFixed(2)),
-  };
-}
 
 function Facturas() {
   const { tiendaId } = Route.useParams();
@@ -257,7 +243,7 @@ function NuevaFacturaDialog({
     { descripcion: "", cantidad: 1, unidad: "ud", precio_unitario: 0, iva_rate: 21 },
   ]);
   const [enviando, setEnviando] = useState(false);
-  const totales = calcTotales(items);
+  const totales = calcularTotales(items);
 
   function actualizarItem(i: number, patch: Partial<Linea>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -317,8 +303,8 @@ function NuevaFacturaDialog({
           emisor_nombre,
           emisor_cif,
           emisor_direccion,
-          base_imponible: totales.base,
-          iva_total: totales.iva,
+          base_imponible: totales.base_imponible,
+          iva_total: totales.iva_total,
           total: totales.total,
           notas: notas || null,
         })
@@ -326,9 +312,11 @@ function NuevaFacturaDialog({
         .single();
       if (errF) throw errF;
 
+      // Las líneas se calculan con el mismo módulo que la cabecera. Antes cada
+      // una redondeaba por su cuenta mientras la cabecera acumulaba en crudo, y
+      // la suma de las líneas podía no dar el total de la factura.
       const filas = items.map((it) => {
-        const sub = Number((it.cantidad * it.precio_unitario).toFixed(2));
-        const ivaImp = Number((sub * (it.iva_rate / 100)).toFixed(2));
+        const linea = calcularLinea(it);
         return {
           factura_id: factura.id,
           descripcion: it.descripcion,
@@ -336,9 +324,9 @@ function NuevaFacturaDialog({
           unidad: it.unidad,
           precio_unitario: it.precio_unitario,
           iva_rate: it.iva_rate,
-          subtotal: sub,
-          iva: ivaImp,
-          total: Number((sub + ivaImp).toFixed(2)),
+          subtotal: linea.base,
+          iva: linea.cuota,
+          total: linea.total,
         };
       });
       const { error: errI } = await supabase.from("factura_items").insert(filas);
@@ -497,11 +485,11 @@ function NuevaFacturaDialog({
         <div className="border-t pt-3 grid grid-cols-3 gap-3 text-sm">
           <div>
             <div className="text-xs text-muted-foreground">Base imponible</div>
-            <div className="font-semibold">{eur(totales.base)}</div>
+            <div className="font-semibold">{eur(totales.base_imponible)}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">IVA</div>
-            <div className="font-semibold">{eur(totales.iva)}</div>
+            <div className="font-semibold">{eur(totales.iva_total)}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Total</div>
