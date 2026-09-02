@@ -344,20 +344,20 @@ BEGIN
   RETURNING id INTO v_factura_id;
 
   -- ---- Las líneas ----
-  FOR r IN SELECT * FROM jsonb_array_elements(v_calc -> 'lineas') AS l LOOP
+  FOR r IN SELECT * FROM jsonb_array_elements(v_calc -> 'lineas') AS l(linea) LOOP
     INSERT INTO public.factura_items (
       factura_id, descripcion, cantidad, unidad,
       precio_unitario, iva_rate, subtotal, iva, total
     ) VALUES (
       v_factura_id,
-      r.l ->> 'descripcion',
-      (r.l ->> 'cantidad')::NUMERIC,
-      r.l ->> 'unidad',
-      (r.l ->> 'precio_unitario')::NUMERIC,
-      (r.l ->> 'iva_rate')::NUMERIC,
-      (r.l ->> 'subtotal')::NUMERIC,
-      (r.l ->> 'iva')::NUMERIC,
-      (r.l ->> 'total')::NUMERIC
+      r.linea ->> 'descripcion',
+      (r.linea ->> 'cantidad')::NUMERIC,
+      r.linea ->> 'unidad',
+      (r.linea ->> 'precio_unitario')::NUMERIC,
+      (r.linea ->> 'iva_rate')::NUMERIC,
+      (r.linea ->> 'subtotal')::NUMERIC,
+      (r.linea ->> 'iva')::NUMERIC,
+      (r.linea ->> 'total')::NUMERIC
     );
   END LOOP;
 

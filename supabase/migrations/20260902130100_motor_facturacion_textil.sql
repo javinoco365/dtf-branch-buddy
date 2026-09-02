@@ -210,16 +210,16 @@ BEGIN
   )
   RETURNING id INTO v_factura_id;
 
-  FOR r IN SELECT * FROM jsonb_array_elements(v_calc -> 'lineas') AS l LOOP
+  FOR r IN SELECT * FROM jsonb_array_elements(v_calc -> 'lineas') AS l(linea) LOOP
     INSERT INTO public.textil_factura_items (
       factura_id, descripcion, cantidad, precio_unitario, iva_pct, subtotal
     ) VALUES (
       v_factura_id,
-      r.l ->> 'descripcion',
-      (r.l ->> 'cantidad')::NUMERIC,
-      (r.l ->> 'precio_unitario')::NUMERIC,
-      (r.l ->> 'iva_rate')::NUMERIC,
-      (r.l ->> 'subtotal')::NUMERIC
+      r.linea ->> 'descripcion',
+      (r.linea ->> 'cantidad')::NUMERIC,
+      (r.linea ->> 'precio_unitario')::NUMERIC,
+      (r.linea ->> 'iva_rate')::NUMERIC,
+      (r.linea ->> 'subtotal')::NUMERIC
     );
   END LOOP;
 
