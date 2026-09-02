@@ -5,18 +5,23 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   addMonths,
   addWeeks,
+  eachDayOfInterval,
   endOfMonth,
   endOfWeek,
   format,
   startOfMonth,
   startOfWeek,
-  eachDayOfInterval,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros, numero } from "@/lib/format";
-import { generarPedidosRango, descargarCSV, TIENDAS_DEMO, type PedidoDemo } from "@/lib/demo-data";
+import { descargarCSV } from "@/lib/csv";
+import { useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
+import { agruparPorDia, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -58,29 +63,6 @@ function etiquetaPeriodo(ref: Date, periodo: Periodo) {
   const { desde, hasta } = rangoPeriodo(ref, periodo);
   return `${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
 }
-function pct(a: number, b: number) {
-  if (b === 0) return a === 0 ? 0 : 100;
-  return ((a - b) / b) * 100;
-}
-function isSameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function calcKPIs(pedidos: PedidoDemo[]) {
-  const validos = pedidos.filter((p) => p.estado !== "cancelado");
-  const total = validos.reduce((s, p) => s + p.total, 0);
-  const bruta = validos.reduce((s, p) => s + p.bruto, 0);
-  const iva = validos.reduce((s, p) => s + p.iva, 0);
-  const envios = validos.reduce((s, p) => s + p.envio, 0);
-  const mts = validos.reduce((s, p) => s + p.metros, 0);
-  const cancelados = pedidos.filter((p) => p.estado === "cancelado").length;
-  const ticket = validos.length ? total / validos.length : 0;
-  return { total, bruta, iva, envios, metros: mts, cancelados, ticket, numPedidos: validos.length };
-}
 
 function FacturacionTienda() {
   const { tiendaId } = Route.useParams();
@@ -88,7 +70,7 @@ function FacturacionTienda() {
   const [ref, setRef] = useState(new Date());
 
   const { data: tienda } = useQuery({
-    queryKey: ["tienda", tiendaId],
+    queryKey: ["tienda-facturacion", tiendaId],
     queryFn: async () => {
       const { data } = await supabase
         .from("tiendas")
@@ -99,58 +81,35 @@ function FacturacionTienda() {
     },
   });
 
-  // Mapear tienda real → tienda demo (por nombre exacto; si no, por índice estable del id)
-  const tiendaDemo = useMemo(() => {
-    if (tienda?.nombre && (TIENDAS_DEMO as readonly string[]).includes(tienda.nombre)) {
-      return tienda.nombre;
-    }
-    // hash del id → posición estable
-    let h = 0;
-    for (const c of tiendaId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-    return TIENDAS_DEMO[h % TIENDAS_DEMO.length];
-  }, [tienda, tiendaId]);
-
   const { desde, hasta } = useMemo(() => rangoPeriodo(ref, periodo), [ref, periodo]);
   const ant = useMemo(() => rangoAnterior(ref, periodo), [ref, periodo]);
 
-  const pedidos = useMemo(
-    () => generarPedidosRango(desde, hasta).filter((p) => p.tienda === tiendaDemo),
-    [desde, hasta, tiendaDemo],
-  );
-  const pedidosAnt = useMemo(
-    () => generarPedidosRango(ant.desde, ant.hasta).filter((p) => p.tienda === tiendaDemo),
-    [ant, tiendaDemo],
-  );
+  const consultaPedidos = usePedidosPeriodo({ desde, hasta, tiendaId });
+  const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta, tiendaId });
+  const consultaLineas = useLineasPeriodo({ desde, hasta, tiendaId });
 
-  const k = useMemo(() => calcKPIs(pedidos), [pedidos]);
-  const kPrev = useMemo(() => calcKPIs(pedidosAnt), [pedidosAnt]);
+  const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
+  const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
+  const kPrev = useMemo(() => calcularKpis(consultaAnterior.data ?? []), [consultaAnterior.data]);
 
   const ingresosDiarios = useMemo(() => {
     const dias = eachDayOfInterval({ start: desde, end: hasta });
-    return dias.map((d) => ({
-      dia: format(d, "d MMM", { locale: es }),
-      total: Number(
-        pedidos
-          .filter((p) => p.estado !== "cancelado" && isSameDay(p.fecha, d))
-          .reduce((s, p) => s + p.total, 0)
-          .toFixed(2),
-      ),
+    return agruparPorDia(pedidos, dias).map((d) => ({
+      dia: format(d.dia, "d MMM", { locale: es }),
+      total: d.total,
     }));
   }, [pedidos, desde, hasta]);
 
-  const topProductos = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of pedidos) {
-      if (p.estado === "cancelado") continue;
-      map.set(p.producto, (map.get(p.producto) ?? 0) + p.metros);
-    }
-    return Array.from(map.entries())
-      .map(([producto, mts]) => ({ producto, metros: Number(mts.toFixed(2)) }))
-      .sort((a, b) => b.metros - a.metros)
-      .slice(0, 6);
-  }, [pedidos]);
+  const topProductos = useMemo(
+    () => topPorMetros(consultaLineas.data ?? []),
+    [consultaLineas.data],
+  );
 
   const pctIva = k.bruta === 0 ? 0 : (k.iva / k.bruta) * 100;
+
+  const cargando = consultaPedidos.isPending;
+  const error = consultaPedidos.error;
+  const sinDatos = !cargando && !error && pedidos.length === 0;
 
   function navegar(dir: -1 | 1) {
     setRef((r) => (periodo === "mes" ? addMonths(r, dir) : addWeeks(r, dir)));
@@ -158,19 +117,18 @@ function FacturacionTienda() {
 
   function exportar() {
     const filas: (string | number)[][] = [
-      ["Fecha", "Producto", "Metros", "Bruta", "IVA", "Envío", "Total", "Estado"],
+      ["Fecha", "Estado", "Metros", "Base", "IVA", "Envío", "Total"],
       ...pedidos.map((p) => [
-        format(p.fecha, "yyyy-MM-dd"),
-        p.producto,
-        p.metros,
-        p.bruto,
-        p.iva,
-        p.envio,
-        p.total,
+        format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
         p.estado,
+        Number(p.metros_total ?? 0),
+        Number(p.subtotal ?? 0),
+        Number(p.iva ?? 0),
+        Number(p.envio ?? 0),
+        Number(p.total ?? 0),
       ]),
     ];
-    const slug = (tienda?.nombre ?? tiendaDemo).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const slug = (tienda?.nombre ?? "tienda").toLowerCase().replace(/[^a-z0-9]+/g, "-");
     descargarCSV(
       `facturacion-${slug}_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}.csv`,
       filas,
@@ -179,11 +137,13 @@ function FacturacionTienda() {
 
   return (
     <div className="space-y-6">
-      {/* Toolbar */}
+      {/* Barra de herramientas */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold">Facturación</h2>
-          <p className="text-sm text-muted-foreground">Vista contable filtrada a esta tienda</p>
+          <p className="text-sm text-muted-foreground">
+            Vista contable filtrada a {tienda?.nombre ?? "esta tienda"}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -219,131 +179,178 @@ function FacturacionTienda() {
             Hoy
           </Button>
 
-          <Button onClick={exportar} size="sm">
+          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KPI
-          titulo="Total periodo"
-          valor={eur(k.total)}
-          delta={pct(k.total, kPrev.total)}
-          icon={Euro}
-        />
-        <KPI
-          titulo="Facturación bruta"
-          valor={eur(k.bruta)}
-          delta={pct(k.bruta, kPrev.bruta)}
-          icon={Receipt}
-        />
-        <KPI
-          titulo="Ticket medio"
-          valor={eur(k.ticket)}
-          delta={pct(k.ticket, kPrev.ticket)}
-          icon={ShoppingCart}
-        />
-        <KPI
-          titulo="Metros vendidos"
-          valor={metros(k.metros)}
-          delta={pct(k.metros, kPrev.metros)}
-          icon={Ruler}
-        />
-        <KPI
-          titulo="Cancelados"
-          valor={String(k.cancelados)}
-          delta={pct(k.cancelados, kPrev.cancelados)}
-          icon={XCircle}
-          color="destructive"
-          deltaInverso
-        />
-      </div>
-
-      {/* Desglose de facturación */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Bloque
-          titulo="Bruta"
-          subtitulo="Solo metros vendidos"
-          valor={eur(k.bruta)}
-          icon={Receipt}
-          tono="primary"
-        />
-        <Bloque
-          titulo="IVA"
-          subtitulo={`${numero(pctIva, 1)}% sobre bruta`}
-          valor={eur(k.iva)}
-          icon={Percent}
-          tono="info"
-        />
-        <Bloque
-          titulo="Envíos"
-          subtitulo="Total cobrado en envíos"
-          valor={eur(k.envios)}
-          icon={Truck}
-          tono="warn"
-        />
-        <Bloque
-          titulo="Total"
-          subtitulo="Bruta + IVA + envíos"
-          valor={eur(k.total)}
-          icon={Wallet}
-          tono="success"
-        />
-      </div>
-
-      {/* Charts */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {error && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Ingresos diarios</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ingresosDiarios}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                <Tooltip
-                  formatter={(v: number) => eur(v)}
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                />
-                <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="py-6 text-sm text-destructive">
+            No se ha podido cargar la facturación: {error.message}
           </CardContent>
         </Card>
+      )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Top productos por metros</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} m`} />
-                <YAxis type="category" dataKey="producto" width={140} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(v: number) => metros(v)}
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                />
-                <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      {cargando && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {sinDatos && (
+        <EstadoVacio
+          icono={Receipt}
+          titulo="Sin facturación en este periodo"
+          descripcion={`Esta tienda no registró pedidos entre el ${format(desde, "d 'de' MMMM", { locale: es })} y el ${format(hasta, "d 'de' MMMM 'de' yyyy", { locale: es })}.`}
+        />
+      )}
+
+      {!cargando && !error && !sinDatos && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <KPI
+              titulo="Total periodo"
+              valor={eur(k.total)}
+              delta={variacion(k.total, kPrev.total)}
+              icon={Euro}
+            />
+            <KPI
+              titulo="Facturación bruta"
+              valor={eur(k.bruta)}
+              delta={variacion(k.bruta, kPrev.bruta)}
+              icon={Receipt}
+            />
+            <KPI
+              titulo="Ticket medio"
+              valor={eur(k.ticket)}
+              delta={variacion(k.ticket, kPrev.ticket)}
+              icon={ShoppingCart}
+            />
+            <KPI
+              titulo="Metros vendidos"
+              valor={metros(k.metros)}
+              delta={variacion(k.metros, kPrev.metros)}
+              icon={Ruler}
+            />
+            <KPI
+              titulo="Cancelados"
+              valor={String(k.cancelados)}
+              delta={variacion(k.cancelados, kPrev.cancelados)}
+              icon={XCircle}
+              color="destructive"
+              deltaInverso
+            />
+          </div>
+
+          {/* Desglose de facturación */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Bloque
+              titulo="Bruta"
+              subtitulo="Base imponible"
+              valor={eur(k.bruta)}
+              icon={Receipt}
+              tono="primary"
+            />
+            <Bloque
+              titulo="IVA"
+              subtitulo={`${numero(pctIva, 1)}% sobre bruta`}
+              valor={eur(k.iva)}
+              icon={Percent}
+              tono="info"
+            />
+            <Bloque
+              titulo="Envíos"
+              subtitulo="Total cobrado en envíos"
+              valor={eur(k.envios)}
+              icon={Truck}
+              tono="warn"
+            />
+            <Bloque
+              titulo="Total"
+              subtitulo="Bruta + IVA + envíos"
+              valor={eur(k.total)}
+              icon={Wallet}
+              tono="success"
+            />
+          </div>
+
+          {/* Gráficas */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Ingresos diarios</CardTitle>
+              </CardHeader>
+              <CardContent className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={ingresosDiarios}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => eur(v)}
+                      contentStyle={{
+                        background: "var(--color-card)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: 8,
+                      }}
+                    />
+                    <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Top productos por metros</CardTitle>
+              </CardHeader>
+              <CardContent className="h-72">
+                {consultaLineas.isPending ? (
+                  <Skeleton className="h-full w-full" />
+                ) : topProductos.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Los pedidos de este periodo no tienen líneas de detalle.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(v) => `${v} m`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="producto"
+                        width={140}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <Tooltip
+                        formatter={(v: number) => metros(v)}
+                        contentStyle={{
+                          background: "var(--color-card)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                        }}
+                      />
+                      <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -358,12 +365,13 @@ function KPI({
 }: {
   titulo: string;
   valor: string;
-  delta: number;
-  icon: any;
+  /** `null` cuando el periodo anterior no da para comparar. */
+  delta: number | null;
+  icon: LucideIcon;
   color?: "primary" | "destructive";
   deltaInverso?: boolean;
 }) {
-  const subiendo = delta >= 0;
+  const subiendo = (delta ?? 0) >= 0;
   const positivo = deltaInverso ? !subiendo : subiendo;
   const iconBg =
     color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
@@ -380,14 +388,18 @@ function KPI({
           </div>
         </div>
         <div className={`mt-3 text-3xl font-bold tracking-tight ${valorColor}`}>{valor}</div>
-        <div
-          className={`mt-1 flex items-center gap-1 text-xs font-medium ${
-            positivo ? "text-status-completado" : "text-status-cancelado"
-          }`}
-        >
-          {subiendo ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-          {numero(Math.abs(delta), 1)}% vs periodo anterior
-        </div>
+        {delta === null ? (
+          <div className="mt-1 text-xs text-muted-foreground">Sin periodo anterior comparable</div>
+        ) : (
+          <div
+            className={`mt-1 flex items-center gap-1 text-xs font-medium ${
+              positivo ? "text-status-completado" : "text-status-cancelado"
+            }`}
+          >
+            {subiendo ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {numero(Math.abs(delta), 1)}% vs periodo anterior
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -403,7 +415,7 @@ function Bloque({
   titulo: string;
   subtitulo: string;
   valor: string;
-  icon: any;
+  icon: LucideIcon;
   tono: "primary" | "info" | "warn" | "success";
 }) {
   const tonos: Record<string, string> = {
