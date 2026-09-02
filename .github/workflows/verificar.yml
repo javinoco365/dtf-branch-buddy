@@ -1,0 +1,59 @@
+# Verificación automática de cada cambio.
+#
+# Ejecuta lo mismo que `npm run verify` en local: lint, comprobación de tipos,
+# pruebas de dominio y compilación. Si algo falla aquí, el cambio no entra.
+#
+# Sobre el gestor de paquetes: el repositorio arrastra un bun.lock generado
+# dentro del sandbox de Lovable, que fija 62 paquetes al registro privado
+# lovable-core-prod. Ese registro no resuelve fuera de Lovable, así que la
+# verificación usa npm contra el registro público con package-lock.json.
+
+name: Verificar
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint · Tipos · Pruebas · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Comprobación de tipos
+        run: npm run typecheck
+
+      - name: Pruebas
+        run: npm run test
+
+      - name: Compilar
+        # build:dev evita necesitar secretos de producción para comprobar
+        # que el proyecto compila.
+        run: npm run build:dev
+        env:
+          # Valores de relleno: la compilación necesita que las variables
+          # existan, no que sean válidas. Ningún secreto real entra aquí.
+          VITE_SUPABASE_URL: https://ejemplo.supabase.co
+          VITE_SUPABASE_PROJECT_ID: ejemplo
+          VITE_SUPABASE_PUBLISHABLE_KEY: clave-de-relleno-para-compilar
