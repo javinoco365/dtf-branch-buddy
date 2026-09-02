@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
-import { calcularLinea, calcularTotales, redondear } from "@/dominio/importes";
+import { calcularLinea, calcularTotales } from "@/dominio/importes";
 
 const ESTADO_VALUES = [
   "pendiente",
@@ -150,11 +150,10 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     await ensureAccess(supabaseAdmin, context.userId, data.tiendaId);
 
     // Mismo módulo que la pantalla, para que lo que se ve y lo que se guarda
-    // coincidan. Sobre el envío, ver la nota de PedidoFormDialog: hoy se suma
-    // después del IVA y ese criterio se conserva aquí.
-    const totales = calcularTotales(data.items);
+    // coincidan. El envío va dentro, en la base imponible: artículo 78 LIVA.
+    const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
     const metros_total = data.items.reduce((s, it) => s + it.cantidad, 0);
-    const total = redondear(totales.total + (data.envio || 0));
+    const total = totales.total;
 
     const numero = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
       Math.random() * 9000 + 1000,
@@ -289,17 +288,16 @@ export const updatePedido = createServerFn({ method: "POST" })
     if (data.notas !== undefined) patch.notas = data.notas;
 
     if (data.items && data.items.length) {
-      const subtotal = data.items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-      const iva = data.items.reduce(
-        (s, it) => s + it.cantidad * it.precio_unitario * (it.iva_rate / 100),
-        0,
-      );
+      // Antes esto calculaba a mano: sumaba las cuotas línea a línea en vez de
+      // aplicar el tipo sobre la base agregada, redondeaba con toFixed y no
+      // miraba el descuento. Crear un pedido y editarlo daban totales
+      // distintos. Ahora las dos vías pasan por el mismo módulo.
+      const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
       const metros_total = data.items.reduce((s, it) => s + it.cantidad, 0);
-      const total = subtotal + iva + (data.envio ?? 0);
-      patch.subtotal = Number(subtotal.toFixed(2));
-      patch.iva = Number(iva.toFixed(2));
+      patch.subtotal = totales.base_imponible;
+      patch.iva = totales.iva_total;
       patch.metros_total = metros_total;
-      patch.total = Number(total.toFixed(2));
+      patch.total = totales.total;
 
       await supabaseAdmin.from("pedido_items").delete().eq("pedido_id", data.id);
       const itemRows = data.items.map((it) => {

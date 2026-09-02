@@ -24,7 +24,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { createPedidoManual, updatePedido } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
-import { calcularTotales, redondear } from "@/dominio/importes";
+import { calcularTotales } from "@/dominio/importes";
 
 type Linea = {
   descripcion: string;
@@ -137,15 +137,12 @@ export function PedidoFormDialog({
     setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
-  // OJO, criterio fiscal pendiente de decidir: hoy el envío se suma DESPUÉS del
-  // IVA, es decir, no tributa. El artículo 78 de la Ley del IVA dice que los
-  // gastos de transporte repercutidos forman parte de la base imponible.
-  // Cambiarlo altera el total de todos los pedidos manuales, así que se conserva
-  // el criterio actual y la decisión va aparte. Cuando se cambie, basta con
-  // pasar { envio } a calcularTotales y quitar la suma de abajo, aquí y en
-  // createPedidoManual.
-  const totales = calcularTotales(lineas);
-  const total = redondear(totales.total + (envio || 0));
+  // El envío entra en la base imponible y tributa, que es lo que dice el
+  // artículo 78 de la Ley del IVA: los gastos de transporte repercutidos al
+  // cliente forman parte de la contraprestación. Antes se sumaba DESPUÉS del
+  // IVA, o sea que no tributaba.
+  const totales = calcularTotales(lineas, { envio });
+  const total = totales.total;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
