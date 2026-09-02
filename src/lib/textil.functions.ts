@@ -3,6 +3,27 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { calcularLinea, calcularTotales as calcularTotalesDominio } from "@/dominio/importes";
 
+// types.ts está generado y todavía no conoce las funciones del motor de
+// facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
+// después de aplicar las migraciones.
+async function llamarRpcTextil<T>(
+  cliente: unknown,
+  funcion: string,
+  argumentos: Record<string, unknown>,
+): Promise<T> {
+  const rpc = (
+    cliente as {
+      rpc: (
+        f: string,
+        a: Record<string, unknown>,
+      ) => Promise<{ data: T; error: { message: string } | null }>;
+    }
+  ).rpc;
+  const { data, error } = await rpc.call(cliente, funcion, argumentos);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 // ============ MARCAS ============
 export const listMarcas = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -305,6 +326,15 @@ async function ajustarStock(
   }
 }
 
+// Numeración de presupuestos y pedidos. NO SIRVE PARA FACTURAS y no debe
+// volver a usarse para ellas: lee el último número y le suma uno, así que dos
+// usuarios a la vez obtienen el mismo, y al ordenar por created_at sin filtrar
+// por ejercicio la secuencia se reinicia mal al cambiar de año. Las facturas van
+// por emitir_factura_textil(), que asigna el número con la fila de la serie
+// bloqueada.
+//
+// Un presupuesto repetido es una molestia; una factura repetida es un problema
+// legal. Aun así, conviene darle el mismo trato: anotado, sin arreglar aquí.
 async function nextNumero(supabase: any, table: string, prefix: string) {
   const { data } = await supabase
     .from(table)
@@ -398,6 +428,14 @@ export const updatePresupuestoEstado = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Convierte un presupuesto aceptado en factura.
+ *
+ * El número lo asigna emitir_factura_textil() en la base, con la fila de la
+ * serie bloqueada. Antes lo calculaba nextNumero() leyendo el último número y
+ * sumándole uno: dos usuarios a la vez obtenían el mismo, y al cambiar de
+ * ejercicio la secuencia se reiniciaba mal.
+ */
 export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
@@ -409,49 +447,41 @@ export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
       .single();
     if (error) throw error;
     if (pres.factura_id) throw new Error("Este presupuesto ya está facturado");
+    if (!pres.items?.length) throw new Error("El presupuesto no tiene líneas");
 
-    const numero = await nextNumero(context.supabase, "textil_facturas", "FAC");
-    const { data: fac, error: facErr } = await context.supabase
-      .from("textil_facturas")
-      .insert({
-        numero,
-        cliente_id: pres.cliente_id,
-        cliente_nombre: pres.cliente_nombre,
-        cliente_email: pres.cliente_email,
-        cliente_nif: pres.cliente_nif,
-        cliente_direccion: pres.cliente_direccion,
-        marca_id: pres.marca_id,
-        presupuesto_id: pres.id,
-        fecha: new Date().toISOString().slice(0, 10),
-        estado: "emitida",
-        subtotal: pres.subtotal,
-        iva: pres.iva,
-        total: pres.total,
-        notas: pres.notas,
-      })
-      .select("id")
-      .single();
-    if (facErr) throw facErr;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const items = (pres.items ?? []).map((it: any) => ({
-      factura_id: fac.id,
-      descripcion: it.descripcion,
-      cantidad: it.cantidad,
-      precio_unitario: it.precio_unitario,
-      iva_pct: it.iva_pct,
-      subtotal: it.subtotal,
-    }));
-    if (items.length) {
-      const { error: itErr } = await context.supabase.from("textil_factura_items").insert(items);
-      if (itErr) throw itErr;
-    }
+    const factura = await llamarRpcTextil<{ id: string; numero: string; total: number }>(
+      supabaseAdmin,
+      "emitir_factura_textil",
+      {
+        _usuario_id: context.userId,
+        _receptor: {
+          nombre: pres.cliente_nombre,
+          email: pres.cliente_email,
+          nif: pres.cliente_nif,
+          direccion: pres.cliente_direccion,
+        },
+        _lineas: pres.items.map((it: any) => ({
+          descripcion: it.descripcion,
+          cantidad: Number(it.cantidad),
+          unidad: "ud",
+          precio_unitario: Number(it.precio_unitario),
+          iva_rate: Number(it.iva_pct),
+        })),
+        _marca_id: pres.marca_id,
+        _cliente_id: pres.cliente_id,
+        _presupuesto_id: pres.id,
+        _notas: pres.notas,
+      },
+    );
 
     await context.supabase
       .from("textil_presupuestos")
-      .update({ estado: "facturado", factura_id: fac.id })
+      .update({ estado: "facturado", factura_id: factura.id })
       .eq("id", pres.id);
 
-    return { facturaId: fac.id, numero };
+    return { facturaId: factura.id, numero: factura.numero };
   });
 
 // ============ FACTURAS ============
@@ -466,10 +496,31 @@ export const listTextilFacturas = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+/**
+ * Borra una factura textil.
+ *
+ * Solo funciona con borradores. Antes borraba cualquier factura sin mirar el
+ * estado, y sus líneas caían en cascada: era un botón de papelera que destruía
+ * documentos fiscales. La base lo impide ahora por trigger; esto lo dice antes
+ * y con un mensaje que se entiende.
+ */
 export const deleteTextilFactura = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    const { data: factura } = await context.supabase
+      .from("textil_facturas")
+      .select("estado, numero")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (!factura) throw new Error("La factura no existe");
+    if (factura.estado !== "borrador") {
+      throw new Error(
+        `La factura ${factura.numero} está emitida y no se borra. Emite una rectificativa.`,
+      );
+    }
+
     const { error } = await context.supabase.from("textil_facturas").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
