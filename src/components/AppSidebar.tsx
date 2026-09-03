@@ -62,12 +62,21 @@ export function AppSidebar() {
     queryFn: async () => {
       // Una tienda desactivada desaparece del día a día. Sigue existiendo, y
       // se vuelve a activar desde la lista de tiendas.
-      const { data, error } = await tabla(supabase, "tiendas")
-        .select("id, nombre, color")
-        .eq("activa", true)
-        .order("nombre");
+      //
+      // El filtro se hace aquí y no en la consulta a propósito. Nombrar la
+      // columna `activa` en el select o en un .eq() hace que PostgREST
+      // devuelva error mientras la migración que la añade no esté aplicada, y
+      // ese error dejaba el menú de tiendas VACÍO sin decir por qué: parecía
+      // que no había tiendas cuando lo que faltaba era una columna. Con
+      // select("*") la consulta funciona antes y después, y una tienda sin el
+      // campo se trata como activa.
+      const { data, error } = await tabla(supabase, "tiendas").select("*").order("nombre");
       if (error) throw error;
-      return (data ?? []) as { id: string; nombre: string; color: string | null }[];
+      return ((data ?? []) as { activa?: boolean }[]).filter((t) => t.activa !== false) as {
+        id: string;
+        nombre: string;
+        color: string | null;
+      }[];
     },
   });
 
