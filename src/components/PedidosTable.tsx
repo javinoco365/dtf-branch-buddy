@@ -42,8 +42,10 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
+  Loader2,
   MoreVertical,
   Plus,
+  RefreshCw,
   Search,
   Truck,
 } from "lucide-react";
@@ -51,6 +53,7 @@ import { toast } from "sonner";
 import { eur } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
+import { sincronizarWoo } from "@/lib/woocommerce.functions";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
@@ -70,6 +73,19 @@ import {
 
 type Periodo = "mes" | "semana";
 
+/** Una dirección congelada en el pedido. Todos los campos pueden faltar. */
+export type Direccion = {
+  nombre?: string | null;
+  empresa?: string | null;
+  direccion?: string | null;
+  codigo_postal?: string | null;
+  ciudad?: string | null;
+  provincia?: string | null;
+  pais?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+};
+
 export type PedidoFila = {
   id: string;
   tienda_id: string;
@@ -86,6 +102,9 @@ export type PedidoFila = {
   cliente_id: string | null;
   cliente_nombre: string | null;
   cliente_email: string | null;
+  cliente_telefono: string | null;
+  direccion_facturacion: Direccion | null;
+  direccion_envio: Direccion | null;
   origen: string | null;
   metodo_pago: string | null;
   envio: number;
@@ -147,6 +166,20 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const { desde, hasta } = rango(ref, periodo);
   const list = useServerFn(listPedidos);
+  const sincronizarFn = useServerFn(sincronizarWoo);
+  const sincronizar = useMutation({
+    mutationFn: () => sincronizarFn({ data: { tienda_id: tiendaId! } }),
+    onSuccess: (r: any) => {
+      toast.success(
+        `Sincronizado: ${r?.pedidos ?? 0} pedidos, ${r?.clientes ?? 0} clientes, ` +
+          `${r?.productos ?? 0} productos`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+      queryClient.invalidateQueries({ queryKey: ["clientes"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo sincronizar"),
+  });
+
   const setEstadoFn = useServerFn(updatePedidoEstado);
   const delFn = useServerFn(deletePedido);
 
@@ -281,6 +314,23 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           </Button>
         </div>
         <div className="ml-auto flex gap-2">
+          {/* Solo con una tienda delante: sincronizar «todas» no significa
+              nada, cada una tiene sus credenciales y su web. */}
+          {tiendaId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sincronizar.mutate()}
+              disabled={sincronizar.isPending}
+            >
+              {sincronizar.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar ahora"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={exportar}>
             <Download className="h-4 w-4 mr-2" /> Exportar CSV
           </Button>
@@ -494,22 +544,30 @@ function FilaPedido({
           </Badge>
         </TableCell>
         <TableCell>
-          <Select value={pedido.estado} onValueChange={onEstadoChange}>
-            <SelectTrigger className="h-8 w-[140px]">
-              <SelectValue>
-                <Badge variant={estadoVariant(pedido.estado)}>
+          {/* Se ve como el Origen, una etiqueta y ya. Sigue cambiándose: la
+              etiqueta abre el menú. Un desplegable por fila llenaba la tabla
+              de cajas y hacía difícil leer la columna de un vistazo. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" title="Cambiar el estado">
+                <Badge
+                  variant={estadoVariant(pedido.estado)}
+                  className="cursor-pointer hover:opacity-80"
+                >
                   {ESTADO_LABEL[pedido.estado] ?? pedido.estado}
                 </Badge>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
               {ESTADOS.map((e) => (
-                <SelectItem key={e} value={e}>
-                  {ESTADO_LABEL[e]}
-                </SelectItem>
+                <DropdownMenuItem key={e} onClick={() => onEstadoChange(e)}>
+                  <Badge variant={estadoVariant(e)} className="mr-2">
+                    {ESTADO_LABEL[e]}
+                  </Badge>
+                </DropdownMenuItem>
               ))}
-            </SelectContent>
-          </Select>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </TableCell>
         <TableCell className="text-xs text-muted-foreground max-w-[140px]">
           {pedido.metodo_pago ?? "—"}
@@ -597,6 +655,8 @@ function FilaPedido({
                   <span className="font-semibold">{eur(pedido.total)}</span>
                 </div>
               </div>
+              <DatosDelCliente pedido={pedido} />
+
               {pedido.tracking?.codigo_seguimiento && (
                 <div className="text-xs text-muted-foreground">
                   Envío: {pedido.tracking.transportista} ·{" "}
@@ -625,4 +685,88 @@ function FilaPedido({
       )}
     </>
   );
+}
+
+/**
+ * Quién ha pedido y adónde va.
+ *
+ * Las direcciones vienen congeladas en el pedido, no de la ficha del cliente:
+ * si el cliente se muda, el pedido antiguo se envió a la casa antigua y la
+ * etiqueta que se imprimió decía eso.
+ */
+function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
+  const facturacion = pedido.direccion_facturacion;
+  const envio = pedido.direccion_envio;
+  const mismaDireccion =
+    envio && facturacion && lineas(envio).join("|") === lineas(facturacion).join("|");
+
+  return (
+    <div className="grid gap-4 pt-3 border-t md:grid-cols-3 text-sm">
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+          Cliente
+        </div>
+        <div className="font-medium">{pedido.cliente_nombre ?? "—"}</div>
+        {pedido.cliente_email && (
+          <div className="text-muted-foreground">{pedido.cliente_email}</div>
+        )}
+        {pedido.cliente_telefono && (
+          <div className="text-muted-foreground">{pedido.cliente_telefono}</div>
+        )}
+      </div>
+
+      <BloqueDireccion titulo="Facturación" direccion={facturacion} />
+      <BloqueDireccion
+        titulo="Envío"
+        direccion={envio}
+        nota={mismaDireccion ? "La misma que la de facturación" : null}
+      />
+    </div>
+  );
+}
+
+function BloqueDireccion({
+  titulo,
+  direccion,
+  nota,
+}: {
+  titulo: string;
+  direccion: Direccion | null;
+  nota?: string | null;
+}) {
+  const filas = direccion ? lineas(direccion) : [];
+  return (
+    <div>
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+        {titulo}
+      </div>
+      {filas.length === 0 ? (
+        // Sin inventar nada: un pedido manual no trae direcciones y decirlo es
+        // más útil que dejar el hueco en blanco.
+        <div className="text-muted-foreground">Sin dirección en el pedido</div>
+      ) : (
+        filas.map((l, i) => (
+          <div key={i} className={i === 0 ? "font-medium" : "text-muted-foreground"}>
+            {l}
+          </div>
+        ))
+      )}
+      {nota && filas.length > 0 && <div className="text-xs text-muted-foreground mt-1">{nota}</div>}
+    </div>
+  );
+}
+
+/** La dirección en líneas, saltándose lo que no venga. */
+function lineas(d: Direccion): string[] {
+  const cp = [d.codigo_postal, d.ciudad].filter(Boolean).join(" ");
+  return [
+    d.nombre,
+    d.empresa,
+    d.direccion,
+    cp,
+    [d.provincia, d.pais].filter(Boolean).join(", "),
+    d.telefono,
+  ]
+    .map((x) => (typeof x === "string" ? x.trim() : ""))
+    .filter(Boolean);
 }

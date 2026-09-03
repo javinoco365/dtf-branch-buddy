@@ -2,12 +2,39 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
+import { tabla } from "./rpc";
 
 /**
  * Sincronizar pedidos, clientes y productos desde WooCommerce.
  * Las credenciales NUNCA viajan al navegador: se leen aquí en el servidor
  * (Cloudflare Worker / TanStack server function) con el cliente de servicio.
  */
+/**
+ * Convierte un bloque de dirección de WooCommerce al que guarda el pedido.
+ *
+ * Devuelve `null` cuando el bloque viene vacío, que es lo que hace Woo con
+ * `shipping` cuando el envío coincide con la facturación. Un objeto lleno de
+ * cadenas vacías no es una dirección y la pantalla lo pintaría como si lo
+ * fuera.
+ */
+function direccionWoo(b: any): Record<string, string> | null {
+  if (!b) return null;
+  const calle = [b.address_1, b.address_2].filter(Boolean).join(" ").trim();
+  const nombre = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
+  const d = {
+    nombre,
+    empresa: (b.company ?? "").trim(),
+    direccion: calle,
+    codigo_postal: (b.postcode ?? "").trim(),
+    ciudad: (b.city ?? "").trim(),
+    provincia: (b.state ?? "").trim(),
+    pais: (b.country ?? "").trim(),
+    telefono: (b.phone ?? "").trim(),
+    email: (b.email ?? "").trim(),
+  };
+  return Object.values(d).some(Boolean) ? d : null;
+}
+
 export const sincronizarWoo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
@@ -138,8 +165,16 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
           );
           const subtotal = Number(o.total || 0) - Number(o.total_tax || 0);
           const iva = Number(o.total_tax || 0);
-          const { data: pedido, error: pErr } = await supabaseAdmin
-            .from("pedidos")
+          // Las direcciones del PEDIDO, no las de la ficha del cliente. Un
+          // pedido de invitado no trae customer_id y se quedaba sin nombre ni
+          // correo: es el «—» de la columna Cliente. Estos datos sí vienen
+          // siempre, dentro de billing.
+          const facturacion = direccionWoo(o.billing);
+          const envio = direccionWoo(o.shipping);
+
+          // tabla() y no .from(): types.ts está generado y todavía no conoce
+          // las columnas de dirección. Se quita cuando se regenere.
+          const { data: pedido, error: pErr } = await tabla(supabaseAdmin, "pedidos")
             .upsert(
               {
                 tienda_id: data.tienda_id,
@@ -147,6 +182,14 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
                 numero: String(o.number || o.id),
                 estado: (estadoMap[o.status] ?? "pendiente") as any,
                 cliente_id,
+                cliente_nombre: facturacion?.nombre || null,
+                cliente_email: facturacion?.email || null,
+                cliente_telefono: facturacion?.telefono || null,
+                direccion_facturacion: facturacion,
+                // Woo manda `shipping` vacío cuando el envío es igual que la
+                // facturación. Guardar un objeto de huecos sería peor que no
+                // guardar nada: la pantalla lo enseñaría como una dirección.
+                direccion_envio: envio ?? facturacion,
                 metros_total,
                 subtotal,
                 iva,
