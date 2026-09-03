@@ -44,6 +44,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
 import { useAuth } from "@/lib/auth-context";
 
 export function AppSidebar() {
@@ -57,12 +58,14 @@ export function AppSidebar() {
     queryKey: ["tiendas-sidebar", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tiendas")
+      // Una tienda desactivada desaparece del día a día. Sigue existiendo, y
+      // se vuelve a activar desde la lista de tiendas.
+      const { data, error } = await tabla(supabase, "tiendas")
         .select("id, nombre, color")
+        .eq("activa", true)
         .order("nombre");
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as { id: string; nombre: string; color: string | null }[];
     },
   });
 
@@ -238,20 +241,6 @@ export function AppSidebar() {
                             tiendaId={t.id}
                             label="Facturación"
                             icon={Receipt}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/cobros"
-                            tiendaId={t.id}
-                            label="Cobros"
-                            icon={Wallet}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/proyectos"
-                            tiendaId={t.id}
-                            label="Proyectos"
-                            icon={CalendarClock}
                             pathname={pathname}
                           />
                           <SubItem

@@ -29,6 +29,7 @@ import {
   deleteTextilCliente,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/clientes")({
   head: () => ({ meta: [{ title: "Clientes textil · CRM DTF" }] }),
@@ -42,6 +43,7 @@ function ClientesPage() {
   const delFn = useServerFn(deleteTextilCliente);
   const { data = [] } = useQuery({ queryKey: ["textil-clientes"], queryFn: () => listFn() });
   const [open, setOpen] = useState(false);
+  const [borrando, setBorrando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
 
   const save = useMutation({
@@ -117,13 +119,7 @@ function ClientesPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (confirm("¿Eliminar?")) del.mutate(c.id);
-                      }}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -133,6 +129,20 @@ function ClientesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`el cliente ${borrando?.nombre ?? ""}`}
+        consecuencias={[
+          "Sus presupuestos, pedidos y facturas se quedan sin cliente asociado, pero no se borran.",
+        ]}
+        cargando={del.isPending}
+        onConfirmar={() => {
+          del.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
 
       <ClienteDialog
         open={open}
