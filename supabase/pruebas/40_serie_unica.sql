@@ -76,3 +76,37 @@ SELECT CASE WHEN count(*) = 0
             THEN 'BIEN  8. sin huecos con DTF, textil y dos tiendas en la misma serie'
             ELSE 'MAL   8. ' || count(*) || ' hueco(s)' END
 FROM public.facturas_huecos_en_serie();
+
+-- ---------------------------------------------------------------------------
+-- 9-10. La fecha acompaña a la numeración
+-- ---------------------------------------------------------------------------
+-- La factura manual deja elegir fecha. Un número mayor con fecha anterior
+-- rompe la correlatividad aunque los números vayan seguidos.
+DO $$
+DECLARE v_ultima DATE;
+BEGIN
+  SELECT max(fecha) INTO v_ultima FROM public.facturas;
+  BEGIN
+    PERFORM public.emitir_factura(
+      _usuario_id => '11111111-1111-4111-8111-111111111111',
+      _tienda_id  => '22222222-2222-4222-8222-222222222222',
+      _receptor   => '{"nombre":"Cliente con fecha vieja"}'::jsonb,
+      _lineas     => '[{"descripcion":"x","cantidad":1,"unidad":"ud","precio_unitario":10,"iva_rate":21}]'::jsonb,
+      _fecha      => v_ultima - 1);
+    RAISE NOTICE 'MAL   9. dejó emitir con fecha anterior a la última';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'BIEN  9. rechaza una fecha anterior a la última de la serie';
+  END;
+END $$;
+
+-- El mismo día sí: varias facturas por día es lo normal.
+SELECT CASE WHEN (r ->> 'referencia') IS NOT NULL
+            THEN 'BIEN 10. el mismo día sí deja: ' || (r ->> 'referencia')
+            ELSE 'MAL  10. rechazó una fecha válida' END
+FROM (SELECT public.emitir_factura(
+        _usuario_id => '11111111-1111-4111-8111-111111111111',
+        _tienda_id  => '22222222-2222-4222-8222-222222222222',
+        _receptor   => '{"nombre":"Cliente del mismo dia"}'::jsonb,
+        _lineas     => '[{"descripcion":"x","cantidad":1,"unidad":"ud","precio_unitario":10,"iva_rate":21}]'::jsonb,
+        _fecha      => (SELECT max(fecha) FROM public.facturas)
+      ) AS r) AS x;
