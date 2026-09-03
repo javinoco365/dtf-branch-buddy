@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { tabla } from "./rpc";
+import { llamarRpc, tabla } from "./rpc";
 import { calcularLinea, calcularTotales as calcularTotalesDominio } from "@/dominio/importes";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
@@ -132,7 +132,11 @@ export const upsertStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => stockSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { id, ...rest } = data;
+    const { id, cantidad, ...rest } = data;
+
+    // La cantidad ya no se escribe aquí: es la suma del libro de movimientos y
+    // hay un guardián en la base que lo impide. Al editar se ignora; al crear
+    // se anota como existencias iniciales.
     if (id) {
       const { data: row, error } = await context.supabase
         .from("textil_stock")
@@ -143,22 +147,90 @@ export const upsertStockItem = createServerFn({ method: "POST" })
       if (error) throw error;
       return row;
     }
+
     const { data: row, error } = await context.supabase
       .from("textil_stock")
-      .insert(rest)
+      .insert({ ...rest, cantidad: 0 })
       .select()
       .single();
     if (error) throw error;
+
+    const inicial = Number(cantidad) || 0;
+    if (inicial > 0) {
+      const { error: mErr } = await tabla(context.supabase, "textil_stock_movimientos").insert({
+        empresa_id: await empresaActiva(context.supabase),
+        stock_id: row.id,
+        motivo: "inicial",
+        cantidad: inicial,
+        coste_unitario: Number(rest.coste_unitario) || 0,
+        nota: "Existencias al dar de alta la variante",
+      });
+      if (mErr) throw mErr;
+    }
     return row;
+  });
+
+/**
+ * Anota un movimiento de stock: una compra, una merma o un recuento.
+ *
+ * Es la única forma de que cambie una cantidad. La base lo exige.
+ */
+export const registrarMovimientoStock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        stock_id: z.string().uuid(),
+        motivo: z.enum([
+          "compra",
+          "merma",
+          "ajuste_inventario",
+          "devolucion_cliente",
+          "devolucion_proveedor",
+        ]),
+        cantidad: z.number().refine((n) => n !== 0, "La cantidad no puede ser cero"),
+        coste_unitario: z.number().nonnegative().default(0),
+        nota: z.string().optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await tabla(context.supabase, "textil_stock_movimientos").insert({
+      empresa_id: await empresaActiva(context.supabase),
+      stock_id: data.stock_id,
+      motivo: data.motivo,
+      cantidad: data.cantidad,
+      coste_unitario: data.coste_unitario,
+      nota: data.nota ?? null,
+    });
+    if (error) throw error;
+    return { ok: true };
+  });
+
+/** El libro de una variante: de dónde viene cada unidad que tiene o tuvo. */
+export const listMovimientosStock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ stock_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: filas, error } = await tabla(context.supabase, "textil_stock_movimientos")
+      .select("id, motivo, cantidad, coste_unitario, nota, created_at")
+      .eq("stock_id", data.stock_id)
+      .order("id", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return filas ?? [];
   });
 
 export const deleteStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("textil_stock").delete().eq("id", data.id);
-    if (error) throw error;
-    return { ok: true };
+    // Se borra si nunca se movió; si tiene historia, se desactiva. Sus
+    // movimientos son la historia de coste de lo que ya vendiste.
+    const resultado = await llamarRpc<string>(context.supabase, "textil_stock_retirar", {
+      _stock_id: data.id,
+    });
+    return { ok: true, resultado };
   });
 
 // ============ CLIENTES ============
@@ -282,6 +354,18 @@ function agruparStock(items: { stock_id?: string | null; cantidad: number }[]) {
   return map;
 }
 
+// Estados en los que la mercancía ya ha salido de la estantería. Hasta llegar
+// aquí un pedido solo reserva; a partir de aquí hay un movimiento de stock.
+const ESTADOS_SALIDA = new Set(["enviado", "entregado"]);
+
+/**
+ * Comprueba que hay stock DISPONIBLE, que no es lo mismo que stock físico.
+ *
+ * disponible = físico − reservado. Lo físico son las camisetas que hay en el
+ * armario; lo reservado, las que ya están prometidas a otros pedidos sin
+ * entregar. `previos` es lo que este mismo pedido tenía reservado antes de
+ * editarlo: se devuelve al montón porque va a sustituirse, no a sumarse.
+ */
 async function validarDisponibilidad(
   supabase: any,
   nuevos: Map<string, number>,
@@ -291,14 +375,14 @@ async function validarDisponibilidad(
   const ids = Array.from(nuevos.keys());
   const { data, error } = await supabase
     .from("textil_stock")
-    .select("id, nombre, cantidad")
+    .select("id, nombre, cantidad, cantidad_reservada")
     .in("id", ids);
   if (error) throw error;
   const faltantes: string[] = [];
   for (const s of data ?? []) {
     const pedido = nuevos.get(s.id) ?? 0;
     const yaReservado = previos.get(s.id) ?? 0;
-    const disponible = Number(s.cantidad) + yaReservado;
+    const disponible = Number(s.cantidad) - Number(s.cantidad_reservada ?? 0) + yaReservado;
     if (pedido > disponible) {
       faltantes.push(`${s.nombre}: solicitado ${pedido}, disponible ${disponible}`);
     }
@@ -308,25 +392,111 @@ async function validarDisponibilidad(
   }
 }
 
+/**
+ * Mueve stock anotándolo en el libro.
+ *
+ * Antes esto leía la cantidad, restaba y escribía. Dos pedidos simultáneos
+ * leían el mismo número y uno de los dos descuentos se perdía, sin que nada
+ * avisara. Ahora cada movimiento es una fila y el saldo lo recalcula un trigger
+ * con la fila de la variante bloqueada, así que no hay carrera posible.
+ *
+ * `delta` viene en la convención de antes: positivo descuenta, negativo
+ * devuelve. En el libro se anota con el signo contrario, que es el natural.
+ */
 async function ajustarStock(
   supabase: any,
-  delta: Map<string, number>, // positivo = descontar, negativo = devolver
+  delta: Map<string, number>,
+  empresaId: string,
+  pedidoId?: string | null,
 ) {
+  const movimientos = [];
   for (const [id, cant] of delta.entries()) {
     if (!cant) continue;
-    const { data, error } = await supabase
-      .from("textil_stock")
-      .select("cantidad")
-      .eq("id", id)
-      .single();
-    if (error) throw error;
-    const nueva = Number(data.cantidad) - cant;
-    const { error: uErr } = await supabase
-      .from("textil_stock")
-      .update({ cantidad: nueva })
-      .eq("id", id);
-    if (uErr) throw uErr;
+    movimientos.push({
+      empresa_id: empresaId,
+      stock_id: id,
+      motivo: cant > 0 ? "venta" : "devolucion_cliente",
+      cantidad: -cant,
+      textil_pedido_id: pedidoId ?? null,
+    });
   }
+  if (movimientos.length === 0) return;
+
+  const { error } = await tabla(supabase, "textil_stock_movimientos").insert(movimientos);
+  if (error) throw error;
+}
+
+/**
+ * Deja las reservas del pedido valiendo exactamente `objetivo`.
+ *
+ * Una reserva no mueve stock: solo aparta lo comprometido para que la pantalla
+ * no te deje prometérselo a otro cliente. Borra las variantes que ya no están
+ * en el pedido y actualiza las que siguen, así que editar un pedido dos veces
+ * no acumula reservas.
+ */
+async function sincronizarReservas(
+  supabase: any,
+  pedidoId: string,
+  empresaId: string,
+  objetivo: Map<string, number>,
+) {
+  const ids = Array.from(objetivo.keys());
+  const borrado = tabla(supabase, "textil_stock_reservas")
+    .delete()
+    .eq("textil_pedido_id", pedidoId);
+  const { error: errBorrado } = ids.length
+    ? await borrado.not("stock_id", "in", `(${ids.join(",")})`)
+    : await borrado;
+  if (errBorrado) throw errBorrado;
+  if (ids.length === 0) return;
+
+  const { error } = await tabla(supabase, "textil_stock_reservas").upsert(
+    ids.map((stock_id) => ({
+      empresa_id: empresaId,
+      stock_id,
+      textil_pedido_id: pedidoId,
+      cantidad: objetivo.get(stock_id)!,
+    })),
+    { onConflict: "textil_pedido_id,stock_id" },
+  );
+  if (error) throw error;
+}
+
+/** Lo que el pedido lleva hoy, agrupado por variante. */
+async function itemsDelPedido(supabase: any, pedidoId: string) {
+  const { data } = await supabase
+    .from("textil_pedido_items")
+    .select("stock_id, cantidad")
+    .eq("pedido_id", pedidoId);
+  return agruparStock((data ?? []) as any);
+}
+
+async function estadoDelPedido(supabase: any, pedidoId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("textil_pedidos")
+    .select("estado")
+    .eq("id", pedidoId)
+    .maybeSingle();
+  return (data?.estado as string | undefined) ?? null;
+}
+
+/** Le da la vuelta a un mapa de cantidades: lo que salió, vuelve. */
+function negar(mapa: Map<string, number>) {
+  const r = new Map<string, number>();
+  for (const [k, v] of mapa.entries()) r.set(k, -v);
+  return r;
+}
+
+/** La empresa activa. El libro de stock la necesita en cada movimiento. */
+async function empresaActiva(supabase: any): Promise<string> {
+  const { data } = await tabla(supabase, "empresas")
+    .select("id")
+    .eq("activa", true)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (!data?.id) throw new Error("No hay ninguna empresa activa configurada");
+  return data.id as string;
 }
 
 // Numeración de presupuestos y pedidos. NO SIRVE PARA FACTURAS y no debe
@@ -564,17 +734,13 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
     // al total después del IVA.
     const totals = calcularTotales(items, header.envio ?? 0);
 
-    // Cantidades ya reservadas previamente (para no doblar contabilidad al editar)
-    let previos = new Map<string, number>();
-    if (id) {
-      const { data: prevItems } = await context.supabase
-        .from("textil_pedido_items")
-        .select("stock_id, cantidad")
-        .eq("pedido_id", id);
-      previos = agruparStock((prevItems ?? []) as any);
-    }
+    // Lo que este pedido ya tenía apartado, para no contarlo dos veces al editar.
+    const previos = id ? await itemsDelPedido(context.supabase, id) : new Map<string, number>();
+    const estadoPrevio = id ? await estadoDelPedido(context.supabase, id) : null;
     const nuevos = agruparStock(items);
-    await validarDisponibilidad(context.supabase, nuevos, previos);
+    if (header.estado !== "cancelado") {
+      await validarDisponibilidad(context.supabase, nuevos, previos);
+    }
 
     const payload = {
       ...header,
@@ -610,14 +776,33 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
     );
     if (itErr) throw itErr;
 
-    // Reservar stock: descontar la diferencia (nuevo - previo) por cada stock_id
-    const delta = new Map<string, number>();
-    const keys = new Set([...nuevos.keys(), ...previos.keys()]);
-    for (const k of keys) {
-      const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
-      if (d !== 0) delta.set(k, d);
+    // Stock. Mientras el pedido no haya salido, lo único que cambia son las
+    // reservas y el físico no se toca. En cuanto sale, la aritmética es sobre
+    // mercancía de verdad y se anota en el libro.
+    const empresaId = await empresaActiva(context.supabase);
+    const salioAntes = estadoPrevio !== null && ESTADOS_SALIDA.has(estadoPrevio);
+    const saleAhora = ESTADOS_SALIDA.has(header.estado);
+    // Un pedido cancelado no aparta nada.
+    const objetivo = header.estado === "cancelado" ? new Map<string, number>() : nuevos;
+
+    if (salioAntes && saleAhora) {
+      // Ya estaba entregado y se corrige: solo se mueve la diferencia.
+      const delta = new Map<string, number>();
+      for (const k of new Set([...nuevos.keys(), ...previos.keys()])) {
+        const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
+        if (d !== 0) delta.set(k, d);
+      }
+      await ajustarStock(context.supabase, delta, empresaId, pedidoId);
+    } else if (salioAntes && !saleAhora) {
+      // Vuelve atrás: la mercancía regresa a la estantería y queda apartada.
+      await ajustarStock(context.supabase, negar(previos), empresaId, pedidoId);
+      await sincronizarReservas(context.supabase, pedidoId!, empresaId, objetivo);
+    } else {
+      await sincronizarReservas(context.supabase, pedidoId!, empresaId, objetivo);
+      if (saleAhora) {
+        await llamarRpc(context.supabase, "textil_pedido_entregar", { _pedido_id: pedidoId });
+      }
     }
-    await ajustarStock(context.supabase, delta);
 
     return { id: pedidoId };
   });
@@ -626,23 +811,29 @@ export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), estado: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
-    // Si se cancela un pedido, devolver el stock reservado
-    if (data.estado === "cancelado") {
-      const { data: prev } = await context.supabase
-        .from("textil_pedidos")
-        .select("estado")
-        .eq("id", data.id)
-        .single();
-      if (prev && prev.estado !== "cancelado") {
-        const { data: prevItems } = await context.supabase
-          .from("textil_pedido_items")
-          .select("stock_id, cantidad")
-          .eq("pedido_id", data.id);
-        const restore = agruparStock((prevItems ?? []) as any);
-        const delta = new Map<string, number>();
-        for (const [k, v] of restore.entries()) delta.set(k, -v);
-        await ajustarStock(context.supabase, delta);
-      }
+    // El cambio de estado es lo que mueve el stock de verdad: al marcar
+    // «enviado» o «entregado» la mercancía sale, y las reservas se convierten
+    // en salidas anotadas en el libro.
+    const estadoPrevio = await estadoDelPedido(context.supabase, data.id);
+    const salioAntes = estadoPrevio !== null && ESTADOS_SALIDA.has(estadoPrevio);
+    const saleAhora = ESTADOS_SALIDA.has(data.estado);
+    const empresaId = await empresaActiva(context.supabase);
+
+    if (!salioAntes && saleAhora) {
+      await llamarRpc(context.supabase, "textil_pedido_entregar", { _pedido_id: data.id });
+    } else if (salioAntes && !saleAhora) {
+      // Devolución: vuelve al armario y se vuelve a apartar, salvo que se anule.
+      const previos = await itemsDelPedido(context.supabase, data.id);
+      await ajustarStock(context.supabase, negar(previos), empresaId, data.id);
+      await sincronizarReservas(
+        context.supabase,
+        data.id,
+        empresaId,
+        data.estado === "cancelado" ? new Map<string, number>() : previos,
+      );
+    } else if (data.estado === "cancelado") {
+      // Nunca llegó a salir: basta con soltar el compromiso.
+      await sincronizarReservas(context.supabase, data.id, empresaId, new Map<string, number>());
     }
     const { error } = await context.supabase
       .from("textil_pedidos")
@@ -656,21 +847,18 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    // Devolver stock reservado antes de borrar (si no estaba cancelado)
-    const { data: ped } = await context.supabase
-      .from("textil_pedidos")
-      .select("estado")
-      .eq("id", data.id)
-      .single();
-    if (ped && ped.estado !== "cancelado") {
-      const { data: prevItems } = await context.supabase
-        .from("textil_pedido_items")
-        .select("stock_id, cantidad")
-        .eq("pedido_id", data.id);
-      const restore = agruparStock((prevItems ?? []) as any);
-      const delta = new Map<string, number>();
-      for (const [k, v] of restore.entries()) delta.set(k, -v);
-      await ajustarStock(context.supabase, delta);
+    // Si la mercancía ya había salido, borrar el pedido tiene que devolverla:
+    // el movimiento de venta no se borra, se compensa con una entrada. Las
+    // reservas, en cambio, caen solas con el pedido (ON DELETE CASCADE).
+    const estado = await estadoDelPedido(context.supabase, data.id);
+    if (estado !== null && ESTADOS_SALIDA.has(estado)) {
+      const previos = await itemsDelPedido(context.supabase, data.id);
+      await ajustarStock(
+        context.supabase,
+        negar(previos),
+        await empresaActiva(context.supabase),
+        data.id,
+      );
     }
     const { error } = await context.supabase.from("textil_pedidos").delete().eq("id", data.id);
     if (error) throw error;
