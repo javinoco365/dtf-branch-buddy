@@ -41,6 +41,7 @@ import {
   List,
   Shirt,
   Boxes,
+  FileUp,
   FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -298,6 +299,12 @@ export function AppSidebar() {
                         to="/panel/textil/stock"
                         label="Stock"
                         icon={Boxes}
+                        pathname={pathname}
+                      />
+                      <TextilSub
+                        to="/panel/textil/compras"
+                        label="Compras"
+                        icon={FileUp}
                         pathname={pathname}
                       />
                       <TextilSub
