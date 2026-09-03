@@ -13,8 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash2 } from "lucide-react";
-import { listTextilFacturas, deleteTextilFactura } from "@/lib/textil.functions";
+import { Download, FileText, Loader2, Trash2 } from "lucide-react";
+import {
+  listTextilFacturas,
+  deleteTextilFactura,
+  generarPdfFacturaTextil,
+  urlFacturaTextil,
+} from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
@@ -38,6 +43,40 @@ function FacturasPage() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const [generando, setGenerando] = useState<string | null>(null);
+  const generarFn = useServerFn(generarPdfFacturaTextil);
+  const urlFn = useServerFn(urlFacturaTextil);
+
+  /**
+   * Genera el PDF si hace falta y lo abre.
+   *
+   * La ventana se abre ANTES de la llamada, no después: un navegador solo
+   * permite abrir pestañas mientras dura el gesto del usuario, y al volver de
+   * una espera de red ya la ha bloqueado. Se abre vacía y se le pone la
+   * dirección cuando llega.
+   */
+  async function abrirPdf(factura: any) {
+    const ventana = window.open("", "_blank");
+    setGenerando(factura.id);
+    try {
+      if (!factura.pdf_path) {
+        await generarFn({ data: { factura_id: factura.id } });
+        qc.invalidateQueries({ queryKey: ["textil-facturas"] });
+      }
+      const { url } = (await urlFn({ data: { factura_id: factura.id } })) as {
+        url: string | null;
+      };
+      if (!url) throw new Error("No se pudo obtener el PDF");
+      if (ventana) ventana.location.href = url;
+      else window.location.href = url;
+    } catch (e: any) {
+      ventana?.close();
+      toast.error(e?.message ?? "No se pudo generar el PDF");
+    } finally {
+      setGenerando(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -92,6 +131,21 @@ function FacturasPage() {
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
                   <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={f.pdf_path ? "Abrir el PDF" : "Generar el PDF"}
+                      disabled={generando === f.id || f.estado === "borrador"}
+                      onClick={() => abrirPdf(f)}
+                    >
+                      {generando === f.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : f.pdf_path ? (
+                        <Download className="h-4 w-4" />
+                      ) : (
+                        <FileText className="h-4 w-4" />
+                      )}
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
