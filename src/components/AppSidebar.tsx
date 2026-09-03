@@ -42,6 +42,7 @@ import {
   Shirt,
   Boxes,
   FileUp,
+  Landmark,
   FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -123,6 +124,14 @@ export function AppSidebar() {
                   <Link to="/panel/pedidos">
                     <ShoppingCart />
                     <span>Pedidos Consolidados</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/conciliacion"}>
+                  <Link to="/panel/conciliacion">
+                    <Landmark />
+                    <span>Conciliación bancaria</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
+import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
 import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
@@ -64,6 +65,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
 const PanelCobrosRoute = PanelCobrosRouteImport.update({
   id: '/cobros',
   path: '/cobros',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelConciliacionRoute = PanelConciliacionRouteImport.update({
+  id: '/conciliacion',
+  path: '/conciliacion',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
@@ -313,6 +322,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/textil'
     | '/panel/cobros'
+    | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/panel/cobros'
+    | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/textil'
     | '/panel/cobros'
+    | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
@@ -445,6 +457,13 @@ declare module '@tanstack/react-router' {
       path: '/cobros'
       fullPath: '/panel/cobros'
       preLoaderRoute: typeof PanelCobrosRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/conciliacion': {
+      id: '/panel/conciliacion'
+      path: '/conciliacion'
+      fullPath: '/panel/conciliacion'
+      preLoaderRoute: typeof PanelConciliacionRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/configuracion': {
@@ -690,6 +709,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 interface PanelRouteRouteChildren {
   PanelTextilRouteRoute: typeof PanelTextilRouteRouteWithChildren
   PanelCobrosRoute: typeof PanelCobrosRoute
+  PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
   PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
@@ -704,6 +724,7 @@ interface PanelRouteRouteChildren {
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelTextilRouteRoute: PanelTextilRouteRouteWithChildren,
   PanelCobrosRoute: PanelCobrosRoute,
+  PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
   PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
