@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { tabla } from "./rpc";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
@@ -71,19 +72,21 @@ export const listPedidos = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    let query = supabase
-      .from("pedidos")
-      .select(
-        "id, tienda_id, woo_order_id, numero, estado, metros_total, subtotal, iva, total, fecha_pedido, notas, cliente_id, cliente_nombre, cliente_email, origen, metodo_pago, envio",
-      )
+    // tabla() y select("*"): types.ts está generado y no conoce las columnas de
+    // dirección, y nombrarlas en el select haría fallar la consulta entera
+    // mientras la migración no esté aplicada. Ya pasó una vez con el menú de
+    // tiendas: la lista se quedaba vacía sin decir por qué.
+    let query = tabla(supabase, "pedidos")
+      .select("*")
       .gte("fecha_pedido", data.desde)
       .lte("fecha_pedido", data.hasta)
       .order("fecha_pedido", { ascending: false });
     if (data.tiendaId) query = query.eq("tienda_id", data.tiendaId);
 
-    const { data: pedidos, error } = await query;
+    const { data: filas, error } = await query;
     if (error) throw error;
-    if (!pedidos || pedidos.length === 0) return { pedidos: [] };
+    if (!filas || filas.length === 0) return { pedidos: [] };
+    const pedidos = filas as Record<string, any>[];
 
     const ids = pedidos.map((p) => p.id);
     const tiendaIds = Array.from(new Set(pedidos.map((p) => p.tienda_id)));
