@@ -55,3 +55,13 @@ SELECT CASE WHEN count(*) FILTER (WHERE cmd = 'SELECT') = 1
             ELSE 'MAL   6. politicas textil mal repartidas' END
 FROM pg_policies
 WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname LIKE 'Facturas textil%';
+
+-- 7. Y ya no hay dos juegos de politicas diciendo lo mismo. Ocho politicas para
+--    cuatro operaciones garantizan que algun dia se toque solo la mitad, que es
+--    justo lo que paso al arreglar el cast.
+SELECT CASE WHEN count(*) = 4
+            THEN 'BIEN  7. un solo juego de politicas de tienda, sin duplicados'
+            ELSE 'MAL   7. hay ' || count(*) || ': ' || string_agg(policyname, ', ') END
+FROM pg_policies
+WHERE schemaname = 'storage' AND tablename = 'objects'
+  AND (COALESCE(qual, '') || COALESCE(with_check, '')) LIKE '%is_tienda_member%';
