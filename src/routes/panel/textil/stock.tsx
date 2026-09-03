@@ -122,7 +122,18 @@ function StockPage() {
                 <TableHead>Cat.</TableHead>
                 <TableHead>Color</TableHead>
                 <TableHead>Talla</TableHead>
-                <TableHead className="text-right">Stock</TableHead>
+                <TableHead className="text-right" title="Lo que hay si vas y lo cuentas">
+                  Físico
+                </TableHead>
+                <TableHead className="text-right" title="Comprometido en pedidos sin entregar">
+                  Reservado
+                </TableHead>
+                <TableHead
+                  className="text-right"
+                  title="Físico menos reservado: lo que puedes prometer"
+                >
+                  Disponible
+                </TableHead>
                 <TableHead className="text-right">Mín.</TableHead>
                 <TableHead className="text-right">Coste</TableHead>
                 <TableHead className="text-right">PVP</TableHead>
@@ -132,18 +143,22 @@ function StockPage() {
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={10}>Cargando…</TableCell>
+                  <TableCell colSpan={12}>Cargando…</TableCell>
                 </TableRow>
               )}
               {!isLoading && data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                     Sin artículos.
                   </TableCell>
                 </TableRow>
               )}
               {data.map((it: any) => {
-                const bajo = Number(it.cantidad) <= Number(it.cantidad_minima);
+                const reservado = Number(it.cantidad_reservada ?? 0);
+                const disponible = Number(it.cantidad) - reservado;
+                // El aviso mira lo disponible, no lo físico: tener 20 en el
+                // armario con 18 comprometidos no es tener 20 para vender.
+                const bajo = disponible <= Number(it.cantidad_minima);
                 return (
                   <TableRow key={it.id}>
                     <TableCell className="font-mono text-xs">{it.sku ?? "—"}</TableCell>
@@ -151,8 +166,12 @@ function StockPage() {
                     <TableCell>{it.categoria ?? "—"}</TableCell>
                     <TableCell>{it.color ?? "—"}</TableCell>
                     <TableCell>{it.talla ?? "—"}</TableCell>
+                    <TableCell className="text-right">{it.cantidad}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {reservado || "—"}
+                    </TableCell>
                     <TableCell className="text-right">
-                      {bajo ? <Badge variant="destructive">{it.cantidad}</Badge> : it.cantidad}
+                      {bajo ? <Badge variant="destructive">{disponible}</Badge> : disponible}
                     </TableCell>
                     <TableCell className="text-right">{it.cantidad_minima}</TableCell>
                     <TableCell className="text-right">
