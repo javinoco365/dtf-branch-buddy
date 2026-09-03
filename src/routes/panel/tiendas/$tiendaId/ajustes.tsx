@@ -572,6 +572,46 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
   const [activa, setActiva] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
+  const [remitenteNombre, setRemitenteNombre] = useState("");
+  const [remitenteEmail, setRemitenteEmail] = useState("");
+
+  const { data: tiendaCorreo } = useQuery({
+    queryKey: ["tienda-remitente", tiendaId],
+    queryFn: async () =>
+      (
+        await tabla(supabase, "tiendas")
+          .select("correo_remitente_nombre, correo_remitente_email")
+          .eq("id", tiendaId)
+          .maybeSingle()
+      ).data,
+  });
+
+  useEffect(() => {
+    if (tiendaCorreo) {
+      setRemitenteNombre(tiendaCorreo.correo_remitente_nombre ?? "");
+      setRemitenteEmail(tiendaCorreo.correo_remitente_email ?? "");
+    }
+  }, [tiendaCorreo]);
+
+  async function guardarRemitente() {
+    setGuardando(true);
+    try {
+      const { error } = await tabla(supabase, "tiendas")
+        .update({
+          correo_remitente_nombre: remitenteNombre.trim() || null,
+          correo_remitente_email: remitenteEmail.trim() || null,
+        })
+        .eq("id", tiendaId);
+      if (error) throw error;
+      toast.success("Remitente guardado");
+      qc.invalidateQueries({ queryKey: ["tienda-remitente", tiendaId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   const { data: plantilla, isLoading } = useQuery({
     queryKey: ["plantilla-correo", tiendaId, "pedido_enviado"],
     queryFn: async () =>
@@ -616,6 +656,51 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
 
   return (
     <TabsContent value="correos" className="space-y-4 mt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Remitente de esta tienda</CardTitle>
+          <CardDescription>
+            Desde qué dirección salen los avisos de esta tienda. Al revés que la factura, que
+            siempre va a nombre de la sociedad: el correo lo recibe alguien que compró en esta
+            tienda y espera ver esta marca.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Nombre visible</Label>
+              <Input
+                value={remitenteNombre}
+                onChange={(e) => setRemitenteNombre(e.target.value)}
+                placeholder="DTF Culture"
+                disabled={!isAdmin}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Dirección</Label>
+              <Input
+                type="email"
+                value={remitenteEmail}
+                onChange={(e) => setRemitenteEmail(e.target.value)}
+                placeholder="pedidos@dtfculture.com"
+                disabled={!isAdmin}
+              />
+            </div>
+          </div>
+          <Alert>
+            <AlertDescription>
+              El proveedor solo deja enviar desde dominios verificados. Si esta dirección es de un
+              dominio que no has verificado, el correo no saldrá.
+            </AlertDescription>
+          </Alert>
+          {isAdmin && (
+            <Button onClick={guardarRemitente} disabled={guardando}>
+              Guardar remitente
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Aviso de pedido enviado</CardTitle>
@@ -713,8 +798,8 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
 
       <Alert>
         <AlertDescription>
-          El envío automático todavía no está montado: falta contratar un proveedor de correo y
-          verificar el dominio. De momento esto guarda el texto.
+          El aviso sale solo al marcar un pedido como enviado, una vez por pedido. Si el envío falla
+          queda registrado con el motivo, y el estado del pedido se guarda igualmente.
         </AlertDescription>
       </Alert>
     </TabsContent>
