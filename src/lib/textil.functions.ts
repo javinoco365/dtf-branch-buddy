@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { tabla } from "./rpc";
+import { llamarRpc, tabla } from "./rpc";
 import { calcularLinea, calcularTotales as calcularTotalesDominio } from "@/dominio/importes";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
@@ -156,9 +156,12 @@ export const deleteStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("textil_stock").delete().eq("id", data.id);
-    if (error) throw error;
-    return { ok: true };
+    // Se borra si nunca se movió; si tiene historia, se desactiva. Sus
+    // movimientos son la historia de coste de lo que ya vendiste.
+    const resultado = await llamarRpc<string>(context.supabase, "textil_stock_retirar", {
+      _stock_id: data.id,
+    });
+    return { ok: true, resultado };
   });
 
 // ============ CLIENTES ============
@@ -308,25 +311,50 @@ async function validarDisponibilidad(
   }
 }
 
+/**
+ * Mueve stock anotándolo en el libro.
+ *
+ * Antes esto leía la cantidad, restaba y escribía. Dos pedidos simultáneos
+ * leían el mismo número y uno de los dos descuentos se perdía, sin que nada
+ * avisara. Ahora cada movimiento es una fila y el saldo lo recalcula un trigger
+ * con la fila de la variante bloqueada, así que no hay carrera posible.
+ *
+ * `delta` viene en la convención de antes: positivo descuenta, negativo
+ * devuelve. En el libro se anota con el signo contrario, que es el natural.
+ */
 async function ajustarStock(
   supabase: any,
-  delta: Map<string, number>, // positivo = descontar, negativo = devolver
+  delta: Map<string, number>,
+  empresaId: string,
+  pedidoId?: string | null,
 ) {
+  const movimientos = [];
   for (const [id, cant] of delta.entries()) {
     if (!cant) continue;
-    const { data, error } = await supabase
-      .from("textil_stock")
-      .select("cantidad")
-      .eq("id", id)
-      .single();
-    if (error) throw error;
-    const nueva = Number(data.cantidad) - cant;
-    const { error: uErr } = await supabase
-      .from("textil_stock")
-      .update({ cantidad: nueva })
-      .eq("id", id);
-    if (uErr) throw uErr;
+    movimientos.push({
+      empresa_id: empresaId,
+      stock_id: id,
+      motivo: cant > 0 ? "venta" : "devolucion_cliente",
+      cantidad: -cant,
+      textil_pedido_id: pedidoId ?? null,
+    });
   }
+  if (movimientos.length === 0) return;
+
+  const { error } = await tabla(supabase, "textil_stock_movimientos").insert(movimientos);
+  if (error) throw error;
+}
+
+/** La empresa activa. El libro de stock la necesita en cada movimiento. */
+async function empresaActiva(supabase: any): Promise<string> {
+  const { data } = await tabla(supabase, "empresas")
+    .select("id")
+    .eq("activa", true)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (!data?.id) throw new Error("No hay ninguna empresa activa configurada");
+  return data.id as string;
 }
 
 // Numeración de presupuestos y pedidos. NO SIRVE PARA FACTURAS y no debe
@@ -617,7 +645,7 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
       const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
       if (d !== 0) delta.set(k, d);
     }
-    await ajustarStock(context.supabase, delta);
+    await ajustarStock(context.supabase, delta, await empresaActiva(context.supabase), pedidoId);
 
     return { id: pedidoId };
   });
@@ -641,7 +669,7 @@ export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
         const restore = agruparStock((prevItems ?? []) as any);
         const delta = new Map<string, number>();
         for (const [k, v] of restore.entries()) delta.set(k, -v);
-        await ajustarStock(context.supabase, delta);
+        await ajustarStock(context.supabase, delta, await empresaActiva(context.supabase), data.id);
       }
     }
     const { error } = await context.supabase
@@ -670,7 +698,7 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
       const restore = agruparStock((prevItems ?? []) as any);
       const delta = new Map<string, number>();
       for (const [k, v] of restore.entries()) delta.set(k, -v);
-      await ajustarStock(context.supabase, delta);
+      await ajustarStock(context.supabase, delta, await empresaActiva(context.supabase), data.id);
     }
     const { error } = await context.supabase.from("textil_pedidos").delete().eq("id", data.id);
     if (error) throw error;
