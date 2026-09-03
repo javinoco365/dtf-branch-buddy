@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { llamarRpc } from "./rpc";
+import { llamarRpc, tabla } from "./rpc";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 
 /**
@@ -45,11 +45,14 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
       .select("descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total")
       .eq("factura_id", factura.id);
 
-    // Fallback a empresa_global cuando la factura no tiene snapshot de emisor.
-    const { data: empresa } = await supabaseAdmin
-      .from("empresa_global")
+    // Respaldo cuando la factura no tiene snapshot de emisor. Sale de empresas,
+    // que es de donde emitir_factura() congela el emisor: leer de otro sitio es
+    // arriesgarse a imprimir unos datos fiscales distintos de los emitidos.
+    const { data: empresa } = await tabla(supabaseAdmin, "empresas")
       .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
-      .eq("id", true)
+      .eq("activa", true)
+      .order("created_at")
+      .limit(1)
       .maybeSingle();
     const empresaDireccion =
       [

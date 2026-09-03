@@ -19,7 +19,7 @@ SELECT 'factura ' || (public.emitir_factura(
 ) ->> 'numero') FROM generate_series(1,3);
 
 \echo '--- 2. Desglose de IVA y totales de la primera'
-SELECT 'serie ' || serie || '-' || numero
+SELECT 'referencia ' || public.factura_referencia(serie, ejercicio, numero)
     || ' | base ' || base_imponible || ' | iva ' || iva_total || ' | total ' || total
     || ' | desglose ' || desglose_iva::text
   FROM public.facturas WHERE numero = 1;

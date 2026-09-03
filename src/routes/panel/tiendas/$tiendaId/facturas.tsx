@@ -132,8 +132,7 @@ function Facturas() {
             Facturas · {tienda?.nombre ?? "Tienda"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Serie {tienda?.serie_factura ?? "—"} · Próximo nº{" "}
-            {tienda?.siguiente_numero_factura ?? "—"}
+            Numeración única de la sociedad. El número lo asigna la base al emitir.
           </p>
         </div>
         <Dialog open={abierto} onOpenChange={setAbierto}>

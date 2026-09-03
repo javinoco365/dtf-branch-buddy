@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { tabla } from "./rpc";
 import { calcularLinea, calcularTotales as calcularTotalesDominio } from "@/dominio/importes";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
@@ -85,23 +86,22 @@ export const setMarcaPredeterminada = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ marca_id: z.string().uuid().nullable() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: existing } = await context.supabase
-      .from("empresa_global")
+    // La empresa existe siempre: la migración 20260903100000 se asegura de ello.
+    // La rama que la creaba al vuelo insertaba una fila con nombre_fiscal
+    // "Empresa", que es exactamente el dato inventado que acabaría impreso en
+    // una factura.
+    const { data: existing } = await tabla(context.supabase, "empresas")
       .select("id")
+      .eq("activa", true)
+      .order("created_at")
       .limit(1)
       .maybeSingle();
-    if (existing) {
-      const { error } = await context.supabase
-        .from("empresa_global")
-        .update({ textil_marca_predeterminada_id: data.marca_id })
-        .eq("id", existing.id);
-      if (error) throw error;
-    } else {
-      const { error } = await context.supabase
-        .from("empresa_global")
-        .insert({ textil_marca_predeterminada_id: data.marca_id, nombre_fiscal: "Empresa" } as any);
-      if (error) throw error;
-    }
+    if (!existing) throw new Error("No hay ninguna empresa activa configurada");
+
+    const { error } = await tabla(context.supabase, "empresas")
+      .update({ textil_marca_predeterminada_id: data.marca_id })
+      .eq("id", existing.id);
+    if (error) throw error;
     return { ok: true };
   });
 
@@ -681,9 +681,10 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
 export const getEmpresaGlobal = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } = await context.supabase
-      .from("empresa_global")
+    const { data } = await tabla(context.supabase, "empresas")
       .select("*")
+      .eq("activa", true)
+      .order("created_at")
       .limit(1)
       .maybeSingle();
     return data;
