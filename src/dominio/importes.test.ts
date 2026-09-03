@@ -171,6 +171,27 @@ describe("calcularTotales", () => {
     });
   });
 
+  it("no da lo mismo sumar cuotas por línea que aplicar el tipo sobre la base", () => {
+    // Esta es la razón por la que updatePedido estaba mal: calculaba el IVA
+    // sumando la cuota de cada línea. Con siete líneas de 0,15 al 21%, cada
+    // cuota redondea a 0,03 y la suma da 0,21; sobre la base agregada de 1,05
+    // sale 0,22. Un céntimo por documento, en cada factura, para siempre.
+    const lineas = Array.from({ length: 7 }, () => ({
+      cantidad: 1,
+      precio_unitario: 0.15,
+      iva_rate: 21,
+    }));
+
+    const porLinea = lineas
+      .map((l) => calcularLinea(l).cuota)
+      .reduce((a, b) => redondear(a + b), 0);
+    const t = calcularTotales(lineas);
+
+    expect(porLinea).toBe(0.21);
+    expect(t.iva_total).toBe(0.22);
+    expect(t.iva_total).not.toBe(porLinea);
+  });
+
   it("no crea una fila de desglose por un envío de cero", () => {
     const t = calcularTotales([{ cantidad: 1, precio_unitario: 10, iva_rate: 21 }], {
       envio: 0,

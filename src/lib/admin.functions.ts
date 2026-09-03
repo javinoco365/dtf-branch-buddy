@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { llamarRpc } from "./rpc";
+import { leerCredencialesWoo } from "./woo-credenciales";
 
 // Bootstrap: si no existe ningún admin, crea uno con email/password.
 // Es seguro porque solo funciona cuando 0 admins existen en el sistema.
@@ -127,12 +129,13 @@ export const guardarCredencialesWoo = createServerFn({ method: "POST" })
       .eq("role", "admin")
       .maybeSingle();
     if (!rolCheck) throw new Error("Solo administradores");
-    const { error } = await supabaseAdmin.from("tienda_credenciales").upsert({
-      tienda_id: data.tienda_id,
-      consumer_key: data.consumer_key,
-      consumer_secret: data.consumer_secret,
+    // A Vault, nunca a las columnas en claro. tienda_credenciales_guardar()
+    // crea o actualiza los dos secretos y deja en la tabla solo la referencia.
+    await llamarRpc<null>(supabaseAdmin, "tienda_credenciales_guardar", {
+      _tienda_id: data.tienda_id,
+      _consumer_key: data.consumer_key,
+      _consumer_secret: data.consumer_secret,
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
@@ -168,16 +171,18 @@ export const credencialesWooMascaradas = createServerFn({ method: "GET" })
       .eq("role", "admin")
       .maybeSingle();
     if (!rolCheck) throw new Error("Solo administradores");
-    const { data: row } = await supabaseAdmin
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) return { tiene: false, ck_mask: null, cs_mask: null, updated_at: null };
+    // updated_at no es un secreto y sigue en la tabla.
+    const { data: fila } = await supabaseAdmin
       .from("tienda_credenciales")
-      .select("consumer_key, consumer_secret, updated_at")
+      .select("updated_at")
       .eq("tienda_id", data.tienda_id)
       .maybeSingle();
-    if (!row) return { tiene: false, ck_mask: null, cs_mask: null, updated_at: null };
     return {
       tiene: true,
-      ck_mask: mask(row.consumer_key),
-      cs_mask: mask(row.consumer_secret),
-      updated_at: row.updated_at,
+      ck_mask: mask(creds.consumer_key),
+      cs_mask: mask(creds.consumer_secret),
+      updated_at: fila?.updated_at ?? null,
     };
   });

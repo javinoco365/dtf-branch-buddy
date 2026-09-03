@@ -255,8 +255,11 @@ const presupuestoSchema = z.object({
 // Antes esta función no redondeaba en ningún momento, así que los importes que
 // acababan en textil_facturas arrastraban el ruido de la coma flotante (un
 // 12.087900000000001 dentro de un documento fiscal).
-function calcularTotales(items: z.infer<typeof itemSchema>[]) {
-  const totales = calcularTotalesDominio(items.map((it) => ({ ...it, iva_rate: it.iva_pct })));
+function calcularTotales(items: z.infer<typeof itemSchema>[], envio = 0) {
+  const totales = calcularTotalesDominio(
+    items.map((it) => ({ ...it, iva_rate: it.iva_pct })),
+    { envio },
+  );
   const itemsCalc = items.map((it) => ({
     ...it,
     subtotal: calcularLinea({ ...it, iva_rate: it.iva_pct }).base,
@@ -557,7 +560,9 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => pedidoSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { items, id, ...header } = data;
-    const totals = calcularTotales(items);
+    // El envío dentro de la base imponible, artículo 78 LIVA. Antes se sumaba
+    // al total después del IVA.
+    const totals = calcularTotales(items, header.envio ?? 0);
 
     // Cantidades ya reservadas previamente (para no doblar contabilidad al editar)
     let previos = new Map<string, number>();
@@ -575,7 +580,7 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
       ...header,
       subtotal: totals.subtotal,
       iva: totals.iva,
-      total: totals.total + (header.envio ?? 0),
+      total: totals.total,
     };
     let pedidoId = id;
     if (id) {
