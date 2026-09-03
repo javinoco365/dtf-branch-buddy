@@ -499,27 +499,31 @@ async function empresaActiva(supabase: any): Promise<string> {
   return data.id as string;
 }
 
-// Numeración de presupuestos y pedidos. NO SIRVE PARA FACTURAS y no debe
-// volver a usarse para ellas: lee el último número y le suma uno, así que dos
-// usuarios a la vez obtienen el mismo, y al ordenar por created_at sin filtrar
-// por ejercicio la secuencia se reinicia mal al cambiar de año. Las facturas van
-// por emitir_factura_textil(), que asigna el número con la fila de la serie
-// bloqueada.
-//
-// Un presupuesto repetido es una molestia; una factura repetida es un problema
-// legal. Aun así, conviene darle el mismo trato: anotado, sin arreglar aquí.
-async function nextNumero(supabase: any, table: string, prefix: string) {
-  const { data } = await supabase
-    .from(table)
-    .select("numero")
-    .like("numero", `${prefix}%`)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const last = data?.[0]?.numero as string | undefined;
-  const year = new Date().getFullYear();
-  const seqPart = last?.split("-").pop();
-  const seq = seqPart ? parseInt(seqPart, 10) + 1 : 1;
-  return `${prefix}-${year}-${String(seq).padStart(4, "0")}`;
+/**
+ * Numeración de presupuestos y pedidos.
+ *
+ * Antes esto leía el último número y le sumaba uno desde el navegador. Entre
+ * leer y escribir caben otros: dos personas guardando a la vez leían el mismo
+ * y la segunda se comía un error de clave duplicada perdiendo el formulario. Y
+ * al no filtrar por ejercicio, en enero detrás de PRES-2026-0041 venía
+ * PRES-2027-0042 en vez de reiniciar.
+ *
+ * Ahora el número lo da `siguiente_numero()`, que lo incrementa y lo devuelve
+ * en una sola sentencia: no hay ventana por la que colarse.
+ *
+ * NO SIRVE PARA FACTURAS. El contador admite huecos —si la transacción que
+ * cogió el número se deshace, ese número se pierde— y una factura no puede
+ * tenerlos. Las facturas van por emitir_factura_textil(), que bloquea la fila
+ * de la serie durante toda la emisión.
+ */
+async function nextNumero(supabase: any, ambito: string, prefijo: string) {
+  const ejercicio = new Date().getFullYear();
+  const numero = await llamarRpcTextil<number>(supabase, "siguiente_numero", {
+    _empresa_id: await empresaActiva(supabase),
+    _ambito: ambito,
+    _ejercicio: ejercicio,
+  });
+  return `${prefijo}-${ejercicio}-${String(numero).padStart(4, "0")}`;
 }
 
 export const upsertPresupuesto = createServerFn({ method: "POST" })
@@ -548,7 +552,7 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
       if (error) throw error;
       await context.supabase.from("textil_presupuesto_items").delete().eq("presupuesto_id", id);
     } else {
-      const numero = await nextNumero(context.supabase, "textil_presupuestos", "PRES");
+      const numero = await nextNumero(context.supabase, "textil_presupuesto", "PRES");
       const { data: row, error } = await context.supabase
         .from("textil_presupuestos")
         .insert({ ...payload, numero })
@@ -605,9 +609,8 @@ export const updatePresupuestoEstado = createServerFn({ method: "POST" })
  * Convierte un presupuesto aceptado en factura.
  *
  * El número lo asigna emitir_factura_textil() en la base, con la fila de la
- * serie bloqueada. Antes lo calculaba nextNumero() leyendo el último número y
- * sumándole uno: dos usuarios a la vez obtenían el mismo, y al cambiar de
- * ejercicio la secuencia se reiniciaba mal.
+ * serie bloqueada durante toda la emisión: una factura no puede tener huecos.
+ * El contador de presupuestos y pedidos no vale aquí, porque sí los admite.
  */
 export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -754,7 +757,7 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
       if (error) throw error;
       await context.supabase.from("textil_pedido_items").delete().eq("pedido_id", id);
     } else {
-      const numero = await nextNumero(context.supabase, "textil_pedidos", "TPD");
+      const numero = await nextNumero(context.supabase, "textil_pedido", "TPD");
       const { data: row, error } = await context.supabase
         .from("textil_pedidos")
         .insert({ ...payload, numero })
