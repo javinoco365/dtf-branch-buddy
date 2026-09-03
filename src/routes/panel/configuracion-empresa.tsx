@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Building2, Save, Calculator } from "lucide-react";
 import { toast } from "sonner";
+import { CLAVE_EMPRESA, leerEmpresa, guardarEmpresa } from "@/lib/empresa";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion-empresa")({
@@ -28,6 +28,8 @@ type EmpresaForm = {
   coste_consumibles_metro: number;
   coste_packaging_metro: number;
   coste_electricidad_metro: number;
+  serie_factura: string;
+  serie_rectificativa: string;
 };
 
 const EMPTY: EmpresaForm = {
@@ -43,6 +45,8 @@ const EMPTY: EmpresaForm = {
   coste_consumibles_metro: 0,
   coste_packaging_metro: 0,
   coste_electricidad_metro: 0,
+  serie_factura: "",
+  serie_rectificativa: "R",
 };
 
 function EmpresaPage() {
@@ -52,16 +56,8 @@ function EmpresaPage() {
   const [saving, setSaving] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["empresa_global"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("empresa_global")
-        .select("*")
-        .eq("id", true)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryKey: CLAVE_EMPRESA,
+    queryFn: leerEmpresa,
   });
 
   useEffect(() => {
@@ -79,6 +75,8 @@ function EmpresaPage() {
         coste_consumibles_metro: Number(data.coste_consumibles_metro ?? 0),
         coste_packaging_metro: Number(data.coste_packaging_metro ?? 0),
         coste_electricidad_metro: Number(data.coste_electricidad_metro ?? 0),
+        serie_factura: data.serie_factura ?? "",
+        serie_rectificativa: data.serie_rectificativa ?? "R",
       });
     }
   }, [data]);
@@ -89,10 +87,10 @@ function EmpresaPage() {
   async function guardar() {
     setSaving(true);
     try {
-      const { error } = await supabase.from("empresa_global").upsert({ id: true, ...f });
-      if (error) throw error;
+      if (!data?.id) throw new Error("No hay ninguna empresa activa que guardar");
+      await guardarEmpresa(data.id, f);
       toast.success("Datos de la empresa guardados");
-      qc.invalidateQueries({ queryKey: ["empresa_global"] });
+      qc.invalidateQueries({ queryKey: CLAVE_EMPRESA });
     } catch (e: any) {
       toast.error(e?.message ?? "Error al guardar");
     } finally {
@@ -190,6 +188,41 @@ function EmpresaPage() {
                 />
               </div>
               <Field label="País" v={f.pais} on={(v) => set("pais", v)} disabled={!isAdmin} />
+
+              <div className="rounded-md border p-4 space-y-4">
+                <div>
+                  <p className="text-sm font-medium">Numeración de facturas</p>
+                  <p className="text-xs text-muted-foreground">
+                    Una sola serie para toda la sociedad: DTF, textil y manuales comparten
+                    numeración. Se reinicia cada año. Con el prefijo ordinario vacío, las facturas
+                    salen como 2026/0001.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Las rectificativas llevan serie propia por obligación legal (RD 1619/2012 art.
+                    6.1.a), y por eso los dos prefijos no pueden ser iguales.
+                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                    Cambiar un prefijo abre una serie nueva que empieza otra vez por 1. No lo toques
+                    con facturas ya emitidas este año.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field
+                    label="Prefijo ordinario"
+                    v={f.serie_factura}
+                    on={(v) => set("serie_factura", v)}
+                    disabled={!isAdmin}
+                    placeholder="(vacío)"
+                  />
+                  <Field
+                    label="Prefijo de rectificativas"
+                    v={f.serie_rectificativa}
+                    on={(v) => set("serie_rectificativa", v)}
+                    disabled={!isAdmin}
+                    placeholder="R"
+                  />
+                </div>
+              </div>
 
               {isAdmin ? (
                 <div className="flex justify-end pt-2">

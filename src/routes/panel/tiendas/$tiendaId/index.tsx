@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tabla } from "@/lib/rpc";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,10 +31,11 @@ function Dashboard() {
           .select("total, metros_total, fecha_pedido, estado")
           .eq("tienda_id", tiendaId),
         supabase.from("facturas").select("total, estado").eq("tienda_id", tiendaId),
-        supabase
-          .from("empresa_global")
+        tabla(supabase, "empresas")
           .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-          .eq("id", true)
+          .eq("activa", true)
+          .order("created_at")
+          .limit(1)
           .maybeSingle(),
       ]);
       return { pedidos: pedidos.data ?? [], facturas: facturas.data ?? [], empresa: empresa.data };

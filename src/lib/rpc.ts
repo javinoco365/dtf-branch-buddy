@@ -26,3 +26,18 @@ export async function llamarRpc<T>(
   if (error) throw new Error(error.message);
   return data;
 }
+
+/**
+ * Acceso a una tabla que `types.ts` todavía no conoce.
+ *
+ * Mismo motivo que `llamarRpc`: el fichero de tipos está generado y se quedó en
+ * el esquema anterior a las migraciones de cimientos, así que no sabe de
+ * `empresas`, `auditoria` ni `series_facturacion`. Hasta que se regenere, el
+ * casting vive aquí y no repartido por las pantallas.
+ *
+ * Cuando se regenere types.ts, esta función y `llamarRpc` sobran: quítalas y
+ * deja que el compilador compruebe las consultas de verdad.
+ */
+export function tabla(cliente: unknown, nombre: string) {
+  return (cliente as { from: (n: string) => any }).from(nombre);
+}

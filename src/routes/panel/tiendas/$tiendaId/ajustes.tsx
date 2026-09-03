@@ -44,8 +44,6 @@ type TiendaForm = {
   logo_url?: string;
   woo_url?: string;
   sync_enabled?: boolean;
-  serie_factura?: string;
-  siguiente_numero_factura?: number;
   iva_default?: number;
   gastos_envio_default?: number;
 };
@@ -94,8 +92,6 @@ function Ajustes() {
         logo_url: form.logo_url || null,
         woo_url: form.woo_url || null,
         sync_enabled: !!form.sync_enabled,
-        serie_factura: form.serie_factura || "F",
-        siguiente_numero_factura: Number(form.siguiente_numero_factura) || 1,
         iva_default: Number(form.iva_default) || 21,
         gastos_envio_default: Number(form.gastos_envio_default) || 0,
       };
@@ -284,17 +280,6 @@ function Ajustes() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <Field
-                label="Serie de factura"
-                v={form.serie_factura}
-                on={(v) => set("serie_factura", v)}
-                placeholder="F"
-              />
-              <FieldNumber
-                label="Siguiente nº de factura"
-                v={form.siguiente_numero_factura}
-                on={(v) => set("siguiente_numero_factura", v)}
-              />
               <FieldNumber
                 label="IVA por defecto (%)"
                 v={form.iva_default}

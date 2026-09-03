@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tabla } from "@/lib/rpc";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,12 +74,13 @@ function DashboardGlobal() {
   const [ref, setRef] = useState(new Date());
 
   const { data: empresa } = useQuery({
-    queryKey: ["empresa_global_costes"],
+    queryKey: ["empresa_costes"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("empresa_global")
+      const { data } = await tabla(supabase, "empresas")
         .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-        .eq("id", true)
+        .eq("activa", true)
+        .order("created_at")
+        .limit(1)
         .maybeSingle();
       return data;
     },
