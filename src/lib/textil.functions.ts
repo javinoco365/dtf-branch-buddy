@@ -132,7 +132,11 @@ export const upsertStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => stockSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { id, ...rest } = data;
+    const { id, cantidad, ...rest } = data;
+
+    // La cantidad ya no se escribe aquí: es la suma del libro de movimientos y
+    // hay un guardián en la base que lo impide. Al editar se ignora; al crear
+    // se anota como existencias iniciales.
     if (id) {
       const { data: row, error } = await context.supabase
         .from("textil_stock")
@@ -143,13 +147,78 @@ export const upsertStockItem = createServerFn({ method: "POST" })
       if (error) throw error;
       return row;
     }
+
     const { data: row, error } = await context.supabase
       .from("textil_stock")
-      .insert(rest)
+      .insert({ ...rest, cantidad: 0 })
       .select()
       .single();
     if (error) throw error;
+
+    const inicial = Number(cantidad) || 0;
+    if (inicial > 0) {
+      const { error: mErr } = await tabla(context.supabase, "textil_stock_movimientos").insert({
+        empresa_id: await empresaActiva(context.supabase),
+        stock_id: row.id,
+        motivo: "inicial",
+        cantidad: inicial,
+        coste_unitario: Number(rest.coste_unitario) || 0,
+        nota: "Existencias al dar de alta la variante",
+      });
+      if (mErr) throw mErr;
+    }
     return row;
+  });
+
+/**
+ * Anota un movimiento de stock: una compra, una merma o un recuento.
+ *
+ * Es la única forma de que cambie una cantidad. La base lo exige.
+ */
+export const registrarMovimientoStock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        stock_id: z.string().uuid(),
+        motivo: z.enum([
+          "compra",
+          "merma",
+          "ajuste_inventario",
+          "devolucion_cliente",
+          "devolucion_proveedor",
+        ]),
+        cantidad: z.number().refine((n) => n !== 0, "La cantidad no puede ser cero"),
+        coste_unitario: z.number().nonnegative().default(0),
+        nota: z.string().optional().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await tabla(context.supabase, "textil_stock_movimientos").insert({
+      empresa_id: await empresaActiva(context.supabase),
+      stock_id: data.stock_id,
+      motivo: data.motivo,
+      cantidad: data.cantidad,
+      coste_unitario: data.coste_unitario,
+      nota: data.nota ?? null,
+    });
+    if (error) throw error;
+    return { ok: true };
+  });
+
+/** El libro de una variante: de dónde viene cada unidad que tiene o tuvo. */
+export const listMovimientosStock = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ stock_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: filas, error } = await tabla(context.supabase, "textil_stock_movimientos")
+      .select("id, motivo, cantidad, coste_unitario, nota, created_at")
+      .eq("stock_id", data.stock_id)
+      .order("id", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return filas ?? [];
   });
 
 export const deleteStockItem = createServerFn({ method: "POST" })
