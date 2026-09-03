@@ -45,19 +45,3 @@ export async function guardarEmpresa(id: string, campos: Record<string, unknown>
   const { error } = await tabla(supabase, "empresas").update(campos).eq("id", id);
   if (error) throw error;
 }
-
-/**
- * La referencia visible de una factura: 2026/0001, R2026/0001.
- *
- * Réplica exacta de public.factura_referencia(). La base es la fuente de
- * verdad —ahí se congela en el documento—; esto es solo para pintar en
- * pantalla sin una ida y vuelta.
- */
-export function referenciaFactura(
-  serie: string | null,
-  ejercicio: number | null,
-  numero: number | null,
-): string {
-  if (ejercicio == null || numero == null) return "—";
-  return `${serie ?? ""}${ejercicio}/${String(numero).padStart(4, "0")}`;
-}

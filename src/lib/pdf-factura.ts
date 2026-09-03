@@ -1,8 +1,11 @@
 import { eur, fechaCorta } from "@/lib/format";
 
+/** Un logo ya descargado y convertido, listo para incrustar. */
+export type LogoPDF = { dataUrl: string; formato: "PNG" | "JPEG" | "WEBP" };
+
 export type FacturaPDFData = {
-  serie: string;
-  numero: number;
+  /** La referencia visible: 2026/0001, R2026/0001. La compone la base. */
+  referencia: string;
   fecha: string;
   fecha_vencimiento?: string | null;
   emisor: {
@@ -29,6 +32,13 @@ export type FacturaPDFData = {
   iva_total: number;
   total: number;
   notas?: string | null;
+  /**
+   * El logo de la tienda o de la marca, congelado en la factura.
+   *
+   * Si falta, la factura sale sin logo y ya está: un logo que no se pudo
+   * descargar no puede impedir emitir ni imprimir un documento fiscal.
+   */
+  logo?: LogoPDF | null;
 };
 
 export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
@@ -38,15 +48,30 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
   const W = 210;
   let y = 18;
 
+  // El logo, encajado en 40 x 18 mm sin deformarlo. Cada tienda tiene el suyo;
+  // la identidad fiscal de abajo es siempre la misma sociedad.
+  if (d.logo) {
+    try {
+      const props = doc.getImageProperties(d.logo.dataUrl);
+      const escala = Math.min(40 / props.width, 18 / props.height);
+      const ancho = props.width * escala;
+      const alto = props.height * escala;
+      doc.addImage(d.logo.dataUrl, d.logo.formato, 15, 12, ancho, alto);
+      y = 12 + alto + 8;
+    } catch {
+      // Un logo ilegible no tumba la factura.
+    }
+  }
+
   doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
   doc.text("FACTURA", 15, y);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Nº ${d.serie}-${String(d.numero).padStart(5, "0")}`, W - 15, y, { align: "right" });
-  doc.text(`Fecha: ${fechaCorta(d.fecha)}`, W - 15, y + 5, { align: "right" });
+  doc.text(`Nº ${d.referencia}`, W - 15, 18, { align: "right" });
+  doc.text(`Fecha: ${fechaCorta(d.fecha)}`, W - 15, 23, { align: "right" });
   if (d.fecha_vencimiento) {
-    doc.text(`Vence: ${fechaCorta(d.fecha_vencimiento)}`, W - 15, y + 10, { align: "right" });
+    doc.text(`Vence: ${fechaCorta(d.fecha_vencimiento)}`, W - 15, 28, { align: "right" });
   }
 
   y += 18;
