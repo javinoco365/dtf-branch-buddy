@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { llamarRpc, tabla } from "./rpc";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
+import { descargarLogo } from "@/lib/logo-descarga";
+import { referenciaFactura } from "@/lib/format";
 
 /**
  * Genera el PDF de una factura, lo sube al bucket privado `facturas`
@@ -16,10 +18,9 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: factura, error: fErr } = await supabaseAdmin
-      .from("facturas")
+    const { data: factura, error: fErr } = await tabla(supabaseAdmin, "facturas")
       .select(
-        "id, tienda_id, serie, numero, fecha, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion",
+        "id, tienda_id, serie, numero, fecha, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
       )
       .eq("id", data.factura_id)
       .maybeSingle();
@@ -71,9 +72,14 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
     const emisorDireccion =
       (factura.emisor_direccion && factura.emisor_direccion.trim()) || empresaDireccion;
 
+    // El logo va congelado en el snapshot del emisor, junto al resto de la
+    // identidad: una factura tiene que imprimirse siempre como se emitió,
+    // aunque la tienda cambie de logo después.
+    const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
+
     const pdfData: FacturaPDFData = {
-      serie: factura.serie ?? "",
-      numero: factura.numero ?? 0,
+      referencia: referenciaFactura(factura.serie, factura.ejercicio, factura.numero),
+      logo: await descargarLogo(logoUrl),
       fecha: factura.fecha ?? new Date().toISOString(),
       fecha_vencimiento: factura.fecha_vencimiento,
       emisor: {

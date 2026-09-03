@@ -76,6 +76,45 @@ function Ajustes() {
   const set = <K extends keyof TiendaForm>(k: K, v: TiendaForm[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
+
+  // Nombre con marca de tiempo, nunca sobrescribiendo: si se reemplazara el
+  // fichero en una ruta fija, cambiar el logo cambiaría RETROACTIVAMENTE el de
+  // las facturas ya emitidas, que son inmutables. Cada logo es un fichero nuevo
+  // y cada factura conserva la URL que congeló.
+  async function subirLogo(archivo: File) {
+    const tipos: Record<string, string> = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/webp": "webp",
+    };
+    const ext = tipos[archivo.type];
+    if (!ext) {
+      toast.error("El logo tiene que ser PNG, JPG o WebP");
+      return;
+    }
+    if (archivo.size > 2 * 1024 * 1024) {
+      toast.error("El logo no puede pasar de 2 MB");
+      return;
+    }
+
+    setSubiendoLogo(true);
+    try {
+      const ruta = `tiendas/${tiendaId}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("logos")
+        .upload(ruta, archivo, { contentType: archivo.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from("logos").getPublicUrl(ruta);
+      set("logo_url", data.publicUrl);
+      toast.success("Logo subido. Guarda los cambios para asociarlo a la tienda.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo subir el logo");
+    } finally {
+      setSubiendoLogo(false);
+    }
+  }
+
   const guardar = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -218,8 +257,11 @@ function Ajustes() {
         <TabsContent value="empresa" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Datos fiscales</CardTitle>
-              <CardDescription>Aparecerán como emisor en las facturas.</CardDescription>
+              <CardTitle className="text-base">Identidad de la tienda</CardTitle>
+              <CardDescription>
+                El emisor de las facturas es siempre la sociedad, con sus datos de Configuración. De
+                aquí la factura solo toma el nombre comercial y el logo.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <Field label="Nombre comercial" v={form.nombre} on={(v) => set("nombre", v)} />
@@ -235,12 +277,6 @@ function Ajustes() {
                 on={(v) => set("email_fiscal", v)}
               />
               <Field label="Teléfono" v={form.telefono} on={(v) => set("telefono", v)} />
-              <Field
-                label="URL del logo"
-                v={form.logo_url}
-                on={(v) => set("logo_url", v)}
-                placeholder="https://…/logo.png"
-              />
               <Field label="Dirección" v={form.direccion} on={(v) => set("direccion", v)} />
               <Field
                 label="Código postal"
@@ -250,19 +286,43 @@ function Ajustes() {
               <Field label="Ciudad" v={form.ciudad} on={(v) => set("ciudad", v)} />
               <Field label="Provincia" v={form.provincia} on={(v) => set("provincia", v)} />
               <Field label="País" v={form.pais} on={(v) => set("pais", v)} />
-              {form.logo_url && (
-                <div className="md:col-span-2">
-                  <Label className="text-xs">Vista previa del logo</Label>
+              <div className="md:col-span-2 space-y-2">
+                <Label className="text-xs">Logo de la tienda</Label>
+                <p className="text-xs text-muted-foreground">
+                  Se imprime en las facturas de esta tienda. PNG, JPG o WebP, hasta 2 MB. Cada logo
+                  que subes se guarda como un fichero nuevo: las facturas ya emitidas siguen
+                  mostrando el que tenían el día que se emitieron.
+                </p>
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={subiendoLogo}
+                  onChange={(e) => {
+                    const archivo = e.target.files?.[0];
+                    e.target.value = "";
+                    if (archivo) void subirLogo(archivo);
+                  }}
+                />
+                {subiendoLogo && <p className="text-xs text-muted-foreground">Subiendo…</p>}
+                {form.logo_url && (
                   <div className="border rounded-lg p-3 bg-muted/30 flex items-center justify-center h-20">
                     <img
                       src={form.logo_url}
-                      alt="Logo"
+                      alt="Logo de la tienda"
                       className="max-h-full"
                       onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                     />
                   </div>
-                </div>
-              )}
+                )}
+                {form.logo_url && (
+                  <Button variant="ghost" size="sm" onClick={() => set("logo_url", "")}>
+                    Quitar el logo
+                  </Button>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Acuérdate de pulsar «Guardar cambios» para que quede asociado a la tienda.
+                </p>
+              </div>
             </CardContent>
           </Card>
           <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
