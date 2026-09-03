@@ -11,7 +11,11 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch as SwitchCorreo } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { tabla } from "@/lib/rpc";
+import { VARIABLES_PEDIDO_ENVIADO, erratasEnPlantilla, vistaPrevia } from "@/lib/plantillas-correo";
 import { useAuth } from "@/lib/auth-context";
 import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
@@ -24,6 +28,7 @@ import {
   Truck,
   ShoppingBag,
   Construction,
+  Mail,
 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
@@ -165,7 +170,7 @@ function Ajustes() {
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto">
           <TabsTrigger value="woo" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             WooCommerce
@@ -177,6 +182,10 @@ function Ajustes() {
           <TabsTrigger value="facturacion" className="gap-2">
             <Receipt className="h-4 w-4" />
             Facturación
+          </TabsTrigger>
+          <TabsTrigger value="correos" className="gap-2">
+            <Mail className="h-4 w-4" />
+            <span className="hidden sm:inline">Correos</span>
           </TabsTrigger>
           <TabsTrigger value="seguimiento" className="gap-2">
             <Truck className="h-4 w-4" />
@@ -360,6 +369,8 @@ function Ajustes() {
         </TabsContent>
 
         {/* === SEGUIMIENTO === */}
+        <PlantillasCorreo tiendaId={tiendaId} isAdmin={isAdmin} />
+
         <TabsContent value="seguimiento" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
@@ -544,5 +555,253 @@ function FieldNumber({
         onChange={(e) => on(Number(e.target.value))}
       />
     </div>
+  );
+}
+
+/**
+ * Las plantillas de correo de una tienda.
+ *
+ * No deja guardar una plantilla con una variable que no existe: si se cuela,
+ * el cliente recibe un correo con `{{clietne_nombre}}` escrito tal cual, y de
+ * eso te enteras cuando ya lo ha leído.
+ */
+function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: boolean }) {
+  const qc = useQueryClient();
+  const [asunto, setAsunto] = useState("");
+  const [cuerpo, setCuerpo] = useState("");
+  const [activa, setActiva] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  const [remitenteNombre, setRemitenteNombre] = useState("");
+  const [remitenteEmail, setRemitenteEmail] = useState("");
+
+  const { data: tiendaCorreo } = useQuery({
+    queryKey: ["tienda-remitente", tiendaId],
+    queryFn: async () =>
+      (
+        await tabla(supabase, "tiendas")
+          .select("correo_remitente_nombre, correo_remitente_email")
+          .eq("id", tiendaId)
+          .maybeSingle()
+      ).data,
+  });
+
+  useEffect(() => {
+    if (tiendaCorreo) {
+      setRemitenteNombre(tiendaCorreo.correo_remitente_nombre ?? "");
+      setRemitenteEmail(tiendaCorreo.correo_remitente_email ?? "");
+    }
+  }, [tiendaCorreo]);
+
+  async function guardarRemitente() {
+    setGuardando(true);
+    try {
+      const { error } = await tabla(supabase, "tiendas")
+        .update({
+          correo_remitente_nombre: remitenteNombre.trim() || null,
+          correo_remitente_email: remitenteEmail.trim() || null,
+        })
+        .eq("id", tiendaId);
+      if (error) throw error;
+      toast.success("Remitente guardado");
+      qc.invalidateQueries({ queryKey: ["tienda-remitente", tiendaId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const { data: plantilla, isLoading } = useQuery({
+    queryKey: ["plantilla-correo", tiendaId, "pedido_enviado"],
+    queryFn: async () =>
+      (
+        await tabla(supabase, "tienda_plantillas_correo")
+          .select("id, asunto, cuerpo, activa")
+          .eq("tienda_id", tiendaId)
+          .eq("clave", "pedido_enviado")
+          .maybeSingle()
+      ).data,
+  });
+
+  useEffect(() => {
+    if (plantilla) {
+      setAsunto(plantilla.asunto ?? "");
+      setCuerpo(plantilla.cuerpo ?? "");
+      setActiva(plantilla.activa ?? true);
+    }
+  }, [plantilla]);
+
+  const erratas = erratasEnPlantilla(asunto, cuerpo);
+
+  async function guardarPlantilla() {
+    if (erratas.length > 0) {
+      toast.error(`Hay variables que no existen: ${erratas.map((e) => `{{${e}}}`).join(", ")}`);
+      return;
+    }
+    setGuardando(true);
+    try {
+      const { error } = await tabla(supabase, "tienda_plantillas_correo")
+        .update({ asunto, cuerpo, activa })
+        .eq("id", plantilla?.id);
+      if (error) throw error;
+      toast.success("Plantilla guardada");
+      qc.invalidateQueries({ queryKey: ["plantilla-correo", tiendaId, "pedido_enviado"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <TabsContent value="correos" className="space-y-4 mt-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Remitente de esta tienda</CardTitle>
+          <CardDescription>
+            Desde qué dirección salen los avisos de esta tienda. Al revés que la factura, que
+            siempre va a nombre de la sociedad: el correo lo recibe alguien que compró en esta
+            tienda y espera ver esta marca.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Nombre visible</Label>
+              <Input
+                value={remitenteNombre}
+                onChange={(e) => setRemitenteNombre(e.target.value)}
+                placeholder="DTF Culture"
+                disabled={!isAdmin}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Dirección</Label>
+              <Input
+                type="email"
+                value={remitenteEmail}
+                onChange={(e) => setRemitenteEmail(e.target.value)}
+                placeholder="pedidos@dtfculture.com"
+                disabled={!isAdmin}
+              />
+            </div>
+          </div>
+          <Alert>
+            <AlertDescription>
+              El proveedor solo deja enviar desde dominios verificados. Si esta dirección es de un
+              dominio que no has verificado, el correo no saldrá.
+            </AlertDescription>
+          </Alert>
+          {isAdmin && (
+            <Button onClick={guardarRemitente} disabled={guardando}>
+              Guardar remitente
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Aviso de pedido enviado</CardTitle>
+          <CardDescription>
+            El correo que recibe el cliente cuando marcas su pedido como enviado. El texto es de
+            esta tienda; cada una puede tener el suyo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : !plantilla ? (
+            <Alert>
+              <AlertDescription>
+                Esta tienda todavía no tiene plantilla. Se crea sola al dar de alta la tienda; si
+                ves esto, avisa.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Enviar este aviso</p>
+                  <p className="text-xs text-muted-foreground">
+                    Desactivado, el texto se conserva pero no se manda nada.
+                  </p>
+                </div>
+                <SwitchCorreo checked={activa} onCheckedChange={setActiva} disabled={!isAdmin} />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Asunto</Label>
+                <Input
+                  value={asunto}
+                  onChange={(e) => setAsunto(e.target.value)}
+                  disabled={!isAdmin}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Cuerpo</Label>
+                <Textarea
+                  value={cuerpo}
+                  onChange={(e) => setCuerpo(e.target.value)}
+                  rows={12}
+                  disabled={!isAdmin}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Texto plano. Los saltos de línea se respetan.
+                </p>
+              </div>
+
+              {erratas.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Estas variables no existen y saldrían escritas tal cual en el correo:{" "}
+                    {erratas.map((e) => `{{${e}}}`).join(", ")}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-xs">Variables disponibles</Label>
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {VARIABLES_PEDIDO_ENVIADO.map((v) => (
+                    <div key={v.clave} className="text-xs">
+                      <code className="bg-muted px-1 py-0.5 rounded">{`{{${v.clave}}}`}</code>{" "}
+                      <span className="text-muted-foreground">{v.descripcion}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Vista previa</Label>
+                <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                  <p className="text-sm font-medium">{vistaPrevia(asunto)}</p>
+                  <p className="text-sm whitespace-pre-wrap">{vistaPrevia(cuerpo)}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Con datos de muestra. El correo real lleva los del pedido.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <Button onClick={guardarPlantilla} disabled={guardando || erratas.length > 0}>
+                  {guardando ? "Guardando…" : "Guardar plantilla"}
+                </Button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Alert>
+        <AlertDescription>
+          El aviso sale solo al marcar un pedido como enviado, una vez por pedido. Si el envío falla
+          queda registrado con el motivo, y el estado del pedido se guarda igualmente.
+        </AlertDescription>
+      </Alert>
+    </TabsContent>
   );
 }

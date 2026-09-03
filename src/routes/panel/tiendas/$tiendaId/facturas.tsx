@@ -18,6 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -259,7 +266,39 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
+  const [clienteId, setClienteId] = useState<string | null>(null);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [fecha, setFecha] = useState(hoy);
+  const [vencimiento, setVencimiento] = useState("");
   const [notas, setNotas] = useState("");
+
+  // Los clientes ya dados de alta en esta tienda, para no reescribir el NIF y
+  // la dirección en cada factura.
+  const { data: clientes } = useQuery({
+    queryKey: ["clientes-tienda", tiendaId],
+    queryFn: async () =>
+      (
+        await supabase
+          .from("clientes")
+          .select("id, nombre, nif, direccion, codigo_postal, ciudad, provincia")
+          .eq("tienda_id", tiendaId)
+          .order("nombre")
+      ).data ?? [],
+  });
+
+  function elegirCliente(id: string) {
+    const c = clientes?.find((x) => x.id === id);
+    if (!c) return;
+    setClienteId(c.id);
+    setCliente({
+      nombre: c.nombre ?? "",
+      nif: c.nif ?? "",
+      direccion:
+        [c.direccion, [c.codigo_postal, c.ciudad].filter(Boolean).join(" "), c.provincia]
+          .filter(Boolean)
+          .join(", ") || "",
+    });
+  }
   const [items, setItems] = useState<Linea[]>([
     { descripcion: "", cantidad: 1, unidad: "ud", precio_unitario: 0, iva_rate: 21 },
   ]);
@@ -301,11 +340,17 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
             precio_unitario: it.precio_unitario,
             iva_rate: it.iva_rate,
           })),
+          fecha,
+          fecha_vencimiento: vencimiento || null,
+          cliente_id: clienteId,
           notas: notas.trim() || null,
         },
       });
 
-      const referencia = `${factura.serie}-${String(factura.numero).padStart(5, "0")}`;
+      // La referencia la compone la base junto con el número. Antes se armaba
+      // aquí como `serie-numero`, que con la serie ordinaria vacía anunciaba
+      // "Factura -00001 emitida".
+      const referencia = factura.referencia;
 
       try {
         const res = await generarPDFFn({ data: { factura_id: factura.id } });
@@ -331,11 +376,35 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
+          {clientes && clientes.length > 0 && (
+            <div className="col-span-2 space-y-1.5">
+              <Label>Cliente guardado</Label>
+              <Select onValueChange={elegirCliente}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir uno para rellenar los datos…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                      {c.nif ? ` · ${c.nif}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Opcional. Puedes escribir los datos a mano y dejarlo sin elegir.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Cliente</Label>
             <Input
               value={cliente.nombre}
-              onChange={(e) => setCliente({ ...cliente, nombre: e.target.value })}
+              onChange={(e) => {
+                setCliente({ ...cliente, nombre: e.target.value });
+                setClienteId(null);
+              }}
               placeholder="Razón social / nombre"
             />
           </div>
@@ -352,6 +421,22 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
               value={cliente.direccion}
               onChange={(e) => setCliente({ ...cliente, direccion: e.target.value })}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Fecha de emisión</Label>
+            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              No puede ser anterior a la última factura emitida.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Vencimiento</Label>
+            <Input
+              type="date"
+              value={vencimiento}
+              onChange={(e) => setVencimiento(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Opcional.</p>
           </div>
         </div>
 

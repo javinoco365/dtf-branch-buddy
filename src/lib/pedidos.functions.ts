@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
+import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 
 const ESTADO_VALUES = [
@@ -225,6 +226,17 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
       .eq("id", data.id);
     if (error) throw error;
 
+    // El aviso al cliente sale aquí, al marcar el pedido como enviado.
+    //
+    // Después de guardar el estado y sin poder tumbarlo: avisarPedidoEnviado()
+    // no lanza nunca. Que el servidor de correo esté caído no puede hacer que
+    // el pedido se quede sin marcar. El estado es el dato; el aviso es una
+    // consecuencia, y queda registrado tanto si sale como si falla.
+    let aviso: ResultadoAviso | null = null;
+    if (data.estado === "enviado") {
+      aviso = await avisarPedidoEnviado(supabaseAdmin, data.id);
+    }
+
     let woo_synced = false;
     if (pedido.woo_order_id && pedido.origen === "woocommerce") {
       const creds = await getWooCreds(supabaseAdmin, pedido.tienda_id);
@@ -241,7 +253,7 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
         }
       }
     }
-    return { ok: true, woo_synced };
+    return { ok: true, woo_synced, aviso };
   });
 
 export const updatePedido = createServerFn({ method: "POST" })

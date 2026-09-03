@@ -171,6 +171,8 @@ type ResultadoEmision = {
   serie: string;
   numero: number;
   ejercicio: number;
+  /** 2026/0001. La compone la base, que es quien asigna el número. */
+  referencia: string;
   tipo: "ordinaria" | "rectificativa";
   base_imponible: number;
   iva_total: number;
@@ -186,6 +188,8 @@ export const emitirFactura = createServerFn({ method: "POST" })
         tienda_id: z.string().uuid(),
         receptor: receptorSchema,
         lineas: z.array(lineaSchema).min(1, "Una factura sin líneas no se emite"),
+        // La base rechaza una fecha anterior a la última de la serie: la
+        // numeración es correlativa y las fechas tienen que acompañarla.
         fecha: z.string().optional(),
         fecha_vencimiento: z.string().nullable().optional(),
         cliente_id: z.string().uuid().nullable().optional(),
