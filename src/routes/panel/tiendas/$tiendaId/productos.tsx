@@ -31,9 +31,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Ruler, Package } from "lucide-react";
+import { Plus, Search, Pencil, Ruler, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/productos")({
   component: Productos,
@@ -77,6 +78,7 @@ function Productos() {
   const [search, setSearch] = useState("");
   const [filtro, setFiltro] = useState<"todos" | "dtf" | "otros" | "inactivos">("todos");
   const [editing, setEditing] = useState<Partial<Producto> | null>(null);
+  const [borrando, setBorrando] = useState<Producto | null>(null);
 
   const { data: productos = [] } = useQuery({
     queryKey: ["productos", tiendaId],
@@ -141,6 +143,22 @@ function Productos() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["productos", tiendaId] }),
+  });
+
+  // Las líneas de pedido y factura llevan producto_id ON DELETE SET NULL, y su
+  // descripción y su precio están copiados en la línea: borrar el producto del
+  // catálogo no cambia ni un importe de lo ya vendido.
+  const borrar = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("productos").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Producto borrado");
+      qc.invalidateQueries({ queryKey: ["productos", tiendaId] });
+      setBorrando(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   return (
@@ -228,8 +246,21 @@ function Productos() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(p)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Editar"
+                        onClick={() => setEditing(p)}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Borrar"
+                        onClick={() => setBorrando(p)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -246,6 +277,19 @@ function Productos() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`el producto ${borrando?.nombre ?? ""}`}
+        consecuencias={[
+          "Los pedidos y facturas que lo llevan no cambian: la descripción y el precio " +
+            "están copiados en cada línea.",
+          "Si solo quieres dejar de venderlo, desactívalo con el interruptor.",
+        ]}
+        cargando={borrar.isPending}
+        onConfirmar={() => borrando && borrar.mutate(borrando.id)}
+      />
 
       {editing && (
         <ProductoForm

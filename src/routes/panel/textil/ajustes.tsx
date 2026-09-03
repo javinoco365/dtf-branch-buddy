@@ -32,6 +32,7 @@ import {
   getEmpresaGlobal,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
   head: () => ({ meta: [{ title: "Ajustes textil · CRM DTF" }] }),
@@ -49,6 +50,7 @@ function AjustesPage() {
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [borrando, setBorrando] = useState<any>(null);
 
   const save = useMutation({
     mutationFn: (d: any) => upsertFn({ data: d }),
@@ -167,7 +169,7 @@ function AjustesPage() {
                     size="icon"
                     variant="ghost"
                     onClick={() => {
-                      if (confirm(`¿Eliminar ${m.nombre}?`)) del.mutate(m.id);
+                      setBorrando(m);
                     }}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -184,6 +186,20 @@ function AjustesPage() {
           </Card>
         ))}
       </div>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`la marca ${borrando?.nombre ?? ""}`}
+        consecuencias={[
+          "Los pedidos y facturas de esta marca se quedan sin marca, pero no se borran.",
+        ]}
+        cargando={del.isPending}
+        onConfirmar={() => {
+          del.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
 
       <MarcaDialog
         open={open}

@@ -33,8 +33,11 @@ import {
   FileText,
   ShoppingCart,
   Receipt,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/clientes")({
   component: Clientes,
@@ -78,6 +81,7 @@ function Clientes() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Partial<Cliente> | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [borrando, setBorrando] = useState<Cliente | null>(null);
 
   const { data: clientes = [] } = useQuery({
     queryKey: ["clientes", tiendaId],
@@ -137,6 +141,21 @@ function Clientes() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Los pedidos y las facturas del cliente llevan cliente_id ON DELETE SET
+  // NULL: borrar la ficha no destruye el histórico, solo lo deja sin ficha.
+  const borrar = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clientes").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Cliente borrado");
+      qc.invalidateQueries({ queryKey: ["clientes", tiendaId] });
+      setBorrando(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -192,8 +211,21 @@ function Clientes() {
                     )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(c)}>
-                      Editar
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Editar"
+                      onClick={() => setEditing(c)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Borrar"
+                      onClick={() => setBorrando(c)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -209,6 +241,20 @@ function Clientes() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`el cliente ${borrando?.nombre ?? ""}`}
+        consecuencias={[
+          "Sus pedidos y facturas no se borran: se quedan sin ficha de cliente asociada.",
+          borrando?.woo_customer_id
+            ? "Viene de WooCommerce: la próxima sincronización volverá a crearlo."
+            : "",
+        ].filter(Boolean)}
+        cargando={borrar.isPending}
+        onConfirmar={() => borrando && borrar.mutate(borrando.id)}
+      />
 
       {editing && (
         <ClienteForm

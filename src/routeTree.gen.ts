@@ -24,6 +24,7 @@ import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
 import { Route as PanelTextilIndexRouteImport } from './routes/panel/textil/index'
 import { Route as PanelTextilAjustesRouteImport } from './routes/panel/textil/ajustes'
 import { Route as PanelTextilClientesRouteImport } from './routes/panel/textil/clientes'
+import { Route as PanelTextilComprasRouteImport } from './routes/panel/textil/compras'
 import { Route as PanelTextilFacturasRouteImport } from './routes/panel/textil/facturas'
 import { Route as PanelTextilPedidosRouteImport } from './routes/panel/textil/pedidos'
 import { Route as PanelTextilPresupuestosRouteImport } from './routes/panel/textil/presupuestos'
@@ -114,6 +115,11 @@ const PanelTextilAjustesRoute = PanelTextilAjustesRouteImport.update({
 const PanelTextilClientesRoute = PanelTextilClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
+  getParentRoute: () => PanelTextilRouteRoute,
+} as any)
+const PanelTextilComprasRoute = PanelTextilComprasRouteImport.update({
+  id: '/compras',
+  path: '/compras',
   getParentRoute: () => PanelTextilRouteRoute,
 } as any)
 const PanelTextilFacturasRoute = PanelTextilFacturasRouteImport.update({
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/textil/ajustes': typeof PanelTextilAjustesRoute
   '/panel/textil/clientes': typeof PanelTextilClientesRoute
+  '/panel/textil/compras': typeof PanelTextilComprasRoute
   '/panel/textil/facturas': typeof PanelTextilFacturasRoute
   '/panel/textil/pedidos': typeof PanelTextilPedidosRoute
   '/panel/textil/presupuestos': typeof PanelTextilPresupuestosRoute
@@ -247,6 +254,7 @@ export interface FileRoutesByTo {
   '/panel': typeof PanelIndexRoute
   '/panel/textil/ajustes': typeof PanelTextilAjustesRoute
   '/panel/textil/clientes': typeof PanelTextilClientesRoute
+  '/panel/textil/compras': typeof PanelTextilComprasRoute
   '/panel/textil/facturas': typeof PanelTextilFacturasRoute
   '/panel/textil/pedidos': typeof PanelTextilPedidosRoute
   '/panel/textil/presupuestos': typeof PanelTextilPresupuestosRoute
@@ -280,6 +288,7 @@ export interface FileRoutesById {
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
   '/panel/textil/ajustes': typeof PanelTextilAjustesRoute
   '/panel/textil/clientes': typeof PanelTextilClientesRoute
+  '/panel/textil/compras': typeof PanelTextilComprasRoute
   '/panel/textil/facturas': typeof PanelTextilFacturasRoute
   '/panel/textil/pedidos': typeof PanelTextilPedidosRoute
   '/panel/textil/presupuestos': typeof PanelTextilPresupuestosRoute
@@ -314,6 +323,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/$tiendaId'
     | '/panel/textil/ajustes'
     | '/panel/textil/clientes'
+    | '/panel/textil/compras'
     | '/panel/textil/facturas'
     | '/panel/textil/pedidos'
     | '/panel/textil/presupuestos'
@@ -343,6 +353,7 @@ export interface FileRouteTypes {
     | '/panel'
     | '/panel/textil/ajustes'
     | '/panel/textil/clientes'
+    | '/panel/textil/compras'
     | '/panel/textil/facturas'
     | '/panel/textil/pedidos'
     | '/panel/textil/presupuestos'
@@ -375,6 +386,7 @@ export interface FileRouteTypes {
     | '/panel/tiendas/$tiendaId'
     | '/panel/textil/ajustes'
     | '/panel/textil/clientes'
+    | '/panel/textil/compras'
     | '/panel/textil/facturas'
     | '/panel/textil/pedidos'
     | '/panel/textil/presupuestos'
@@ -505,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelTextilClientesRouteImport
       parentRoute: typeof PanelTextilRouteRoute
     }
+    '/panel/textil/compras': {
+      id: '/panel/textil/compras'
+      path: '/compras'
+      fullPath: '/panel/textil/compras'
+      preLoaderRoute: typeof PanelTextilComprasRouteImport
+      parentRoute: typeof PanelTextilRouteRoute
+    }
     '/panel/textil/facturas': {
       id: '/panel/textil/facturas'
       path: '/facturas'
@@ -616,6 +635,7 @@ declare module '@tanstack/react-router' {
 interface PanelTextilRouteRouteChildren {
   PanelTextilAjustesRoute: typeof PanelTextilAjustesRoute
   PanelTextilClientesRoute: typeof PanelTextilClientesRoute
+  PanelTextilComprasRoute: typeof PanelTextilComprasRoute
   PanelTextilFacturasRoute: typeof PanelTextilFacturasRoute
   PanelTextilPedidosRoute: typeof PanelTextilPedidosRoute
   PanelTextilPresupuestosRoute: typeof PanelTextilPresupuestosRoute
@@ -626,6 +646,7 @@ interface PanelTextilRouteRouteChildren {
 const PanelTextilRouteRouteChildren: PanelTextilRouteRouteChildren = {
   PanelTextilAjustesRoute: PanelTextilAjustesRoute,
   PanelTextilClientesRoute: PanelTextilClientesRoute,
+  PanelTextilComprasRoute: PanelTextilComprasRoute,
   PanelTextilFacturasRoute: PanelTextilFacturasRoute,
   PanelTextilPedidosRoute: PanelTextilPedidosRoute,
   PanelTextilPresupuestosRoute: PanelTextilPresupuestosRoute,

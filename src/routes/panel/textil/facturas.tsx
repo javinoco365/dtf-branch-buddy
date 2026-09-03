@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Trash2 } from "lucide-react";
 import { listTextilFacturas, deleteTextilFactura } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · CRM DTF" }] }),
@@ -25,6 +27,7 @@ export const Route = createFileRoute("/panel/textil/facturas")({
 function FacturasPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listTextilFacturas);
+  const [borrando, setBorrando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
   const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
   const del = useMutation({
@@ -89,13 +92,7 @@ function FacturasPage() {
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (confirm("¿Eliminar?")) del.mutate(f.id);
-                      }}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -105,6 +102,23 @@ function FacturasPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`la factura ${borrando?.numero ?? ""}`}
+        cargando={del.isPending}
+        impedimento={
+          borrando && borrando.estado !== "borrador"
+            ? "Está emitida. Una factura emitida no se borra ni se edita: para " +
+              "corregirla hay que emitir una rectificativa."
+            : null
+        }
+        onConfirmar={() => {
+          del.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
     </div>
   );
 }

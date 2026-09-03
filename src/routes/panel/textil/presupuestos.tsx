@@ -45,6 +45,17 @@ import {
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · CRM DTF" }] }),
@@ -85,6 +96,8 @@ function PresupuestosPage() {
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
 
   const [open, setOpen] = useState(false);
+  const [borrando, setBorrando] = useState<any>(null);
+  const [facturando, setFacturando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
 
   const invalidate = () => {
@@ -207,9 +220,7 @@ function PresupuestosPage() {
                         variant="ghost"
                         size="icon"
                         title="Convertir en factura"
-                        onClick={() => {
-                          if (confirm("¿Convertir este presupuesto en factura?")) conv.mutate(p.id);
-                        }}
+                        onClick={() => setFacturando(p)}
                       >
                         <FileText className="h-4 w-4 text-primary" />
                       </Button>
@@ -224,13 +235,7 @@ function PresupuestosPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (confirm("¿Eliminar?")) del.mutate(p.id);
-                      }}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -240,6 +245,40 @@ function PresupuestosPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`el presupuesto ${borrando?.numero ?? ""}`}
+        cargando={del.isPending}
+        onConfirmar={() => {
+          del.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
+
+      <AlertDialog open={!!facturando} onOpenChange={(o) => !o && setFacturando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Facturar el presupuesto {facturando?.numero}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se emitirá una factura con número correlativo. Una vez emitida no se edita ni se
+              borra: solo se corrige con una rectificativa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                conv.mutate(facturando.id);
+                setFacturando(null);
+              }}
+            >
+              Emitir factura
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {open && (
         <PresupuestoDialog

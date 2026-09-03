@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,9 +19,27 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Plus, Store, ShoppingBag, Receipt, KeyRound, Building2 } from "lucide-react";
+import {
+  Plus,
+  Store,
+  ShoppingBag,
+  Receipt,
+  KeyRound,
+  Building2,
+  Pencil,
+  Trash2,
+  Power,
+  PowerOff,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { guardarCredencialesWoo } from "@/lib/admin.functions";
+import {
+  actualizarTienda,
+  activarTienda,
+  eliminarTienda,
+  resumenBorradoTienda,
+} from "@/lib/tiendas.functions";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
@@ -85,6 +103,9 @@ function TiendasIndex() {
     }
   }, [nueva, isAdmin, navigate]);
 
+  const [editando, setEditando] = useState<any>(null);
+  const [borrando, setBorrando] = useState<any>(null);
+
   const { data: tiendas = [] } = useQuery({
     queryKey: ["tiendas"],
     queryFn: async () => {
@@ -92,6 +113,41 @@ function TiendasIndex() {
       if (error) throw error;
       return data;
     },
+  });
+
+  function refrescar() {
+    qc.invalidateQueries({ queryKey: ["tiendas"] });
+    qc.invalidateQueries({ queryKey: ["tiendas-sidebar"] });
+  }
+
+  const activarFn = useServerFn(activarTienda);
+  const activar = useMutation({
+    mutationFn: (v: { id: string; activa: boolean }) => activarFn({ data: v }),
+    onSuccess: (_r, v) => {
+      toast.success(v.activa ? "Tienda activada" : "Tienda desactivada");
+      refrescar();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo cambiar el estado"),
+  });
+
+  const borrarFn = useServerFn(eliminarTienda);
+  const borrar = useMutation({
+    mutationFn: (id: string) => borrarFn({ data: { id } }),
+    onSuccess: (r: any) => {
+      toast.success(`Tienda «${r?.nombre ?? ""}» borrada`);
+      setBorrando(null);
+      refrescar();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo borrar la tienda"),
+  });
+
+  // El resumen se pide al abrir el aviso: sin él no se puede decir qué se
+  // lleva por delante, y un «¿seguro?» sin números no avisa de nada.
+  const resumenFn = useServerFn(resumenBorradoTienda);
+  const { data: resumen, isLoading: cargandoResumen } = useQuery({
+    queryKey: ["tienda-resumen-borrado", borrando?.id],
+    enabled: !!borrando,
+    queryFn: () => resumenFn({ data: { id: borrando.id } }),
   });
 
   return (
@@ -121,24 +177,71 @@ function TiendasIndex() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {tiendas.map((t) => (
-          <Link key={t.id} to="/panel/tiendas/$tiendaId" params={{ tiendaId: t.id }}>
-            <Card className="hover:border-primary transition-colors cursor-pointer">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Store className="h-5 w-5" style={{ color: t.color ?? undefined }} />
-                  {t.nombre}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <div>{t.woo_url || "Sin URL configurada"}</div>
-                  <div>CIF: {t.cif || "—"}</div>
-                  <div>Sync: {t.sync_enabled ? "✅ Activa" : "⏸ Desactivada"}</div>
+        {tiendas.map((t: any) => (
+          <Card
+            key={t.id}
+            className={t.activa === false ? "opacity-60 border-dashed" : "transition-colors"}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Link
+                  to="/panel/tiendas/$tiendaId"
+                  params={{ tiendaId: t.id }}
+                  className="flex items-center gap-2 hover:underline min-w-0"
+                >
+                  <Store className="h-5 w-5 shrink-0" style={{ color: t.color ?? undefined }} />
+                  <span className="truncate">{t.nombre}</span>
+                </Link>
+                {t.activa === false && (
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Desactivada
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <div className="truncate">{t.woo_url || "Sin URL configurada"}</div>
+                <div>CIF: {t.cif || "—"}</div>
+                <div>Sync: {t.sync_enabled ? "✅ Activa" : "⏸ Desactivada"}</div>
+              </div>
+              {isAdmin && (
+                <div className="flex flex-wrap gap-2 pt-1 border-t">
+                  <Button variant="ghost" size="sm" className="mt-2" onClick={() => setEditando(t)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                    Editar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => activar.mutate({ id: t.id, activa: t.activa === false })}
+                  >
+                    {t.activa === false ? (
+                      <>
+                        <Power className="h-3.5 w-3.5 mr-1.5" />
+                        Activar
+                      </>
+                    ) : (
+                      <>
+                        <PowerOff className="h-3.5 w-3.5 mr-1.5" />
+                        Desactivar
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-destructive hover:text-destructive"
+                    onClick={() => setBorrando(t)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    Borrar
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </Link>
+              )}
+            </CardContent>
+          </Card>
         ))}
         {tiendas.length === 0 && (
           <Card className="md:col-span-2 lg:col-span-3">
@@ -148,7 +251,131 @@ function TiendasIndex() {
           </Card>
         )}
       </div>
+
+      <Dialog open={!!editando} onOpenChange={(o) => !o && setEditando(null)}>
+        {editando && (
+          <EditarTiendaDialog
+            tienda={editando}
+            onDone={() => {
+              setEditando(null);
+              refrescar();
+            }}
+          />
+        )}
+      </Dialog>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`la tienda «${borrando?.nombre ?? ""}»`}
+        escribirParaConfirmar={borrando?.nombre}
+        cargando={borrar.isPending || cargandoResumen}
+        impedimento={
+          resumen && Number(resumen.facturas_emitidas) > 0
+            ? `Tiene ${resumen.facturas_emitidas} factura(s) emitida(s). Una factura ` +
+              "emitida no se borra, y sin su tienda no sabría de qué web salió. " +
+              "Desactívala: desaparece del menú y las facturas se conservan."
+            : null
+        }
+        consecuencias={consecuenciasDeBorrar(resumen)}
+        onConfirmar={() => borrando && borrar.mutate(borrando.id)}
+      />
     </div>
+  );
+}
+
+/** Lo que se va a llevar por delante, en frases y solo lo que existe. */
+function consecuenciasDeBorrar(r: any): string[] {
+  if (!r) return [];
+  const lineas: string[] = [];
+  const añadir = (n: number, uno: string, varios: string) => {
+    if (Number(n) > 0) lineas.push(`${n} ${Number(n) === 1 ? uno : varios}`);
+  };
+  añadir(r.pedidos, "pedido", "pedidos");
+  añadir(r.clientes, "cliente", "clientes");
+  añadir(r.productos, "producto", "productos");
+  añadir(r.proyectos, "proyecto", "proyectos");
+  añadir(r.facturas_borrador, "factura en borrador", "facturas en borrador");
+  if (lineas.length === 0) return ["No cuelga nada de esta tienda."];
+  return lineas.map((l) => `Se borrarán ${l}.`);
+}
+
+function EditarTiendaDialog({ tienda, onDone }: { tienda: any; onDone: () => void }) {
+  const [f, setF] = useState({
+    nombre: tienda.nombre ?? "",
+    slug: tienda.slug ?? "",
+    color: tienda.color ?? "#3b82f6",
+    woo_url: tienda.woo_url ?? "",
+    sync_enabled: !!tienda.sync_enabled,
+  });
+  const guardarFn = useServerFn(actualizarTienda);
+  const guardar = useMutation({
+    mutationFn: () => guardarFn({ data: { id: tienda.id, ...f, slug: f.slug || null } }),
+    onSuccess: () => {
+      toast.success("Tienda actualizada");
+      onDone();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar"),
+  });
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Editar {tienda.nombre}</DialogTitle>
+        <DialogDescription>
+          Los datos fiscales de la factura son los de la sociedad, en Configuración. De la tienda
+          solo salen el nombre comercial y el logo.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label>Nombre</Label>
+          <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Identificador</Label>
+            <Input
+              value={f.slug}
+              placeholder={slugify(f.nombre)}
+              onChange={(e) => setF({ ...f, slug: slugify(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Color</Label>
+            <Input
+              type="color"
+              value={f.color}
+              className="h-10 p-1"
+              onChange={(e) => setF({ ...f, color: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>URL de WooCommerce</Label>
+          <Input
+            value={f.woo_url}
+            placeholder="https://…"
+            onChange={(e) => setF({ ...f, woo_url: e.target.value })}
+          />
+        </div>
+        <div className="flex items-center justify-between rounded-md border p-3">
+          <div>
+            <Label className="cursor-pointer">Sincronización activa</Label>
+            <p className="text-xs text-muted-foreground">Necesita URL y credenciales guardadas.</p>
+          </div>
+          <Switch
+            checked={f.sync_enabled}
+            onCheckedChange={(v) => setF({ ...f, sync_enabled: v })}
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button onClick={() => guardar.mutate()} disabled={guardar.isPending || !f.nombre.trim()}>
+          {guardar.isPending ? "Guardando…" : "Guardar"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 

@@ -94,6 +94,16 @@ $PSQL -f "$RAIZ/supabase/pruebas/70_stock_reservas.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
 
 echo
+echo "== Borrado de tiendas =="
+$PSQL -f "$RAIZ/supabase/pruebas/80_borrado_tiendas.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
+echo "== Compras textil =="
+$PSQL -f "$RAIZ/supabase/pruebas/90_compras_textil.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
 echo "== Credenciales de WooCommerce en Vault =="
 $PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'

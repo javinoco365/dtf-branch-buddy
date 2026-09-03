@@ -43,6 +43,7 @@ import {
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · CRM DTF" }] }),
@@ -75,6 +76,7 @@ function PedidosPage() {
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
 
   const [open, setOpen] = useState(false);
+  const [borrando, setBorrando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
 
   const inv = () => qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
@@ -181,13 +183,7 @@ function PedidosPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (confirm("¿Eliminar?")) del.mutate(p.id);
-                      }}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -197,6 +193,22 @@ function PedidosPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={`el pedido ${borrando?.numero ?? ""}`}
+        consecuencias={
+          borrando?.estado === "enviado" || borrando?.estado === "entregado"
+            ? ["El género que salió con este pedido vuelve al stock."]
+            : ["El stock que tenía reservado queda libre."]
+        }
+        cargando={del.isPending}
+        onConfirmar={() => {
+          del.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
 
       {open && (
         <PedidoDialog
