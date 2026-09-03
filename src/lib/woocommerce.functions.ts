@@ -180,6 +180,11 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
                 tienda_id: data.tienda_id,
                 woo_order_id: o.id,
                 numero: String(o.number || o.id),
+                // Sin esto se quedaba en 'manual', que es el valor por defecto
+                // de la columna. No era cosmético: updatePedidoEstado y el aviso
+                // de tracking comprueban origen === 'woocommerce' antes de
+                // devolver el cambio a la web, así que nunca lo devolvían.
+                origen: "woocommerce",
                 estado: (estadoMap[o.status] ?? "pendiente") as any,
                 cliente_id,
                 cliente_nombre: facturacion?.nombre || null,
