@@ -73,9 +73,11 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
           {tiendaId ? "Servidor propio de esta tienda" : "Servidor de correo"}
         </CardTitle>
         <CardDescription>
-          Para Resend: host <span className="font-mono">smtp.resend.com</span>, puerto{" "}
-          <span className="font-mono">465</span>, usuario <span className="font-mono">resend</span>{" "}
-          y la clave de API como contraseña.
+          Los datos del buzón de tu hosting: host{" "}
+          <span className="font-mono">mail.tudominio.com</span>, puerto{" "}
+          <span className="font-mono">465</span> con SSL o <span className="font-mono">587</span>{" "}
+          con STARTTLS, y como usuario la <strong>dirección completa</strong>. Sirve igual un
+          proveedor transaccional, con sus propios datos.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -88,7 +90,7 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
                 <Label>Host</Label>
                 <Input
                   value={host}
-                  placeholder="smtp.resend.com"
+                  placeholder="mail.tudominio.com"
                   onChange={(e) => setHost(e.target.value)}
                 />
               </div>
@@ -106,7 +108,7 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
               <Label>Usuario</Label>
               <Input
                 value={usuario}
-                placeholder="resend"
+                placeholder="pedidos@tudominio.com"
                 autoComplete="off"
                 onChange={(e) => setUsuario(e.target.value)}
               />

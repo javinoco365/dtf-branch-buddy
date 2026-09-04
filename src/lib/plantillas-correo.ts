@@ -57,3 +57,14 @@ export function erratasEnPlantilla(...textos: string[]): string[] {
 export function vistaPrevia(texto: string): string {
   return renderizarPlantilla(texto, EJEMPLO_PEDIDO_ENVIADO).texto;
 }
+
+/**
+ * La maqueta HTML con los valores de muestra, para verla en la pantalla.
+ *
+ * Escapa las variables igual que al enviar. Si aquí no se escapara, la vista
+ * previa enseñaría algo distinto de lo que va a recibir el cliente, que es la
+ * peor clase de vista previa.
+ */
+export function vistaPreviaHtml(html: string): string {
+  return renderizarPlantilla(html, EJEMPLO_PEDIDO_ENVIADO, { escaparHtml: true }).texto;
+}
