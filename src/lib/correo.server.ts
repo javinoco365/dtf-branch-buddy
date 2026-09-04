@@ -26,8 +26,12 @@ export type Credenciales = {
 };
 
 /**
- * Las credenciales del proveedor, del entorno. Nunca de una tabla ni del
- * cliente.
+ * Las credenciales del entorno, si las hay.
+ *
+ * Ya no son la fuente principal: el servidor de correo se configura desde la
+ * aplicación y la contraseña vive en Vault. Esto se queda como respaldo para
+ * no romper un despliegue que ya tuviera las variables puestas, y porque
+ * permite mandar correo antes de haber configurado nada.
  *
  * Para Resend: host smtp.resend.com, puerto 465, usuario "resend" y la clave
  * de API como contraseña.
@@ -56,10 +60,15 @@ export type Mensaje = {
  */
 export async function enviarCorreo(
   m: Mensaje,
+  credenciales?: Credenciales | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const creds = credencialesSmtp();
+  // Las de la aplicación mandan; el entorno es el respaldo.
+  const creds = credenciales ?? credencialesSmtp();
   if (!creds) {
-    return { ok: false, error: "Faltan SMTP_HOST, SMTP_USUARIO o SMTP_CLAVE en el entorno" };
+    return {
+      ok: false,
+      error: "No hay servidor de correo configurado. Ponlo en Configuración › Servidor de correo.",
+    };
   }
 
   try {

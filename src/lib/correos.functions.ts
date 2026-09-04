@@ -107,17 +107,22 @@ export async function avisarPedidoEnviado(
     }).texto;
 
     const { enviarCorreo, textoAHtml } = await import("./correo.server");
+    const { leerCredencialesSmtp } = await import("./smtp-credenciales");
+    const credenciales = await leerCredencialesSmtp(supabaseAdmin, pedido.tienda_id);
     const remitente = tienda.correo_remitente_nombre
       ? `${tienda.correo_remitente_nombre} <${tienda.correo_remitente_email}>`
       : tienda.correo_remitente_email;
 
-    const resultado = await enviarCorreo({
-      de: remitente,
-      para: pedido.cliente_email,
-      asunto,
-      texto,
-      html: textoAHtml(htmlSeguro),
-    });
+    const resultado = await enviarCorreo(
+      {
+        de: remitente,
+        para: pedido.cliente_email,
+        asunto,
+        texto,
+        html: textoAHtml(htmlSeguro),
+      },
+      credenciales,
+    );
 
     await tabla(supabaseAdmin, "pedido_correos_enviados").insert({
       empresa_id: tienda.empresa_id,
