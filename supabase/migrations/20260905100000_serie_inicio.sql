@@ -245,12 +245,6 @@ GRANT EXECUTE ON FUNCTION public.serie_fijar_inicio(
   UUID, UUID, INTEGER, public.factura_tipo, INTEGER) TO service_role;
 
 -- ---------------------------------------------------------------------------
--- 5. Dejar dicho en el esquema que la columna vieja no vale
--- ---------------------------------------------------------------------------
--- La columna no se borra: la usó la semilla de 20260902130000 y borrarla
--- perdería el rastro de por dónde iba cada tienda antes de unificar la serie.
--- Pero que quede escrito en el propio esquema, no solo en una migración.
--- ---------------------------------------------------------------------------
 -- 4. El detector de huecos cuenta desde donde empieza la serie
 -- ---------------------------------------------------------------------------
 -- Mismo cuerpo que en 20260903100000, con generate_series arrancando en
@@ -287,6 +281,12 @@ COMMENT ON FUNCTION public.facturas_huecos_en_serie() IS
 REVOKE EXECUTE ON FUNCTION public.facturas_huecos_en_serie() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.facturas_huecos_en_serie() TO authenticated;
 
+-- ---------------------------------------------------------------------------
+-- 5. Dejar dicho en el esquema que la columna vieja no vale
+-- ---------------------------------------------------------------------------
+-- La columna no se borra: la usó la semilla de 20260902130000 y borrarla
+-- perdería el rastro de por dónde iba cada tienda antes de unificar la serie.
+-- Pero que quede escrito en el propio esquema, no solo en una migración.
 COMMENT ON COLUMN public.tiendas.siguiente_numero_factura IS
   'OBSOLETA. No la lee nadie. El contador vivo es series_facturacion, y por '
   'dónde empieza se fija con serie_fijar_inicio().';
