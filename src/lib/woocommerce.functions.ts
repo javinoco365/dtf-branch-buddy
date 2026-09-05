@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { tabla } from "./rpc";
+import { numeroPedidoWoo } from "@/dominio/pedido-woo";
 
 /**
  * Sincronizar pedidos, clientes y productos desde WooCommerce.
@@ -179,7 +180,11 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
               {
                 tienda_id: data.tienda_id,
                 woo_order_id: o.id,
-                numero: String(o.number || o.id),
+                // El número que ve el cliente, no el id interno de WordPress.
+                // En una tienda sin plugins son el mismo; con un plugin de
+                // numeración, no, y entonces el número del correo del cliente
+                // no coincidía con el de aquí.
+                numero: numeroPedidoWoo(o) || String(o.id),
                 // Sin esto se quedaba en 'manual', que es el valor por defecto
                 // de la columna. No era cosmético: updatePedidoEstado y el aviso
                 // de tracking comprueban origen === 'woocommerce' antes de
