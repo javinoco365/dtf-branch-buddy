@@ -58,7 +58,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
-  head: () => ({ meta: [{ title: "Presupuestos textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
   component: PresupuestosPage,
 });
 

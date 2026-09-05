@@ -52,7 +52,7 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
-  head: () => ({ meta: [{ title: "Facturación Consolidada · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Facturación Consolidada · DTF Culture" }] }),
   component: FacturacionGlobal,
 });
 

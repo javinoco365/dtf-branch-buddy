@@ -31,7 +31,6 @@ import {
   ShoppingCart,
   FileText,
   Settings,
-  Printer,
   Building2,
   Receipt,
   Wallet,
@@ -48,6 +47,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
 import { useAuth } from "@/lib/auth-context";
+import { Marca } from "@/components/Marca";
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -87,20 +87,8 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        <div className="px-3 py-4 flex items-center gap-2 border-b border-sidebar-border">
-          <div className="h-9 w-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
-            <Printer className="h-4 w-4" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="font-bold text-sm truncate text-sidebar-foreground tracking-wide">
-                CRM DTF
-              </div>
-              <div className="text-[11px] text-sidebar-foreground/60 truncate">
-                Gestión multi-tienda
-              </div>
-            </div>
-          )}
+        <div className="px-3 py-4 flex items-center gap-2 border-b border-sidebar-border text-sidebar-foreground">
+          <Marca soloIcono={collapsed} />
         </div>
 
         <SidebarGroup>

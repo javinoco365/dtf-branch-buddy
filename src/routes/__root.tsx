@@ -79,44 +79,45 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
+      // Aquí seguía la plantilla de Lovable: título «Lovable App», autor
+      // «Lovable», @Lovable en twitter y una og:image que era una captura del
+      // editor alojada en su CDN. Al compartir un enlace del CRM, eso es lo
+      // que salía en la vista previa.
+      { title: "DTF Culture · CRM" },
       {
         name: "description",
         content:
-          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+          "CRM de DTF Culture: pedidos, stock, facturación y contabilidad de las tiendas de RONOCA DESARROLLOS S.L.",
       },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
+      { name: "author", content: "RONOCA DESARROLLOS S.L." },
+      // El panel es privado: que no lo indexe nadie.
+      { name: "robots", content: "noindex, nofollow" },
+      { name: "theme-color", content: "#f97316" },
+      { property: "og:site_name", content: "DTF Culture" },
+      { property: "og:title", content: "DTF Culture · CRM" },
       {
         property: "og:description",
-        content:
-          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+        content: "Gestión de pedidos, stock y facturación de DTF Culture.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
+      { name: "twitter:title", content: "DTF Culture · CRM" },
       {
         name: "twitter:description",
-        content:
-          "CRM for DTF printing businesses managing orders, accounting, and invoicing across multiple WooCommerce stores.",
+        content: "Gestión de pedidos, stock y facturación de DTF Culture.",
       },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e8ffe92e-8c3b-49d2-82d9-9919eeb21340/id-preview-6bd88bbf--ebb87d64-fb9a-47c1-90b6-b45bcdf7fb66.lovable.app-1781534558270.png",
-      },
+      // Sin og:image mientras no haya una de verdad en public/marca/: una
+      // imagen de previsualización rota se ve peor que ninguna.
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
+      // Si el fichero todavía no está, el navegador enseña su icono de siempre:
+      // referenciarlo no rompe nada y evita tener que tocar código después.
+      { rel: "icon", type: "image/png", href: "/marca/favicon.png" },
+      { rel: "apple-touch-icon", href: "/marca/favicon.png" },
     ],
   }),
   shellComponent: RootShell,

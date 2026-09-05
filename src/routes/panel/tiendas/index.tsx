@@ -42,7 +42,7 @@ import {
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/tiendas/")({
-  head: () => ({ meta: [{ title: "Tiendas · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
   validateSearch: (s: Record<string, unknown>): { nueva?: 1 } =>
     s.nueva === 1 || s.nueva === "1" ? { nueva: 1 } : {},
   component: TiendasIndex,

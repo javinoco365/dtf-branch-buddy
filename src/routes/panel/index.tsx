@@ -40,7 +40,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/panel/")({
-  head: () => ({ meta: [{ title: "Dashboard Global · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Dashboard Global · DTF Culture" }] }),
   component: DashboardGlobal,
 });
 

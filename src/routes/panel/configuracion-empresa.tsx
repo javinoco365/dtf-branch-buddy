@@ -11,7 +11,7 @@ import { CLAVE_EMPRESA, leerEmpresa, guardarEmpresa } from "@/lib/empresa";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion-empresa")({
-  head: () => ({ meta: [{ title: "Datos de la empresa · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Datos de la empresa · DTF Culture" }] }),
   component: EmpresaPage,
 });
 

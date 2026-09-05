@@ -46,7 +46,7 @@ import { listStock } from "@/lib/textil.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/compras")({
-  head: () => ({ meta: [{ title: "Compras · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Compras · DTF Culture" }] }),
   component: ComprasPage,
 });
 

@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/clientes")({
-  head: () => ({ meta: [{ title: "Clientes textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Clientes textil · DTF Culture" }] }),
   component: ClientesPage,
 });
 

@@ -5,7 +5,7 @@ import { Users, Building2, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion")({
-  head: () => ({ meta: [{ title: "Configuración general · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Configuración general · DTF Culture" }] }),
   component: ConfiguracionPage,
 });
 

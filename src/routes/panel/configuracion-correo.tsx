@@ -4,7 +4,7 @@ import { FormularioSmtp } from "@/components/FormularioSmtp";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion-correo")({
-  head: () => ({ meta: [{ title: "Servidor de correo · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Servidor de correo · DTF Culture" }] }),
   component: CorreoPage,
 });
 
