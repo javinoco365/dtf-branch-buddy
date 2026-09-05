@@ -35,6 +35,7 @@ import {
   Receipt,
   Wallet,
   Coins,
+  PiggyBank,
   ChevronRight,
   Plus,
   List,
@@ -145,6 +146,14 @@ export function AppSidebar() {
                   <Link to="/panel/caja">
                     <Coins />
                     <span>Caja</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/inversion"}>
+                  <Link to="/panel/inversion">
+                    <PiggyBank />
+                    <span>Inversión</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
