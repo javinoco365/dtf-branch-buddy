@@ -7,11 +7,16 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth-context";
+import { esErrorDeVersionVieja } from "@/dominio/despliegue";
+import {
+  intentarRecargaPorVersionVieja,
+  registrarAvisosDeVersionVieja,
+} from "@/lib/recarga-despliegue";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -37,20 +42,49 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
   const router = useRouter();
+
+  /*
+   * Un error de «versión vieja» no es un fallo de la aplicación: es que se ha
+   * desplegado mientras esta pestaña estaba abierta y el código que pide ya no
+   * existe en el servidor. Se recarga sola en vez de enseñar una pantalla de
+   * error que no dice nada útil y que se arregla con F5.
+   *
+   * Se empieza pintando «Actualizando…» y la recarga se lanza en el efecto,
+   * no aquí: recargar durante el renderizado es un efecto secundario en mitad
+   * de React. Si la recarga no llega a salir —porque ya se intentó y el trozo
+   * falta de verdad en el servidor— se pasa a la pantalla de error normal, que
+   * es lo correcto: ahí sí hay algo roto.
+   */
+  const [recargando, setRecargando] = useState(() => esErrorDeVersionVieja(error));
+
   useEffect(() => {
+    if (!recargando) return;
+    if (!intentarRecargaPorVersionVieja(error)) setRecargando(false);
+  }, [recargando, error]);
+
+  useEffect(() => {
+    if (recargando) return;
+    console.error(error);
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
+  }, [recargando, error]);
+
+  if (recargando) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <p className="text-sm text-muted-foreground">Hay una versión nueva. Actualizando…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          Esta página no ha cargado
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Algo ha fallado por nuestra parte. Puedes reintentar o volver al principio.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -60,13 +94,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            Reintentar
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            Ir al inicio
           </a>
         </div>
       </div>
@@ -160,6 +194,10 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // Los fallos al traer un trozo de código no siempre llegan al límite de
+  // error de React: al navegar entre secciones salen como promesa rechazada.
+  useEffect(() => registrarAvisosDeVersionVieja(), []);
 
   return (
     <QueryClientProvider client={queryClient}>
