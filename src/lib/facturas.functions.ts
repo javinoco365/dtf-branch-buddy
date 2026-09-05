@@ -263,3 +263,78 @@ export const cambiarEstadoCobro = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+/* ==========================================================================
+ * Por dónde empieza la numeración
+ *
+ * Solo hace falta una vez: el día que la numeración venga de otro programa y
+ * haya que continuarla en vez de empezar por el 1. En cuanto hay una factura
+ * emitida en la serie, la base cierra la puerta y estas funciones dejan de
+ * poder mover nada.
+ * ========================================================================== */
+
+export type EstadoSerie = {
+  tipo: "ordinaria" | "rectificativa";
+  serie: string;
+  ejercicio: number;
+  numero_inicial: number;
+  ultimo_numero: number;
+  proximo_numero: number;
+  emitidas: number;
+  se_puede_fijar: boolean;
+};
+
+/** En qué punto va cada serie del ejercicio. Solo lectura. */
+export const leerEstadoSeries = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        empresa_id: z.string().uuid(),
+        ejercicio: z.number().int().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const series = await llamarRpc<EstadoSerie[]>(supabaseAdmin, "serie_estado", {
+      _empresa_id: data.empresa_id,
+      _ejercicio: data.ejercicio ?? new Date().getFullYear(),
+    });
+    return { series: series ?? [] };
+  });
+
+/**
+ * Fija el número de la próxima factura de una serie.
+ *
+ * La comprobación de que la serie está vacía la hace la base dentro del mismo
+ * bloqueo que usa la emisión, no esta función: comprobarlo aquí dejaría una
+ * rendija entre la comprobación y la escritura.
+ */
+export const fijarInicioSerie = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        empresa_id: z.string().uuid(),
+        ejercicio: z.number().int(),
+        tipo: z.enum(["ordinaria", "rectificativa"]),
+        siguiente: z.number().int().min(1, "La próxima factura no puede ser la número 0"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return llamarRpc<{ serie: string; ejercicio: number; proximo_numero: number }>(
+      supabaseAdmin,
+      "serie_fijar_inicio",
+      {
+        _usuario_id: context.userId,
+        _empresa_id: data.empresa_id,
+        _ejercicio: data.ejercicio,
+        _tipo: data.tipo,
+        _siguiente: data.siguiente,
+      },
+    );
+  });

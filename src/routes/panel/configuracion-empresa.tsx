@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Building2, Save, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { CLAVE_EMPRESA, leerEmpresa, guardarEmpresa } from "@/lib/empresa";
+import { useServerFn } from "@tanstack/react-start";
+import { useMutation } from "@tanstack/react-query";
+import { leerEstadoSeries, fijarInicioSerie, type EstadoSerie } from "@/lib/facturas.functions";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion-empresa")({
@@ -222,6 +225,8 @@ function EmpresaPage() {
                     placeholder="R"
                   />
                 </div>
+
+                {data?.id && <PorDondeVaLaNumeracion empresaId={data.id} isAdmin={isAdmin} />}
               </div>
 
               {isAdmin ? (
@@ -351,6 +356,110 @@ function Field({
         placeholder={placeholder}
         disabled={disabled}
       />
+    </div>
+  );
+}
+
+/**
+ * Por dónde va la numeración, y por dónde empieza.
+ *
+ * Fijar el número de la próxima factura hace falta una sola vez: el día que la
+ * numeración venga de otro programa y haya que continuarla en vez de empezar
+ * por el 1. En cuanto hay una factura emitida, la serie se cierra sola y esto
+ * pasa a ser solo informativo.
+ *
+ * Quien decide si se puede o no es la base, dentro del mismo bloqueo que usa la
+ * emisión. Aquí solo se pinta lo que ella responde: comprobarlo en el navegador
+ * dejaría una rendija entre la comprobación y la escritura.
+ */
+function PorDondeVaLaNumeracion({ empresaId, isAdmin }: { empresaId: string; isAdmin: boolean }) {
+  const ejercicio = new Date().getFullYear();
+  const leer = useServerFn(leerEstadoSeries);
+  const fijar = useServerFn(fijarInicioSerie);
+  const qc = useQueryClient();
+  const [editando, setEditando] = useState<EstadoSerie["tipo"] | null>(null);
+  const [valor, setValor] = useState("");
+
+  const clave = ["series", empresaId, ejercicio] as const;
+  const { data, isLoading } = useQuery({
+    queryKey: clave,
+    queryFn: () => leer({ data: { empresa_id: empresaId, ejercicio } }),
+  });
+
+  const mut = useMutation({
+    mutationFn: async (tipo: EstadoSerie["tipo"]) => {
+      const n = Number(valor);
+      if (!Number.isInteger(n) || n < 1)
+        throw new Error("Escribe un número entero de 1 en adelante");
+      return fijar({ data: { empresa_id: empresaId, ejercicio, tipo, siguiente: n } });
+    },
+    onSuccess: (r) => {
+      toast.success(`La próxima factura será la ${r.proximo_numero}`);
+      setEditando(null);
+      setValor("");
+      qc.invalidateQueries({ queryKey: clave });
+    },
+    onError: (e: Error) => toast.error(e.message || "No se ha podido fijar"),
+  });
+
+  if (isLoading || !data) return null;
+
+  return (
+    <div className="border-t pt-3 space-y-2">
+      <p className="text-xs font-medium">Por dónde va la numeración de {ejercicio}</p>
+      {data.series.map((s) => (
+        <div key={s.tipo} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="w-28 shrink-0 capitalize text-muted-foreground">{s.tipo}</span>
+          <span className="font-medium tabular-nums">
+            {s.emitidas === 0
+              ? `sin facturas · la próxima será la ${s.proximo_numero}`
+              : `${s.emitidas} emitida${s.emitidas === 1 ? "" : "s"} · la próxima será la ${s.proximo_numero}`}
+          </span>
+
+          {editando === s.tipo ? (
+            <span className="flex items-center gap-2">
+              <Input
+                className="h-7 w-24"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder={String(s.proximo_numero)}
+                inputMode="numeric"
+              />
+              <Button
+                size="sm"
+                className="h-7"
+                onClick={() => mut.mutate(s.tipo)}
+                disabled={mut.isPending}
+              >
+                {mut.isPending ? "Fijando…" : "Fijar"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditando(null)}>
+                Cancelar
+              </Button>
+            </span>
+          ) : (
+            isAdmin &&
+            s.se_puede_fijar && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                onClick={() => {
+                  setEditando(s.tipo);
+                  setValor(String(s.proximo_numero));
+                }}
+              >
+                Cambiar por dónde empieza
+              </Button>
+            )
+          )}
+        </div>
+      ))}
+      <p className="text-xs text-muted-foreground">
+        Solo se puede elegir por dónde empieza una serie mientras no tenga ninguna factura emitida.
+        Después no: subir el contador dejaría un hueco en la numeración y bajarlo repetiría un
+        número, y ninguna de las dos cosas se arregla luego.
+      </p>
     </div>
   );
 }
