@@ -101,22 +101,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Gestión de pedidos, stock y facturación de DTF Culture.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "DTF Culture · CRM" },
       {
         name: "twitter:description",
         content: "Gestión de pedidos, stock y facturación de DTF Culture.",
       },
-      // Sin og:image mientras no haya una de verdad en public/marca/: una
-      // imagen de previsualización rota se ve peor que ninguna.
+      // La vista previa al pegar un enlace en WhatsApp, Slack o un correo. El
+      // logotipo sobre el navy de la marca, en 1200×630, que es lo que esperan
+      // todos. Antes aquí había una captura del editor de Lovable alojada en su
+      // CDN, que era lo que salía al compartir el panel.
+      { property: "og:image", content: "/marca/og.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { name: "twitter:image", content: "/marca/og.png" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      // Si el fichero todavía no está, el navegador enseña su icono de siempre:
-      // referenciarlo no rompe nada y evita tener que tocar código después.
       { rel: "icon", type: "image/png", href: "/marca/favicon.png" },
       { rel: "apple-touch-icon", href: "/marca/favicon.png" },
     ],

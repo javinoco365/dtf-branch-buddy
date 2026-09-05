@@ -318,3 +318,69 @@ export const sincronizarWooDevoluciones = createServerFn({ method: "POST" })
 
     return { ok: true, devoluciones: importadas };
   });
+
+/**
+ * De dónde sale el número de pedido en ESTA tienda.
+ *
+ * Existe porque adivinar dónde guarda el número un plugin de WooCommerce
+ * cuesta una ronda entera cada vez: hay decenas de plugins de numeración y
+ * cada uno usa su clave. Esto trae lo que devuelve la API de verdad, para
+ * mirarlo en vez de suponerlo.
+ *
+ * ## Qué devuelve, y qué no
+ *
+ * De cada pedido: el `id`, el `number`, y las claves de `meta_data`. El VALOR
+ * de un meta solo se devuelve si su clave parece de numeración; del resto se
+ * devuelve únicamente el nombre de la clave.
+ *
+ * No es pudor: en `meta_data` hay NIF, teléfonos y direcciones, y volcarlo
+ * entero a una pantalla —y de ahí a una conversación— sería sacar datos
+ * personales de clientes sin ninguna necesidad. Para encontrar dónde vive el
+ * número basta con ver la lista de claves.
+ */
+export const diagnosticoNumeroWoo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("Esta tienda no tiene URL de WooCommerce");
+
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Esta tienda no tiene credenciales de WooCommerce guardadas");
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const r = await fetch(`${base}/wp-json/wc/v3/orders?per_page=3&orderby=date&order=desc`, {
+      headers: { Authorization: autorizacionWoo(creds) },
+    });
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}: ${await r.text()}`);
+    const pedidos = (await r.json()) as Record<string, unknown>[];
+
+    // Claves que pueden contener un número de pedido o de factura.
+    const pareceNumero = /num|order|invoice|factur|serie|seq|folio/i;
+
+    return {
+      pedidos: pedidos.map((o) => {
+        const metas = Array.isArray(o.meta_data) ? (o.meta_data as any[]) : [];
+        return {
+          id: String(o.id ?? ""),
+          number: String(o.number ?? ""),
+          // Lo que el CRM guardaría hoy con estos datos.
+          numero_que_guardaria: numeroPedidoWoo(o as never) || String(o.id ?? ""),
+          metas: metas.map((m) => {
+            const clave = String(m?.key ?? "");
+            const v = m?.value;
+            const legible = typeof v === "string" || typeof v === "number" ? String(v) : null;
+            const mostrar = pareceNumero.test(clave) && legible !== null;
+            return { clave, valor: mostrar ? legible.slice(0, 80) : null };
+          }),
+        };
+      }),
+    };
+  });

@@ -25,7 +25,7 @@ import { useAuth } from "@/lib/auth-context";
 import { estadoSmtp, usarSmtpGeneral } from "@/lib/smtp.functions";
 import { FormularioSmtp } from "@/components/FormularioSmtp";
 import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
-import { sincronizarWoo } from "@/lib/woocommerce.functions";
+import { sincronizarWoo, diagnosticoNumeroWoo } from "@/lib/woocommerce.functions";
 import {
   RefreshCw,
   KeyRound,
@@ -230,6 +230,8 @@ function Ajustes() {
               </div>
             </CardContent>
           </Card>
+
+          <DiagnosticoNumero tiendaId={tiendaId} />
 
           <CredencialesCard
             tieneCreds={!!creds?.tiene}
@@ -976,3 +978,72 @@ const PLANTILLA_HTML_EJEMPLO = `<style>
     <p><a class="boton" href="{{seguimiento_url}}">Seguir el envio</a></p>
   </td></tr>
 </table>`;
+
+/**
+ * De dónde sale el número de pedido en esta tienda.
+ *
+ * Con un plugin de numeración, el número que ve el cliente no está donde uno
+ * espera, y cada plugin lo guarda en una clave distinta. Esto trae lo que la
+ * API devuelve de verdad para los tres últimos pedidos, en vez de suponerlo.
+ *
+ * De `meta_data` solo se enseña el VALOR de las claves que parecen de
+ * numeración; del resto, únicamente el nombre. Ahí dentro hay NIF, teléfonos y
+ * direcciones de clientes, y para encontrar dónde vive el número basta con ver
+ * la lista de claves.
+ */
+function DiagnosticoNumero({ tiendaId }: { tiendaId: string }) {
+  const diagnosticar = useServerFn(diagnosticoNumeroWoo);
+  const mut = useMutation({
+    mutationFn: () => diagnosticar({ data: { tienda_id: tiendaId } }),
+    onError: (e: Error) => toast.error(e.message || "No se ha podido consultar"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">De dónde sale el número de pedido</CardTitle>
+        <CardDescription>
+          Si el número que aparece en el CRM no es el que ve el cliente, aquí se ve qué devuelve
+          WooCommerce de verdad para los tres últimos pedidos.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Button variant="outline" onClick={() => mut.mutate()} disabled={mut.isPending}>
+          {mut.isPending ? "Consultando…" : "Consultar"}
+        </Button>
+
+        {mut.data?.pedidos.map((p) => (
+          <div key={p.id} className="rounded-md border p-3 text-sm space-y-1">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                <span className="text-muted-foreground">id:</span> {p.id}
+              </span>
+              <span>
+                <span className="text-muted-foreground">number:</span> {p.number}
+              </span>
+              <span className="font-medium">
+                <span className="text-muted-foreground font-normal">el CRM guardaría:</span>{" "}
+                {p.numero_que_guardaria}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              claves de meta_data ({p.metas.length}):{" "}
+              {p.metas.length === 0
+                ? "ninguna"
+                : p.metas
+                    .map((m) => (m.valor === null ? m.clave : `${m.clave} = ${m.valor}`))
+                    .join(" · ")}
+            </div>
+          </div>
+        ))}
+
+        {mut.data && (
+          <p className="text-xs text-muted-foreground">
+            Si el número que esperas no aparece en ninguna de esas claves, el plugin no lo expone
+            por la API y hay que mirar su configuración.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

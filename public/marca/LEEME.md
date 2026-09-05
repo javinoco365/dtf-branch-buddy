@@ -1,17 +1,28 @@
-# La marca
+# Los ficheros de la marca
 
-Deja aquí los ficheros y la aplicación los coge sola. No hay que tocar código.
+Ya están puestos. Salen del logotipo que mandó Javier el 5 de septiembre de 2026.
 
-| Fichero | Para qué | Formato |
+| Fichero | Dónde sale | Qué es |
 | --- | --- | --- |
-| `logo.svg` | El logotipo del menú y de la pantalla de acceso | SVG, o PNG cuadrado con fondo transparente renombrado a `.svg` no vale: si es PNG, dilo y se cambia la referencia |
-| `favicon.png` | El icono de la pestaña del navegador | PNG cuadrado, 32×32 o 180×180 |
-| `og.png` | La imagen que sale al compartir un enlace | PNG 1200×630 |
+| `logo.png` | Menú lateral y pantalla de acceso | 512×512, fondo transparente |
+| `favicon.png` | Pestaña del navegador y icono en el móvil | 180×180, fondo transparente |
+| `og.png` | Vista previa al pegar un enlace en WhatsApp, Slack o un correo | 1200×630, logotipo sobre el navy de marca |
 
-Mientras `logo.svg` no exista, el menú pinta un monograma con las iniciales.
-No sale una imagen rota: el componente solo cambia al logotipo si la imagen
-carga de verdad.
+## Cómo se prepararon
 
-`og.png` todavía no está referenciado en `__root.tsx`: una imagen de
-previsualización rota se ve peor que ninguna. Cuando esté el fichero, se añade
-la etiqueta.
+Del original, en tres pasos:
+
+1. **El fondo blanco se quitó propagando la transparencia desde el borde**, no
+   sustituyendo todo el blanco de la imagen. Las letras del logotipo también son
+   blancas: un reemplazo global las habría dejado transparentes y el logotipo
+   habría salido hueco.
+2. **Se recortó el margen** hasta la caja de lo que queda opaco, para que el
+   logotipo llene su hueco y no se vea pequeño rodeado de aire.
+3. Se escaló a cada tamaño con un poco de margen, y para `og.png` se compuso
+   sobre el navy `#2A2260`.
+
+## Si hay que cambiarlos
+
+Se sustituyen los tres ficheros y ya está: no hay que tocar código. El componente
+`src/components/Marca.tsx` pinta un monograma con las iniciales si `logo.png` no
+carga, así que un fichero que falte no deja un hueco ni una imagen rota.

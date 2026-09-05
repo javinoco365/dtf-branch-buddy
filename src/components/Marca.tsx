@@ -3,11 +3,14 @@ import { useState } from "react";
 /**
  * La marca de la casa: logotipo y nombre.
  *
- * El logotipo se sirve desde `public/marca/logo.svg`. Mientras ese fichero no
- * exista se pinta un monograma con las iniciales, no una imagen rota: el
- * componente arranca con el monograma y solo cambia al logotipo si la imagen
- * llega a cargar. Así se puede dejar el logotipo en su sitio cuando se tenga,
- * sin tocar código, y hasta entonces la pantalla no enseña un hueco.
+ * El logotipo se sirve desde `public/marca/logo.png`, con fondo transparente.
+ * Mientras ese fichero no exista se pinta un monograma con las iniciales, no
+ * una imagen rota: el componente arranca con el monograma y solo cambia al
+ * logotipo si la imagen llega a cargar de verdad.
+ *
+ * El recuadro navy de detrás solo se pinta con el monograma. El logotipo ya
+ * trae su propio fondo navy y su filete cyan, así que ponerlo encima de otro
+ * recuadro navy le comería el filete por los bordes.
  */
 export const MARCA_NOMBRE = "DTF Culture";
 export const MARCA_DESCRIPCION = "Gestión multi-tienda";
@@ -20,16 +23,17 @@ export function Marca({
   soloIcono?: boolean;
 }) {
   const [conLogo, setConLogo] = useState(false);
-  const caja = tamano === "lg" ? "h-12 w-12 rounded-xl" : "h-9 w-9 rounded-lg";
+  const caja = tamano === "lg" ? "h-12 w-12" : "h-9 w-9";
   const letras = tamano === "lg" ? "text-sm" : "text-[11px]";
+  const fondo = conLogo
+    ? ""
+    : `bg-primary text-primary-foreground shadow-sm ${tamano === "lg" ? "rounded-xl" : "rounded-lg"}`;
 
   return (
     <div className="flex items-center gap-2 min-w-0">
-      <div
-        className={`${caja} bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-sm overflow-hidden`}
-      >
+      <div className={`${caja} ${fondo} flex items-center justify-center shrink-0 overflow-hidden`}>
         <img
-          src="/marca/logo.svg"
+          src="/marca/logo.png"
           alt=""
           className={conLogo ? "h-full w-full object-contain" : "hidden"}
           onLoad={() => setConLogo(true)}
