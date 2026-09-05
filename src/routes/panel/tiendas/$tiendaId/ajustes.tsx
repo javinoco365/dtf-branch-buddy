@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,8 +15,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch as SwitchCorreo } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { tabla } from "@/lib/rpc";
-import { VARIABLES_PEDIDO_ENVIADO, erratasEnPlantilla, vistaPrevia } from "@/lib/plantillas-correo";
+import {
+  VARIABLES_PEDIDO_ENVIADO,
+  erratasEnPlantilla,
+  vistaPrevia,
+  vistaPreviaHtml,
+} from "@/lib/plantillas-correo";
 import { useAuth } from "@/lib/auth-context";
+import { estadoSmtp, usarSmtpGeneral } from "@/lib/smtp.functions";
+import { FormularioSmtp } from "@/components/FormularioSmtp";
 import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 import {
@@ -569,6 +576,8 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
   const qc = useQueryClient();
   const [asunto, setAsunto] = useState("");
   const [cuerpo, setCuerpo] = useState("");
+  const [cuerpoHtml, setCuerpoHtml] = useState("");
+  const [formato, setFormato] = useState<"texto" | "html">("texto");
   const [activa, setActiva] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
@@ -617,7 +626,9 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
     queryFn: async () =>
       (
         await tabla(supabase, "tienda_plantillas_correo")
-          .select("id, asunto, cuerpo, activa")
+          // select("*"): nombrar las columnas nuevas rompería la pantalla
+          // entera mientras la migración no esté aplicada.
+          .select("*")
           .eq("tienda_id", tiendaId)
           .eq("clave", "pedido_enviado")
           .maybeSingle()
@@ -628,21 +639,27 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
     if (plantilla) {
       setAsunto(plantilla.asunto ?? "");
       setCuerpo(plantilla.cuerpo ?? "");
+      setCuerpoHtml(plantilla.cuerpo_html ?? "");
+      setFormato(plantilla.formato === "html" ? "html" : "texto");
       setActiva(plantilla.activa ?? true);
     }
   }, [plantilla]);
 
-  const erratas = erratasEnPlantilla(asunto, cuerpo);
+  const erratas = erratasEnPlantilla(asunto, cuerpo, formato === "html" ? cuerpoHtml : "");
 
   async function guardarPlantilla() {
     if (erratas.length > 0) {
       toast.error(`Hay variables que no existen: ${erratas.map((e) => `{{${e}}}`).join(", ")}`);
       return;
     }
+    if (formato === "html" && !cuerpoHtml.trim()) {
+      toast.error("En formato HTML hace falta escribir la maqueta");
+      return;
+    }
     setGuardando(true);
     try {
       const { error } = await tabla(supabase, "tienda_plantillas_correo")
-        .update({ asunto, cuerpo, activa })
+        .update({ asunto, cuerpo, cuerpo_html: cuerpoHtml || null, formato, activa })
         .eq("id", plantilla?.id);
       if (error) throw error;
       toast.success("Plantilla guardada");
@@ -701,6 +718,8 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
         </CardContent>
       </Card>
 
+      <ServidorDeCorreo tiendaId={tiendaId} isAdmin={isAdmin} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Aviso de pedido enviado</CardTitle>
@@ -740,19 +759,70 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Cuerpo</Label>
-                <Textarea
-                  value={cuerpo}
-                  onChange={(e) => setCuerpo(e.target.value)}
-                  rows={12}
-                  disabled={!isAdmin}
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Texto plano. Los saltos de línea se respetan.
-                </p>
-              </div>
+              <Tabs value={formato} onValueChange={(v) => setFormato(v as "texto" | "html")}>
+                <TabsList>
+                  <TabsTrigger value="texto">Texto</TabsTrigger>
+                  <TabsTrigger value="html">HTML y CSS</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="texto" className="space-y-1.5 mt-4">
+                  <Label>Cuerpo</Label>
+                  <Textarea
+                    value={cuerpo}
+                    onChange={(e) => setCuerpo(e.target.value)}
+                    rows={12}
+                    disabled={!isAdmin}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Texto plano. Los saltos de línea se respetan.
+                  </p>
+                </TabsContent>
+
+                <TabsContent value="html" className="space-y-4 mt-4">
+                  <div className="space-y-1.5">
+                    <Label>Maqueta HTML</Label>
+                    <Textarea
+                      value={cuerpoHtml}
+                      onChange={(e) => setCuerpoHtml(e.target.value)}
+                      rows={18}
+                      disabled={!isAdmin}
+                      className="font-mono text-xs"
+                      placeholder={PLANTILLA_HTML_EJEMPLO}
+                    />
+                  </div>
+
+                  <Alert>
+                    <AlertDescription className="text-xs space-y-1">
+                      <p>
+                        El CSS que pongas en un <code>&lt;style&gt;</code> se pasa a estilos en
+                        línea al enviar. Hace falta: Outlook pinta con el motor de Word y varios
+                        clientes de Gmail descartan el bloque <code>&lt;style&gt;</code>.
+                      </p>
+                      <p>
+                        Por lo mismo, maqueta con <code>&lt;table&gt;</code> y no con flexbox ni
+                        grid, que Outlook no entiende. Las imágenes tienen que estar en una URL
+                        pública.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-1.5">
+                    <Label>Versión en texto</Label>
+                    <Textarea
+                      value={cuerpo}
+                      onChange={(e) => setCuerpo(e.target.value)}
+                      rows={6}
+                      disabled={!isAdmin}
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      La que ven los clientes de correo que no pintan HTML. Si la dejas vacía se
+                      saca del propio HTML, pero escribirla baja la puntuación de spam.
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
 
               {erratas.length > 0 && (
                 <Alert variant="destructive">
@@ -779,7 +849,19 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
                 <Label className="text-xs">Vista previa</Label>
                 <div className="rounded-md border bg-muted/30 p-3 space-y-2">
                   <p className="text-sm font-medium">{vistaPrevia(asunto)}</p>
-                  <p className="text-sm whitespace-pre-wrap">{vistaPrevia(cuerpo)}</p>
+                  {formato === "html" ? (
+                    // En un iframe aislado y no incrustado en la página: la
+                    // maqueta trae su propio CSS y, metida en el DOM del CRM,
+                    // se lo pintaría encima.
+                    <iframe
+                      title="Vista previa del correo"
+                      sandbox=""
+                      className="w-full h-96 rounded border bg-white"
+                      srcDoc={vistaPreviaHtml(cuerpoHtml)}
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{vistaPrevia(cuerpo)}</p>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Con datos de muestra. El correo real lleva los del pedido.
@@ -805,3 +887,92 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
     </TabsContent>
   );
 }
+
+/**
+ * El servidor de correo de una tienda.
+ *
+ * Casi siempre se usa el general: una cuenta de Resend con varios dominios
+ * verificados y un remitente por tienda. Por eso lo normal es ver solo el aviso
+ * de que se usa el general, y el formulario aparece si de verdad hace falta
+ * separar esta tienda.
+ */
+function ServidorDeCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: boolean }) {
+  const qc = useQueryClient();
+  const [editando, setEditando] = useState(false);
+  const estadoFn = useServerFn(estadoSmtp);
+  const generalFn = useServerFn(usarSmtpGeneral);
+
+  const { data } = useQuery({
+    queryKey: ["smtp-estado", tiendaId],
+    queryFn: () => estadoFn({ data: { tienda_id: tiendaId } }),
+  });
+  const estado = (data as any)?.estado ?? null;
+  const propia = estado?.ambito === "tienda";
+
+  const volverAGeneral = useMutation({
+    mutationFn: () => generalFn({ data: { tienda_id: tiendaId } }),
+    onSuccess: () => {
+      toast.success("Esta tienda vuelve a usar el servidor general");
+      setEditando(false);
+      qc.invalidateQueries({ queryKey: ["smtp-estado"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo quitar"),
+  });
+
+  if (editando || propia) {
+    return (
+      <div className="space-y-2">
+        <FormularioSmtp tiendaId={tiendaId} />
+        {isAdmin && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => (propia ? volverAGeneral.mutate() : setEditando(false))}
+            disabled={volverAGeneral.isPending}
+          >
+            {propia ? "Usar el servidor general" : "Cancelar"}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Servidor de correo</CardTitle>
+        <CardDescription>
+          {estado
+            ? `Esta tienda usa el servidor general: ${estado.host}.`
+            : "No hay ningún servidor de correo configurado todavía, así que los avisos no salen."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/panel/configuracion-correo">Configurar el general</Link>
+        </Button>
+        {isAdmin && (
+          <Button variant="ghost" size="sm" onClick={() => setEditando(true)}>
+            Usar un servidor propio para esta tienda
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Un punto de partida para quien nunca ha maquetado un correo. */
+const PLANTILLA_HTML_EJEMPLO = `<style>
+  .caja { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+  .cabecera { background: #f97316; color: #fff; padding: 20px; }
+  .boton { background: #111; color: #fff; padding: 12px 20px;
+           text-decoration: none; display: inline-block; }
+</style>
+<table class="caja" cellpadding="0" cellspacing="0" width="100%">
+  <tr><td class="cabecera"><h1>{{tienda_nombre}}</h1></td></tr>
+  <tr><td style="padding: 20px">
+    <p>Hola {{cliente_nombre}},</p>
+    <p>Tu pedido {{pedido_numero}} ya va de camino.</p>
+    <p><a class="boton" href="{{seguimiento_url}}">Seguir el envio</a></p>
+  </td></tr>
+</table>`;

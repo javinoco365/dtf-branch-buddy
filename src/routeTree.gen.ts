@@ -16,6 +16,7 @@ import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
 import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
+import { Route as PanelConfiguracionCorreoRouteImport } from './routes/panel/configuracion-correo'
 import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
@@ -77,6 +78,12 @@ const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
   path: '/configuracion',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelConfiguracionCorreoRoute =
+  PanelConfiguracionCorreoRouteImport.update({
+    id: '/configuracion-correo',
+    path: '/configuracion-correo',
+    getParentRoute: () => PanelRouteRoute,
+  } as any)
 const PanelConfiguracionEmpresaRoute =
   PanelConfiguracionEmpresaRouteImport.update({
     id: '/configuracion-empresa',
@@ -222,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
@@ -254,6 +262,7 @@ export interface FileRoutesByTo {
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
@@ -288,6 +297,7 @@ export interface FileRoutesById {
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
@@ -356,6 +367,7 @@ export interface FileRouteTypes {
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
@@ -389,6 +401,7 @@ export interface FileRouteTypes {
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
@@ -471,6 +484,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracion'
       fullPath: '/panel/configuracion'
       preLoaderRoute: typeof PanelConfiguracionRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/configuracion-correo': {
+      id: '/panel/configuracion-correo'
+      path: '/configuracion-correo'
+      fullPath: '/panel/configuracion-correo'
+      preLoaderRoute: typeof PanelConfiguracionCorreoRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/configuracion-empresa': {
@@ -711,6 +731,7 @@ interface PanelRouteRouteChildren {
   PanelCobrosRoute: typeof PanelCobrosRoute
   PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
+  PanelConfiguracionCorreoRoute: typeof PanelConfiguracionCorreoRoute
   PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
@@ -726,6 +747,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelCobrosRoute: PanelCobrosRoute,
   PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
+  PanelConfiguracionCorreoRoute: PanelConfiguracionCorreoRoute,
   PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelPedidosRoute: PanelPedidosRoute,

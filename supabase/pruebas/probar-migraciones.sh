@@ -129,6 +129,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/A1_origen_pedidos.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
 
 echo
+echo "== SMTP configurable =="
+$PSQL -f "$RAIZ/supabase/pruebas/A2_smtp_configurable.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
 echo "== Credenciales de WooCommerce en Vault =="
 $PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'

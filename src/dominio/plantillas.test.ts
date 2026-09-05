@@ -55,6 +55,23 @@ describe("renderizarPlantilla", () => {
     expect(r.texto).toBe("<p>Hola &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; Cía</p>");
   });
 
+  it("escapa también dentro de un atributo, que es donde más se cuela", () => {
+    // Con maquetas HTML, una variable acaba dentro de href o de alt. Sin
+    // escapar la comilla, el valor se sale del atributo y el resto de la
+    // etiqueta pasa a ser lo que ponga el dato.
+    const r = renderizarPlantilla(
+      '<a href="{{seguimiento_url}}" title="Pedido de {{cliente_nombre}}">Seguir</a>',
+      {
+        seguimiento_url: '" onmouseover="robar()',
+        cliente_nombre: 'Pepe" autofocus onfocus="x()',
+      },
+      { escaparHtml: true },
+    );
+    expect(r.texto).not.toContain('onmouseover="');
+    expect(r.texto).not.toContain('onfocus="');
+    expect(r.texto).toContain("&quot;");
+  });
+
   it("no escapa en el cuerpo de texto plano", () => {
     const r = renderizarPlantilla("Hola {{cliente_nombre}}", { cliente_nombre: "Martí & Hijos" });
     expect(r.texto).toBe("Hola Martí & Hijos");

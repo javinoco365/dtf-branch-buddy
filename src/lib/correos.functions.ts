@@ -66,7 +66,10 @@ export async function avisarPedidoEnviado(
     }
 
     const { data: plantilla } = await tabla(supabaseAdmin, "tienda_plantillas_correo")
-      .select("asunto, cuerpo, activa")
+      // select("*"): nombrar columnas nuevas haría fallar la consulta entera
+      // mientras la migración no esté aplicada, y el aviso dejaría de salir sin
+      // decir por qué.
+      .select("*")
       .eq("tienda_id", pedido.tienda_id)
       .eq("clave", "pedido_enviado")
       .maybeSingle();
@@ -99,25 +102,44 @@ export async function avisarPedidoEnviado(
     };
 
     const asunto = renderizarPlantilla(plantilla.asunto, variables).texto;
-    const texto = renderizarPlantilla(plantilla.cuerpo, variables).texto;
-    // El HTML se compone del texto ya escapado: una variable no puede inyectar
-    // etiquetas en el correo.
-    const htmlSeguro = renderizarPlantilla(plantilla.cuerpo, variables, {
-      escaparHtml: true,
-    }).texto;
 
-    const { enviarCorreo, textoAHtml } = await import("./correo.server");
+    const { enviarCorreo, textoAHtml, prepararHtml, htmlATexto } = await import("./correo.server");
+
+    // En los dos formatos las variables se escapan al sustituirlas: el HTML lo
+    // pone quien escribió la plantilla, nunca el dato de un cliente.
+    let texto: string;
+    let html: string;
+    if (plantilla.formato === "html" && plantilla.cuerpo_html) {
+      html = await prepararHtml(
+        renderizarPlantilla(plantilla.cuerpo_html, variables, { escaparHtml: true }).texto,
+      );
+      // La parte de texto sale de la plantilla de texto si la hay; si no, del
+      // propio HTML. Un correo sin parte de texto puntúa peor en los filtros.
+      const plano = renderizarPlantilla(plantilla.cuerpo ?? "", variables).texto.trim();
+      texto = plano || htmlATexto(html);
+    } else {
+      texto = renderizarPlantilla(plantilla.cuerpo, variables).texto;
+      html = textoAHtml(
+        renderizarPlantilla(plantilla.cuerpo, variables, { escaparHtml: true }).texto,
+      );
+    }
+
+    const { leerCredencialesSmtp } = await import("./smtp-credenciales");
+    const credenciales = await leerCredencialesSmtp(supabaseAdmin, pedido.tienda_id);
     const remitente = tienda.correo_remitente_nombre
       ? `${tienda.correo_remitente_nombre} <${tienda.correo_remitente_email}>`
       : tienda.correo_remitente_email;
 
-    const resultado = await enviarCorreo({
-      de: remitente,
-      para: pedido.cliente_email,
-      asunto,
-      texto,
-      html: textoAHtml(htmlSeguro),
-    });
+    const resultado = await enviarCorreo(
+      {
+        de: remitente,
+        para: pedido.cliente_email,
+        asunto,
+        texto,
+        html,
+      },
+      credenciales,
+    );
 
     await tabla(supabaseAdmin, "pedido_correos_enviados").insert({
       empresa_id: tienda.empresa_id,
