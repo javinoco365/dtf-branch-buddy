@@ -144,6 +144,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/A4_caja.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
 
 echo
+echo "== Inversion de los socios =="
+$PSQL -f "$RAIZ/supabase/pruebas/A5_inversion.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+
+echo
 echo "== Credenciales de WooCommerce en Vault =="
 $PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'

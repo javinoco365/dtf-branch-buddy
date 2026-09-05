@@ -21,6 +21,7 @@ import { Route as PanelConfiguracionCajaRouteImport } from './routes/panel/confi
 import { Route as PanelConfiguracionCorreoRouteImport } from './routes/panel/configuracion-correo'
 import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
+import { Route as PanelInversionRouteImport } from './routes/panel/inversion'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
 import { Route as PanelTextilRouteRouteImport } from './routes/panel/textil/route'
 import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
@@ -103,6 +104,11 @@ const PanelConfiguracionEmpresaRoute =
 const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
   id: '/facturacion-global',
   path: '/facturacion-global',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelInversionRoute = PanelInversionRouteImport.update({
+  id: '/inversion',
+  path: '/inversion',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelPedidosRoute = PanelPedidosRouteImport.update({
@@ -233,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/inversion': typeof PanelInversionRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/inversion': typeof PanelInversionRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel': typeof PanelIndexRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
+  '/panel/inversion': typeof PanelInversionRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
+    | '/panel/inversion'
     | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel/'
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
+    | '/panel/inversion'
     | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel'
@@ -405,6 +416,7 @@ export interface FileRouteTypes {
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
+    | '/panel/inversion'
     | '/panel/pedidos'
     | '/panel/usuarios'
     | '/panel/'
@@ -518,6 +530,13 @@ declare module '@tanstack/react-router' {
       path: '/facturacion-global'
       fullPath: '/panel/facturacion-global'
       preLoaderRoute: typeof PanelFacturacionGlobalRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/inversion': {
+      id: '/panel/inversion'
+      path: '/inversion'
+      fullPath: '/panel/inversion'
+      preLoaderRoute: typeof PanelInversionRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/pedidos': {
@@ -733,6 +752,7 @@ interface PanelRouteRouteChildren {
   PanelConfiguracionCorreoRoute: typeof PanelConfiguracionCorreoRoute
   PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
+  PanelInversionRoute: typeof PanelInversionRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
   PanelIndexRoute: typeof PanelIndexRoute
@@ -750,6 +770,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelConfiguracionCorreoRoute: PanelConfiguracionCorreoRoute,
   PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
+  PanelInversionRoute: PanelInversionRoute,
   PanelPedidosRoute: PanelPedidosRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,
   PanelIndexRoute: PanelIndexRoute,
