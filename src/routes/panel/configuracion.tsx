@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Building2, Mail } from "lucide-react";
+import { Users, Building2, Mail, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion")({
@@ -39,6 +39,12 @@ function ConfiguracionPage() {
             badge="Admin"
           />
         )}
+        <ConfigCard
+          to="/panel/configuracion-caja"
+          icon={Wallet}
+          title="Caja"
+          desc="Los conceptos del desplegable y los socios que aparecen en los apuntes de caja."
+        />
         {isAdmin && (
           <ConfigCard
             to="/panel/usuarios"

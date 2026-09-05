@@ -13,14 +13,15 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
+import { Route as PanelCajaRouteImport } from './routes/panel/caja'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
 import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
+import { Route as PanelConfiguracionCajaRouteImport } from './routes/panel/configuracion-caja'
 import { Route as PanelConfiguracionCorreoRouteImport } from './routes/panel/configuracion-correo'
 import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
-import { Route as PanelProyectosRouteImport } from './routes/panel/proyectos'
 import { Route as PanelTextilRouteRouteImport } from './routes/panel/textil/route'
 import { Route as PanelUsuariosRouteImport } from './routes/panel/usuarios'
 import { Route as PanelTextilIndexRouteImport } from './routes/panel/textil/index'
@@ -63,6 +64,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelCajaRoute = PanelCajaRouteImport.update({
+  id: '/caja',
+  path: '/caja',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
 const PanelCobrosRoute = PanelCobrosRouteImport.update({
   id: '/cobros',
   path: '/cobros',
@@ -76,6 +82,11 @@ const PanelConciliacionRoute = PanelConciliacionRouteImport.update({
 const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
   id: '/configuracion',
   path: '/configuracion',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelConfiguracionCajaRoute = PanelConfiguracionCajaRouteImport.update({
+  id: '/configuracion-caja',
+  path: '/configuracion-caja',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelConfiguracionCorreoRoute =
@@ -98,11 +109,6 @@ const PanelFacturacionGlobalRoute = PanelFacturacionGlobalRouteImport.update({
 const PanelPedidosRoute = PanelPedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
-  getParentRoute: () => PanelRouteRoute,
-} as any)
-const PanelProyectosRoute = PanelProyectosRouteImport.update({
-  id: '/proyectos',
-  path: '/proyectos',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelTextilRouteRoute = PanelTextilRouteRouteImport.update({
@@ -226,14 +232,15 @@ export interface FileRoutesByFullPath {
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/caja': typeof PanelCajaRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
-  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -259,14 +266,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/panel/caja': typeof PanelCajaRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
-  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel': typeof PanelIndexRoute
   '/panel/textil/ajustes': typeof PanelTextilAjustesRoute
@@ -294,14 +302,15 @@ export interface FileRoutesById {
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/caja': typeof PanelCajaRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-correo': typeof PanelConfiguracionCorreoRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/pedidos': typeof PanelPedidosRoute
-  '/panel/proyectos': typeof PanelProyectosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
   '/panel/': typeof PanelIndexRoute
   '/panel/tiendas/$tiendaId': typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -331,14 +340,15 @@ export interface FileRouteTypes {
     | '/panel'
     | '/auth'
     | '/panel/textil'
+    | '/panel/caja'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-caja'
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
-    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -364,14 +374,15 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/panel/caja'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-caja'
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
-    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel'
     | '/panel/textil/ajustes'
@@ -398,14 +409,15 @@ export interface FileRouteTypes {
     | '/panel'
     | '/auth'
     | '/panel/textil'
+    | '/panel/caja'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-caja'
     | '/panel/configuracion-correo'
     | '/panel/configuracion-empresa'
     | '/panel/facturacion-global'
     | '/panel/pedidos'
-    | '/panel/proyectos'
     | '/panel/usuarios'
     | '/panel/'
     | '/panel/tiendas/$tiendaId'
@@ -465,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelIndexRouteImport
       parentRoute: typeof PanelRouteRoute
     }
+    '/panel/caja': {
+      id: '/panel/caja'
+      path: '/caja'
+      fullPath: '/panel/caja'
+      preLoaderRoute: typeof PanelCajaRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
     '/panel/cobros': {
       id: '/panel/cobros'
       path: '/cobros'
@@ -484,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracion'
       fullPath: '/panel/configuracion'
       preLoaderRoute: typeof PanelConfiguracionRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/configuracion-caja': {
+      id: '/panel/configuracion-caja'
+      path: '/configuracion-caja'
+      fullPath: '/panel/configuracion-caja'
+      preLoaderRoute: typeof PanelConfiguracionCajaRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/configuracion-correo': {
@@ -512,13 +538,6 @@ declare module '@tanstack/react-router' {
       path: '/pedidos'
       fullPath: '/panel/pedidos'
       preLoaderRoute: typeof PanelPedidosRouteImport
-      parentRoute: typeof PanelRouteRoute
-    }
-    '/panel/proyectos': {
-      id: '/panel/proyectos'
-      path: '/proyectos'
-      fullPath: '/panel/proyectos'
-      preLoaderRoute: typeof PanelProyectosRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/textil': {
@@ -728,14 +747,15 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 
 interface PanelRouteRouteChildren {
   PanelTextilRouteRoute: typeof PanelTextilRouteRouteWithChildren
+  PanelCajaRoute: typeof PanelCajaRoute
   PanelCobrosRoute: typeof PanelCobrosRoute
   PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
+  PanelConfiguracionCajaRoute: typeof PanelConfiguracionCajaRoute
   PanelConfiguracionCorreoRoute: typeof PanelConfiguracionCorreoRoute
   PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
-  PanelProyectosRoute: typeof PanelProyectosRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
   PanelIndexRoute: typeof PanelIndexRoute
   PanelTiendasTiendaIdRouteRoute: typeof PanelTiendasTiendaIdRouteRouteWithChildren
@@ -744,14 +764,15 @@ interface PanelRouteRouteChildren {
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelTextilRouteRoute: PanelTextilRouteRouteWithChildren,
+  PanelCajaRoute: PanelCajaRoute,
   PanelCobrosRoute: PanelCobrosRoute,
   PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
+  PanelConfiguracionCajaRoute: PanelConfiguracionCajaRoute,
   PanelConfiguracionCorreoRoute: PanelConfiguracionCorreoRoute,
   PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelPedidosRoute: PanelPedidosRoute,
-  PanelProyectosRoute: PanelProyectosRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,
   PanelIndexRoute: PanelIndexRoute,
   PanelTiendasTiendaIdRouteRoute: PanelTiendasTiendaIdRouteRouteWithChildren,
