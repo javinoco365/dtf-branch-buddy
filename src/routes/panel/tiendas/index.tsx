@@ -53,9 +53,8 @@ type WizardForm = {
   nombre: string;
   slug: string;
   color: string;
-  // Facturación
-  serie_factura: string;
-  siguiente_numero_factura: number;
+  // Facturación. Ni la serie ni el número de factura están aquí: son de la
+  // sociedad, no de la tienda. Se configuran en Configuración de empresa.
   iva_default: number;
   gastos_envio_default: number;
   // WooCommerce
@@ -69,8 +68,6 @@ const FORM_INICIAL: WizardForm = {
   nombre: "",
   slug: "",
   color: "#3b82f6",
-  serie_factura: "F",
-  siguiente_numero_factura: 1,
   iva_default: 21,
   gastos_envio_default: 0,
   woo_url: "",
@@ -411,8 +408,6 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
           nombre: f.nombre,
           slug,
           color: f.color || null,
-          serie_factura: f.serie_factura || "F",
-          siguiente_numero_factura: Number(f.siguiente_numero_factura) || 1,
           iva_default: Number(f.iva_default) || 21,
           gastos_envio_default: Number(f.gastos_envio_default) || 0,
           woo_url: f.woo_url || null,
@@ -530,19 +525,22 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
 
         {/* === FACTURACIÓN === */}
         <TabsContent value="facturacion" className="space-y-3 mt-4">
-          <Row>
-            <FieldText
-              label="Serie de factura"
-              v={f.serie_factura}
-              on={(v) => set("serie_factura", v)}
-              placeholder="F"
-            />
-            <FieldNum
-              label="Siguiente nº de factura"
-              v={f.siguiente_numero_factura}
-              on={(v) => set("siguiente_numero_factura", v)}
-            />
-          </Row>
+          {/*
+            Aquí había «Serie de factura» y «Siguiente nº de factura». Los dos
+            dejaron de hacer nada en 20260903100000: la serie es de la sociedad
+            y el contador vive en series_facturacion. Se podía escribir 500 en
+            el número, guardarlo sin error y que la primera factura saliera con
+            el 1. Un control que acepta un dato fiscal y lo tira engaña más que
+            no tenerlo.
+          */}
+          <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+            La serie y la numeración de las facturas son de la sociedad, no de la tienda: todas las
+            tiendas comparten una única numeración correlativa. Se configuran en{" "}
+            <Link to="/panel/configuracion-empresa" className="underline underline-offset-2">
+              Configuración de empresa
+            </Link>
+            .
+          </div>
           <Row>
             <FieldNum
               label="IVA por defecto (%)"
