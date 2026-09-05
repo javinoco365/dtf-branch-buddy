@@ -97,8 +97,12 @@ export const listPedidos = createServerFn({ method: "POST" })
       await Promise.all([
         supabase
           .from("pedido_items")
+          // iva_rate viaja hasta la pantalla: sin él, el formulario de edición
+          // no puede saber a qué tipo estaba una línea y la rellena con el 21 %.
+          // Una línea al 10 % o al 4 % se convertía en una al 21 % con solo
+          // abrir el pedido y guardarlo, sin avisar de nada.
           .select(
-            "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, subtotal, iva, total",
+            "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total",
           )
           .in("pedido_id", ids),
         supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
@@ -349,8 +353,7 @@ export const updatePedido = createServerFn({ method: "POST" })
 
       await supabaseAdmin.from("pedido_items").delete().eq("pedido_id", data.id);
       const itemRows = data.items.map((it) => {
-        const sub = it.cantidad * it.precio_unitario;
-        const ivaLi = sub * (it.iva_rate / 100);
+        const linea = calcularLinea(it);
         return {
           pedido_id: data.id,
           descripcion: it.descripcion,
@@ -358,9 +361,9 @@ export const updatePedido = createServerFn({ method: "POST" })
           unidad: "ud",
           precio_unitario: it.precio_unitario,
           iva_rate: it.iva_rate,
-          subtotal: Number(sub.toFixed(2)),
-          iva: Number(ivaLi.toFixed(2)),
-          total: Number((sub + ivaLi).toFixed(2)),
+          subtotal: linea.base,
+          iva: linea.cuota,
+          total: linea.total,
         };
       });
       await supabaseAdmin.from("pedido_items").insert(itemRows);

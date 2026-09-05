@@ -41,6 +41,9 @@ type Linea = {
   iva_rate: number;
 };
 
+/** El tipo con el que nace una línea nueva. El DTF va todo al 21 %. */
+const IVA_GENERAL = 21;
+
 const PAGOS = [
   "Transferencia bancaria directa",
   "Bizum",
@@ -112,7 +115,7 @@ export function PedidoFormDialog({
   const [entrega, setEntrega] = useState<DireccionForm>(DIRECCION_VACIA);
   const [envioIgual, setEnvioIgual] = useState(true);
   const [lineas, setLineas] = useState<Linea[]>([
-    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: 21 },
+    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL },
   ]);
 
   useEffect(() => {
@@ -139,9 +142,12 @@ export function PedidoFormDialog({
               descripcion: it.descripcion,
               cantidad: Number(it.cantidad),
               precio_unitario: Number(it.precio_unitario),
-              iva_rate: 21,
+              // El tipo que tenía la línea, no el general: abrir un pedido con
+              // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
+              // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
+              iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
             }))
-          : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: 21 }],
+          : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }],
       );
     } else {
       setCliente("");
@@ -153,7 +159,7 @@ export function PedidoFormDialog({
       setFacturacion(DIRECCION_VACIA);
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
-      setLineas([{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: 21 }]);
+      setLineas([{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }]);
     }
   }, [open, pedido]);
 
@@ -332,7 +338,7 @@ export function PedidoFormDialog({
                 onClick={() =>
                   setLineas([
                     ...lineas,
-                    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: 21 },
+                    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL },
                   ])
                 }
               >

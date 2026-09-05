@@ -108,6 +108,8 @@ export type PedidoFila = {
     cantidad: number;
     unidad: string;
     precio_unitario: number;
+    /** El tipo de IVA de la línea. Puede faltar en pedidos antiguos. */
+    iva_rate: number | null;
     subtotal: number;
     iva: number;
     total: number;
