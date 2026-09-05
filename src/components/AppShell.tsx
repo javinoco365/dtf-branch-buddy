@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { MARCA_DESCRIPCION, MARCA_NOMBRE } from "@/components/Marca";
+import { BotonTema } from "@/components/BotonTema";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+              <BotonTema />
               <Button
                 variant="ghost"
                 size="sm"

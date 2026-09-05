@@ -92,7 +92,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "author", content: "RONOCA DESARROLLOS S.L." },
       // El panel es privado: que no lo indexe nadie.
       { name: "robots", content: "noindex, nofollow" },
-      { name: "theme-color", content: "#f97316" },
+      // El navy de la marca: es el color de la barra del navegador en móvil.
+      { name: "theme-color", content: "#2A2260" },
       { property: "og:site_name", content: "DTF Culture" },
       { property: "og:title", content: "DTF Culture · CRM" },
       {
@@ -126,11 +127,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+/*
+ * El tema, antes de la primera pintura.
+ *
+ * Va como guion en línea dentro del <head> a propósito. Si la clase `dark` se
+ * pusiera al montar un componente de React, la primera pintura sería en claro
+ * y quien tenga el modo oscuro vería un fogonazo blanco en cada carga.
+ *
+ * Está envuelto en try/catch porque en navegación privada leer localStorage
+ * puede lanzar, y un error aquí dejaría la página en blanco.
+ */
+const GUION_TEMA = `try{var t=localStorage.getItem('dtfculture:tema');var o=t==='oscuro'||(t!=='claro'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',o);document.documentElement.style.colorScheme=o?'dark':'light'}catch(e){}`;
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: GUION_TEMA }} />
       </head>
       <body>
         {children}
