@@ -514,7 +514,17 @@ function FilaPedido({
   onBorrar: () => void;
 }) {
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
-  const numeroLabel = pedido.woo_order_id ? `#${pedido.woo_order_id}` : pedido.numero;
+  // El número que ve el cliente, siempre. Antes esta línea era al revés: si
+  // el pedido venía de WooCommerce se pintaba `#` + el id interno de
+  // WordPress, tirando a la basura el `numero` que la sincronización ya
+  // guardaba bien. Con un plugin de numeración eso enseñaba #432 donde el
+  // cliente tiene DCUL-23-2026, y al llamar preguntando por su pedido no
+  // había forma de encontrarlo.
+  //
+  // El id solo se usa si no hay número, que es lo único que puede pasarle a
+  // un pedido importado antes de que existiera esa columna.
+  const numeroLabel =
+    pedido.numero?.trim() || (pedido.woo_order_id ? `#${pedido.woo_order_id}` : "—");
 
   return (
     <>
