@@ -5,6 +5,7 @@ import { tabla } from "./rpc";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
+import { normalizarDireccion } from "@/dominio/direcciones";
 
 const ESTADO_VALUES = [
   "pendiente",
@@ -133,6 +134,29 @@ const itemSchema = z.object({
   iva_rate: z.number().nonnegative().default(21),
 });
 
+/**
+ * Una dirección tal como llega del formulario: todo opcional y todo texto.
+ *
+ * Lo que se guarda no es esto, es lo que devuelve `normalizarDireccion`: sin
+ * espacios sobrantes, sin campos vacíos y `null` entero si no había nada. Así
+ * la columna nunca contiene un objeto que parece una dirección y no lo es.
+ */
+const direccionSchema = z
+  .object({
+    nombre: z.string(),
+    empresa: z.string(),
+    direccion: z.string(),
+    codigo_postal: z.string(),
+    ciudad: z.string(),
+    provincia: z.string(),
+    pais: z.string(),
+    telefono: z.string(),
+    email: z.string(),
+  })
+  .partial()
+  .nullable()
+  .optional();
+
 export const createPedidoManual = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
@@ -141,6 +165,9 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         tiendaId: z.string().uuid(),
         cliente_nombre: z.string().min(1),
         cliente_email: z.string().optional().nullable(),
+        cliente_telefono: z.string().optional().nullable(),
+        direccion_facturacion: direccionSchema,
+        direccion_envio: direccionSchema,
         metodo_pago: z.string().optional().nullable(),
         envio: z.number().nonnegative().default(0),
         notas: z.string().optional().nullable(),
@@ -163,8 +190,9 @@ export const createPedidoManual = createServerFn({ method: "POST" })
       Math.random() * 9000 + 1000,
     )}`;
 
-    const { data: pedido, error: pErr } = await supabaseAdmin
-      .from("pedidos")
+    // tabla(): types.ts está generado y todavía no conoce cliente_telefono ni
+    // las dos columnas de dirección, que las añadió 20260903360000.
+    const { data: pedido, error: pErr } = await tabla(supabaseAdmin, "pedidos")
       .insert({
         tienda_id: data.tiendaId,
         numero,
@@ -174,6 +202,9 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         envio: data.envio ?? 0,
         cliente_nombre: data.cliente_nombre,
         cliente_email: data.cliente_email ?? null,
+        cliente_telefono: data.cliente_telefono?.trim() || null,
+        direccion_facturacion: normalizarDireccion(data.direccion_facturacion),
+        direccion_envio: normalizarDireccion(data.direccion_envio),
         notas: data.notas ?? null,
         metros_total,
         subtotal: totales.base_imponible,
@@ -267,6 +298,9 @@ export const updatePedido = createServerFn({ method: "POST" })
         id: z.string().uuid(),
         cliente_nombre: z.string().optional().nullable(),
         cliente_email: z.string().optional().nullable(),
+        cliente_telefono: z.string().optional().nullable(),
+        direccion_facturacion: direccionSchema,
+        direccion_envio: direccionSchema,
         metodo_pago: z.string().optional().nullable(),
         envio: z.number().nonnegative().optional(),
         notas: z.string().optional().nullable(),
@@ -285,19 +319,18 @@ export const updatePedido = createServerFn({ method: "POST" })
     if (!pedido) throw new Error("Pedido no encontrado");
     await ensureAccess(supabaseAdmin, context.userId, pedido.tienda_id);
 
-    const patch: {
-      cliente_nombre?: string | null;
-      cliente_email?: string | null;
-      metodo_pago?: string | null;
-      envio?: number;
-      notas?: string | null;
-      subtotal?: number;
-      iva?: number;
-      metros_total?: number;
-      total?: number;
-    } = {};
+    const patch: Record<string, unknown> = {};
     if (data.cliente_nombre !== undefined) patch.cliente_nombre = data.cliente_nombre;
     if (data.cliente_email !== undefined) patch.cliente_email = data.cliente_email;
+    if (data.cliente_telefono !== undefined)
+      patch.cliente_telefono = data.cliente_telefono?.trim() || null;
+    // Solo se tocan las direcciones si el formulario las manda. Un cliente que
+    // no las envíe (una llamada antigua) no debe borrar la dirección de un
+    // pedido que sí la tenía.
+    if (data.direccion_facturacion !== undefined)
+      patch.direccion_facturacion = normalizarDireccion(data.direccion_facturacion);
+    if (data.direccion_envio !== undefined)
+      patch.direccion_envio = normalizarDireccion(data.direccion_envio);
     if (data.metodo_pago !== undefined) patch.metodo_pago = data.metodo_pago;
     if (data.envio !== undefined) patch.envio = data.envio;
     if (data.notas !== undefined) patch.notas = data.notas;
@@ -333,7 +366,8 @@ export const updatePedido = createServerFn({ method: "POST" })
       await supabaseAdmin.from("pedido_items").insert(itemRows);
     }
 
-    const { error } = await supabaseAdmin.from("pedidos").update(patch).eq("id", data.id);
+    // tabla(): mismo motivo que en createPedidoManual.
+    const { error } = await tabla(supabaseAdmin, "pedidos").update(patch).eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });

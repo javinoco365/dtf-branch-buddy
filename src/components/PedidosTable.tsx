@@ -52,6 +52,11 @@ import {
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import {
+  lineasDireccion,
+  mismaDireccion as sonLaMismaDireccion,
+  type Direccion,
+} from "@/dominio/direcciones";
 import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 const PedidoFormDialog = lazy(() =>
@@ -73,18 +78,7 @@ import {
 
 type Periodo = "mes" | "semana";
 
-/** Una dirección congelada en el pedido. Todos los campos pueden faltar. */
-export type Direccion = {
-  nombre?: string | null;
-  empresa?: string | null;
-  direccion?: string | null;
-  codigo_postal?: string | null;
-  ciudad?: string | null;
-  provincia?: string | null;
-  pais?: string | null;
-  telefono?: string | null;
-  email?: string | null;
-};
+export type { Direccion };
 
 export type PedidoFila = {
   id: string;
@@ -697,8 +691,7 @@ function FilaPedido({
 function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
   const facturacion = pedido.direccion_facturacion;
   const envio = pedido.direccion_envio;
-  const mismaDireccion =
-    envio && facturacion && lineas(envio).join("|") === lineas(facturacion).join("|");
+  const esLaMisma = sonLaMismaDireccion(envio, facturacion);
 
   return (
     <div className="grid gap-4 pt-3 border-t md:grid-cols-3 text-sm">
@@ -719,7 +712,7 @@ function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
       <BloqueDireccion
         titulo="Envío"
         direccion={envio}
-        nota={mismaDireccion ? "La misma que la de facturación" : null}
+        nota={esLaMisma ? "La misma que la de facturación" : null}
       />
     </div>
   );
@@ -734,7 +727,7 @@ function BloqueDireccion({
   direccion: Direccion | null;
   nota?: string | null;
 }) {
-  const filas = direccion ? lineas(direccion) : [];
+  const filas = direccion ? lineasDireccion(direccion) : [];
   return (
     <div>
       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
@@ -754,19 +747,4 @@ function BloqueDireccion({
       {nota && filas.length > 0 && <div className="text-xs text-muted-foreground mt-1">{nota}</div>}
     </div>
   );
-}
-
-/** La dirección en líneas, saltándose lo que no venga. */
-function lineas(d: Direccion): string[] {
-  const cp = [d.codigo_postal, d.ciudad].filter(Boolean).join(" ");
-  return [
-    d.nombre,
-    d.empresa,
-    d.direccion,
-    cp,
-    [d.provincia, d.pais].filter(Boolean).join(", "),
-    d.telefono,
-  ]
-    .map((x) => (typeof x === "string" ? x.trim() : ""))
-    .filter(Boolean);
 }
