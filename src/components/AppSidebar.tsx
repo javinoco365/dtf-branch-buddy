@@ -34,7 +34,7 @@ import {
   Building2,
   Receipt,
   Wallet,
-  CalendarClock,
+  Coins,
   ChevronRight,
   Plus,
   List,
@@ -141,10 +141,10 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/proyectos"}>
-                  <Link to="/panel/proyectos">
-                    <CalendarClock />
-                    <span>Próximos Proyectos</span>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/caja"}>
+                  <Link to="/panel/caja">
+                    <Coins />
+                    <span>Caja</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
