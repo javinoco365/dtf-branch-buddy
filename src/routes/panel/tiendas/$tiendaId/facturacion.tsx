@@ -40,7 +40,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
-  head: () => ({ meta: [{ title: "Facturación · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
   component: FacturacionTienda,
 });
 

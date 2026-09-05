@@ -25,7 +25,7 @@ import { eur, fechaCorta } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
-  head: () => ({ meta: [{ title: "Facturas textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
   component: FacturasPage,
 });
 

@@ -33,7 +33,7 @@ import {
 } from "@/lib/banco.functions";
 
 export const Route = createFileRoute("/panel/conciliacion")({
-  head: () => ({ meta: [{ title: "Conciliación bancaria · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
   component: ConciliacionPage,
 });
 

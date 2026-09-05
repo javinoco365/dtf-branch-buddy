@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { eur as fmtEUR } from "@/lib/format";
 
 export const Route = createFileRoute("/panel/textil/stock")({
-  head: () => ({ meta: [{ title: "Stock textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
   component: StockPage,
 });
 

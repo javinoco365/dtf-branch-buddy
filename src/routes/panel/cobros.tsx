@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CobrosPendientes } from "@/components/CobrosPendientes";
 
 export const Route = createFileRoute("/panel/cobros")({
-  head: () => ({ meta: [{ title: "Cobros pendientes · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Cobros pendientes · DTF Culture" }] }),
   component: CobrosGlobal,
 });
 

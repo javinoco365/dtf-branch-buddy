@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PedidosTableLazy } from "@/components/PedidosTableLazy";
 
 export const Route = createFileRoute("/panel/pedidos")({
-  head: () => ({ meta: [{ title: "Pedidos Consolidados · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Pedidos Consolidados · DTF Culture" }] }),
   component: PedidosGlobal,
 });
 

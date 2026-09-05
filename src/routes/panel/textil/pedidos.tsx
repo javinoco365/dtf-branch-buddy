@@ -46,7 +46,7 @@ import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
-  head: () => ({ meta: [{ title: "Pedidos textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
   component: PedidosPage,
 });
 

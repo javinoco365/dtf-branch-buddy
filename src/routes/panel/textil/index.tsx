@@ -13,7 +13,7 @@ import {
 import { eur as fmtEUR } from "@/lib/format";
 
 export const Route = createFileRoute("/panel/textil/")({
-  head: () => ({ meta: [{ title: "Textil Personalizado · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Textil Personalizado · DTF Culture" }] }),
   component: TextilHome,
 });
 

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { MARCA_DESCRIPCION, MARCA_NOMBRE } from "@/components/Marca";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
@@ -19,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-3">
               <SidebarTrigger />
               <span className="text-sm text-muted-foreground hidden md:inline">
-                CRM DTF · Gestión multi-tienda
+                {MARCA_NOMBRE} · {MARCA_DESCRIPCION}
               </span>
             </div>
             <div className="flex items-center gap-3">

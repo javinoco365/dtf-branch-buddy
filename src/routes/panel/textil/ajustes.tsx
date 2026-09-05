@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
-  head: () => ({ meta: [{ title: "Ajustes textil · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Ajustes textil · DTF Culture" }] }),
   component: AjustesPage,
 });
 

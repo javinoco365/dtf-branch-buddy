@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Printer } from "lucide-react";
+import { Marca, MARCA_NOMBRE } from "@/components/Marca";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Acceso · CRM DTF" }] }),
+  head: () => ({ meta: [{ title: "Acceso · DTF Culture" }] }),
   component: AuthPage,
 });
 
@@ -56,10 +56,10 @@ function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Printer className="h-6 w-6" />
+          <div className="mx-auto mb-2 flex justify-center">
+            <Marca tamano="lg" soloIcono />
           </div>
-          <CardTitle className="text-2xl">CRM DTF</CardTitle>
+          <CardTitle className="text-2xl">{MARCA_NOMBRE}</CardTitle>
           <CardDescription>
             {needsBootstrap === null
               ? "Cargando…"

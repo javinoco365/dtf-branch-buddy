@@ -146,7 +146,7 @@ export const probarSmtp = createServerFn({ method: "POST" })
       {
         de: remitente,
         para: data.destinatario,
-        asunto: "Prueba del servidor de correo · CRM DTF",
+        asunto: "Prueba del servidor de correo · DTF Culture",
         texto,
         html: textoAHtml(texto),
       },
