@@ -291,7 +291,6 @@ function consecuenciasDeBorrar(r: any): string[] {
   añadir(r.pedidos, "pedido", "pedidos");
   añadir(r.clientes, "cliente", "clientes");
   añadir(r.productos, "producto", "productos");
-  añadir(r.proyectos, "proyecto", "proyectos");
   añadir(r.facturas_borrador, "factura en borrador", "facturas en borrador");
   if (lineas.length === 0) return ["No cuelga nada de esta tienda."];
   return lineas.map((l) => `Se borrarán ${l}.`);

@@ -207,12 +207,12 @@ function CajaPage() {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Resumen titulo="Ingresos" valor={eur(totales.ingresos)} tono="text-emerald-600" />
-        <Resumen titulo="Gastos" valor={eur(totales.gastos)} tono="text-red-600" />
+        <Resumen titulo="Ingresos" valor={eur(totales.ingresos)} tono="text-status-completado" />
+        <Resumen titulo="Gastos" valor={eur(totales.gastos)} tono="text-status-cancelado" />
         <Resumen
           titulo="Saldo del periodo"
           valor={eur(totales.saldo)}
-          tono={totales.saldo < 0 ? "text-red-600" : "text-emerald-600"}
+          tono={totales.saldo < 0 ? "text-status-cancelado" : "text-status-completado"}
         />
       </div>
 
@@ -260,7 +260,7 @@ function CajaPage() {
               )}
               {error && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-red-600 py-8">
+                  <TableCell colSpan={7} className="text-center text-destructive py-8">
                     {(error as Error).message}
                   </TableCell>
                 </TableRow>
@@ -287,8 +287,8 @@ function CajaPage() {
                       variant="outline"
                       className={
                         m.categoria === "ingreso"
-                          ? "border-emerald-600/30 text-emerald-700 dark:text-emerald-400"
-                          : "border-red-600/30 text-red-700 dark:text-red-400"
+                          ? "border-status-completado/40 text-status-completado"
+                          : "border-status-cancelado/40 text-status-cancelado"
                       }
                     >
                       {m.categoria === "ingreso" ? "Ingreso" : "Gasto"}
@@ -296,7 +296,7 @@ function CajaPage() {
                   </TableCell>
                   <TableCell
                     className={`text-right tabular-nums font-medium ${
-                      m.categoria === "gasto" ? "text-red-600" : "text-emerald-600"
+                      m.categoria === "gasto" ? "text-status-cancelado" : "text-status-completado"
                     }`}
                   >
                     {m.categoria === "gasto" ? "−" : "+"}

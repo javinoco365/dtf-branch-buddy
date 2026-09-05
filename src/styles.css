@@ -67,86 +67,134 @@
 
 :root {
   --radius: 0.625rem;
-  /* App background: gris muy claro */
-  --background: oklch(0.975 0.003 255);
-  --foreground: oklch(0.22 0.025 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.025 260);
+
+  /* ---------------------------------------------------------------------
+   * Paleta Navy · DTF Culture
+   *
+   * Los valores salen de la paleta de marca. Cada uno lleva su hexadecimal
+   * al lado para poder cotejarlo con el documento sin tener que convertir
+   * oklch a mano.
+   *
+   * El papel de cada color lo fija la propia paleta:
+   *   Navy    primario, texto sobre blanco y fondo de secciones oscuras
+   *   Cyan    acento brillante; como texto sobre blanco va en su variante
+   *           tinta, porque el cyan puro se queda en 2,7:1
+   *   Naranja acento de conversión; SIEMPRE con texto negro encima, nunca
+   *           blanco (blanco sobre naranja es 2,6:1 y no cumple)
+   * ------------------------------------------------------------------- */
+
+  --background: oklch(0.9814 0.0045 258.32); /* Frío 050  #F7F9FC */
+  --foreground: oklch(0.2024 0.0183 274.9); /* Tinta 900 #14161F */
+  --card: oklch(1 0 0); /* Blanco    #FFFFFF */
+  --card-foreground: oklch(0.2024 0.0183 274.9);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.025 260);
-  /* Acento primario: naranja coral #FF6B45 */
-  --primary: oklch(0.7 0.18 35);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.005 255);
-  --secondary-foreground: oklch(0.24 0.025 260);
-  --muted: oklch(0.96 0.005 255);
-  --muted-foreground: oklch(0.52 0.02 258);
-  --accent: oklch(0.96 0.01 35);
-  --accent-foreground: oklch(0.3 0.1 35);
-  --destructive: oklch(0.6 0.22 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.92 0.008 255);
-  --input: oklch(0.92 0.008 255);
-  --ring: oklch(0.7 0.18 35);
-  /* Charts: naranja coral primario + complementarios sobrios */
-  --chart-1: oklch(0.7 0.18 35);
-  --chart-2: oklch(0.65 0.12 220);
-  --chart-3: oklch(0.7 0.14 150);
-  --chart-4: oklch(0.75 0.15 75);
-  --chart-5: oklch(0.55 0.18 300);
-  /* Sidebar: azul marino/slate muy oscuro #1B2433 */
-  --sidebar: oklch(0.24 0.025 255);
-  --sidebar-foreground: oklch(0.92 0.01 255);
-  --sidebar-primary: oklch(0.7 0.18 35);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.3 0.03 255);
-  --sidebar-accent-foreground: oklch(0.98 0.005 255);
-  --sidebar-border: oklch(0.32 0.03 255);
-  --sidebar-ring: oklch(0.7 0.18 35);
-  /* Estados */
-  --status-procesando: oklch(0.65 0.15 235);
-  --status-completado: oklch(0.65 0.16 150);
-  --status-cancelado: oklch(0.6 0.22 27);
-  --status-pendiente: oklch(0.78 0.15 80);
+  --popover-foreground: oklch(0.2024 0.0183 274.9);
+
+  /* Navy sobre blanco: 14:1. El blanco encima, también 14:1. */
+  --primary: oklch(0.3011 0.1057 283.92); /* Navy      #2A2260 */
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.9576 0.0087 264.52); /* Frío 100  #EEF1F7 */
+  --secondary-foreground: oklch(0.3658 0.0247 272.61); /* Gris 700  #3A3E4C */
+  --muted: oklch(0.9576 0.0087 264.52);
+  --muted-foreground: oklch(0.5397 0.0223 272.97); /* Gris 500  #6A6E7C, 5:1 */
+  --accent: oklch(0.9576 0.0087 264.52);
+  --accent-foreground: oklch(0.3011 0.1057 283.92);
+
+  --destructive: oklch(0.5696 0.2068 22.57); /* Error     #D62839, blanco 5:1 */
+  --destructive-foreground: oklch(1 0 0);
+
+  --border: oklch(0.8088 0.0157 273.8); /* Gris 300  #BDC0CB */
+  --input: oklch(0.8088 0.0157 273.8);
+  /* El foco en cyan: es el color más visible de la paleta y aquí no lleva
+     texto encima, así que su bajo contraste como tipografía no importa. */
+  --ring: oklch(0.6883 0.1424 233.09); /* Cyan      #00A8E4 */
+
+  /* Gráficas: los cuatro de marca más el cyan tinta, que se distingue del
+     cyan puro por luminosidad y no solo por tono. */
+  --chart-1: oklch(0.3011 0.1057 283.92); /* Navy */
+  --chart-2: oklch(0.6883 0.1424 233.09); /* Cyan */
+  --chart-3: oklch(0.7339 0.1808 55.41); /* Naranja   #FC8400 */
+  --chart-4: oklch(0.5433 0.132 153.84); /* Éxito     #12854A */
+  --chart-5: oklch(0.5514 0.1136 232.8); /* Cyan tinta #007CA9 */
+
+  /* El menú lateral es la «sección oscura» de la paleta. */
+  --sidebar: oklch(0.3011 0.1057 283.92); /* Navy */
+  --sidebar-foreground: oklch(0.9814 0.0045 258.32);
+  --sidebar-primary: oklch(0.6883 0.1424 233.09); /* Cyan, el del keyline */
+  --sidebar-primary-foreground: oklch(0.2178 0 89.88); /* Negro #1A1A1A */
+  /* Un navy aclarado, no el Navy 900: sobre el menú navy, un tono más oscuro
+     no se distingue y el elemento activo desaparecía. */
+  --sidebar-accent: oklch(0.4 0.105 283.9);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.4 0.095 283.9);
+  --sidebar-ring: oklch(0.6883 0.1424 233.09);
+
+  /* Estados. Sobre fondo claro se usan las variantes tinta, que son las que
+     cumplen AA como texto pequeño. */
+  --status-procesando: oklch(0.5514 0.1136 232.8); /* Cyan tinta   4,7:1 */
+  --status-completado: oklch(0.5433 0.132 153.84); /* Éxito        4,9:1 */
+  --status-cancelado: oklch(0.5696 0.2068 22.57); /* Error        4,6:1 */
+  --status-pendiente: oklch(0.5636 0.1372 56.49); /* Naranja tinta 4,8:1 */
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
-  --status-procesando: oklch(0.68 0.15 235);
-  --status-completado: oklch(0.72 0.16 150);
-  --status-cancelado: oklch(0.7 0.19 27);
-  --status-pendiente: oklch(0.78 0.15 80);
+  /* ---------------------------------------------------------------------
+   * El mismo sistema, invertido.
+   *
+   * El modo oscuro que había era el de serie de shadcn, sin tocar: el color
+   * primario era casi blanco y no quedaba ni rastro de la marca.
+   *
+   * Aquí el primario pasa a ser el cyan, no el navy: el navy sobre un fondo
+   * oscuro se pierde. El cyan lleva texto negro encima (6,4:1), nunca blanco.
+   * ------------------------------------------------------------------- */
+
+  --background: oklch(0.2024 0.0183 274.9); /* Tinta 900 #14161F */
+  --foreground: oklch(0.9814 0.0045 258.32); /* Frío 050  #F7F9FC */
+  /* Un escalón por encima del fondo, con el mismo matiz frío: la paleta no
+     trae una superficie intermedia y las tarjetas necesitan despegarse. */
+  --card: oklch(0.245 0.021 275);
+  --card-foreground: oklch(0.9814 0.0045 258.32);
+  --popover: oklch(0.245 0.021 275);
+  --popover-foreground: oklch(0.9814 0.0045 258.32);
+
+  --primary: oklch(0.6883 0.1424 233.09); /* Cyan      #00A8E4 */
+  --primary-foreground: oklch(0.2178 0 89.88); /* Negro     #1A1A1A */
+
+  --secondary: oklch(0.29 0.023 275);
+  --secondary-foreground: oklch(0.9576 0.0087 264.52);
+  --muted: oklch(0.29 0.023 275);
+  --muted-foreground: oklch(0.72 0.02 273);
+  --accent: oklch(0.3011 0.1057 283.92); /* Navy, como superficie de paso */
+  --accent-foreground: oklch(0.9814 0.0045 258.32);
+
+  --destructive: oklch(0.64 0.2 22.57);
+  --destructive-foreground: oklch(0.2024 0.0183 274.9);
+
+  --border: oklch(1 0 0 / 13%);
+  --input: oklch(1 0 0 / 17%);
+  --ring: oklch(0.6883 0.1424 233.09);
+
+  /* Los mismos tonos, subidos de luminosidad para que se lean sobre oscuro. */
+  --chart-1: oklch(0.6883 0.1424 233.09);
+  --chart-2: oklch(0.7339 0.1808 55.41);
+  --chart-3: oklch(0.72 0.13 153.84);
+  --chart-4: oklch(0.72 0.09 283.92);
+  --chart-5: oklch(0.74 0.06 273);
+
+  --sidebar: oklch(0.2269 0.0836 283.41); /* Navy 900  #191341 */
+  --sidebar-foreground: oklch(0.9814 0.0045 258.32);
+  --sidebar-primary: oklch(0.6883 0.1424 233.09);
+  --sidebar-primary-foreground: oklch(0.2178 0 89.88);
+  --sidebar-accent: oklch(0.3011 0.1057 283.92); /* Navy, sobre Navy 900 */
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(1 0 0 / 13%);
+  --sidebar-ring: oklch(0.6883 0.1424 233.09);
+
+  --status-procesando: oklch(0.6883 0.1424 233.09);
+  --status-completado: oklch(0.72 0.13 153.84);
+  --status-cancelado: oklch(0.68 0.19 22.57);
+  --status-pendiente: oklch(0.7339 0.1808 55.41);
 }
 
 @layer base {

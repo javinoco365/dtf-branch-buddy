@@ -10,7 +10,6 @@ export type ResumenBorradoTienda = {
   pedidos: number;
   clientes: number;
   productos: number;
-  proyectos: number;
 };
 
 /**
