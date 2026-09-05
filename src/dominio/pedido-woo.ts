@@ -6,25 +6,31 @@
  *
  * ## El problema
  *
- * WooCommerce tiene dos cosas distintas que parecen la misma:
+ * WooCommerce tiene dos cosas que parecen la misma:
  *
  *   - `id`     el identificador interno del pedido en la base de WordPress.
  *   - `number` el número que se ve en el panel y en el correo del cliente.
  *
  * **En una tienda sin plugins los dos valen lo mismo**, así que la diferencia
- * no se nota. En cuanto entra un plugin de numeración —los hay en casi todas
- * las tiendas, para que las facturas no delaten cuántos pedidos llevas— el
- * número visible pasa a ser otro y se guarda en `meta_data`, no en `number`.
+ * no se nota. Con un plugin de numeración, el número visible pasa a ser otro
+ * —en DTF Culture, `DCUL-23-2026`— y guardar el `id` significa que el número
+ * de aquí no coincide con el que el cliente tiene en su correo. Cuando alguien
+ * llama preguntando por «el pedido DCUL-23-2026», no hay forma de encontrarlo.
  *
- * Si el CRM guarda el `id`, el número que aparece aquí no coincide con el que
- * el cliente tiene en su correo. Y cuando alguien llama preguntando por «el
- * pedido 1043», no hay forma de encontrarlo.
+ * ## Por qué `number` va PRIMERO y no las claves de `meta_data`
  *
- * ## El orden en que se busca
+ * Porque `number` en la API es el resultado de `$order->get_order_number()`, y
+ * eso es exactamente lo que los plugins de numeración sustituyen: si hay
+ * plugin, ahí ya viene el número completo y formateado.
  *
- * De lo más específico a lo más genérico. Las dos primeras claves son las que
- * usan los plugins de numeración más extendidos; `number` es el campo estándar
- * de la API; el `id` es el último recurso y solo para no quedarse sin nada.
+ * Las claves de `meta_data` son el respaldo para los plugins que guardan el
+ * número pero no filtran esa función. Y van DESPUÉS a propósito: muchos
+ * plugins guardan en `_order_number` solo la parte numérica —el `23` de
+ * `DCUL-23-2026`— así que preferirla al `number` daría un número incompleto,
+ * que es peor que el problema que se venía a resolver.
+ *
+ * Dentro del respaldo, primero la variante «formatted», que es la que lleva el
+ * prefijo y el año.
  */
 
 /** Lo que hace falta de un pedido de la API de WooCommerce. */
@@ -35,15 +41,12 @@ export type PedidoWoo = {
 };
 
 /**
- * Claves de `meta_data` donde los plugins guardan el número visible, en orden
- * de preferencia. La «formatted» va primera porque incluye el prefijo y el
- * sufijo que el cliente ve; la otra es solo la parte numérica.
+ * Claves de `meta_data` donde los plugins guardan el número, en orden de
+ * preferencia. Son las de WooCommerce Sequential Order Numbers, que es la
+ * familia más extendida. Si el plugin de DTF Culture usara otra, se añade aquí
+ * y no hay que tocar nada más.
  */
-export const CLAVES_NUMERO = [
-  "_order_number_formatted",
-  "_order_number",
-  "_alg_wc_full_custom_order_number",
-] as const;
+export const CLAVES_NUMERO = ["_order_number_formatted", "_order_number"] as const;
 
 function texto(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -55,11 +58,18 @@ function texto(v: unknown): string {
 /**
  * El número visible del pedido, o cadena vacía si no hay nada aprovechable.
  *
- * Nunca devuelve el `id` salvo que no exista ninguna otra cosa: es el último
- * recurso para no dejar un pedido sin identificar en pantalla.
+ * El `id` solo se usa cuando no existe ninguna otra cosa: es el último recurso
+ * para no dejar un pedido sin identificar en pantalla.
  */
 export function numeroPedidoWoo(pedido: PedidoWoo | null | undefined): string {
   if (!pedido) return "";
+
+  const id = texto(pedido.id);
+  const numero = texto(pedido.number);
+
+  // Con plugin, `number` ya trae el número completo. Sin plugin vale lo mismo
+  // que el id, y entonces conviene mirar antes si hay algo en meta_data.
+  if (numero && numero !== id) return numero;
 
   const metas = Array.isArray(pedido.meta_data) ? pedido.meta_data : [];
   for (const clave of CLAVES_NUMERO) {
@@ -68,8 +78,5 @@ export function numeroPedidoWoo(pedido: PedidoWoo | null | undefined): string {
     if (valor) return valor;
   }
 
-  const numero = texto(pedido.number);
-  if (numero) return numero;
-
-  return texto(pedido.id);
+  return numero || id;
 }

@@ -2,22 +2,41 @@ import { describe, expect, it } from "vitest";
 import { numeroPedidoWoo } from "./pedido-woo";
 
 describe("numeroPedidoWoo", () => {
-  it("prefiere el número formateado del plugin al de la API", () => {
-    // El caso que motiva el módulo: el cliente tiene «DTF-1043» en su correo y
-    // el CRM enseñaba 432. Al llamar preguntando por el 1043 no se encontraba.
+  it("coge el número del plugin tal cual lo ve el cliente", () => {
+    // El caso real de DTF Culture: el plugin de numeración sustituye
+    // get_order_number(), así que la API ya devuelve el número completo.
+    expect(numeroPedidoWoo({ id: 432, number: "DCUL-23-2026" })).toBe("DCUL-23-2026");
+  });
+
+  it("prefiere el número completo de la API a la parte suelta del meta", () => {
+    // Este es el orden que importa: muchos plugins dejan en _order_number solo
+    // el «23». Preferirlo daría un número incompleto, peor que el problema que
+    // se venía a resolver.
+    expect(
+      numeroPedidoWoo({
+        id: 432,
+        number: "DCUL-23-2026",
+        meta_data: [{ key: "_order_number", value: "23" }],
+      }),
+    ).toBe("DCUL-23-2026");
+  });
+
+  it("usa el meta cuando el plugin guarda pero no filtra la API", () => {
+    // Aquí number sigue valiendo lo mismo que el id: el plugin no sustituyó
+    // get_order_number(), solo dejó el número guardado.
     expect(
       numeroPedidoWoo({
         id: 432,
         number: "432",
         meta_data: [
-          { key: "_order_number", value: "1043" },
-          { key: "_order_number_formatted", value: "DTF-1043" },
+          { key: "_order_number", value: "23" },
+          { key: "_order_number_formatted", value: "DCUL-23-2026" },
         ],
       }),
-    ).toBe("DTF-1043");
+    ).toBe("DCUL-23-2026");
   });
 
-  it("usa el número sin formato si no hay formateado", () => {
+  it("cae en el meta sin formatear si no hay formateado", () => {
     expect(
       numeroPedidoWoo({
         id: 432,
@@ -27,10 +46,9 @@ describe("numeroPedidoWoo", () => {
     ).toBe("1043");
   });
 
-  it("cae en el campo number de la API cuando no hay plugin", () => {
-    // Una tienda sin plugins: number e id valen lo mismo y da igual cuál se
-    // coja. Lo que importa es que no falle.
+  it("sin plugin, number e id valen lo mismo y devuelve ese número", () => {
     expect(numeroPedidoWoo({ id: 432, number: 432, meta_data: [] })).toBe("432");
+    expect(numeroPedidoWoo({ id: 432, number: "432" })).toBe("432");
   });
 
   it("solo usa el id cuando no hay absolutamente nada más", () => {
