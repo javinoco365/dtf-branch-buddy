@@ -12,18 +12,18 @@ import { estadoSmtp, guardarSmtp, probarSmtp } from "@/lib/smtp.functions";
 /**
  * El formulario del servidor de correo.
  *
- * Se usa tal cual para la configuración general (`tiendaId` a null) y para la
- * de una tienda. La contraseña NUNCA se rellena con la guardada: la pantalla no
- * la conoce, y dejarla vacía significa «no la cambies».
+ * Siempre es el de una tienda: no hay configuración general. La contraseña
+ * NUNCA se rellena con la guardada: la pantalla no la conoce, y dejarla vacía
+ * significa «no la cambies».
  */
-export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
+export function FormularioSmtp({ tiendaId }: { tiendaId: string }) {
   const qc = useQueryClient();
   const estadoFn = useServerFn(estadoSmtp);
   const guardarFn = useServerFn(guardarSmtp);
   const probarFn = useServerFn(probarSmtp);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["smtp-estado", tiendaId ?? "general"],
+    queryKey: ["smtp-estado", tiendaId],
     queryFn: () => estadoFn({ data: { tienda_id: tiendaId } }),
   });
   const estado = (data as any)?.estado ?? null;
@@ -34,10 +34,9 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
   const [clave, setClave] = useState("");
   const [destinatario, setDestinatario] = useState("");
 
-  // Solo se rellena con lo que ya está guardado si es del ámbito que se edita:
-  // si esta tienda usa la general, los campos salen vacíos para no dar a
-  // entender que tiene configuración propia.
-  const propia = estado && (tiendaId === null || estado.ambito === "tienda");
+  // Solo se rellena si la configuración es de esta tienda. Si viniera de otro
+  // ámbito, los campos salen vacíos para no dar a entender que es suya.
+  const propia = estado && estado.ambito === "tienda";
   useEffect(() => {
     if (propia) {
       setHost(estado.host ?? "");
@@ -70,7 +69,7 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string | null }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Mail className="h-4 w-4" />
-          {tiendaId ? "Servidor propio de esta tienda" : "Servidor de correo"}
+          Servidor de correo de esta tienda
         </CardTitle>
         <CardDescription>
           Los datos del buzón de tu hosting: host{" "}
