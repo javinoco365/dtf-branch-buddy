@@ -22,6 +22,8 @@
  * etiqueta de envío y, más adelante, el receptor congelado de la factura.
  */
 
+import { nombreProvincia } from "./provincias-es";
+
 /** Una dirección congelada en el pedido. Todos los campos pueden faltar. */
 export type Direccion = {
   nombre?: string | null;
@@ -88,12 +90,15 @@ export function normalizarDireccion(entrada: unknown): Direccion | null {
  */
 export function lineasDireccion(d: Direccion): string[] {
   const cp = [d.codigo_postal, d.ciudad].filter(Boolean).join(" ");
+  // Woo guarda el código corto de su lista de provincias («H»), no el nombre
+  // («Huelva»). Se traduce aquí, al pintar, no al guardar: ver provincias-es.ts.
+  const provincia = d.provincia ? nombreProvincia(d.provincia) : d.provincia;
   return [
     d.nombre,
     d.empresa,
     d.direccion,
     cp,
-    [d.provincia, d.pais].filter(Boolean).join(", "),
+    [provincia, d.pais].filter(Boolean).join(", "),
     d.telefono,
   ]
     .map((x) => (typeof x === "string" ? x.trim() : ""))
