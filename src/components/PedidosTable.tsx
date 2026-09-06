@@ -401,19 +401,32 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </div>
             <Card>
               <CardContent className="p-0">
-                <Table>
+                {/*
+                  Cada día es una tabla aparte, y una tabla HTML reparte el
+                  ancho de sus columnas según SU propio contenido. Con anchos
+                  automáticos, un grupo con nombres largos sacaba las columnas
+                  de sitio respecto al grupo de al lado y las cabeceras no
+                  cuadraban entre sí.
+
+                  `table-fixed` hace que manden los anchos declarados abajo y
+                  no el contenido, así que todos los grupos salen alineados.
+                  Solo Cliente se queda sin ancho fijo: se lleva lo que sobre.
+                  El `min-w` es para que en pantallas estrechas la tabla se
+                  desplace en horizontal en vez de estrujar las columnas.
+                */}
+                <Table className="table-fixed min-w-[880px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead>Nº Pedido</TableHead>
+                      <TableHead className="w-40">Nº Pedido</TableHead>
                       <TableHead>Cliente</TableHead>
-                      {!tiendaId && <TableHead>Tienda</TableHead>}
-                      <TableHead>Origen</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Pago</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead className="w-10">Env.</TableHead>
-                      <TableHead className="w-10" />
+                      {!tiendaId && <TableHead className="w-32">Tienda</TableHead>}
+                      <TableHead className="w-36">Origen</TableHead>
+                      <TableHead className="w-40">Estado</TableHead>
+                      <TableHead className="w-28">Pago</TableHead>
+                      <TableHead className="w-28 text-right">Total</TableHead>
+                      <TableHead className="w-14">Env.</TableHead>
+                      <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -532,15 +545,22 @@ function FilaPedido({
         <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
-        <TableCell className="font-mono text-sm">{numeroLabel}</TableCell>
+        <TableCell className="font-mono text-sm truncate">{numeroLabel}</TableCell>
         <TableCell>
-          <div className="font-medium">{pedido.cliente_nombre ?? "—"}</div>
+          {/* Con table-fixed la celda ya no se estira: un correo largo se
+              recorta con puntos suspensivos en vez de descuadrar la fila.
+              El title deja verlo entero al pasar el ratón. */}
+          <div className="font-medium truncate" title={pedido.cliente_nombre ?? undefined}>
+            {pedido.cliente_nombre ?? "—"}
+          </div>
           {pedido.cliente_email && (
-            <div className="text-xs text-muted-foreground">{pedido.cliente_email}</div>
+            <div className="text-xs text-muted-foreground truncate" title={pedido.cliente_email}>
+              {pedido.cliente_email}
+            </div>
           )}
         </TableCell>
         {mostrarTienda && (
-          <TableCell className="text-xs text-muted-foreground">
+          <TableCell className="text-xs text-muted-foreground truncate">
             {pedido.tienda_nombre ?? "—"}
           </TableCell>
         )}
