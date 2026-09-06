@@ -14,10 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { setPedidoTracking } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
-
-const CTT = "CTT Express";
-const cttUrl = (codigo: string) =>
-  `https://www.cttexpress.com/localizador-de-envios/?sc=${encodeURIComponent(codigo.trim())}`;
+import { TRANSPORTISTAS_CONOCIDOS, transportistaConocido } from "@/dominio/transportistas";
 
 export function PedidoTrackingDialog({
   open,
@@ -43,15 +40,19 @@ export function PedidoTrackingDialog({
 
   const fn = useServerFn(setPedidoTracking);
 
-  const aplicarCtt = () => {
-    setTransportista(CTT);
-    if (codigo.trim()) setUrl(cttUrl(codigo));
+  const aplicarConocido = (nombre: string) => {
+    setTransportista(nombre);
+    const generada = transportistaConocido(nombre)?.urlSeguimiento(codigo);
+    if (generada) setUrl(generada);
   };
 
   const onCodigoChange = (v: string) => {
     setCodigo(v);
-    if (transportista === CTT && v.trim()) setUrl(cttUrl(v));
+    const generada = transportistaConocido(transportista)?.urlSeguimiento(v);
+    if (generada) setUrl(generada);
   };
+
+  const conocidoActual = transportistaConocido(transportista);
   const mut = useMutation({
     mutationFn: async () => {
       if (!pedido) return;
@@ -85,24 +86,35 @@ export function PedidoTrackingDialog({
               onChange={(e) => setTransportista(e.target.value)}
               placeholder="SEUR, MRW, Correos Express…"
             />
-            <Button type="button" variant="secondary" size="sm" onClick={aplicarCtt}>
-              Usar CTT Express
-            </Button>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {TRANSPORTISTAS_CONOCIDOS.map((t) => (
+                <Button
+                  key={t.nombre}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => aplicarConocido(t.nombre)}
+                >
+                  Usar {t.nombre}
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="space-y-1">
             <Label>Número de seguimiento</Label>
             <Input
               value={codigo}
               onChange={(e) => onCodigoChange(e.target.value)}
-              placeholder="0034050034059700104370"
+              placeholder={conocidoActual?.marcador ?? "0034050034059700104370"}
             />
           </div>
           <div className="space-y-1">
             <Label>URL de seguimiento</Label>
             <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
             <p className="text-xs text-muted-foreground">
-              Con CTT Express el enlace se genera solo desde el número de envío. Si recibes por
-              correo un enlace propio de CTT, pégalo aquí para sustituirlo.
+              {conocidoActual
+                ? `${conocidoActual.ayuda} Si recibes por correo un enlace propio, pégalo aquí para sustituirlo.`
+                : "Con CTT Express y Nacex el enlace se genera solo desde el número de envío."}
             </p>
           </div>
         </div>

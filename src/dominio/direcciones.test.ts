@@ -86,6 +86,15 @@ describe("lineasDireccion", () => {
   it("no incluye el correo: no va en una etiqueta de envío", () => {
     expect(lineasDireccion({ nombre: "Ana", email: "ana@example.com" })).toEqual(["Ana"]);
   });
+
+  it("traduce el código de provincia que guarda WooCommerce", () => {
+    // El caso real: Woo deja «H» en vez de «Huelva». Sin esto la etiqueta de
+    // envío sale con una letra suelta que no dice nada.
+    expect(lineasDireccion({ ciudad: "Cartaya", provincia: "H", pais: "España" })).toEqual([
+      "Cartaya",
+      "Huelva, España",
+    ]);
+  });
 });
 
 describe("mismaDireccion", () => {
