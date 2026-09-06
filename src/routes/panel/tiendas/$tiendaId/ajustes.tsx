@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,7 +22,6 @@ import {
   vistaPreviaHtml,
 } from "@/lib/plantillas-correo";
 import { useAuth } from "@/lib/auth-context";
-import { estadoSmtp, usarSmtpGeneral } from "@/lib/smtp.functions";
 import { FormularioSmtp } from "@/components/FormularioSmtp";
 import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
 import { sincronizarWoo, diagnosticoNumeroWoo } from "@/lib/woocommerce.functions";
@@ -720,7 +719,7 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
         </CardContent>
       </Card>
 
-      <ServidorDeCorreo tiendaId={tiendaId} isAdmin={isAdmin} />
+      <ServidorDeCorreo tiendaId={tiendaId} />
 
       <Card>
         <CardHeader>
@@ -893,74 +892,17 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
 /**
  * El servidor de correo de una tienda.
  *
- * Casi siempre se usa el general: una cuenta de Resend con varios dominios
- * verificados y un remitente por tienda. Por eso lo normal es ver solo el aviso
- * de que se usa el general, y el formulario aparece si de verdad hace falta
- * separar esta tienda.
+ * El formulario va directo, sin botón que lo descubra. Antes esta tarjeta
+ * empezaba ofreciendo «configurar el general» y escondía los campos de host y
+ * puerto detrás de un «usar un servidor propio»: quien entraba a poner el
+ * puerto de su buzón no encontraba dónde.
+ *
+ * Ya no hay servidor general: cada tienda tiene el suyo. Los avisos de una
+ * tienda salen con su marca y desde su dominio, así que el proveedor y el
+ * buzón son también cosa de cada tienda.
  */
-function ServidorDeCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: boolean }) {
-  const qc = useQueryClient();
-  const [editando, setEditando] = useState(false);
-  const estadoFn = useServerFn(estadoSmtp);
-  const generalFn = useServerFn(usarSmtpGeneral);
-
-  const { data } = useQuery({
-    queryKey: ["smtp-estado", tiendaId],
-    queryFn: () => estadoFn({ data: { tienda_id: tiendaId } }),
-  });
-  const estado = (data as any)?.estado ?? null;
-  const propia = estado?.ambito === "tienda";
-
-  const volverAGeneral = useMutation({
-    mutationFn: () => generalFn({ data: { tienda_id: tiendaId } }),
-    onSuccess: () => {
-      toast.success("Esta tienda vuelve a usar el servidor general");
-      setEditando(false);
-      qc.invalidateQueries({ queryKey: ["smtp-estado"] });
-    },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo quitar"),
-  });
-
-  if (editando || propia) {
-    return (
-      <div className="space-y-2">
-        <FormularioSmtp tiendaId={tiendaId} />
-        {isAdmin && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => (propia ? volverAGeneral.mutate() : setEditando(false))}
-            disabled={volverAGeneral.isPending}
-          >
-            {propia ? "Usar el servidor general" : "Cancelar"}
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Servidor de correo</CardTitle>
-        <CardDescription>
-          {estado
-            ? `Esta tienda usa el servidor general: ${estado.host}.`
-            : "No hay ningún servidor de correo configurado todavía, así que los avisos no salen."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/panel/configuracion-correo">Configurar el general</Link>
-        </Button>
-        {isAdmin && (
-          <Button variant="ghost" size="sm" onClick={() => setEditando(true)}>
-            Usar un servidor propio para esta tienda
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
+function ServidorDeCorreo({ tiendaId }: { tiendaId: string }) {
+  return <FormularioSmtp tiendaId={tiendaId} />;
 }
 
 /** Un punto de partida para quien nunca ha maquetado un correo. */
