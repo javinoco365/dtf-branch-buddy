@@ -254,9 +254,27 @@ function Ajustes() {
               onClick={async () => {
                 try {
                   const r = await sync({ data: { tienda_id: tiendaId } });
-                  toast.success(
-                    `Sincronizado: ${r.pedidos} pedidos, ${r.clientes} clientes, ${r.productos} productos`,
-                  );
+                  const detalles = [
+                    `${r.pedidos} pedidos`,
+                    `${r.clientes} clientes`,
+                    `${r.productos} productos`,
+                  ];
+                  if (r.devoluciones_actualizadas > 0) {
+                    detalles.push(`${r.devoluciones_actualizadas} con devolución`);
+                  }
+                  if (r.pedidos_borrados > 0) {
+                    detalles.push(`${r.pedidos_borrados} borrados (ya no están en WooCommerce)`);
+                  }
+                  toast.success(`Sincronizado: ${detalles.join(", ")}`);
+                  if (r.protegidos_por_factura > 0) {
+                    toast.warning(
+                      `${r.protegidos_por_factura} ${
+                        r.protegidos_por_factura === 1
+                          ? "pedido ha desaparecido de WooCommerce pero no se ha borrado"
+                          : "pedidos han desaparecido de WooCommerce pero no se han borrado"
+                      }: tienen una factura emitida.`,
+                    );
+                  }
                   qc.invalidateQueries();
                 } catch (e) {
                   toast.error((e as Error).message);

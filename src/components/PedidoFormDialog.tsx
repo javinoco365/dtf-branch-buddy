@@ -117,6 +117,11 @@ export function PedidoFormDialog({
   const [lineas, setLineas] = useState<Linea[]>([
     { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL },
   ]);
+  // Para exportación y para operaciones intracomunitarias con inversión del
+  // sujeto pasivo (arts. 21 y 25 LIVA): el pedido no lleva IVA. Un interruptor
+  // por pedido, no por línea — el DTF va todo al mismo tipo, así que mezclar
+  // tipos dentro de un mismo pedido no es un caso real.
+  const [aplicaIva, setAplicaIva] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -136,19 +141,21 @@ export function PedidoFormDialog({
         mismaDireccion(pedido.direccion_envio, pedido.direccion_facturacion) ||
           !pedido.direccion_envio,
       );
-      setLineas(
-        pedido.items.length
-          ? pedido.items.map((it) => ({
-              descripcion: it.descripcion,
-              cantidad: Number(it.cantidad),
-              precio_unitario: Number(it.precio_unitario),
-              // El tipo que tenía la línea, no el general: abrir un pedido con
-              // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
-              // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
-              iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
-            }))
-          : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }],
-      );
+      const lineasIniciales = pedido.items.length
+        ? pedido.items.map((it) => ({
+            descripcion: it.descripcion,
+            cantidad: Number(it.cantidad),
+            precio_unitario: Number(it.precio_unitario),
+            // El tipo que tenía la línea, no el general: abrir un pedido con
+            // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
+            // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
+            iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
+          }))
+        : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }];
+      setLineas(lineasIniciales);
+      // Si el pedido ya estaba entero sin IVA, el interruptor nace apagado:
+      // si no, reabrirlo y guardarlo sin tocar nada le habría puesto el 21 %.
+      setAplicaIva(lineasIniciales.some((l) => l.iva_rate > 0));
     } else {
       setCliente("");
       setEmail("");
@@ -160,6 +167,7 @@ export function PedidoFormDialog({
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
       setLineas([{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }]);
+      setAplicaIva(true);
     }
   }, [open, pedido]);
 
@@ -223,6 +231,14 @@ export function PedidoFormDialog({
 
   function setLinea(i: number, patch: Partial<Linea>) {
     setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+
+  // Cambia las líneas de golpe: dejarlas cada una con su tipo anterior tras
+  // desmarcar habría guardado un pedido "sin IVA" que en realidad sigue
+  // llevando un 21 % en cada línea.
+  function alternarIva(v: boolean) {
+    setAplicaIva(v);
+    setLineas((prev) => prev.map((l) => ({ ...l, iva_rate: v ? IVA_GENERAL : 0 })));
   }
 
   // El envío entra en la base imponible y tributa, que es lo que dice el
@@ -338,13 +354,36 @@ export function PedidoFormDialog({
                 onClick={() =>
                   setLineas([
                     ...lineas,
-                    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL },
+                    {
+                      descripcion: "",
+                      cantidad: 1,
+                      precio_unitario: 0,
+                      iva_rate: aplicaIva ? IVA_GENERAL : 0,
+                    },
                   ])
                 }
               >
                 <Plus className="h-4 w-4 mr-1" /> Añadir línea
               </Button>
             </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="aplica-iva"
+                checked={aplicaIva}
+                onCheckedChange={(v) => alternarIva(v === true)}
+              />
+              <Label htmlFor="aplica-iva" className="font-normal cursor-pointer">
+                Aplicar IVA ({IVA_GENERAL} %)
+              </Label>
+            </div>
+            {!aplicaIva && (
+              <p className="text-xs text-muted-foreground">
+                Exportación o entrega intracomunitaria: el pedido se guarda sin IVA en ninguna
+                línea.
+              </p>
+            )}
+
             <div className="space-y-2">
               {lineas.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-end">
@@ -381,6 +420,7 @@ export function PedidoFormDialog({
                       type="number"
                       step="1"
                       value={l.iva_rate}
+                      disabled={!aplicaIva}
                       onChange={(e) => setLinea(i, { iva_rate: Number(e.target.value) || 0 })}
                     />
                   </div>
