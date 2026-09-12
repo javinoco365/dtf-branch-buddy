@@ -19,10 +19,20 @@ export const bootstrapPrimerAdmin = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin, adminComoUsuario } =
       await import("@/integrations/supabase/client.server");
-    const { count } = await supabaseAdmin
+    const { count, error: countErr } = await supabaseAdmin
       .from("user_roles")
       .select("*", { count: "exact", head: true })
       .eq("role", "admin");
+    // Si la consulta falla (un blip de red, la base despertando de una
+    // pausa, una clave caducada…) NO se trata como «cero administradores»:
+    // eso es justo lo que convertía cualquier fallo pasajero en la pantalla
+    // de «crear el primer administrador», con el riesgo de acabar creando
+    // uno de más sobre un sistema que ya tenía los suyos.
+    if (countErr) {
+      throw new Error(
+        `No se ha podido comprobar si ya existe un administrador: ${countErr.message}`,
+      );
+    }
     if ((count ?? 0) > 0) {
       throw new Error("Ya existe un administrador. Pide una invitación.");
     }
@@ -42,10 +52,18 @@ export const bootstrapPrimerAdmin = createServerFn({ method: "POST" })
 
 export const adminExiste = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { count } = await supabaseAdmin
+  const { count, error } = await supabaseAdmin
     .from("user_roles")
     .select("*", { count: "exact", head: true })
     .eq("role", "admin");
+  // Mismo motivo que en bootstrapPrimerAdmin: un fallo de la consulta no es
+  // lo mismo que «no hay administradores», y confundir los dos es lo que
+  // hacía salir la pantalla de alta del primer administrador —con el CRM
+  // en producción y con administradores de sobra— cada vez que la consulta
+  // fallaba por cualquier motivo pasajero.
+  if (error) {
+    throw new Error(`No se ha podido comprobar si existe un administrador: ${error.message}`);
+  }
   return { existe: (count ?? 0) > 0 };
 });
 
