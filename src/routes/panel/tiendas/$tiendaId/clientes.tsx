@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -48,6 +49,7 @@ type Cliente = {
   tienda_id: string;
   woo_customer_id: number | null;
   nombre: string;
+  apodo: string | null;
   email: string | null;
   telefono: string | null;
   nif: string | null;
@@ -63,6 +65,7 @@ type Cliente = {
 const empty = (tiendaId: string): Partial<Cliente> => ({
   tienda_id: tiendaId,
   nombre: "",
+  apodo: "",
   email: "",
   telefono: "",
   nif: "",
@@ -86,8 +89,9 @@ function Clientes() {
   const { data: clientes = [] } = useQuery({
     queryKey: ["clientes", tiendaId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
+      // tabla() y no .from(): types.ts está generado y todavía no conoce
+      // apodo. Se quita cuando se regenere.
+      const { data, error } = await tabla(supabase, "clientes")
         .select("*")
         .eq("tienda_id", tiendaId)
         .order("nombre");
@@ -102,6 +106,7 @@ function Clientes() {
     return clientes.filter(
       (c) =>
         c.nombre.toLowerCase().includes(q) ||
+        (c.apodo ?? "").toLowerCase().includes(q) ||
         (c.email ?? "").toLowerCase().includes(q) ||
         (c.nif ?? "").toLowerCase().includes(q) ||
         (c.telefono ?? "").toLowerCase().includes(q),
@@ -114,6 +119,7 @@ function Clientes() {
       const payload = {
         tienda_id: tiendaId,
         nombre: c.nombre.trim(),
+        apodo: c.apodo?.trim() || null,
         email: c.email || null,
         telefono: c.telefono || null,
         nif: c.nif || null,
@@ -126,10 +132,10 @@ function Clientes() {
         notas: c.notas || null,
       };
       if (c.id) {
-        const { error } = await supabase.from("clientes").update(payload).eq("id", c.id);
+        const { error } = await tabla(supabase, "clientes").update(payload).eq("id", c.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("clientes").insert(payload);
+        const { error } = await tabla(supabase, "clientes").insert(payload);
         if (error) throw error;
       }
     },
@@ -174,7 +180,7 @@ function Clientes() {
       <div className="relative max-w-sm">
         <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Buscar nombre, email, NIF…"
+          placeholder="Buscar nombre, apodo, email, NIF…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
@@ -198,7 +204,12 @@ function Clientes() {
             <TableBody>
               {filtered.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setDetailId(c.id)}>
-                  <TableCell className="font-medium">{c.nombre}</TableCell>
+                  <TableCell className="font-medium">
+                    {c.nombre}
+                    {c.apodo && (
+                      <div className="text-xs font-normal text-muted-foreground">{c.apodo}</div>
+                    )}
+                  </TableCell>
                   <TableCell>{c.email ?? "—"}</TableCell>
                   <TableCell>{c.telefono ?? "—"}</TableCell>
                   <TableCell>{c.nif ?? "—"}</TableCell>
@@ -304,6 +315,18 @@ function ClienteForm({
           <div className="col-span-2">
             <Label>Nombre *</Label>
             <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">
+              El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
+              WooCommerce ni se cambia solo.
+            </p>
+          </div>
+          <div className="col-span-2">
+            <Label>Apodo</Label>
+            <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
+            <p className="text-xs text-muted-foreground mt-1">
+              Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí» para
+              «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una factura.
+            </p>
           </div>
           <div>
             <Label>Email</Label>
@@ -391,8 +414,9 @@ function ClienteDetalle({
   const { data: cliente } = useQuery({
     queryKey: ["cliente", clienteId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
+      // tabla() y no .from(): types.ts está generado y todavía no conoce
+      // apodo. Se quita cuando se regenere.
+      const { data, error } = await tabla(supabase, "clientes")
         .select("*")
         .eq("id", clienteId)
         .maybeSingle();
@@ -437,9 +461,10 @@ function ClienteDetalle({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            {cliente.nombre}
+            {cliente.apodo || cliente.nombre}
             {cliente.woo_customer_id && <Badge variant="secondary">WooCommerce</Badge>}
           </DialogTitle>
+          {cliente.apodo && <p className="text-sm text-muted-foreground">{cliente.nombre}</p>}
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
