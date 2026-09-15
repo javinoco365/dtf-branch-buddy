@@ -98,3 +98,107 @@ export function estadoPagoPorDevolucion(
   if (!(reembolsado > 0)) return null;
   return reembolsado >= totalPedido - EPSILON ? "reembolsado" : "parcial";
 }
+
+/**
+ * Qué clientes de invitado hay que dar de alta a partir de una tanda de
+ * pedidos.
+ *
+ * ## El problema
+ *
+ * La sincronización solo traía fichas de cliente de `/wp-json/wc/v3/customers`,
+ * que es la lista de cuentas registradas en WooCommerce. Un pedido de
+ * invitado —sin cuenta, sin `customer_id`— nunca aparece ahí. El pedido en sí
+ * se guardaba bien, con el nombre y el email congelados en sus propias
+ * columnas, pero no dejaba ninguna ficha en Clientes: ese comprador
+ * desaparecía de la base de clientes en cuanto se cerraba el pedido, y si
+ * volvía a comprar, otra vez sin ficha.
+ *
+ * ## Por qué el correo es la clave, no el nombre
+ *
+ * Un invitado no tiene ningún identificador estable salvo lo que escribió en
+ * el formulario. El correo es lo único de eso que de verdad identifica a la
+ * misma persona entre dos pedidos —el nombre se teclea distinto de una vez a
+ * otra, con o sin tilde, con o sin el segundo apellido—.
+ */
+export type PedidoWooBilling = {
+  customer_id?: number | null;
+  billing?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address_1?: string | null;
+    address_2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postcode?: string | null;
+    country?: string | null;
+  } | null;
+};
+
+/** Una ficha de cliente nueva, lista para insertar. */
+export type ClienteInvitadoNuevo = {
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  empresa: string | null;
+  direccion: string | null;
+  codigo_postal: string | null;
+  ciudad: string | null;
+  provincia: string | null;
+  pais: string;
+};
+
+function limpio(v: string | null | undefined): string | null {
+  const t = v?.trim();
+  return t ? t : null;
+}
+
+/**
+ * Los invitados de esta tanda que todavía no tienen ficha.
+ *
+ * `emailsConFicha` son los correos que ya existen como cliente en esta
+ * tienda, en minúsculas: tanto los de cuentas registradas como los de un
+ * invitado de una sincronización anterior. Un correo de ahí nunca genera una
+ * ficha nueva, aunque el pedido sea de invitado.
+ *
+ * Dentro de la propia tanda, un correo repetido —dos pedidos de invitado del
+ * mismo comprador el mismo día— solo genera una ficha: la segunda vez
+ * chocaría al intentar insertar la misma fila dos veces en la misma
+ * escritura.
+ */
+export function clientesInvitadosNuevos(
+  orders: readonly PedidoWooBilling[],
+  emailsConFicha: ReadonlySet<string>,
+): ClienteInvitadoNuevo[] {
+  const vistos = new Set<string>();
+  const nuevos: ClienteInvitadoNuevo[] = [];
+
+  for (const o of orders) {
+    if (o.customer_id) continue;
+    const b = o.billing;
+    const emailOriginal = b?.email?.trim();
+    if (!emailOriginal) continue;
+    const email = emailOriginal.toLowerCase();
+    if (vistos.has(email) || emailsConFicha.has(email)) continue;
+    vistos.add(email);
+
+    const nombre = [limpio(b?.first_name), limpio(b?.last_name)].filter(Boolean).join(" ");
+    const direccion = [limpio(b?.address_1), limpio(b?.address_2)].filter(Boolean).join(" ");
+
+    nuevos.push({
+      nombre: nombre || emailOriginal,
+      email: emailOriginal,
+      telefono: limpio(b?.phone),
+      empresa: limpio(b?.company),
+      direccion: direccion || null,
+      codigo_postal: limpio(b?.postcode),
+      ciudad: limpio(b?.city),
+      provincia: limpio(b?.state),
+      pais: limpio(b?.country) ?? "ES",
+    });
+  }
+
+  return nuevos;
+}

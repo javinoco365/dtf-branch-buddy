@@ -216,6 +216,112 @@ export const emitirFactura = createServerFn({ method: "POST" })
   });
 
 /**
+ * Reúne lo que hace falta para facturar un pedido con un botón: el
+ * receptor y las líneas, listos para pasárselos tal cual a `emitirFactura`.
+ *
+ * No emite nada — no llama a `emitir_factura()`, no asigna número, no
+ * escribe una fila. Solo lee. La emisión de verdad la hace quien llama esto,
+ * con una segunda petición a `emitirFactura`, después de que alguien haya
+ * visto lo que va a salir en la factura y lo confirme.
+ *
+ * Si el pedido ya tiene una factura, no prepara una segunda: la devuelve, y
+ * quien llama decide qué enseñar. Si de verdad hiciera falta una segunda
+ * factura para el mismo pedido —una corrección, un pedido con dos entregas
+ * facturadas aparte— es una decisión que se toma a mano desde «Nueva
+ * factura», no algo que este atajo deba ofrecer solo.
+ */
+export const prepararFacturaPedido = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ pedido_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { receptorDesdePedido, lineasDesdePedido } =
+      await import("@/dominio/factura-desde-pedido");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    // tabla() y no .from(): direccion_facturacion no está en types.ts.
+    const { data: pedido, error: pErr } = await tabla(supabaseAdmin, "pedidos")
+      .select(
+        "id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas",
+      )
+      .eq("id", data.pedido_id)
+      .maybeSingle();
+    if (pErr || !pedido) throw new Error("Pedido no encontrado");
+
+    const { data: miembro } = await supabaseAdmin
+      .from("tienda_usuarios")
+      .select("tienda_id")
+      .eq("tienda_id", pedido.tienda_id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!miembro && !rol) throw new Error("Sin acceso a este pedido");
+
+    const { data: existente } = await tabla(supabaseAdmin, "facturas")
+      .select("id, serie, ejercicio, numero")
+      .eq("pedido_id", data.pedido_id)
+      .order("fecha", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existente) {
+      return {
+        ya_facturado: true as const,
+        factura: {
+          id: existente.id,
+          referencia: referenciaFactura(existente.serie, existente.ejercicio, existente.numero),
+        },
+      };
+    }
+
+    const [{ data: items }, clienteRes] = await Promise.all([
+      supabaseAdmin
+        .from("pedido_items")
+        .select("descripcion, cantidad, unidad, precio_unitario, iva_rate")
+        .eq("pedido_id", data.pedido_id),
+      pedido.cliente_id
+        ? supabaseAdmin
+            .from("clientes")
+            .select("nombre, nif, direccion, codigo_postal, ciudad, provincia, pais, email")
+            .eq("id", pedido.cliente_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const receptor = receptorDesdePedido(
+      clienteRes.data,
+      pedido.direccion_facturacion,
+      pedido.cliente_nombre,
+      pedido.cliente_email,
+    );
+    if (!receptor.nombre) {
+      throw new Error(
+        "Este pedido no tiene ni cliente vinculado ni nombre en la dirección de facturación. " +
+          "Complétalo antes de facturar.",
+      );
+    }
+
+    const lineas = lineasDesdePedido(items ?? [], Number(pedido.envio || 0));
+    if (lineas.length === 0) {
+      throw new Error("Este pedido no tiene líneas: no hay nada que facturar.");
+    }
+
+    return {
+      ya_facturado: false as const,
+      tienda_id: pedido.tienda_id as string,
+      cliente_id: (pedido.cliente_id as string | null) ?? null,
+      receptor,
+      lineas,
+      sin_nif: !receptor.nif,
+      notas: (pedido.notas as string | null) ?? null,
+    };
+  });
+
+/**
  * Anula una factura emitida.
  *
  * No la borra ni la modifica: emite una rectificativa con las mismas líneas en

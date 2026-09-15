@@ -65,6 +65,9 @@ const PedidoFormDialog = lazy(() =>
 const PedidoTrackingDialog = lazy(() =>
   import("@/components/PedidoTrackingDialog").then((m) => ({ default: m.PedidoTrackingDialog })),
 );
+const FacturarPedidoDialog = lazy(() =>
+  import("@/components/FacturarPedidoDialog").then((m) => ({ default: m.FacturarPedidoDialog })),
+);
 import {
   AlertDialog,
   AlertDialogAction,
@@ -159,6 +162,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const [editar, setEditar] = useState<PedidoFila | null>(null);
   const [tracking, setTracking] = useState<PedidoFila | null>(null);
   const [borrar, setBorrar] = useState<PedidoFila | null>(null);
+  const [facturar, setFacturar] = useState<PedidoFila | null>(null);
 
   const { desde, hasta } = rango(ref, periodo);
   const list = useServerFn(listPedidos);
@@ -443,6 +447,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                           onEditar={() => setEditar(p)}
                           onTracking={() => setTracking(p)}
                           onBorrar={() => setBorrar(p)}
+                          onFacturar={() => setFacturar(p)}
                         />
                       );
                     })}
@@ -486,6 +491,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             }}
           />
         )}
+        {facturar && (
+          <FacturarPedidoDialog
+            open={!!facturar}
+            onOpenChange={(o) => !o && setFacturar(null)}
+            pedidoId={facturar.id}
+            numeroPedido={facturar.numero}
+            onEmitida={() => {
+              queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+              setFacturar(null);
+            }}
+          />
+        )}
       </Suspense>
       <AlertDialog open={!!borrar} onOpenChange={(o) => !o && setBorrar(null)}>
         <AlertDialogContent>
@@ -516,6 +533,7 @@ function FilaPedido({
   onEditar,
   onTracking,
   onBorrar,
+  onFacturar,
 }: {
   pedido: PedidoFila;
   abierta: boolean;
@@ -525,6 +543,7 @@ function FilaPedido({
   onEditar: () => void;
   onTracking: () => void;
   onBorrar: () => void;
+  onFacturar: () => void;
 }) {
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
   // El número que ve el cliente, siempre. Antes esta línea era al revés: si
@@ -626,6 +645,7 @@ function FilaPedido({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
               <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
+              <DropdownMenuItem onClick={onFacturar}>Facturar</DropdownMenuItem>
               <DropdownMenuItem onClick={onBorrar} className="text-destructive">
                 Borrar
               </DropdownMenuItem>

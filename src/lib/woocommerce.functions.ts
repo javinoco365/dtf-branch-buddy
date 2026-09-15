@@ -5,6 +5,7 @@ import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { tabla } from "./rpc";
 import { numeroPedidoWoo } from "@/dominio/pedido-woo";
 import {
+  clientesInvitadosNuevos,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
   pedidosDesaparecidos,
@@ -164,6 +165,47 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
           }
         }
 
+        // Los pedidos de invitado —sin customer_id— no salen en /customers, así
+        // que sin esto nunca dejaban ficha en Clientes: se guardaban bien en el
+        // pedido, pero el comprador desaparecía de la base de clientes en cuanto
+        // se cerraba el pedido. Se identifican por correo, en minúsculas para no
+        // duplicar a quien escribe su email distinto cada vez.
+        const clientePorEmail = new Map<string, string>();
+        const emailsInvitados = [
+          ...new Set(
+            orders
+              .filter((o) => !o.customer_id)
+              .map((o) => o.billing?.email?.trim().toLowerCase())
+              .filter((e): e is string => !!e),
+          ),
+        ];
+        if (emailsInvitados.length) {
+          const { data: existentes } = await supabaseAdmin
+            .from("clientes")
+            .select("id, email")
+            .eq("tienda_id", data.tienda_id)
+            .not("email", "is", null);
+          for (const c of existentes ?? []) {
+            if (c.email) clientePorEmail.set(c.email.trim().toLowerCase(), c.id);
+          }
+
+          const nuevos = clientesInvitadosNuevos(orders, new Set(clientePorEmail.keys()));
+          if (nuevos.length) {
+            const { data: creados, error } = await supabaseAdmin
+              .from("clientes")
+              .insert(
+                nuevos.map((c) => ({ tienda_id: data.tienda_id, woo_customer_id: null, ...c })),
+              )
+              .select("id, email");
+            if (!error) {
+              for (const c of creados ?? []) {
+                if (c.email) clientePorEmail.set(c.email.trim().toLowerCase(), c.id);
+              }
+              importados.clientes += creados?.length ?? 0;
+            }
+          }
+        }
+
         const estadoMap: Record<string, string> = {
           pending: "pendiente",
           processing: "en_produccion",
@@ -199,7 +241,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
             // el cambio a la web, así que nunca lo devolvían.
             origen: "woocommerce",
             estado: (estadoMap[o.status] ?? "pendiente") as any,
-            cliente_id: o.customer_id ? (clientePorWooId.get(o.customer_id) ?? null) : null,
+            cliente_id: o.customer_id
+              ? (clientePorWooId.get(o.customer_id) ?? null)
+              : (clientePorEmail.get(o.billing?.email?.trim().toLowerCase() ?? "") ?? null),
             cliente_nombre: facturacion?.nombre || null,
             cliente_email: facturacion?.email || null,
             cliente_telefono: facturacion?.telefono || null,
