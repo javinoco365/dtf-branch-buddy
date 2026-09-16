@@ -43,6 +43,40 @@ function direccionWoo(b: any): Record<string, string> | null {
   return Object.values(d).some(Boolean) ? d : null;
 }
 
+/**
+ * Todas las páginas de un listado de WooCommerce, no solo la primera.
+ *
+ * `sincronizarWoo` se queda a propósito en los últimos 100 clientes y 100
+ * pedidos: es la sincronización de cada dos por tres, y tiene que ser rápida.
+ * Pero eso significa que una tienda con más de 100 clientes registrados, o
+ * más de 100 pedidos históricos con compradores de invitado, tiene compradores
+ * que esa sincronización nunca llega a ver. Esto es lo que usa
+ * `sincronizarClientesWoo` para mirarlos todos, una vez, a demanda.
+ *
+ * `maxPaginas` corta un bucle que por lo que sea no acabara nunca: con
+ * `per_page=100` son 500 páginas → 50.000 filas, muy por encima de lo que va
+ * a tener esta tienda.
+ */
+async function fetchTodasLasPaginasWoo(
+  url: string,
+  headers: HeadersInit,
+  maxPaginas = 500,
+): Promise<any[]> {
+  const items: any[] = [];
+  const sep = url.includes("?") ? "&" : "?";
+  for (let page = 1; page <= maxPaginas; page++) {
+    const r = await fetch(`${url}${sep}per_page=100&page=${page}`, { headers });
+    if (!r.ok) {
+      if (page === 1) throw new Error(`WooCommerce respondió ${r.status}: ${await r.text()}`);
+      break;
+    }
+    const pagina = (await r.json()) as any[];
+    items.push(...pagina);
+    if (pagina.length < 100) break;
+  }
+  return items;
+}
+
 export const sincronizarWoo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
@@ -403,6 +437,117 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
       ...importados,
       ...borrados,
       devoluciones_actualizadas: devolucionesActualizadas,
+    };
+  });
+
+/**
+ * Rellenar Clientes con quien la sincronización normal se ha dejado fuera.
+ *
+ * `sincronizarWoo` solo mira los últimos 100 clientes registrados y los
+ * últimos 100 pedidos (de ahí sale también el invitado sin cuenta). En una
+ * tienda con más historial que eso, hay compradores —con cuenta o de
+ * invitado— que nunca han llegado a tener ficha. Este botón es aparte, para
+ * no volver más lenta la sincronización de cada día: recorre TODO lo que
+ * tenga la tienda en WooCommerce, una vez, a demanda.
+ *
+ * No toca pedidos ni productos — de eso ya se encarga `sincronizarWoo`.
+ */
+export const sincronizarClientesWoo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    const { data: miembro } = await supabaseAdmin
+      .from("tienda_usuarios")
+      .select("tienda_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url, sync_enabled")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
+    if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
+
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Faltan credenciales de WooCommerce");
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
+
+    // --- Todos los clientes con cuenta ------------------------------------
+    const customers = await fetchTodasLasPaginasWoo(
+      `${base}/wp-json/wc/v3/customers?_fields=id,first_name,last_name,username,email,billing`,
+      headers,
+    );
+    let clientesRegistrados = 0;
+    if (customers.length) {
+      const filas = customers.map((c) => ({
+        tienda_id: data.tienda_id,
+        woo_customer_id: c.id,
+        nombre: `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.username || c.email,
+        email: c.email || null,
+        telefono: c.billing?.phone || null,
+        empresa: c.billing?.company || null,
+        direccion: [c.billing?.address_1, c.billing?.address_2].filter(Boolean).join(" ") || null,
+        codigo_postal: c.billing?.postcode || null,
+        ciudad: c.billing?.city || null,
+        provincia: c.billing?.state || null,
+        pais: c.billing?.country || "ES",
+      }));
+      const { error } = await supabaseAdmin
+        .from("clientes")
+        .upsert(filas, { onConflict: "tienda_id,woo_customer_id" });
+      if (error) throw new Error(`No se pudieron guardar los clientes: ${error.message}`);
+      clientesRegistrados = filas.length;
+    }
+
+    // --- Todos los pedidos, solo para encontrar invitados sin ficha ------
+    // status=any: un invitado que compró una vez y canceló sigue siendo un
+    // comprador real. _fields reduce cada pedido a lo mínimo que hace falta
+    // aquí, nada de líneas ni totales: esto no toca pedidos.
+    const orders = await fetchTodasLasPaginasWoo(
+      `${base}/wp-json/wc/v3/orders?status=any&_fields=id,customer_id,billing`,
+      headers,
+    );
+
+    const { data: existentes } = await supabaseAdmin
+      .from("clientes")
+      .select("email")
+      .eq("tienda_id", data.tienda_id)
+      .not("email", "is", null);
+    const emailsConFicha = new Set((existentes ?? []).map((c) => c.email!.trim().toLowerCase()));
+
+    const nuevosInvitados = clientesInvitadosNuevos(orders, emailsConFicha);
+    let clientesInvitados = 0;
+    if (nuevosInvitados.length) {
+      const { data: creados, error } = await supabaseAdmin
+        .from("clientes")
+        .insert(
+          nuevosInvitados.map((c) => ({ tienda_id: data.tienda_id, woo_customer_id: null, ...c })),
+        )
+        .select("id");
+      if (error) throw new Error(`No se pudieron dar de alta los invitados: ${error.message}`);
+      clientesInvitados = creados?.length ?? 0;
+    }
+
+    return {
+      ok: true,
+      clientes_registrados: clientesRegistrados,
+      clientes_invitados: clientesInvitados,
+      pedidos_revisados: orders.length,
     };
   });
 

@@ -24,7 +24,11 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { FormularioSmtp } from "@/components/FormularioSmtp";
 import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
-import { sincronizarWoo, diagnosticoNumeroWoo } from "@/lib/woocommerce.functions";
+import {
+  sincronizarWoo,
+  sincronizarClientesWoo,
+  diagnosticoNumeroWoo,
+} from "@/lib/woocommerce.functions";
 import {
   RefreshCw,
   KeyRound,
@@ -35,6 +39,7 @@ import {
   ShoppingBag,
   Construction,
   Mail,
+  Users,
 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
@@ -67,6 +72,8 @@ function Ajustes() {
   const guardarCreds = useServerFn(guardarCredencialesWoo);
   const getCredsMask = useServerFn(credencialesWooMascaradas);
   const sync = useServerFn(sincronizarWoo);
+  const syncClientes = useServerFn(sincronizarClientesWoo);
+  const [sincronizandoClientes, setSincronizandoClientes] = useState(false);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda", tiendaId],
@@ -285,7 +292,34 @@ function Ajustes() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Sincronizar ahora
             </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setSincronizandoClientes(true);
+                try {
+                  const r = await syncClientes({ data: { tienda_id: tiendaId } });
+                  toast.success(
+                    `Clientes al día: ${r.clientes_registrados} con cuenta, ${r.clientes_invitados} de invitado nuevos (revisados ${r.pedidos_revisados} pedidos)`,
+                  );
+                  qc.invalidateQueries();
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setSincronizandoClientes(false);
+                }
+              }}
+              disabled={!form.sync_enabled || !creds?.tiene || sincronizandoClientes}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              {sincronizandoClientes ? "Sincronizando clientes…" : "Sincronizar clientes"}
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            «Sincronizar ahora» solo mira los últimos 100 pedidos y clientes, para ser rápida.
+            «Sincronizar clientes» recorre todo el historial de la tienda en WooCommerce: úsala si
+            sospechas que algún cliente —con cuenta o de invitado— nunca ha llegado a tener ficha
+            aquí. Puede tardar más si la tienda tiene mucho historial.
+          </p>
         </TabsContent>
 
         {/* === MI EMPRESA === */}
