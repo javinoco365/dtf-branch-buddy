@@ -12,6 +12,9 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $r$;
 DO $r$ BEGIN
   CREATE ROLE service_role NOLOGIN;
 EXCEPTION WHEN duplicate_object THEN NULL; END $r$;
+DO $r$ BEGIN
+  CREATE ROLE supabase_auth_admin NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL; END $r$;
 
 -- En Supabase service_role salta la RLS; anon y authenticated no. Sin esto el
 -- simulador no reproduce el camino de supabaseAdmin, que es justo el que las
