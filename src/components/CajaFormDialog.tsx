@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -20,7 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
 import {
   guardarMovimientoCaja,
   type ConceptoCaja,
@@ -30,6 +32,7 @@ import {
 
 const SIN_CLIENTE = "__sin_cliente__";
 const SIN_SOCIO = "__sin_socio__";
+const NUEVO_CLIENTE = "__nuevo_cliente__";
 
 /**
  * Alta y edición de un apunte de caja.
@@ -54,12 +57,14 @@ export function CajaFormDialog({
   onSaved: () => void;
 }) {
   const esEdicion = !!movimiento;
+  const qc = useQueryClient();
   const [fecha, setFecha] = useState("");
   const [conceptoId, setConceptoId] = useState("");
   const [clienteId, setClienteId] = useState(SIN_CLIENTE);
   const [socioId, setSocioId] = useState(SIN_SOCIO);
   const [importe, setImporte] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const [nuevoClienteAbierto, setNuevoClienteAbierto] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -176,12 +181,26 @@ export function CajaFormDialog({
           {esIngreso && (
             <div className="space-y-1">
               <Label>Cliente</Label>
-              <Select value={clienteId} onValueChange={setClienteId}>
+              <Select
+                value={clienteId}
+                onValueChange={(v) => {
+                  if (v === NUEVO_CLIENTE) {
+                    setNuevoClienteAbierto(true);
+                    return;
+                  }
+                  setClienteId(v);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={SIN_CLIENTE}>Sin cliente (venta de mostrador)</SelectItem>
+                  <SelectItem value={NUEVO_CLIENTE}>
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
+                    </span>
+                  </SelectItem>
                   {(clientes ?? []).map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.nombre}
@@ -230,6 +249,137 @@ export function CajaFormDialog({
           </Button>
           <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
             {mut.isPending ? "Guardando…" : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+
+      <NuevoClienteDialog
+        open={nuevoClienteAbierto}
+        onOpenChange={setNuevoClienteAbierto}
+        onCreado={(cliente) => {
+          qc.setQueryData(
+            ["caja-clientes"],
+            (actuales: { id: string; nombre: string }[] | undefined) =>
+              [...(actuales ?? []), cliente].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+          );
+          setClienteId(cliente.id);
+        }}
+      />
+    </Dialog>
+  );
+}
+
+/**
+ * Alta rápida de un cliente, sin salir del apunte de caja.
+ *
+ * Solo pide lo imprescindible: nombre y tienda —`clientes.tienda_id` no
+ * admite NULL, y Caja no está dentro de ninguna tienda, así que hay que
+ * preguntarlo—. El resto de la ficha (NIF, dirección, apodo…) se completa
+ * después desde Clientes, si hace falta.
+ */
+function NuevoClienteDialog({
+  open,
+  onOpenChange,
+  onCreado,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onCreado: (cliente: { id: string; nombre: string }) => void;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [tiendaId, setTiendaId] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setNombre("");
+    setTiendaId("");
+    setTelefono("");
+    setEmail("");
+  }, [open]);
+
+  const { data: tiendas } = useQuery({
+    queryKey: ["tiendas-para-cliente"],
+    enabled: open,
+    queryFn: async () => {
+      const { data } = await supabase.from("tiendas").select("id, nombre").order("nombre");
+      return (data ?? []) as { id: string; nombre: string }[];
+    },
+  });
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!nombre.trim()) throw new Error("Ponle un nombre al cliente");
+      if (!tiendaId) throw new Error("Elige a qué tienda pertenece");
+      const { data, error } = await tabla(supabase, "clientes")
+        .insert({
+          tienda_id: tiendaId,
+          nombre: nombre.trim(),
+          telefono: telefono.trim() || null,
+          email: email.trim() || null,
+        })
+        .select("id, nombre")
+        .single();
+      if (error) throw error;
+      return data as { id: string; nombre: string };
+    },
+    onSuccess: (cliente) => {
+      toast.success("Cliente creado");
+      onCreado(cliente);
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message || "No se ha podido crear el cliente"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Nuevo cliente</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label>Nombre</Label>
+            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
+          </div>
+          <div className="space-y-1">
+            <Label>Tienda</Label>
+            <Select value={tiendaId} onValueChange={setTiendaId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Elige una tienda" />
+              </SelectTrigger>
+              <SelectContent>
+                {(tiendas ?? []).map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Teléfono</Label>
+              <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            El resto de datos —NIF, dirección…— se rellenan luego desde Clientes, si hace falta.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
+            {mut.isPending ? "Creando…" : "Crear"}
           </Button>
         </DialogFooter>
       </DialogContent>
