@@ -154,6 +154,13 @@ export const borrarMovimientoCaja = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
     const { error } = await tabla(supabaseAdmin, "caja_movimientos").delete().eq("id", data.id);
+    // El apunte de un cobro textil en efectivo no se borra desde aquí: el
+    // pedido seguiría constando como cobrado sin el dinero en caja.
+    if (error?.code === "23503" && error.message.includes("textil_cobros")) {
+      throw new Error(
+        "Este apunte es el cobro en efectivo de un pedido textil. Bórralo desde el pedido, en Textil › Pedidos › Cobros.",
+      );
+    }
     if (error) throw new Error(error.message);
     return { ok: true };
   });

@@ -25,8 +25,9 @@ import {
 } from "@/components/ui/table";
 import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
-import { usePedidosPeriodo, useTiendas } from "@/lib/periodo";
+import { useCobrosTextilPeriodo, usePedidosPeriodo, useTiendas } from "@/lib/periodo";
 import { agruparPorRangos, agruparPorTienda, calcularKpis, variacion } from "@/dominio/kpis";
+import { TIENDA_TEXTIL } from "@/dominio/cobros-textil";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
@@ -105,27 +106,42 @@ function FacturacionGlobal() {
 
   const consultaTiendas = useTiendas();
   const consultaPedidos = usePedidosPeriodo({ desde, hasta });
+  // Lo cobrado en textil con tarjeta o transferencia, como una tienda más.
+  const consultaTextil = useCobrosTextilPeriodo({ desde, hasta });
 
   // Una sola consulta para las doce semanas, no una por barra.
   const semanas = useMemo(() => semanasRecientes(new Date(), SEMANAS_HISTORICO), []);
-  const consultaHistorico = usePedidosPeriodo({
-    desde: semanas[0].desde,
-    hasta: semanas[semanas.length - 1].hasta,
-  });
+  const rangoHistorico = useMemo(
+    () => ({ desde: semanas[0].desde, hasta: semanas[semanas.length - 1].hasta }),
+    [semanas],
+  );
+  const consultaHistorico = usePedidosPeriodo(rangoHistorico);
+  const consultaTextilHistorico = useCobrosTextilPeriodo(rangoHistorico);
 
   const tiendas = useMemo(() => consultaTiendas.data ?? [], [consultaTiendas.data]);
-  const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
+  const textilDisponible = consultaTextil.data?.disponible ?? false;
+  const tiendasYTextil = useMemo(
+    () => (textilDisponible ? [...tiendas, TIENDA_TEXTIL] : tiendas),
+    [tiendas, textilDisponible],
+  );
+  const pedidos = useMemo(
+    () => [...(consultaPedidos.data ?? []), ...(consultaTextil.data?.pedidos ?? [])],
+    [consultaPedidos.data, consultaTextil.data],
+  );
 
-  const filas = useMemo(() => agruparPorTienda(pedidos, tiendas), [pedidos, tiendas]);
+  const filas = useMemo(() => agruparPorTienda(pedidos, tiendasYTextil), [pedidos, tiendasYTextil]);
   const totales = useMemo(() => calcularKpis(pedidos), [pedidos]);
 
   const historico = useMemo(
     () =>
-      agruparPorRangos(consultaHistorico.data ?? [], semanas).map((s) => ({
+      agruparPorRangos(
+        [...(consultaHistorico.data ?? []), ...(consultaTextilHistorico.data?.pedidos ?? [])],
+        semanas,
+      ).map((s) => ({
         semana: format(s.desde, "d MMM", { locale: es }),
         total: s.total,
       })),
-    [consultaHistorico.data, semanas],
+    [consultaHistorico.data, consultaTextilHistorico.data, semanas],
   );
 
   const deltaSemana = useMemo(() => {
@@ -139,8 +155,9 @@ function FacturacionGlobal() {
     .filter((f) => f.total > 0)
     .map((f) => ({ tienda: f.nombre, total: f.total }));
 
-  const cargando = consultaPedidos.isPending || consultaTiendas.isPending;
-  const error = consultaPedidos.error ?? consultaTiendas.error;
+  const cargando =
+    consultaPedidos.isPending || consultaTiendas.isPending || consultaTextil.isPending;
+  const error = consultaPedidos.error ?? consultaTiendas.error ?? consultaTextil.error;
   const sinTiendas = !cargando && !error && tiendas.length === 0;
   const sinPedidos = !cargando && !error && tiendas.length > 0 && pedidos.length === 0;
 
@@ -172,7 +189,9 @@ function FacturacionGlobal() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Facturación Consolidada</h1>
-          <p className="text-muted-foreground">Contabilidad conjunta de todas las webs</p>
+          <p className="text-muted-foreground">
+            Contabilidad conjunta de todas las webs y del textil cobrado con tarjeta o transferencia
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
