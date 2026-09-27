@@ -10,8 +10,11 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
+import { cobrosComoPedidos, type CobroFacturable } from "@/dominio/cobros-textil";
 
 const CAMPOS_PEDIDO = "fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total";
 
@@ -42,6 +45,38 @@ export function usePedidosPeriodo(filtro: Filtro) {
       const { data, error } = await consulta;
       if (error) throw error;
       return (data ?? []) as PedidoResumen[];
+    },
+  });
+}
+
+/**
+ * Los cobros textil del rango que cuentan como facturación —tarjeta y
+ * transferencia; el efectivo va a Caja—, ya con la forma de un pedido para
+ * sumarlos junto a los de las tiendas. Se fechan por el día del cobro.
+ *
+ * `disponible` sale en falso si la migración de cobros todavía no está
+ * aplicada: la Consolidada sigue funcionando con las tiendas en vez de caerse
+ * entera por una tabla que aún no existe.
+ */
+export function useCobrosTextilPeriodo(rango: RangoFechas) {
+  return useQuery({
+    queryKey: ["cobros-textil-periodo", rango.desde.toISOString(), rango.hasta.toISOString()],
+    queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoResumen[] }> => {
+      const { data, error } = await tabla(supabase, "textil_cobros")
+        .select("fecha, importe, metodo, pedido:textil_pedidos(iva, total)")
+        .in("metodo", ["tarjeta", "transferencia"])
+        .gte("fecha", format(rango.desde, "yyyy-MM-dd"))
+        .lte("fecha", format(rango.hasta, "yyyy-MM-dd"));
+
+      // Solo «la tabla no existe»; cualquier otro error se enseña.
+      if (error && (error.code === "42P01" || error.code === "PGRST205")) {
+        return { disponible: false, pedidos: [] };
+      }
+      if (error) throw error;
+      return {
+        disponible: true,
+        pedidos: cobrosComoPedidos((data ?? []) as CobroFacturable[]),
+      };
     },
   });
 }

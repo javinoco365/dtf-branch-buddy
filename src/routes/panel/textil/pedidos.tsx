@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Wallet } from "lucide-react";
 import {
   listTextilPedidos,
   upsertTextilPedido,
@@ -39,11 +39,15 @@ import {
   listMarcas,
   getEmpresaGlobal,
   listStock,
+  listTextilCobros,
+  type CobroTextil,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/textil/CobrosPedidoDialog";
+import { resumenCobros } from "@/dominio/cobros-textil";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -74,10 +78,24 @@ function PedidosPage() {
   });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
+  const cobrosFn = useServerFn(listTextilCobros);
+  const { data: datosCobros } = useQuery({
+    queryKey: ["textil-cobros"],
+    queryFn: () => cobrosFn(),
+  });
+  const cobrosPorPedido = useMemo(() => {
+    const m = new Map<string, CobroTextil[]>();
+    for (const c of datosCobros?.cobros ?? []) {
+      m.set(c.pedido_id, [...(m.get(c.pedido_id) ?? []), c]);
+    }
+    return m;
+  }, [datosCobros]);
+  const cobrosDisponibles = datosCobros?.disponible ?? true;
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
+  const [cobrando, setCobrando] = useState<any>(null);
 
   const inv = () => qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
   const save = useMutation({
@@ -106,6 +124,7 @@ function PedidosPage() {
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
       toast.success("Eliminado");
     },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const defaultMarcaId = (empresa as any)?.textil_marca_predeterminada_id ?? null;
@@ -126,6 +145,15 @@ function PedidosPage() {
           <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
         </Button>
       </div>
+      {!cobrosDisponibles && (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Los cobros de los pedidos necesitan la migración{" "}
+            <code>20260927100000_textil_cobros.sql</code>. Hasta que se aplique, no se pueden
+            registrar.
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -137,58 +165,78 @@ function PedidosPage() {
                 <TableHead>Marca</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Cobrado</TableHead>
+                <TableHead className="text-right">Pendiente</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     Sin pedidos.
                   </TableCell>
                 </TableRow>
               )}
-              {data.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono text-xs">{p.numero}</TableCell>
-                  <TableCell>{fechaCorta(p.fecha)}</TableCell>
-                  <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
-                  <TableCell>{p.marca?.nombre ?? "—"}</TableCell>
-                  <TableCell>
-                    <Select
-                      value={p.estado}
-                      onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
-                    >
-                      <SelectTrigger className="h-7 w-36 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ESTADOS.map((e) => (
-                          <SelectItem key={e} value={e}>
-                            {e}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditing(p);
-                        setOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {data.map((p: any) => {
+                const cobro = resumenCobros(p.total, cobrosPorPedido.get(p.id) ?? []);
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-mono text-xs">{p.numero}</TableCell>
+                    <TableCell>{fechaCorta(p.fecha)}</TableCell>
+                    <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
+                    <TableCell>{p.marca?.nombre ?? "—"}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={p.estado}
+                        onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
+                      >
+                        <SelectTrigger className="h-7 w-36 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ESTADOS.map((e) => (
+                            <SelectItem key={e} value={e}>
+                              {e}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
+                    <TableCell className="text-right tabular-nums">{eur(cobro.cobrado)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="tabular-nums">{eur(Math.max(cobro.pendiente, 0))}</div>
+                      {p.estado !== "cancelado" && <EstadoCobroTexto estado={cobro.estado} />}
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Cobros"
+                        title="Cobros"
+                        disabled={!cobrosDisponibles}
+                        onClick={() => setCobrando(p)}
+                      >
+                        <Wallet className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditing(p);
+                          setOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -209,6 +257,15 @@ function PedidosPage() {
           setBorrando(null);
         }}
       />
+
+      {cobrando && (
+        <CobrosPedidoDialog
+          open={!!cobrando}
+          onOpenChange={(o) => !o && setCobrando(null)}
+          pedido={data.find((p: any) => p.id === cobrando.id) ?? cobrando}
+          cobros={cobrosPorPedido.get(cobrando.id) ?? []}
+        />
+      )}
 
       {open && (
         <PedidoDialog
