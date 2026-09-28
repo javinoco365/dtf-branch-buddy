@@ -1,11 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { tabla } from "./rpc";
+import { faltaLaTabla, tabla } from "./rpc";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { normalizarDireccion } from "@/dominio/direcciones";
+import type { Cobro } from "./cobros.functions";
 
 const ESTADO_VALUES = [
   "pendiente",
@@ -86,34 +87,48 @@ export const listPedidos = createServerFn({ method: "POST" })
 
     const { data: filas, error } = await query;
     if (error) throw error;
-    if (!filas || filas.length === 0) return { pedidos: [] };
+    if (!filas || filas.length === 0) return { pedidos: [], cobrosDisponibles: true };
     const pedidos = filas as Record<string, any>[];
 
     const ids = pedidos.map((p) => p.id);
     const tiendaIds = Array.from(new Set(pedidos.map((p) => p.tienda_id)));
     const clienteIds = pedidos.map((p) => p.cliente_id).filter(Boolean) as string[];
 
-    const [{ data: items }, { data: tiendas }, { data: clientes }, { data: tracking }] =
-      await Promise.all([
-        supabase
-          .from("pedido_items")
-          // iva_rate viaja hasta la pantalla: sin él, el formulario de edición
-          // no puede saber a qué tipo estaba una línea y la rellena con el 21 %.
-          // Una línea al 10 % o al 4 % se convertía en una al 21 % con solo
-          // abrir el pedido y guardarlo, sin avisar de nada.
-          .select(
-            "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total",
-          )
-          .in("pedido_id", ids),
-        supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
-        clienteIds.length
-          ? supabase.from("clientes").select("id, nombre, email").in("id", clienteIds)
-          : Promise.resolve({ data: [] as any[] }),
-        supabase
-          .from("enlaces_seguimiento")
-          .select("id, pedido_id, transportista, url, codigo_seguimiento")
-          .in("pedido_id", ids),
-      ]);
+    const [
+      { data: items },
+      { data: tiendas },
+      { data: clientes },
+      { data: tracking },
+      { data: cobros, error: errCobros },
+    ] = await Promise.all([
+      supabase
+        .from("pedido_items")
+        // iva_rate viaja hasta la pantalla: sin él, el formulario de edición
+        // no puede saber a qué tipo estaba una línea y la rellena con el 21 %.
+        // Una línea al 10 % o al 4 % se convertía en una al 21 % con solo
+        // abrir el pedido y guardarlo, sin avisar de nada.
+        .select(
+          "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total",
+        )
+        .in("pedido_id", ids),
+      supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
+      clienteIds.length
+        ? supabase.from("clientes").select("id, nombre, email").in("id", clienteIds)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase
+        .from("enlaces_seguimiento")
+        .select("id, pedido_id, transportista, url, codigo_seguimiento")
+        .in("pedido_id", ids),
+      tabla(supabase, "cobros")
+        .select("*")
+        .in("pedido_id", ids)
+        .order("fecha", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+
+    // Sin la migración de cobros, la lista sigue saliendo; solo sin cobros.
+    const cobrosDisponibles = !faltaLaTabla(errCobros);
+    if (errCobros && cobrosDisponibles) throw new Error(errCobros.message);
 
     void userId;
     return {
@@ -126,8 +141,10 @@ export const listPedidos = createServerFn({ method: "POST" })
           cliente_email: p.cliente_email ?? cli?.email ?? null,
           items: (items ?? []).filter((it: any) => it.pedido_id === p.id),
           tracking: (tracking ?? []).find((t: any) => t.pedido_id === p.id) ?? null,
+          cobros: ((cobros ?? []) as Cobro[]).filter((c) => c.pedido_id === p.id),
         };
       }),
+      cobrosDisponibles,
     };
   });
 
@@ -463,6 +480,11 @@ export const deletePedido = createServerFn({ method: "POST" })
     if (!pedido) throw new Error("Pedido no encontrado");
     await ensureAccess(supabaseAdmin, context.userId, pedido.tienda_id);
     const { error } = await supabaseAdmin.from("pedidos").delete().eq("id", data.id);
+    // Los cobros automáticos (web y previos) se van con el pedido; los hechos
+    // a mano lo impiden (ON DELETE RESTRICT): ese dinero entró.
+    if (error?.code === "23503" && error.message.includes("cobros")) {
+      throw new Error("Este pedido tiene cobros registrados. Bórralos antes de borrar el pedido.");
+    }
     if (error) throw error;
     return { ok: true };
   });

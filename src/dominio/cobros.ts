@@ -1,29 +1,50 @@
 /**
- * Cobros de los pedidos textil.
+ * Cobros de los pedidos, de las tiendas y del textil.
  *
- * Un pedido textil se puede cobrar en varias veces —el textil al encargarlo,
- * la personalización al recogerlo—, así que lo que importa es cuánto lleva
- * cobrado y cuánto le falta, no un «pagado sí/no».
+ * Un pedido se puede cobrar en varias veces —un anticipo al encargarlo, el
+ * resto al recogerlo—, así que lo que importa es cuánto lleva cobrado y
+ * cuánto le falta, no un «pagado sí/no». Lo recibido de más es propina, y
+ * solo si se marca: no reduce lo pendiente.
  *
- * Adónde va cada cobro lo decide el método: el efectivo entra en Caja; la
- * tarjeta y la transferencia cuentan en la Facturación Consolidada, como una
- * fila «Textil personalizado» junto a las tiendas.
+ * Adónde va cada cobro lo decide el método: el efectivo entra en Caja; lo
+ * demás cuenta en la Facturación Consolidada.
  *
  * Lógica pura: no consulta nada y se prueba sin base de datos. Quien garantiza
- * que nunca se cobra más que el total es la base (textil_registrar_cobro, con
- * el pedido bloqueado); aquí se calcula lo mismo para enseñarlo.
+ * que nunca se aplica al pedido más que lo pendiente es la base
+ * (registrar_cobro, con el pedido bloqueado); aquí se calcula lo mismo para
+ * enseñarlo antes de enviar.
  */
 
 import { redondear } from "./importes";
 import type { PedidoResumen } from "./kpis";
 
-export type MetodoCobro = "efectivo" | "tarjeta" | "transferencia";
+/** Los que se registran a mano. */
+export type MetodoCobroManual = "efectivo" | "tarjeta" | "transferencia";
 
-export const METODOS_COBRO: readonly { valor: MetodoCobro; etiqueta: string }[] = [
+/**
+ * Todos los que puede tener un cobro guardado: además de los manuales, el web
+ * que pone la sincronización de WooCommerce y el «sin especificar» de los
+ * cobros previos de los que no consta cómo se cobraron.
+ */
+export type MetodoCobro = MetodoCobroManual | "web" | "sin_especificar";
+
+export const METODOS_COBRO: readonly { valor: MetodoCobroManual; etiqueta: string }[] = [
   { valor: "efectivo", etiqueta: "Efectivo" },
   { valor: "tarjeta", etiqueta: "Tarjeta" },
   { valor: "transferencia", etiqueta: "Transferencia" },
 ];
+
+const ETIQUETAS_METODO: Record<MetodoCobro, string> = {
+  efectivo: "Efectivo",
+  tarjeta: "Tarjeta",
+  transferencia: "Transferencia",
+  web: "Web",
+  sin_especificar: "Sin especificar",
+};
+
+export function etiquetaMetodo(metodo: MetodoCobro | string): string {
+  return ETIQUETAS_METODO[metodo as MetodoCobro] ?? metodo;
+}
 
 export type DestinoCobro = "caja" | "facturacion";
 
@@ -52,6 +73,8 @@ const num = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
  * `excedido` existe porque el total de un pedido se puede editar después de
  * cobrarlo: si baja por debajo de lo cobrado, hay que decirlo en vez de
  * enseñar un pendiente negativo como si fuera normal.
+ *
+ * La propina no cuenta: `importe` es lo aplicado al pedido, ya sin ella.
  */
 export function resumenCobros(
   total: number | string | null | undefined,
@@ -68,6 +91,20 @@ export function resumenCobros(
   else estado = "pendiente";
 
   return { cobrado, pendiente, estado };
+}
+
+/**
+ * Cómo se reparte lo recibido: lo que cabe en lo pendiente se aplica al
+ * pedido; lo que sobra es propina. Lo mismo que hace registrar_cobro() en la
+ * base, para saber antes de enviar si hay que marcar «propina».
+ */
+export function repartirCobro(
+  recibido: number,
+  pendiente: number,
+): { importe: number; propina: number } {
+  const r = redondear(Math.max(recibido, 0));
+  const importe = redondear(Math.min(r, Math.max(redondear(pendiente), 0)));
+  return { importe, propina: redondear(r - importe) };
 }
 
 /**

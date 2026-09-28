@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { llamarRpc, tabla } from "./rpc";
+import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import type { Cobro } from "./cobros.functions";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
   redondear as redondearImporte,
 } from "@/dominio/importes";
-import type { MetodoCobro } from "@/dominio/cobros-textil";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -857,10 +857,10 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     // Antes de tocar el stock: si el pedido tiene cobros la base no dejará
     // borrarlo, y el género ya devuelto se quedaría contado dos veces.
-    const { count: cobros, error: errCobros } = await tabla(context.supabase, "textil_cobros")
+    const { count: cobros, error: errCobros } = await tabla(context.supabase, "cobros")
       .select("id", { count: "exact", head: true })
-      .eq("pedido_id", data.id);
-    if (errCobros && !faltaTablaCobros(errCobros)) throw new Error(errCobros.message);
+      .eq("textil_pedido_id", data.id);
+    if (errCobros && !faltaLaTabla(errCobros)) throw new Error(errCobros.message);
     if ((cobros ?? 0) > 0) {
       throw new Error("Este pedido tiene cobros registrados. Bórralos antes de borrar el pedido.");
     }
@@ -881,7 +881,7 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
     const { error } = await context.supabase.from("textil_pedidos").delete().eq("id", data.id);
     // La base no deja borrar un pedido con cobros (ON DELETE RESTRICT): el
     // dinero entró y tiene que seguir constando de qué pedido era.
-    if (error?.code === "23503" && error.message.includes("textil_cobros")) {
+    if (error?.code === "23503" && error.message.includes("cobros")) {
       throw new Error("Este pedido tiene cobros registrados. Bórralos antes de borrar el pedido.");
     }
     if (error) throw error;
@@ -889,29 +889,10 @@ export const deleteTextilPedido = createServerFn({ method: "POST" })
   });
 
 // ============ COBROS ============
-export type CobroTextil = {
-  id: string;
-  pedido_id: string;
-  fecha: string;
-  importe: number;
-  metodo: MetodoCobro;
-  caja_movimiento_id: string | null;
-  notas: string | null;
-  created_at: string;
-};
-
 /**
- * La tabla todavía no existe: la migración de cobros no se ha aplicado. Solo
- * esos dos códigos; un error de permisos no es «falta la migración» y tiene
- * que verse.
- */
-function faltaTablaCobros(error: { code?: string } | null) {
-  return !!error && (error.code === "42P01" || error.code === "PGRST205");
-}
-
-/**
- * Todos los cobros textil. Son pocos: se leen de una vez y se reparten por
- * pedido en la pantalla.
+ * Los cobros de los pedidos textil. Son pocos: se leen de una vez y se
+ * reparten por pedido en la pantalla. Se registran y se borran con
+ * cobros.functions.ts, igual que los de las tiendas.
  *
  * Si la migración todavía no está aplicada, `disponible` sale en falso en vez
  * de romper la lista de pedidos entera.
@@ -919,80 +900,14 @@ function faltaTablaCobros(error: { code?: string } | null) {
 export const listTextilCobros = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await tabla(context.supabase, "textil_cobros")
+    const { data, error } = await tabla(context.supabase, "cobros")
       .select("*")
+      .not("textil_pedido_id", "is", null)
       .order("fecha", { ascending: true })
       .order("created_at", { ascending: true });
-    if (faltaTablaCobros(error)) return { disponible: false, cobros: [] as CobroTextil[] };
+    if (faltaLaTabla(error)) return { disponible: false, cobros: [] as Cobro[] };
     if (error) throw new Error(error.message);
-    return { disponible: true, cobros: (data ?? []) as CobroTextil[] };
-  });
-
-/**
- * El pedido tiene que ser visible para quien cobra. Se lee con su propia
- * sesión, así que es la RLS de textil_pedidos la que decide; solo después se
- * usa la clave de servicio, que es la única que puede llamar a las funciones
- * de cobro.
- */
-async function comprobarAccesoPedido(supabase: unknown, pedidoId: string) {
-  const { data } = await tabla(supabase, "textil_pedidos")
-    .select("id")
-    .eq("id", pedidoId)
-    .maybeSingle();
-  if (!data) throw new Error("Sin acceso a este pedido");
-}
-
-/**
- * Registra un cobro. Si es en efectivo, la base crea en la misma transacción
- * el apunte de ingreso en Caja; si es con tarjeta o transferencia, cuenta en la
- * Facturación Consolidada. Ver textil_registrar_cobro() en la migración.
- */
-export const registrarCobroTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        pedido_id: z.string().uuid(),
-        fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
-        importe: z.number().positive("El importe tiene que ser mayor que cero"),
-        metodo: z.enum(["efectivo", "tarjeta", "transferencia"]),
-        concepto_caja_id: z.string().uuid().nullable().optional(),
-        notas: z.string().nullable().optional(),
-      })
-      .refine((c) => c.metodo !== "efectivo" || !!c.concepto_caja_id, {
-        message: "Elige el concepto de caja del cobro en efectivo",
-      })
-      .parse(d),
-  )
-  .handler(async ({ data, context }) => {
-    await comprobarAccesoPedido(context.supabase, data.pedido_id);
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const id = await llamarRpc<string>(supabaseAdmin, "textil_registrar_cobro", {
-      _pedido_id: data.pedido_id,
-      _fecha: data.fecha,
-      _importe: redondearImporte(data.importe),
-      _metodo: data.metodo,
-      _concepto_caja_id: data.metodo === "efectivo" ? data.concepto_caja_id : null,
-      _notas: data.notas ?? null,
-    });
-    return { id };
-  });
-
-/** Borra un cobro y, si fue en efectivo, su apunte de caja. */
-export const borrarCobroTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { data: cobro } = await tabla(context.supabase, "textil_cobros")
-      .select("id")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (!cobro) throw new Error("Sin acceso a este cobro");
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    await llamarRpc<null>(supabaseAdmin, "textil_borrar_cobro", { _cobro_id: data.id });
-    return { ok: true };
+    return { disponible: true, cobros: (data ?? []) as Cobro[] };
   });
 
 // ============ EMPRESA ============

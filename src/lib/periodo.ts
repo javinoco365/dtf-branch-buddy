@@ -12,9 +12,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { tabla } from "@/lib/rpc";
+import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
-import { cobrosComoPedidos, type CobroFacturable } from "@/dominio/cobros-textil";
+import { cobrosComoPedidos, type CobroFacturable } from "@/dominio/cobros";
 
 const CAMPOS_PEDIDO = "fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total";
 
@@ -62,14 +62,15 @@ export function useCobrosTextilPeriodo(rango: RangoFechas) {
   return useQuery({
     queryKey: ["cobros-textil-periodo", rango.desde.toISOString(), rango.hasta.toISOString()],
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoResumen[] }> => {
-      const { data, error } = await tabla(supabase, "textil_cobros")
+      const { data, error } = await tabla(supabase, "cobros")
         .select("fecha, importe, metodo, pedido:textil_pedidos(iva, total)")
+        .not("textil_pedido_id", "is", null)
         .in("metodo", ["tarjeta", "transferencia"])
         .gte("fecha", format(rango.desde, "yyyy-MM-dd"))
         .lte("fecha", format(rango.hasta, "yyyy-MM-dd"));
 
       // Solo «la tabla no existe»; cualquier otro error se enseña.
-      if (error && (error.code === "42P01" || error.code === "PGRST205")) {
+      if (faltaLaTabla(error)) {
         return { disponible: false, pedidos: [] };
       }
       if (error) throw error;

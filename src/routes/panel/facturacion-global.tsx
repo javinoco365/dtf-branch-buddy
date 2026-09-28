@@ -27,7 +27,7 @@ import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { useCobrosTextilPeriodo, usePedidosPeriodo, useTiendas } from "@/lib/periodo";
 import { agruparPorRangos, agruparPorTienda, calcularKpis, variacion } from "@/dominio/kpis";
-import { TIENDA_TEXTIL } from "@/dominio/cobros-textil";
+import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,

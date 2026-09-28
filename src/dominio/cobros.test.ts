@@ -4,8 +4,10 @@ import {
   cobrosComoPedidos,
   desglosarCobro,
   destinoDelCobro,
+  etiquetaMetodo,
+  repartirCobro,
   resumenCobros,
-} from "./cobros-textil";
+} from "./cobros";
 import { agruparPorRangos, agruparPorTienda, calcularKpis } from "./kpis";
 
 describe("destinoDelCobro", () => {
@@ -16,6 +18,37 @@ describe("destinoDelCobro", () => {
   it("la tarjeta y la transferencia van a facturación", () => {
     expect(destinoDelCobro("tarjeta")).toBe("facturacion");
     expect(destinoDelCobro("transferencia")).toBe("facturacion");
+  });
+});
+
+describe("etiquetaMetodo", () => {
+  it("también los que no se eligen a mano", () => {
+    expect(etiquetaMetodo("web")).toBe("Web");
+    expect(etiquetaMetodo("sin_especificar")).toBe("Sin especificar");
+    expect(etiquetaMetodo("tarjeta")).toBe("Tarjeta");
+  });
+});
+
+describe("repartirCobro", () => {
+  it("lo que cabe en lo pendiente va entero al pedido", () => {
+    expect(repartirCobro(30, 40)).toEqual({ importe: 30, propina: 0 });
+    expect(repartirCobro(40, 40)).toEqual({ importe: 40, propina: 0 });
+  });
+
+  it("lo que sobra es propina", () => {
+    expect(repartirCobro(35, 30)).toEqual({ importe: 30, propina: 5 });
+  });
+
+  it("con el pedido ya cobrado, todo es propina", () => {
+    expect(repartirCobro(2, 0)).toEqual({ importe: 0, propina: 2 });
+  });
+
+  it("un pedido cobrado de más no deja una propina mayor que lo recibido", () => {
+    expect(repartirCobro(5, -20)).toEqual({ importe: 0, propina: 5 });
+  });
+
+  it("sin error de coma flotante", () => {
+    expect(repartirCobro(0.3, 0.1)).toEqual({ importe: 0.1, propina: 0.2 });
   });
 });
 

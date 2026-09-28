@@ -41,3 +41,12 @@ export async function llamarRpc<T>(
 export function tabla(cliente: unknown, nombre: string) {
   return (cliente as { from: (n: string) => any }).from(nombre);
 }
+
+/**
+ * La tabla todavía no existe: su migración no se ha aplicado. Solo esos dos
+ * códigos (Postgres y PostgREST); un error de permisos no es «falta la
+ * migración» y tiene que verse.
+ */
+export function faltaLaTabla(error: { code?: string } | null | undefined): boolean {
+  return !!error && (error.code === "42P01" || error.code === "PGRST205");
+}
