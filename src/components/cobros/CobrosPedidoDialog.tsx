@@ -146,6 +146,8 @@ export function CobrosPedidoDialog({
     qc.invalidateQueries({ queryKey: ["textil-cobros"] });
     qc.invalidateQueries({ queryKey: ["caja"] });
     qc.invalidateQueries({ queryKey: ["cobros-periodo"] });
+    qc.invalidateQueries({ queryKey: ["cobros-pendientes-pedidos"] });
+    qc.invalidateQueries({ queryKey: ["cobros-pedido"] });
   }
 
   const alta = useMutation({
