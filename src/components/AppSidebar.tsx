@@ -126,6 +126,14 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/clientes"}>
+                  <Link to="/panel/clientes">
+                    <Users />
+                    <span>Clientes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/panel/conciliacion"}>
                   <Link to="/panel/conciliacion">
                     <Landmark />
