@@ -289,11 +289,18 @@ function consecuenciasDeBorrar(r: any): string[] {
     if (Number(n) > 0) lineas.push(`${n} ${Number(n) === 1 ? uno : varios}`);
   };
   añadir(r.pedidos, "pedido", "pedidos");
-  añadir(r.clientes, "cliente", "clientes");
   añadir(r.productos, "producto", "productos");
   añadir(r.facturas_borrador, "factura en borrador", "facturas en borrador");
-  if (lineas.length === 0) return ["No cuelga nada de esta tienda."];
-  return lineas.map((l) => `Se borrarán ${l}.`);
+  const frases = lineas.map((l) => `Se borrarán ${l}.`);
+  // Los clientes son de la empresa, no de la tienda: se quedan, solo pierden
+  // la referencia a dónde se dieron de alta.
+  if (Number(r.clientes) > 0) {
+    frases.push(
+      `${r.clientes} ${Number(r.clientes) === 1 ? "cliente dado de alta aquí se conserva" : "clientes dados de alta aquí se conservan"}: son de la empresa, no de la tienda.`,
+    );
+  }
+  if (frases.length === 0) return ["No cuelga nada de esta tienda."];
+  return frases;
 }
 
 function EditarTiendaDialog({ tienda, onDone }: { tienda: any; onDone: () => void }) {

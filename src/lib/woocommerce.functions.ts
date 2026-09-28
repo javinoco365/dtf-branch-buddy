@@ -13,6 +13,19 @@ import {
 } from "@/dominio/sync-woo";
 
 /**
+ * La empresa de una tienda. Los clientes son de la empresa, y con la clave de
+ * servicio —que ve todas— hay que acotar a mano lo que la RLS acotaría sola.
+ */
+async function empresaDeTienda(supabaseAdmin: unknown, tiendaId: string): Promise<string> {
+  const { data } = await tabla(supabaseAdmin, "tiendas")
+    .select("empresa_id")
+    .eq("id", tiendaId)
+    .maybeSingle();
+  if (!data?.empresa_id) throw new Error("La tienda no tiene empresa asignada");
+  return data.empresa_id as string;
+}
+
+/**
  * Sincronizar pedidos, clientes y productos desde WooCommerce.
  * Las credenciales NUNCA viajan al navegador: se leen aquí en el servidor
  * (Cloudflare Worker / TanStack server function) con el cliente de servicio.
@@ -109,6 +122,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
 
     const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
     if (!creds) throw new Error("Faltan credenciales de WooCommerce");
+    // Aquí y no dentro de los try de abajo: esos solo apuntan el error en la
+    // consola, y un fallo al leer la empresa se saltaría los pedidos sin avisar.
+    const empresaId = await empresaDeTienda(supabaseAdmin, data.tienda_id);
 
     const base = tienda.woo_url.replace(/\/$/, "");
     const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
@@ -214,10 +230,12 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
           ),
         ];
         if (emailsInvitados.length) {
-          const { data: existentes } = await supabaseAdmin
-            .from("clientes")
+          // En toda la empresa, no solo en esta tienda: el cliente es único,
+          // y quien ya compró en otra tienda o encargó en el textil no es un
+          // cliente nuevo.
+          const { data: existentes } = await tabla(supabaseAdmin, "clientes")
             .select("id, email")
-            .eq("tienda_id", data.tienda_id)
+            .eq("empresa_id", empresaId)
             .not("email", "is", null);
           for (const c of existentes ?? []) {
             if (c.email) clientePorEmail.set(c.email.trim().toLowerCase(), c.id);
@@ -523,12 +541,14 @@ export const sincronizarClientesWoo = createServerFn({ method: "POST" })
       headers,
     );
 
-    const { data: existentes } = await supabaseAdmin
-      .from("clientes")
+    // En toda la empresa: ver el mismo comentario en sincronizarWoo.
+    const { data: existentes } = await tabla(supabaseAdmin, "clientes")
       .select("email")
-      .eq("tienda_id", data.tienda_id)
+      .eq("empresa_id", await empresaDeTienda(supabaseAdmin, data.tienda_id))
       .not("email", "is", null);
-    const emailsConFicha = new Set((existentes ?? []).map((c) => c.email!.trim().toLowerCase()));
+    const emailsConFicha = new Set(
+      ((existentes ?? []) as { email: string }[]).map((c) => c.email.trim().toLowerCase()),
+    );
 
     const nuevosInvitados = clientesInvitadosNuevos(orders, emailsConFicha);
     let clientesInvitados = 0;

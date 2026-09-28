@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelCajaRouteImport } from './routes/panel/caja'
+import { Route as PanelClientesRouteImport } from './routes/panel/clientes'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
 import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
@@ -66,6 +67,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
 const PanelCajaRoute = PanelCajaRouteImport.update({
   id: '/caja',
   path: '/caja',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelClientesRoute = PanelClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelCobrosRoute = PanelCobrosRouteImport.update({
@@ -225,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/caja': typeof PanelCajaRoute
+  '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
@@ -258,6 +265,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/panel/caja': typeof PanelCajaRoute
+  '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/caja': typeof PanelCajaRoute
+  '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
@@ -330,6 +339,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/textil'
     | '/panel/caja'
+    | '/panel/clientes'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
@@ -363,6 +373,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/panel/caja'
+    | '/panel/clientes'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
@@ -397,6 +408,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/panel/textil'
     | '/panel/caja'
+    | '/panel/clientes'
     | '/panel/cobros'
     | '/panel/conciliacion'
     | '/panel/configuracion'
@@ -468,6 +480,13 @@ declare module '@tanstack/react-router' {
       path: '/caja'
       fullPath: '/panel/caja'
       preLoaderRoute: typeof PanelCajaRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/clientes': {
+      id: '/panel/clientes'
+      path: '/clientes'
+      fullPath: '/panel/clientes'
+      preLoaderRoute: typeof PanelClientesRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/cobros': {
@@ -725,6 +744,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 interface PanelRouteRouteChildren {
   PanelTextilRouteRoute: typeof PanelTextilRouteRouteWithChildren
   PanelCajaRoute: typeof PanelCajaRoute
+  PanelClientesRoute: typeof PanelClientesRoute
   PanelCobrosRoute: typeof PanelCobrosRoute
   PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
@@ -742,6 +762,7 @@ interface PanelRouteRouteChildren {
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelTextilRouteRoute: PanelTextilRouteRouteWithChildren,
   PanelCajaRoute: PanelCajaRoute,
+  PanelClientesRoute: PanelClientesRoute,
   PanelCobrosRoute: PanelCobrosRoute,
   PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,

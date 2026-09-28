@@ -240,14 +240,14 @@ export const deleteStockItem = createServerFn({ method: "POST" })
   });
 
 // ============ CLIENTES ============
+// Desde 20260928100000_clientes_unicos, el textil no tiene lista propia: sus
+// clientes son la ficha única de la empresa (`clientes`), la misma que usan
+// las tiendas. textil_clientes queda congelada y no se lee ni se escribe.
 export const listTextilClientes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("textil_clientes")
-      .select("*")
-      .order("nombre");
-    if (error) throw error;
+    const { data, error } = await tabla(context.supabase, "clientes").select("*").order("nombre");
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 
@@ -267,21 +267,20 @@ export const upsertTextilCliente = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { id, ...rest } = data;
     if (id) {
-      const { data: row, error } = await context.supabase
-        .from("textil_clientes")
+      // Editar no toca origen ni tienda: siguen diciendo dónde se dio de alta.
+      const { data: row, error } = await tabla(context.supabase, "clientes")
         .update(rest)
         .eq("id", id)
         .select()
         .single();
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       return row;
     }
-    const { data: row, error } = await context.supabase
-      .from("textil_clientes")
-      .insert(rest)
+    const { data: row, error } = await tabla(context.supabase, "clientes")
+      .insert({ ...rest, origen: "textil", tienda_id: null })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     return row;
   });
 
@@ -289,8 +288,8 @@ export const deleteTextilCliente = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("textil_clientes").delete().eq("id", data.id);
-    if (error) throw error;
+    const { error } = await tabla(context.supabase, "clientes").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 

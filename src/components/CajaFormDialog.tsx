@@ -272,10 +272,10 @@ export function CajaFormDialog({
 /**
  * Alta rápida de un cliente, sin salir del apunte de caja.
  *
- * Solo pide lo imprescindible: nombre y tienda —`clientes.tienda_id` no
- * admite NULL, y Caja no está dentro de ninguna tienda, así que hay que
- * preguntarlo—. El resto de la ficha (NIF, dirección, apodo…) se completa
- * después desde Clientes, si hace falta.
+ * Solo pide lo imprescindible. El cliente es de la empresa, no de una tienda,
+ * y Caja no está dentro de ninguna: se da de alta con origen «general». El
+ * resto de la ficha (NIF, dirección, apodo…) se completa después desde
+ * Clientes, si hace falta.
  */
 function NuevoClienteDialog({
   open,
@@ -287,34 +287,23 @@ function NuevoClienteDialog({
   onCreado: (cliente: { id: string; nombre: string }) => void;
 }) {
   const [nombre, setNombre] = useState("");
-  const [tiendaId, setTiendaId] = useState("");
   const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setNombre("");
-    setTiendaId("");
     setTelefono("");
     setEmail("");
   }, [open]);
 
-  const { data: tiendas } = useQuery({
-    queryKey: ["tiendas-para-cliente"],
-    enabled: open,
-    queryFn: async () => {
-      const { data } = await supabase.from("tiendas").select("id, nombre").order("nombre");
-      return (data ?? []) as { id: string; nombre: string }[];
-    },
-  });
-
   const mut = useMutation({
     mutationFn: async () => {
       if (!nombre.trim()) throw new Error("Ponle un nombre al cliente");
-      if (!tiendaId) throw new Error("Elige a qué tienda pertenece");
       const { data, error } = await tabla(supabase, "clientes")
         .insert({
-          tienda_id: tiendaId,
+          tienda_id: null,
+          origen: "general",
           nombre: nombre.trim(),
           telefono: telefono.trim() || null,
           email: email.trim() || null,
@@ -343,21 +332,6 @@ function NuevoClienteDialog({
           <div className="space-y-1">
             <Label>Nombre</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
-          </div>
-          <div className="space-y-1">
-            <Label>Tienda</Label>
-            <Select value={tiendaId} onValueChange={setTiendaId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige una tienda" />
-              </SelectTrigger>
-              <SelectContent>
-                {(tiendas ?? []).map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
