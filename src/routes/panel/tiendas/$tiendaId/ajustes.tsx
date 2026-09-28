@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizarPrefijo } from "@/dominio/presupuestos";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,8 @@ type TiendaForm = {
   sync_enabled?: boolean;
   iva_default?: number;
   gastos_envio_default?: number;
+  /** Solo existe con la migración 20261001100000; si no, ni se envía. */
+  prefijo?: string | null;
 };
 
 function Ajustes() {
@@ -151,8 +154,10 @@ function Ajustes() {
         sync_enabled: !!form.sync_enabled,
         iva_default: Number(form.iva_default) || 21,
         gastos_envio_default: Number(form.gastos_envio_default) || 0,
+        // El prefijo de los presupuestos, si la columna ya existe.
+        ...("prefijo" in form ? { prefijo: normalizarPrefijo(form.prefijo) || null } : {}),
       };
-      const { error } = await supabase.from("tiendas").update(payload).eq("id", tiendaId);
+      const { error } = await tabla(supabase, "tiendas").update(payload).eq("id", tiendaId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -421,6 +426,21 @@ function Ajustes() {
                 on={(v) => set("gastos_envio_default", v)}
                 step="0.01"
               />
+              {"prefijo" in form && (
+                <div className="space-y-1">
+                  <Field
+                    label="Prefijo de los presupuestos"
+                    v={form.prefijo}
+                    on={(v) => set("prefijo", normalizarPrefijo(v))}
+                    placeholder="DTFC"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Mayúsculas y números, hasta 8. Los presupuestos se numeran PRES-
+                    {form.prefijo || "…"}-{new Date().getFullYear()}-0001. Cambiarlo no toca los ya
+                    hechos.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>

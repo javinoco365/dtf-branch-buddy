@@ -20,6 +20,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
 import { upsertTextilCliente } from "@/lib/textil.functions";
 
 export type ClienteTextil = {
@@ -43,15 +45,23 @@ const NUEVO_CLIENTE = "__nuevo_cliente__";
  * Devuelve el cliente entero y no solo su id: el recién creado todavía no está
  * en la lista que tiene el formulario, así que buscarlo por id no lo
  * encontraría.
+ *
+ * Con `tiendaId` sirve también en una tienda: el cliente nuevo se da de alta
+ * en la ficha única con esa tienda de origen, y se añade a la lista de
+ * `claveLista`.
  */
 export function SelectorClienteTextil({
   clientes,
   valor,
   onElegir,
+  tiendaId,
+  claveLista = ["textil-clientes"],
 }: {
   clientes: ClienteTextil[];
   valor: string | null | undefined;
   onElegir: (cliente: ClienteTextil) => void;
+  tiendaId?: string;
+  claveLista?: readonly unknown[];
 }) {
   const [altaAbierta, setAltaAbierta] = useState(false);
 
@@ -89,6 +99,8 @@ export function SelectorClienteTextil({
         open={altaAbierta}
         onOpenChange={setAltaAbierta}
         onCreado={onElegir}
+        tiendaId={tiendaId}
+        claveLista={claveLista}
       />
     </>
   );
@@ -98,10 +110,14 @@ function NuevoClienteTextilDialog({
   open,
   onOpenChange,
   onCreado,
+  tiendaId,
+  claveLista,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreado: (cliente: ClienteTextil) => void;
+  tiendaId?: string;
+  claveLista: readonly unknown[];
 }) {
   const qc = useQueryClient();
   const guardar = useServerFn(upsertTextilCliente);
@@ -123,6 +139,23 @@ function NuevoClienteTextilDialog({
   const alta = useMutation({
     mutationFn: async () => {
       if (!nombre.trim()) throw new Error("Ponle un nombre al cliente");
+      if (tiendaId) {
+        // En una tienda: a la ficha única, con esa tienda como origen.
+        const { data, error } = await tabla(supabase, "clientes")
+          .insert({
+            tienda_id: tiendaId,
+            origen: "tienda",
+            nombre: nombre.trim(),
+            nif: nif.trim() || null,
+            email: email.trim() || null,
+            telefono: telefono.trim() || null,
+            direccion: direccion.trim() || null,
+          })
+          .select("id, nombre, email, telefono, direccion, nif")
+          .single();
+        if (error) throw new Error(error.message);
+        return data as ClienteTextil;
+      }
       return (await guardar({
         data: {
           nombre: nombre.trim(),
@@ -134,9 +167,10 @@ function NuevoClienteTextilDialog({
       })) as ClienteTextil;
     },
     onSuccess: (cliente) => {
-      qc.setQueryData(["textil-clientes"], (actuales: ClienteTextil[] | undefined) =>
+      qc.setQueryData(claveLista, (actuales: ClienteTextil[] | undefined) =>
         [...(actuales ?? []), cliente].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
       );
+      qc.invalidateQueries({ queryKey: ["clientes-empresa"] });
       toast.success("Cliente creado");
       onCreado(cliente);
       onOpenChange(false);
@@ -148,7 +182,7 @@ function NuevoClienteTextilDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Nuevo cliente textil</DialogTitle>
+          <DialogTitle>{tiendaId ? "Nuevo cliente" : "Nuevo cliente textil"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">

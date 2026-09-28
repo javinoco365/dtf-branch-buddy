@@ -44,6 +44,8 @@ import {
   FileUp,
   Landmark,
   FileSpreadsheet,
+  FilePen,
+  Package,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
@@ -130,6 +132,14 @@ export function AppSidebar() {
                   <Link to="/panel/clientes">
                     <Users />
                     <span>Clientes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/productos"}>
+                  <Link to="/panel/productos">
+                    <Package />
+                    <span>Productos generales</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -254,6 +264,13 @@ export function AppSidebar() {
                             pathname={pathname}
                           />
                           <SubItem
+                            to="/panel/tiendas/$tiendaId/presupuestos"
+                            tiendaId={t.id}
+                            label="Presupuestos"
+                            icon={FilePen}
+                            pathname={pathname}
+                          />
+                          <SubItem
                             to="/panel/tiendas/$tiendaId/facturas"
                             tiendaId={t.id}
                             label="Facturas"
@@ -265,6 +282,13 @@ export function AppSidebar() {
                             tiendaId={t.id}
                             label="Facturación"
                             icon={Receipt}
+                            pathname={pathname}
+                          />
+                          <SubItem
+                            to="/panel/tiendas/$tiendaId/productos"
+                            tiendaId={t.id}
+                            label="Productos"
+                            icon={Package}
                             pathname={pathname}
                           />
                           <SubItem
