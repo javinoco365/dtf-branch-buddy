@@ -6,8 +6,8 @@
  * cuánto le falta, no un «pagado sí/no». Lo recibido de más es propina, y
  * solo si se marca: no reduce lo pendiente.
  *
- * Adónde va cada cobro lo decide el método: el efectivo entra en Caja; lo
- * demás cuenta en la Facturación Consolidada.
+ * Todo cobro cuenta en la Facturación Consolidada, con su método para poder
+ * separarlo. El efectivo, además, entra en Caja.
  *
  * Lógica pura: no consulta nada y se prueba sin base de datos. Quien garantiza
  * que nunca se aplica al pedido más que lo pendiente es la base
@@ -16,7 +16,6 @@
  */
 
 import { redondear } from "./importes";
-import type { PedidoResumen } from "./kpis";
 
 /** Los que se registran a mano. */
 export type MetodoCobroManual = "efectivo" | "tarjeta" | "transferencia";
@@ -46,11 +45,9 @@ export function etiquetaMetodo(metodo: MetodoCobro | string): string {
   return ETIQUETAS_METODO[metodo as MetodoCobro] ?? metodo;
 }
 
-export type DestinoCobro = "caja" | "facturacion";
-
-/** El efectivo va a Caja; lo demás, a la Facturación Consolidada. */
-export function destinoDelCobro(metodo: MetodoCobro): DestinoCobro {
-  return metodo === "efectivo" ? "caja" : "facturacion";
+/** El efectivo, además de contar en la Consolidada, entra en Caja. */
+export function pasaPorCaja(metodo: MetodoCobro): boolean {
+  return metodo === "efectivo";
 }
 
 export type EstadoCobro = "pendiente" | "parcial" | "cobrado" | "excedido";
@@ -127,42 +124,3 @@ export function desglosarCobro(
 
 /** El identificador con el que el textil aparece entre las tiendas. */
 export const TIENDA_TEXTIL = { id: "textil-personalizado", nombre: "Textil personalizado" };
-
-export type CobroFacturable = {
-  fecha: string;
-  importe: number | string;
-  metodo: MetodoCobro;
-  /** Nulo solo si la lectura no pudo traer el pedido; entonces no se reparte IVA. */
-  pedido: { iva: number | string | null; total: number | string | null } | null;
-};
-
-/**
- * Los cobros textil que cuentan como facturación, con la forma de un pedido
- * para que la Facturación Consolidada los sume con las mismas funciones que a
- * las tiendas.
- *
- * Cada cobro cuenta como una operación: un pedido cobrado en dos veces con
- * tarjeta suma dos al número de pedidos del periodo. Se fechan por el día del
- * cobro, no del pedido, porque es cuando pasan a facturación.
- *
- * El cobro guarda un día sin hora. Se sitúa a mediodía, hora local: a
- * medianoche en UTC, un cobro del lunes caería el domingo por la noche en
- * cualquier huso por detrás de Greenwich y saltaría de semana.
- */
-export function cobrosComoPedidos(cobros: readonly CobroFacturable[]): PedidoResumen[] {
-  return cobros
-    .filter((c) => destinoDelCobro(c.metodo) === "facturacion")
-    .map((c) => {
-      const { base, iva } = desglosarCobro(c.importe, c.pedido);
-      return {
-        fecha_pedido: `${c.fecha.slice(0, 10)}T12:00:00`,
-        tienda_id: TIENDA_TEXTIL.id,
-        estado: "cobrado",
-        subtotal: base,
-        iva,
-        envio: 0,
-        total: redondear(base + iva),
-        metros_total: 0,
-      };
-    });
-}

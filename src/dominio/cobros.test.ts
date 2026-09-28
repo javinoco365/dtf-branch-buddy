@@ -1,23 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  TIENDA_TEXTIL,
-  cobrosComoPedidos,
   desglosarCobro,
-  destinoDelCobro,
   etiquetaMetodo,
+  pasaPorCaja,
   repartirCobro,
   resumenCobros,
 } from "./cobros";
-import { agruparPorRangos, agruparPorTienda, calcularKpis } from "./kpis";
 
-describe("destinoDelCobro", () => {
-  it("el efectivo va a caja", () => {
-    expect(destinoDelCobro("efectivo")).toBe("caja");
-  });
-
-  it("la tarjeta y la transferencia van a facturación", () => {
-    expect(destinoDelCobro("tarjeta")).toBe("facturacion");
-    expect(destinoDelCobro("transferencia")).toBe("facturacion");
+describe("pasaPorCaja", () => {
+  it("solo el efectivo entra en caja", () => {
+    expect(pasaPorCaja("efectivo")).toBe(true);
+    expect(pasaPorCaja("tarjeta")).toBe(false);
+    expect(pasaPorCaja("transferencia")).toBe(false);
+    expect(pasaPorCaja("web")).toBe(false);
   });
 });
 
@@ -115,55 +110,5 @@ describe("desglosarCobro", () => {
 
   it("sin el pedido no se inventa un IVA: todo a la base", () => {
     expect(desglosarCobro(10, null)).toEqual({ base: 10, iva: 0 });
-  });
-});
-
-describe("cobrosComoPedidos", () => {
-  const pedido = { iva: 21, total: 121 };
-
-  it("el efectivo no cuenta como facturación: va a caja", () => {
-    expect(
-      cobrosComoPedidos([{ fecha: "2026-09-24", importe: 40, metodo: "efectivo", pedido }]),
-    ).toEqual([]);
-  });
-
-  it("la tarjeta y la transferencia sí, con su base y su IVA", () => {
-    const filas = cobrosComoPedidos([
-      { fecha: "2026-09-24", importe: 60.5, metodo: "tarjeta", pedido },
-      { fecha: "2026-09-25", importe: 60.5, metodo: "transferencia", pedido },
-    ]);
-    expect(filas).toHaveLength(2);
-    expect(filas[0]).toMatchObject({
-      tienda_id: TIENDA_TEXTIL.id,
-      subtotal: 50,
-      iva: 10.5,
-      envio: 0,
-      total: 60.5,
-      metros_total: 0,
-    });
-  });
-
-  it("encaja con el desglose por tienda de la Consolidada", () => {
-    const filas = cobrosComoPedidos([
-      { fecha: "2026-09-24", importe: 121, metodo: "tarjeta", pedido },
-      { fecha: "2026-09-24", importe: 50, metodo: "efectivo", pedido },
-    ]);
-    const tiendas = [{ id: "t1", nombre: "DTF Culture" }, TIENDA_TEXTIL];
-    const desglose = agruparPorTienda(filas, tiendas);
-    const textil = desglose.find((f) => f.tienda_id === TIENDA_TEXTIL.id)!;
-    expect(textil).toMatchObject({ pedidos: 1, bruta: 100, iva: 21, total: 121 });
-    expect(calcularKpis(filas).total).toBe(121);
-  });
-
-  it("un cobro de un lunes cae en la semana de ese lunes, no en la anterior", () => {
-    const filas = cobrosComoPedidos([
-      { fecha: "2026-09-28", importe: 10, metodo: "tarjeta", pedido },
-    ]);
-    const [anterior, actual] = agruparPorRangos(filas, [
-      { desde: new Date(2026, 8, 21, 0, 0, 0), hasta: new Date(2026, 8, 27, 23, 59, 59) },
-      { desde: new Date(2026, 8, 28, 0, 0, 0), hasta: new Date(2026, 9, 4, 23, 59, 59) },
-    ]);
-    expect(anterior.total).toBe(0);
-    expect(actual.total).toBe(10);
   });
 });

@@ -14,7 +14,8 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
-import { cobrosComoPedidos, type CobroFacturable } from "@/dominio/cobros";
+import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
+import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
 
 const CAMPOS_PEDIDO = "fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total";
 
@@ -49,35 +50,110 @@ export function usePedidosPeriodo(filtro: Filtro) {
   });
 }
 
+type FilaCobroTienda = {
+  id: string;
+  fecha: string;
+  importe: number | string;
+  propina: number | string;
+  metodo: MetodoCobro;
+  previo: boolean;
+  pedido: {
+    id: string;
+    numero: string;
+    fecha_pedido: string;
+    tienda_id: string;
+    cliente_nombre: string | null;
+    total: number | string;
+    iva: number | string;
+    envio: number | string | null;
+    metros_total: number | string | null;
+  };
+};
+
+type FilaCobroTextil = Omit<FilaCobroTienda, "pedido"> & {
+  pedido: {
+    id: string;
+    numero: string;
+    fecha: string;
+    cliente_nombre: string | null;
+    total: number | string;
+    iva: number | string;
+    envio: number | string | null;
+  };
+};
+
+const CAMPOS_COBRO = "id, fecha, importe, propina, metodo, previo";
+
 /**
- * Los cobros textil del rango que cuentan como facturación —tarjeta y
- * transferencia; el efectivo va a Caja—, ya con la forma de un pedido para
- * sumarlos junto a los de las tiendas. Se fechan por el día del cobro.
+ * Todos los cobros del rango, de las tiendas y del textil, ya repartidos y
+ * fechados según el criterio: por la fecha del pedido (lo vendido en el
+ * periodo) o por la del cobro (lo que entró en el periodo).
+ *
+ * Dos consultas, una por tipo de pedido, porque el pedido de un cobro está en
+ * una tabla o en la otra y cada una filtra por su propia fecha. El `!inner`
+ * deja en cada una solo los cobros de su tipo.
  *
  * `disponible` sale en falso si la migración de cobros todavía no está
- * aplicada: la Consolidada sigue funcionando con las tiendas en vez de caerse
- * entera por una tabla que aún no existe.
+ * aplicada, en vez de romper la pantalla entera.
  */
-export function useCobrosTextilPeriodo(rango: RangoFechas) {
+export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
   return useQuery({
-    queryKey: ["cobros-textil-periodo", rango.desde.toISOString(), rango.hasta.toISOString()],
-    queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoResumen[] }> => {
-      const { data, error } = await tabla(supabase, "cobros")
-        .select("fecha, importe, metodo, pedido:textil_pedidos(iva, total)")
-        .not("textil_pedido_id", "is", null)
-        .in("metodo", ["tarjeta", "transferencia"])
-        .gte("fecha", format(rango.desde, "yyyy-MM-dd"))
-        .lte("fecha", format(rango.hasta, "yyyy-MM-dd"));
+    queryKey: ["cobros-periodo", criterio, rango.desde.toISOString(), rango.hasta.toISOString()],
+    queryFn: async (): Promise<{ disponible: boolean; cobros: CobroConsolidado[] }> => {
+      const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
-      // Solo «la tabla no existe»; cualquier otro error se enseña.
-      if (faltaLaTabla(error)) {
-        return { disponible: false, pedidos: [] };
+      let tiendas = tabla(supabase, "cobros").select(
+        `${CAMPOS_COBRO}, pedido:pedidos!inner(id, numero, fecha_pedido, tienda_id, cliente_nombre, total, iva, envio, metros_total)`,
+      );
+      let textil = tabla(supabase, "cobros").select(
+        `${CAMPOS_COBRO}, pedido:textil_pedidos!inner(id, numero, fecha, cliente_nombre, total, iva, envio)`,
+      );
+      if (criterio === "pedido") {
+        tiendas = tiendas
+          .gte("pedido.fecha_pedido", rango.desde.toISOString())
+          .lte("pedido.fecha_pedido", rango.hasta.toISOString());
+        textil = textil.gte("pedido.fecha", dia(rango.desde)).lte("pedido.fecha", dia(rango.hasta));
+      } else {
+        tiendas = tiendas.gte("fecha", dia(rango.desde)).lte("fecha", dia(rango.hasta));
+        textil = textil.gte("fecha", dia(rango.desde)).lte("fecha", dia(rango.hasta));
       }
-      if (error) throw error;
-      return {
-        disponible: true,
-        pedidos: cobrosComoPedidos((data ?? []) as CobroFacturable[]),
-      };
+
+      const [rt, rx] = await Promise.all([tiendas, textil]);
+      // Solo «la tabla no existe»; cualquier otro error se enseña.
+      if (faltaLaTabla(rt.error)) return { disponible: false, cobros: [] };
+      if (rt.error) throw rt.error;
+      if (rx.error) throw rx.error;
+
+      const deTiendas = ((rt.data ?? []) as FilaCobroTienda[]).map((c) =>
+        consolidarCobro(
+          {
+            ...c,
+            tienda_id: c.pedido.tienda_id,
+            pedido: {
+              id: c.pedido.id,
+              numero: c.pedido.numero,
+              fecha: c.pedido.fecha_pedido,
+              cliente_nombre: c.pedido.cliente_nombre,
+              total: c.pedido.total,
+              iva: c.pedido.iva,
+              envio: c.pedido.envio,
+              metros: c.pedido.metros_total,
+            },
+          },
+          criterio,
+        ),
+      );
+      const delTextil = ((rx.data ?? []) as FilaCobroTextil[]).map((c) =>
+        consolidarCobro(
+          {
+            ...c,
+            tienda_id: TIENDA_TEXTIL.id,
+            pedido: { ...c.pedido, metros: 0 },
+          },
+          criterio,
+        ),
+      );
+      return { disponible: true, cobros: [...deTiendas, ...delTextil] };
     },
   });
 }

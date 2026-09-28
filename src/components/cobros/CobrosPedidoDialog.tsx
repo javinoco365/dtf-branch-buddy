@@ -28,8 +28,8 @@ import { listarCatalogosCaja } from "@/lib/caja.functions";
 import { borrarCobro, registrarCobro, type Cobro } from "@/lib/cobros.functions";
 import {
   METODOS_COBRO,
-  destinoDelCobro,
   etiquetaMetodo,
+  pasaPorCaja,
   repartirCobro,
   resumenCobros,
   type EstadoCobro,
@@ -67,9 +67,9 @@ function leerImporte(texto: string): number {
 /**
  * Los cobros de un pedido, y el alta de uno nuevo.
  *
- * Un pedido se puede cobrar en varias veces. Adónde va cada cobro lo decide el
- * método: el efectivo entra en Caja como ingreso; la tarjeta y la
- * transferencia cuentan en la Facturación Consolidada. Si lo recibido supera
+ * Un pedido se puede cobrar en varias veces. Todo cobro cuenta en la
+ * Facturación Consolidada con su método; el efectivo, además, entra en Caja
+ * como ingreso. Si lo recibido supera
  * lo pendiente, hay que marcar «propina»: la parte que sobra se apunta aparte
  * y no descuenta del pedido. Todo lo hace la base en una sola transacción.
  */
@@ -145,7 +145,7 @@ export function CobrosPedidoDialog({
     qc.invalidateQueries({ queryKey: ["pedidos"] });
     qc.invalidateQueries({ queryKey: ["textil-cobros"] });
     qc.invalidateQueries({ queryKey: ["caja"] });
-    qc.invalidateQueries({ queryKey: ["cobros-textil-periodo"] });
+    qc.invalidateQueries({ queryKey: ["cobros-periodo"] });
   }
 
   const alta = useMutation({
@@ -176,9 +176,7 @@ export function CobrosPedidoDialog({
     },
     onSuccess: () => {
       toast.success(
-        destinoDelCobro(metodo) === "caja"
-          ? "Cobro registrado y apuntado en Caja"
-          : "Cobro registrado. Cuenta en la Facturación Consolidada",
+        pasaPorCaja(metodo) ? "Cobro registrado y apuntado en Caja" : "Cobro registrado",
       );
       setNotas("");
       refrescar();
@@ -208,8 +206,8 @@ export function CobrosPedidoDialog({
         <DialogHeader>
           <DialogTitle>Cobros del pedido {pedido.numero}</DialogTitle>
           <DialogDescription>
-            El efectivo entra en Caja; la tarjeta y la transferencia cuentan en la Facturación
-            Consolidada.
+            Todo lo cobrado cuenta en la Facturación Consolidada. El efectivo, además, entra en
+            Caja.
           </DialogDescription>
         </DialogHeader>
 
@@ -258,7 +256,7 @@ export function CobrosPedidoDialog({
                   <span className="flex-1 min-w-0">
                     {etiquetaMetodo(c.metodo)}
                     <span className="text-xs text-muted-foreground ml-2">
-                      → {destinoDelCobro(c.metodo) === "caja" ? "Caja" : "Facturación"}
+                      {pasaPorCaja(c.metodo) ? "→ también en Caja" : ""}
                     </span>
                     {c.previo && (
                       <Badge
@@ -404,10 +402,8 @@ export function CobrosPedidoDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {metodo === "efectivo"
-                ? "Se apunta como ingreso en Caja con el concepto elegido, propina incluida."
-                : pedido.tipo === "textil"
-                  ? "No pasa por Caja: cuenta en la Facturación Consolidada, en la fila Textil personalizado."
-                  : "No pasa por Caja: cuenta en la Facturación Consolidada."}
+                ? "Cuenta en la Consolidada como efectivo y se apunta como ingreso en Caja con el concepto elegido, propina incluida."
+                : "Cuenta en la Consolidada. No pasa por Caja."}
             </p>
             <div className="flex justify-end">
               <Button
@@ -430,7 +426,11 @@ export function CobrosPedidoDialog({
           }
           consecuencias={
             borrando?.metodo === "efectivo"
-              ? ["Se borra también su apunte de ingreso en Caja", "El importe vuelve a pendiente"]
+              ? [
+                  "Se borra también su apunte de ingreso en Caja",
+                  "Deja de contar en la Facturación Consolidada",
+                  "El importe vuelve a pendiente",
+                ]
               : ["Deja de contar en la Facturación Consolidada", "El importe vuelve a pendiente"]
           }
           cargando={baja.isPending}
