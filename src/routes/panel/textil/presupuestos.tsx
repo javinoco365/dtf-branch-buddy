@@ -45,6 +45,10 @@ import {
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
+import {
+  SelectorClienteTextil,
+  type ClienteTextil,
+} from "@/components/textil/SelectorClienteTextil";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import {
   AlertDialog,
@@ -325,15 +329,14 @@ function PresupuestoDialog({
     })),
   });
 
-  const setCliente = (id: string) => {
-    const c = clientes.find((x: any) => x.id === id);
+  const setCliente = (c: ClienteTextil) => {
     setF({
       ...f,
-      cliente_id: id,
-      cliente_nombre: c?.nombre,
-      cliente_email: c?.email,
-      cliente_nif: c?.nif,
-      cliente_direccion: c?.direccion,
+      cliente_id: c.id,
+      cliente_nombre: c.nombre,
+      cliente_email: c.email,
+      cliente_nif: c.nif,
+      cliente_direccion: c.direccion,
     });
   };
 
@@ -349,18 +352,11 @@ function PresupuestoDialog({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label>Cliente</Label>
-              <Select value={f.cliente_id ?? ""} onValueChange={setCliente}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientes.map((c: any) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectorClienteTextil
+                clientes={clientes}
+                valor={f.cliente_id}
+                onElegir={setCliente}
+              />
             </div>
             <div>
               <Label>Marca comercial</Label>
