@@ -58,6 +58,9 @@ import {
   type Direccion,
 } from "@/dominio/direcciones";
 import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
+import type { Cobro } from "@/lib/cobros.functions";
+import { resumenCobros } from "@/dominio/cobros";
+import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
@@ -67,6 +70,11 @@ const PedidoTrackingDialog = lazy(() =>
 );
 const FacturarPedidoDialog = lazy(() =>
   import("@/components/FacturarPedidoDialog").then((m) => ({ default: m.FacturarPedidoDialog })),
+);
+const CobrosPedidoDialog = lazy(() =>
+  import("@/components/cobros/CobrosPedidoDialog").then((m) => ({
+    default: m.CobrosPedidoDialog,
+  })),
 );
 import {
   AlertDialog,
@@ -123,6 +131,8 @@ export type PedidoFila = {
     codigo_seguimiento: string | null;
     url: string | null;
   } | null;
+  /** Vacío también si la migración de cobros no está aplicada. */
+  cobros: Cobro[];
 };
 
 function rango(ref: Date, p: Periodo) {
@@ -163,6 +173,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const [tracking, setTracking] = useState<PedidoFila | null>(null);
   const [borrar, setBorrar] = useState<PedidoFila | null>(null);
   const [facturar, setFacturar] = useState<PedidoFila | null>(null);
+  const [cobrando, setCobrando] = useState<PedidoFila | null>(null);
 
   const { desde, hasta } = rango(ref, periodo);
   const list = useServerFn(listPedidos);
@@ -194,6 +205,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   });
 
   const pedidos: PedidoFila[] = (data?.pedidos ?? []) as any;
+  const cobrosDisponibles = data?.cobrosDisponibles ?? true;
 
   const estadoMut = useMutation({
     mutationFn: (vars: { id: string; estado: string }) =>
@@ -254,18 +266,35 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   function exportar() {
     const filas: (string | number)[][] = [
-      ["Fecha", "Nº", "Tienda", "Cliente", "Email", "Estado", "Origen", "Pago", "Total"],
-      ...filtrados.map((p) => [
-        format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
-        p.numero,
-        p.tienda_nombre ?? "",
-        p.cliente_nombre ?? "",
-        p.cliente_email ?? "",
-        ESTADO_LABEL[p.estado] ?? p.estado,
-        p.origen ?? "",
-        p.metodo_pago ?? "",
-        p.total,
-      ]),
+      [
+        "Fecha",
+        "Nº",
+        "Tienda",
+        "Cliente",
+        "Email",
+        "Estado",
+        "Origen",
+        "Pago",
+        "Total",
+        "Cobrado",
+        "Pendiente",
+      ],
+      ...filtrados.map((p) => {
+        const cobro = resumenCobros(p.total, p.cobros ?? []);
+        return [
+          format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+          p.numero,
+          p.tienda_nombre ?? "",
+          p.cliente_nombre ?? "",
+          p.cliente_email ?? "",
+          ESTADO_LABEL[p.estado] ?? p.estado,
+          p.origen ?? "",
+          p.metodo_pago ?? "",
+          p.total,
+          cobro.cobrado,
+          cobro.pendiente,
+        ];
+      }),
     ];
     descargarCSV(`pedidos-${format(desde, "yyyy-MM-dd")}.csv`, filas);
   }
@@ -375,6 +404,15 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         </CardContent>
       </Card>
 
+      {!cobrosDisponibles && (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
+            Hasta que se aplique, no se pueden registrar.
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-6">
         {isLoading && (
           <Card>
@@ -418,7 +456,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   El `min-w` es para que en pantallas estrechas la tabla se
                   desplace en horizontal en vez de estrujar las columnas.
                 */}
-                <Table className="table-fixed min-w-[880px]">
+                <Table className="table-fixed min-w-[1080px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
@@ -429,6 +467,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                       <TableHead className="w-40">Estado</TableHead>
                       <TableHead className="w-28">Pago</TableHead>
                       <TableHead className="w-28 text-right">Total</TableHead>
+                      <TableHead className="w-28 text-right">Cobrado</TableHead>
+                      <TableHead className="w-28 text-right">Pendiente</TableHead>
                       <TableHead className="w-14">Env.</TableHead>
                       <TableHead className="w-12" />
                     </TableRow>
@@ -448,6 +488,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                           onTracking={() => setTracking(p)}
                           onBorrar={() => setBorrar(p)}
                           onFacturar={() => setFacturar(p)}
+                          onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
                         />
                       );
                     })}
@@ -503,6 +544,26 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             }}
           />
         )}
+        {cobrando && (
+          <CobrosPedidoDialog
+            open={!!cobrando}
+            onOpenChange={(o) => !o && setCobrando(null)}
+            pedido={(() => {
+              // La fila recién recargada, para que el diálogo vea los cobros
+              // que se acaban de registrar o borrar.
+              const p = pedidos.find((x) => x.id === cobrando.id) ?? cobrando;
+              return {
+                id: p.id,
+                numero: p.numero,
+                total: p.total,
+                tipo: "tienda" as const,
+                cancelado: p.estado === "cancelado",
+                web: p.origen === "woocommerce",
+              };
+            })()}
+            cobros={(pedidos.find((x) => x.id === cobrando.id) ?? cobrando).cobros ?? []}
+          />
+        )}
       </Suspense>
       <AlertDialog open={!!borrar} onOpenChange={(o) => !o && setBorrar(null)}>
         <AlertDialogContent>
@@ -534,6 +595,7 @@ function FilaPedido({
   onTracking,
   onBorrar,
   onFacturar,
+  onCobros,
 }: {
   pedido: PedidoFila;
   abierta: boolean;
@@ -544,6 +606,8 @@ function FilaPedido({
   onTracking: () => void;
   onBorrar: () => void;
   onFacturar: () => void;
+  /** Sin él, la migración de cobros no está aplicada y no se ofrece. */
+  onCobros?: () => void;
 }) {
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
   // El número que ve el cliente, siempre. Antes esta línea era al revés: si
@@ -557,6 +621,8 @@ function FilaPedido({
   // un pedido importado antes de que existiera esa columna.
   const numeroLabel =
     pedido.numero?.trim() || (pedido.woo_order_id ? `#${pedido.woo_order_id}` : "—");
+  const cancelado = pedido.estado === "cancelado";
+  const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
 
   return (
     <>
@@ -618,6 +684,27 @@ function FilaPedido({
           {pedido.metodo_pago ?? "—"}
         </TableCell>
         <TableCell className="text-right font-semibold">{eur(pedido.total)}</TableCell>
+        <TableCell className="text-right tabular-nums">
+          {onCobros ? eur(cobro.cobrado) : "—"}
+        </TableCell>
+        <TableCell className="text-right">
+          {!onCobros || cancelado ? (
+            "—"
+          ) : (
+            // Abre los cobros: es lo que se quiere hacer al mirar lo pendiente.
+            <button
+              type="button"
+              className="text-right hover:underline"
+              title="Ver y registrar cobros"
+              onClick={onCobros}
+            >
+              <span className="block tabular-nums font-medium">
+                {eur(Math.max(cobro.pendiente, 0))}
+              </span>
+              <EstadoCobroTexto estado={cobro.estado} />
+            </button>
+          )}
+        </TableCell>
         <TableCell>
           <Button
             variant="ghost"
@@ -645,6 +732,7 @@ function FilaPedido({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
               <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
+              {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
               <DropdownMenuItem onClick={onFacturar}>Facturar</DropdownMenuItem>
               <DropdownMenuItem onClick={onBorrar} className="text-destructive">
                 Borrar
@@ -656,7 +744,7 @@ function FilaPedido({
       {abierta && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
-          <TableCell colSpan={mostrarTienda ? 9 : 8}>
+          <TableCell colSpan={mostrarTienda ? 11 : 10}>
             <div className="py-2 space-y-2">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Líneas del pedido

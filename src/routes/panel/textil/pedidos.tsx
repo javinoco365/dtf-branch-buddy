@@ -40,8 +40,8 @@ import {
   getEmpresaGlobal,
   listStock,
   listTextilCobros,
-  type CobroTextil,
 } from "@/lib/textil.functions";
+import type { Cobro } from "@/lib/cobros.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
@@ -50,8 +50,8 @@ import {
   type ClienteTextil,
 } from "@/components/textil/SelectorClienteTextil";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/textil/CobrosPedidoDialog";
-import { resumenCobros } from "@/dominio/cobros-textil";
+import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
+import { resumenCobros } from "@/dominio/cobros";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -88,9 +88,10 @@ function PedidosPage() {
     queryFn: () => cobrosFn(),
   });
   const cobrosPorPedido = useMemo(() => {
-    const m = new Map<string, CobroTextil[]>();
+    const m = new Map<string, Cobro[]>();
     for (const c of datosCobros?.cobros ?? []) {
-      m.set(c.pedido_id, [...(m.get(c.pedido_id) ?? []), c]);
+      if (!c.textil_pedido_id) continue;
+      m.set(c.textil_pedido_id, [...(m.get(c.textil_pedido_id) ?? []), c]);
     }
     return m;
   }, [datosCobros]);
@@ -152,9 +153,8 @@ function PedidosPage() {
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración{" "}
-            <code>20260927100000_textil_cobros.sql</code>. Hasta que se aplique, no se pueden
-            registrar.
+            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
+            Hasta que se aplique, no se pueden registrar.
           </CardContent>
         </Card>
       )}
@@ -266,7 +266,16 @@ function PedidosPage() {
         <CobrosPedidoDialog
           open={!!cobrando}
           onOpenChange={(o) => !o && setCobrando(null)}
-          pedido={data.find((p: any) => p.id === cobrando.id) ?? cobrando}
+          pedido={(() => {
+            const p = data.find((x: any) => x.id === cobrando.id) ?? cobrando;
+            return {
+              id: p.id,
+              numero: p.numero,
+              total: p.total,
+              tipo: "textil" as const,
+              cancelado: p.estado === "cancelado",
+            };
+          })()}
           cobros={cobrosPorPedido.get(cobrando.id) ?? []}
         />
       )}

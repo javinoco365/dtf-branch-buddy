@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { CobrosPendientes } from "@/components/CobrosPendientes";
+import { PantallaCobrosPendientes } from "@/components/cobros/PantallaCobrosPendientes";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/cobros")({
   component: CobrosTienda,
@@ -21,10 +21,10 @@ function CobrosTienda() {
           Cobros pendientes · {tienda?.nombre ?? "Tienda"}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Facturas pendientes de cobro de esta tienda.
+          Lo que queda por cobrar de los pedidos de esta tienda, y sus facturas sin cobrar.
         </p>
       </div>
-      <CobrosPendientes tiendaId={tiendaId} />
+      <PantallaCobrosPendientes tiendaId={tiendaId} />
     </div>
   );
 }

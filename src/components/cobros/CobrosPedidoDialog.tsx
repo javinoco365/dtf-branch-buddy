@@ -9,7 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,14 +25,16 @@ import { Trash2 } from "lucide-react";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { eur, fechaCorta } from "@/lib/format";
 import { listarCatalogosCaja } from "@/lib/caja.functions";
-import { borrarCobroTextil, registrarCobroTextil, type CobroTextil } from "@/lib/textil.functions";
+import { borrarCobro, registrarCobro, type Cobro } from "@/lib/cobros.functions";
 import {
   METODOS_COBRO,
-  destinoDelCobro,
+  etiquetaMetodo,
+  pasaPorCaja,
+  repartirCobro,
   resumenCobros,
   type EstadoCobro,
-  type MetodoCobro,
-} from "@/dominio/cobros-textil";
+  type MetodoCobroManual,
+} from "@/dominio/cobros";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -44,22 +48,30 @@ export function EstadoCobroTexto({ estado }: { estado: EstadoCobro }) {
   return <span className={`text-xs font-medium ${e.clase}`}>{e.texto}</span>;
 }
 
-const etiquetaMetodo = (m: MetodoCobro) => METODOS_COBRO.find((x) => x.valor === m)?.etiqueta ?? m;
-
-type PedidoCobrable = {
+/** Lo que el diálogo necesita saber del pedido, venga de una tienda o del textil. */
+export type PedidoCobrable = {
   id: string;
   numero: string;
   total: number | string;
-  estado: string;
+  tipo: "tienda" | "textil";
+  cancelado: boolean;
+  /** De WooCommerce: se cobra en la web y su cobro lo pone la sincronización. */
+  web?: boolean;
 };
 
+/** El importe como lo escribe una persona: «12,50» o «12.50». */
+function leerImporte(texto: string): number {
+  return Number(texto.trim().replace(",", "."));
+}
+
 /**
- * Los cobros de un pedido textil, y el alta de uno nuevo.
+ * Los cobros de un pedido, y el alta de uno nuevo.
  *
- * Un pedido se puede cobrar en varias veces. Adónde va cada cobro lo decide el
- * método: el efectivo entra en Caja como ingreso; la tarjeta y la
- * transferencia cuentan en la Facturación Consolidada. Lo hace la base en una
- * sola transacción, así que aquí solo se elige.
+ * Un pedido se puede cobrar en varias veces. Todo cobro cuenta en la
+ * Facturación Consolidada con su método; el efectivo, además, entra en Caja
+ * como ingreso. Si lo recibido supera
+ * lo pendiente, hay que marcar «propina»: la parte que sobra se apunta aparte
+ * y no descuenta del pedido. Todo lo hace la base en una sola transacción.
  */
 export function CobrosPedidoDialog({
   open,
@@ -70,28 +82,29 @@ export function CobrosPedidoDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   pedido: PedidoCobrable;
-  cobros: CobroTextil[];
+  cobros: Cobro[];
 }) {
   const qc = useQueryClient();
-  const registrar = useServerFn(registrarCobroTextil);
-  const borrar = useServerFn(borrarCobroTextil);
+  const registrar = useServerFn(registrarCobro);
+  const borrar = useServerFn(borrarCobro);
   const catalogos = useServerFn(listarCatalogosCaja);
 
   const resumen = resumenCobros(pedido.total, cobros);
-  const cancelado = pedido.estado === "cancelado";
-  const admiteCobro = !cancelado && resumen.pendiente > 0;
+  const propinas = cobros.reduce((s, c) => s + Number(c.propina ?? 0), 0);
+  const admiteCobro = !pedido.cancelado && !pedido.web;
 
   const [importe, setImporte] = useState("");
   const [fecha, setFecha] = useState("");
-  const [metodo, setMetodo] = useState<MetodoCobro>("efectivo");
+  const [metodo, setMetodo] = useState<MetodoCobroManual>("efectivo");
+  const [esPropina, setEsPropina] = useState(false);
   const [conceptoId, setConceptoId] = useState("");
   const [notas, setNotas] = useState("");
-  const [borrando, setBorrando] = useState<CobroTextil | null>(null);
+  const [borrando, setBorrando] = useState<Cobro | null>(null);
 
   const { data: cat } = useQuery({
     queryKey: ["caja-catalogos"],
     queryFn: () => catalogos(),
-    enabled: open,
+    enabled: open && admiteCobro,
   });
   const conceptosIngreso = useMemo(
     () => (cat?.conceptos ?? []).filter((c) => c.activo && c.categoria === "ingreso"),
@@ -110,37 +123,54 @@ export function CobrosPedidoDialog({
   useEffect(() => {
     if (!open) return;
     setImporte(resumen.pendiente > 0 ? String(resumen.pendiente).replace(".", ",") : "");
+    setEsPropina(false);
   }, [open, resumen.pendiente]);
 
-  // Si hay un concepto que se llame como el textil, es el obvio.
+  // Si hay un concepto que se llame como lo que se cobra, es el obvio.
   useEffect(() => {
     if (conceptoId || conceptosIngreso.length === 0) return;
-    const textil = conceptosIngreso.find((c) => /textil/i.test(c.nombre));
-    setConceptoId((textil ?? conceptosIngreso[0]).id);
-  }, [conceptosIngreso, conceptoId]);
+    const patron = pedido.tipo === "textil" ? /textil/i : /metro|dtf/i;
+    const obvio = conceptosIngreso.find((c) => patron.test(c.nombre));
+    setConceptoId((obvio ?? conceptosIngreso[0]).id);
+  }, [conceptosIngreso, conceptoId, pedido.tipo]);
+
+  const recibido = leerImporte(importe);
+  const reparto =
+    Number.isFinite(recibido) && recibido > 0
+      ? repartirCobro(recibido, resumen.pendiente)
+      : { importe: 0, propina: 0 };
+  const hayExceso = reparto.propina > 0;
 
   function refrescar() {
+    qc.invalidateQueries({ queryKey: ["pedidos"] });
     qc.invalidateQueries({ queryKey: ["textil-cobros"] });
     qc.invalidateQueries({ queryKey: ["caja"] });
-    qc.invalidateQueries({ queryKey: ["cobros-textil-periodo"] });
+    qc.invalidateQueries({ queryKey: ["cobros-periodo"] });
+    qc.invalidateQueries({ queryKey: ["cobros-pendientes-pedidos"] });
+    qc.invalidateQueries({ queryKey: ["cobros-pedido"] });
   }
 
   const alta = useMutation({
     mutationFn: async () => {
-      const n = Number(importe.trim().replace(",", "."));
-      if (!Number.isFinite(n) || n <= 0) throw new Error("El importe tiene que ser mayor que cero");
-      if (n > resumen.pendiente + 0.005) {
-        throw new Error(`Solo quedan ${eur(resumen.pendiente)} pendientes`);
+      if (!Number.isFinite(recibido) || recibido <= 0) {
+        throw new Error("El importe tiene que ser mayor que cero");
+      }
+      if (hayExceso && !esPropina) {
+        throw new Error(
+          `Solo quedan ${eur(Math.max(resumen.pendiente, 0))} pendientes: marca «propina» para cobrar más`,
+        );
       }
       if (metodo === "efectivo" && !conceptoId) {
         throw new Error("Elige el concepto de caja");
       }
       return registrar({
         data: {
-          pedido_id: pedido.id,
+          pedido_id: pedido.tipo === "tienda" ? pedido.id : null,
+          textil_pedido_id: pedido.tipo === "textil" ? pedido.id : null,
           fecha,
-          importe: n,
+          importe: recibido,
           metodo,
+          es_propina: hayExceso && esPropina,
           concepto_caja_id: metodo === "efectivo" ? conceptoId : null,
           notas: notas.trim() || null,
         },
@@ -148,9 +178,7 @@ export function CobrosPedidoDialog({
     },
     onSuccess: () => {
       toast.success(
-        destinoDelCobro(metodo) === "caja"
-          ? "Cobro registrado y apuntado en Caja"
-          : "Cobro registrado. Cuenta en la Facturación Consolidada",
+        pasaPorCaja(metodo) ? "Cobro registrado y apuntado en Caja" : "Cobro registrado",
       );
       setNotas("");
       refrescar();
@@ -180,8 +208,8 @@ export function CobrosPedidoDialog({
         <DialogHeader>
           <DialogTitle>Cobros del pedido {pedido.numero}</DialogTitle>
           <DialogDescription>
-            El efectivo entra en Caja; la tarjeta y la transferencia cuentan en la Facturación
-            Consolidada.
+            Todo lo cobrado cuenta en la Facturación Consolidada. El efectivo, además, entra en
+            Caja.
           </DialogDescription>
         </DialogHeader>
 
@@ -193,6 +221,11 @@ export function CobrosPedidoDialog({
           <div>
             <div className="text-xs text-muted-foreground">Cobrado</div>
             <div className="font-semibold tabular-nums">{eur(resumen.cobrado)}</div>
+            {propinas > 0 && (
+              <div className="text-xs text-muted-foreground tabular-nums">
+                + {eur(propinas)} de propina
+              </div>
+            )}
           </div>
           <div>
             <div className="text-xs text-muted-foreground">
@@ -225,45 +258,81 @@ export function CobrosPedidoDialog({
                   <span className="flex-1 min-w-0">
                     {etiquetaMetodo(c.metodo)}
                     <span className="text-xs text-muted-foreground ml-2">
-                      → {destinoDelCobro(c.metodo) === "caja" ? "Caja" : "Facturación"}
+                      {pasaPorCaja(c.metodo) ? "→ también en Caja" : ""}
                     </span>
+                    {c.previo && (
+                      <Badge
+                        variant="outline"
+                        className="ml-2 text-[10px]"
+                        title="Cobrado antes de registrar cobros, sin presupuesto"
+                      >
+                        Previo
+                      </Badge>
+                    )}
                     {c.notas && (
                       <span className="block text-xs text-muted-foreground truncate">
                         {c.notas}
                       </span>
                     )}
                   </span>
-                  <span className="tabular-nums font-medium">{eur(Number(c.importe))}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Borrar cobro"
-                    onClick={() => setBorrando(c)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <span className="text-right">
+                    <span className="block tabular-nums font-medium">{eur(Number(c.importe))}</span>
+                    {Number(c.propina) > 0 && (
+                      <span className="block text-xs text-muted-foreground tabular-nums">
+                        + {eur(Number(c.propina))} propina
+                      </span>
+                    )}
+                  </span>
+                  {c.metodo === "web" ? (
+                    // El cobro web sigue al pedido de WooCommerce: no se borra a mano.
+                    <span className="w-9" />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Borrar cobro"
+                      onClick={() => setBorrando(c)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        {cancelado ? (
+        {pedido.cancelado ? (
           <p className="text-sm text-muted-foreground">
             El pedido está cancelado: no admite cobros nuevos.
           </p>
-        ) : admiteCobro ? (
+        ) : pedido.web ? (
+          <p className="text-sm text-muted-foreground">
+            Es un pedido de la tienda online: se cobra en la web, y su cobro llega al sincronizar
+            cuando WooCommerce lo da por pagado.
+          </p>
+        ) : (
           <div className="space-y-3 rounded-md border p-3">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
               Registrar cobro
             </Label>
+            {resumen.pendiente <= 0 && (
+              <p className="text-xs text-status-completado">
+                El pedido está cobrado entero. Lo que se cobre ahora es propina.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>Importe (€)</Label>
+                <Label>Importe recibido (€)</Label>
                 <Input
                   inputMode="decimal"
                   value={importe}
-                  onChange={(e) => setImporte(e.target.value)}
+                  onChange={(e) => {
+                    setImporte(e.target.value);
+                    // La propina se confirma para el importe que se ve, no
+                    // para uno anterior.
+                    setEsPropina(false);
+                  }}
                 />
               </div>
               <div className="space-y-1">
@@ -272,7 +341,7 @@ export function CobrosPedidoDialog({
               </div>
               <div className="space-y-1">
                 <Label>Método</Label>
-                <Select value={metodo} onValueChange={(v) => setMetodo(v as MetodoCobro)}>
+                <Select value={metodo} onValueChange={(v) => setMetodo(v as MetodoCobroManual)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -303,40 +372,67 @@ export function CobrosPedidoDialog({
                 </div>
               )}
             </div>
+
+            {hayExceso && (
+              <label
+                className={`flex items-start gap-2 rounded-md border p-2 text-sm cursor-pointer ${
+                  esPropina ? "border-primary" : "border-status-cancelado"
+                }`}
+              >
+                <Checkbox
+                  checked={esPropina}
+                  onCheckedChange={(v) => setEsPropina(v === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">Es propina</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Supera lo pendiente. {eur(reparto.importe)} van al pedido y{" "}
+                    {eur(reparto.propina)} se apuntan como propina.
+                  </span>
+                </span>
+              </label>
+            )}
+
             <div className="space-y-1">
               <Label>Notas</Label>
               <Input
                 value={notas}
                 onChange={(e) => setNotas(e.target.value)}
-                placeholder="p. ej. el textil; falta la personalización"
+                placeholder="p. ej. el anticipo; falta el resto"
               />
             </div>
             <p className="text-xs text-muted-foreground">
               {metodo === "efectivo"
-                ? "Se apunta como ingreso en Caja con el concepto elegido."
-                : "No pasa por Caja: cuenta en la Facturación Consolidada, en la fila Textil personalizado."}
+                ? "Cuenta en la Consolidada como efectivo y se apunta como ingreso en Caja con el concepto elegido, propina incluida."
+                : "Cuenta en la Consolidada. No pasa por Caja."}
             </p>
             <div className="flex justify-end">
-              <Button onClick={() => alta.mutate()} disabled={alta.isPending}>
+              <Button
+                onClick={() => alta.mutate()}
+                disabled={alta.isPending || (hayExceso && !esPropina)}
+              >
                 {alta.isPending ? "Registrando…" : "Registrar cobro"}
               </Button>
             </div>
           </div>
-        ) : resumen.estado === "cobrado" ? (
-          <p className="text-sm text-status-completado">El pedido está cobrado entero.</p>
-        ) : null}
+        )}
 
         <ConfirmarBorrado
           abierto={!!borrando}
           onCerrar={() => setBorrando(null)}
           que={
             borrando
-              ? `el cobro de ${eur(Number(borrando.importe))} del ${fechaCorta(borrando.fecha)}`
+              ? `el cobro de ${eur(Number(borrando.importe) + Number(borrando.propina ?? 0))} del ${fechaCorta(borrando.fecha)}`
               : "el cobro"
           }
           consecuencias={
             borrando?.metodo === "efectivo"
-              ? ["Se borra también su apunte de ingreso en Caja", "El importe vuelve a pendiente"]
+              ? [
+                  "Se borra también su apunte de ingreso en Caja",
+                  "Deja de contar en la Facturación Consolidada",
+                  "El importe vuelve a pendiente",
+                ]
               : ["Deja de contar en la Facturación Consolidada", "El importe vuelve a pendiente"]
           }
           cargando={baja.isPending}
