@@ -10,6 +10,7 @@ import {
   explicarDecision,
   LIMITES_TICKET,
   limiteTicket,
+  situacionTicket,
   tieneDatosFiscales,
   type DecisionDocumento,
 } from "./tickets";
@@ -176,5 +177,35 @@ describe("clasificarParaTickets", () => {
       ["b", "preguntar_tipo"],
       ["e", "pedir_datos"],
     ]);
+  });
+});
+
+describe("situacionTicket", () => {
+  const doc = (
+    id: string,
+    extra: Partial<{ rectifica_a_id: string; sustituye_a_id: string }> = {},
+  ) => ({
+    id,
+    referencia: id.toUpperCase(),
+    rectifica_a_id: extra.rectifica_a_id ?? null,
+    sustituye_a_id: extra.sustituye_a_id ?? null,
+  });
+
+  it("intacto: se puede canjear o anular", () => {
+    expect(situacionTicket("t1", [doc("t1"), doc("f9")])).toEqual({
+      canjeado_por: null,
+      rectificado_por: null,
+      admite_cambios: true,
+    });
+  });
+
+  it("canjeado o rectificado: ya no", () => {
+    expect(situacionTicket("t1", [doc("t1"), doc("f1", { sustituye_a_id: "t1" })])).toEqual({
+      canjeado_por: "F1",
+      rectificado_por: null,
+      admite_cambios: false,
+    });
+    expect(situacionTicket("t1", [doc("r1", { rectifica_a_id: "t1" })]).rectificado_por).toBe("R1");
+    expect(situacionTicket("t1", [doc("r1", { rectifica_a_id: "t1" })]).admite_cambios).toBe(false);
   });
 });

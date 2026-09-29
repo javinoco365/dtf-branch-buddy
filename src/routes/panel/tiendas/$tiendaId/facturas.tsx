@@ -45,6 +45,7 @@ import { calcularTotales } from "@/dominio/importes";
 import {
   anularFactura,
   cambiarEstadoCobro,
+  canjearTicket,
   emitirFactura,
   generarTicket80,
   generarYSubirFacturaPDF,
@@ -52,12 +53,15 @@ import {
 import { toast } from "sonner";
 import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
 import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
+import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
+import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import {
   Download,
   FileText,
   Plus,
   Trash2,
   CheckCircle2,
+  FileCheck2,
   Loader2,
   Mail,
   Printer,
@@ -84,6 +88,8 @@ function Facturas() {
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const ticket80Fn = useServerFn(generarTicket80);
   const [porCorreo, setPorCorreo] = useState<any>(null);
+  const [canjeando, setCanjeando] = useState<any>(null);
+  const canjearFn = useServerFn(canjearTicket);
   const cambiarEstadoCobroFn = useServerFn(cambiarEstadoCobro);
   const anularFacturaFn = useServerFn(anularFactura);
 
@@ -106,6 +112,21 @@ function Facturas() {
   });
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Qué le ha pasado a cada ticket: canjeado, anulado o intacto.
+  const situaciones = useMemo(() => {
+    const docs = (facturas as any[]).map((f) => ({
+      id: f.id as string,
+      referencia: referenciaFactura(f.serie, f.ejercicio, f.numero),
+      rectifica_a_id: (f.rectifica_a_id as string | null) ?? null,
+      sustituye_a_id: (f.sustituye_a_id as string | null) ?? null,
+    }));
+    const mapa = new Map<string, SituacionTicket>();
+    for (const f of facturas as any[]) {
+      if (f.tipo === "simplificada") mapa.set(f.id, situacionTicket(f.id, docs));
+    }
+    return mapa;
+  }, [facturas]);
+
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (facturas as any[]).filter(
@@ -134,7 +155,11 @@ function Facturas() {
   // Anular no borra ni modifica la original: emite una rectificativa con las
   // mismas líneas en negativo. Las dos quedan en el libro y suman cero.
   const anular = useMutation({
-    mutationFn: async (id: string) => anularFacturaFn({ data: { factura_id: id, motivo: "R1" } }),
+    // R5 es el motivo propio de la rectificativa de un ticket (factura simplificada).
+    mutationFn: async (f: { id: string; tipo: string }) =>
+      anularFacturaFn({
+        data: { factura_id: f.id, motivo: f.tipo === "simplificada" ? "R5" : "R1" },
+      }),
     onSuccess: (r: any) => {
       toast.success(`Anulada con la rectificativa ${r.referencia}`);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
@@ -241,6 +266,16 @@ function Facturas() {
                         Ticket
                       </Badge>
                     )}
+                    {situaciones.get(f.id)?.canjeado_por && (
+                      <div className="font-sans text-[11px] text-muted-foreground">
+                        Canjeado por {situaciones.get(f.id)?.canjeado_por}
+                      </div>
+                    )}
+                    {situaciones.get(f.id)?.rectificado_por && (
+                      <div className="font-sans text-[11px] text-muted-foreground">
+                        Anulado por {situaciones.get(f.id)?.rectificado_por}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
                   <TableCell>
@@ -318,25 +353,37 @@ function Facturas() {
                           <CheckCircle2 className="h-4 w-4 text-green-600" />
                         </Button>
                       )}
-                      {f.tipo !== "rectificativa" && (
+                      {situaciones.get(f.id)?.admite_cambios && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
-                              )
-                            ) {
-                              anular.mutate(f.id);
-                            }
-                          }}
-                          disabled={anular.isPending}
-                          title="Anular con una rectificativa"
+                          title="Canjear por factura"
+                          aria-label="Canjear por factura"
+                          onClick={() => setCanjeando(f)}
                         >
-                          <Undo2 className="h-4 w-4 text-destructive" />
+                          <FileCheck2 className="h-4 w-4" />
                         </Button>
                       )}
+                      {f.tipo !== "rectificativa" &&
+                        situaciones.get(f.id)?.admite_cambios !== false && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
+                                )
+                              ) {
+                                anular.mutate({ id: f.id, tipo: f.tipo });
+                              }
+                            }}
+                            disabled={anular.isPending}
+                            title="Anular con una rectificativa"
+                          >
+                            <Undo2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -353,6 +400,26 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      {canjeando && (
+        <CanjearTicketDialog
+          open={!!canjeando}
+          onOpenChange={(o) => !o && setCanjeando(null)}
+          referencia={referenciaFactura(canjeando.serie, canjeando.ejercicio, canjeando.numero)}
+          total={Number(canjeando.total)}
+          nombreInicial={canjeando.cliente_nombre ?? null}
+          canjear={(d) =>
+            canjearFn({
+              data: {
+                factura_id: canjeando.id,
+                receptor: { nombre: d.nombre, nif: d.nif, direccion: d.direccion || null },
+              },
+            })
+          }
+          abrirPdf={async (id) => (await generarPDFFn({ data: { factura_id: id } }))?.url ?? null}
+          alCanjear={() => qc.invalidateQueries({ queryKey: ["facturas", tiendaId] })}
+        />
+      )}
 
       {porCorreo && (
         <EnviarDocumentoDialog

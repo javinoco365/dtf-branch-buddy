@@ -795,6 +795,17 @@ export const anularFactura = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Un ticket canjeado ya no es el documento de esa venta: lo es la factura
+    // que lo sustituyó, y es esa la que se rectifica.
+    const { data: canje } = await tabla(supabaseAdmin, "facturas")
+      .select("serie, ejercicio, numero")
+      .eq("sustituye_a_id", data.factura_id)
+      .maybeSingle();
+    if (canje) {
+      throw new Error(
+        `Este ticket se canjeó por la factura ${referenciaFactura(canje.serie, canje.ejercicio, canje.numero)}: rectifica esa.`,
+      );
+    }
     return llamarRpc<ResultadoEmision>(supabaseAdmin, "anular_factura", {
       _usuario_id: context.userId,
       _factura_id: data.factura_id,
@@ -896,4 +907,60 @@ export const fijarInicioSerie = createServerFn({ method: "POST" })
         _siguiente: data.siguiente,
       },
     );
+  });
+
+/** Una línea congelada, lista para volver a emitirse igual. */
+function lineasDeSnapshot(snapshot: unknown) {
+  return ((Array.isArray(snapshot) ? snapshot : []) as any[]).map((l) => ({
+    descripcion: String(l.descripcion ?? ""),
+    cantidad: Number(l.cantidad ?? 0),
+    unidad: String(l.unidad ?? "ud"),
+    precio_unitario: Number(l.precio_unitario ?? 0),
+    iva_rate: Number(l.iva_rate ?? 0),
+  }));
+}
+
+/**
+ * Canjea un ticket de tienda por una factura completa (en Verifactu, F3).
+ *
+ * La factura nueva lleva las mismas líneas que se congelaron en el ticket y
+ * los datos fiscales que da ahora el cliente. El ticket no se toca. La base
+ * comprueba que es un ticket, que no se canjeó ni rectificó antes y que la
+ * factura suma lo mismo.
+ */
+export const canjearTicket = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        factura_id: z.string().uuid(),
+        receptor: receptorSchema.extend({
+          nif: z.string().trim().min(1, "El canje necesita el NIF del cliente"),
+        }),
+        fecha: z.string().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario, supabaseAdmin } =
+      await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    const { data: ticket } = await tabla(sb, "facturas")
+      .select("id, tienda_id, tipo, cliente_id, lineas_snapshot")
+      .eq("id", data.factura_id)
+      .maybeSingle();
+    if (!ticket) throw new Error("El ticket no existe");
+    await comprobarAccesoTienda(sb, ticket.tienda_id, context.userId);
+    if (ticket.tipo !== "simplificada") throw new Error("Solo se canjean tickets");
+
+    return llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+      _usuario_id: context.userId,
+      _tienda_id: ticket.tienda_id,
+      _receptor: data.receptor,
+      _lineas: lineasDeSnapshot(ticket.lineas_snapshot),
+      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _cliente_id: ticket.cliente_id ?? null,
+      _notas: null,
+      _sustituye_a_id: ticket.id,
+    });
   });
