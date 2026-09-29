@@ -21,14 +21,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, FileText, Loader2, Printer, Trash2 } from "lucide-react";
+import { Download, FileCheck2, FileText, Loader2, Printer, Trash2, Undo2 } from "lucide-react";
 import {
   listTextilFacturas,
   deleteTextilFactura,
   generarPdfFacturaTextil,
   generarTicket80Textil,
   urlFacturaTextil,
+  canjearTicketTextil,
+  anularTicketTextil,
 } from "@/lib/textil.functions";
+import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
+import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
@@ -70,6 +74,35 @@ function FacturasPage() {
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
   const ticket80Fn = useServerFn(generarTicket80Textil);
+  const canjearFn = useServerFn(canjearTicketTextil);
+  const anularFn = useServerFn(anularTicketTextil);
+  const [canjeando, setCanjeando] = useState<any>(null);
+
+  // Qué le ha pasado a cada ticket: canjeado, anulado o intacto.
+  const situaciones = useMemo(() => {
+    const docs = (data as any[]).map((f) => ({
+      id: f.id as string,
+      referencia: f.numero as string,
+      rectifica_a_id: (f.rectifica_a_id as string | null) ?? null,
+      sustituye_a_id: (f.sustituye_a_id as string | null) ?? null,
+    }));
+    const mapa = new Map<string, SituacionTicket>();
+    for (const f of data as any[]) {
+      if (f.tipo === "simplificada") mapa.set(f.id, situacionTicket(f.id, docs));
+    }
+    return mapa;
+  }, [data]);
+
+  // Anular no borra ni modifica el ticket: emite su rectificativa, las mismas
+  // líneas en negativo. Los dos quedan en el libro y suman cero.
+  const anular = useMutation({
+    mutationFn: (id: string) => anularFn({ data: { factura_id: id } }),
+    onSuccess: (r: any) => {
+      toast.success(`Ticket anulado con la rectificativa ${r.referencia}`);
+      qc.invalidateQueries({ queryKey: ["textil-facturas"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo anular"),
+  });
 
   /** El ticket en 80 mm, con la pestaña abierta antes de la llamada por lo mismo que abajo. */
   async function abrirTicket80(factura: any) {
@@ -173,6 +206,16 @@ function FacturasPage() {
                         Ticket
                       </Badge>
                     )}
+                    {situaciones.get(f.id)?.canjeado_por && (
+                      <div className="font-sans text-[11px] text-muted-foreground">
+                        Canjeado por {situaciones.get(f.id)?.canjeado_por}
+                      </div>
+                    )}
+                    {situaciones.get(f.id)?.rectificado_por && (
+                      <div className="font-sans text-[11px] text-muted-foreground">
+                        Anulado por {situaciones.get(f.id)?.rectificado_por}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
                   <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
@@ -220,6 +263,37 @@ function FacturasPage() {
                         <Printer className="h-4 w-4" />
                       </Button>
                     )}
+                    {situaciones.get(f.id)?.admite_cambios && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Canjear por factura"
+                          aria-label="Canjear por factura"
+                          onClick={() => setCanjeando(f)}
+                        >
+                          <FileCheck2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Anular con una rectificativa"
+                          aria-label="Anular con una rectificativa"
+                          disabled={anular.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Se emitirá una rectificativa que anula el ticket ${f.numero}. El ticket no se borra ni se modifica. ¿Continuar?`,
+                              )
+                            ) {
+                              anular.mutate(f.id);
+                            }
+                          }}
+                        >
+                          <Undo2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -230,6 +304,31 @@ function FacturasPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {canjeando && (
+        <CanjearTicketDialog
+          open={!!canjeando}
+          onOpenChange={(o) => !o && setCanjeando(null)}
+          referencia={canjeando.numero}
+          total={Number(canjeando.total)}
+          nombreInicial={canjeando.cliente_nombre ?? null}
+          canjear={(d) =>
+            canjearFn({
+              data: {
+                factura_id: canjeando.id,
+                nombre: d.nombre,
+                nif: d.nif,
+                direccion: d.direccion || null,
+              },
+            })
+          }
+          abrirPdf={async (id) => {
+            await generarFn({ data: { factura_id: id } });
+            return (await urlFn({ data: { factura_id: id } })).url;
+          }}
+          alCanjear={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
+        />
+      )}
 
       <ConfirmarBorrado
         abierto={!!borrando}

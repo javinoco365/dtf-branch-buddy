@@ -227,3 +227,42 @@ export function clasificarParaTickets<P extends PedidoSinDocumento>(
   }
   return salida;
 }
+
+// ---------------------------------------------------------------------------
+// Un ticket después de emitido: canjeado, rectificado o vigente
+// ---------------------------------------------------------------------------
+
+/** Lo justo de cada documento para saber qué le ha pasado a un ticket. */
+export type DocumentoRelacionado = {
+  id: string;
+  referencia: string;
+  rectifica_a_id: string | null;
+  sustituye_a_id: string | null;
+};
+
+export type SituacionTicket = {
+  /** La factura por la que se canjeó, si se canjeó. */
+  canjeado_por: string | null;
+  /** La rectificativa que lo corrige, si la hay. */
+  rectificado_por: string | null;
+  /** Solo un ticket intacto se canjea o se anula; lo demás se hace sobre lo que lo sustituyó. */
+  admite_cambios: boolean;
+};
+
+/**
+ * Qué le ha pasado a un ticket, mirando los demás documentos. La base impide
+ * además canjearlo dos veces o canjear uno rectificado; esto es para que la
+ * pantalla no ofrezca lo que luego se va a rechazar.
+ */
+export function situacionTicket(
+  ticketId: string,
+  docs: readonly DocumentoRelacionado[],
+): SituacionTicket {
+  const canje = docs.find((d) => d.sustituye_a_id === ticketId);
+  const rect = docs.find((d) => d.rectifica_a_id === ticketId);
+  return {
+    canjeado_por: canje?.referencia ?? null,
+    rectificado_por: rect?.referencia ?? null,
+    admite_cambios: !canje && !rect,
+  };
+}

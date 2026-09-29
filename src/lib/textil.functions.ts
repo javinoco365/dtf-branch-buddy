@@ -9,6 +9,14 @@ import {
   calcularTotales as calcularTotalesDominio,
   redondear as redondearImporte,
 } from "@/dominio/importes";
+// El dominio se importa aquí arriba y no con await import() dentro de cada
+// función: un módulo que se carga de las dos formas obliga al empaquetador a
+// generar un auxiliar que acabó en el arranque del servidor, en una
+// importación circular que tiró el panel entero en producción («This page
+// didn't load»). Son módulos puros y pequeños: no hay nada que ganar
+// cargándolos a demanda.
+import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1122,9 +1130,6 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
 
 /** Todo lo que hace falta para el documento de un pedido textil. Solo lee. */
 async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
-  const { receptorDesdePedido, lineasDesdePedido } = await import("@/dominio/factura-desde-pedido");
-  const { documentoVigente, esTipoFiscal, LIMITES_TICKET } = await import("@/dominio/tickets");
-
   const { data: pedido, error } = await supabase
     .from("textil_pedidos")
     .select("id, numero, cliente_id, cliente_nombre, cliente_email, marca_id, envio, notas")
@@ -1204,7 +1209,6 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ textil_pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { calcularTotales } = await import("@/dominio/importes");
     const { pedido, vigente, receptor, lineas, limites, tipoFiscal } =
       await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
 
@@ -1221,7 +1225,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       ya_facturado: false as const,
       receptor,
       lineas,
-      total: calcularTotales(lineas).total,
+      total: calcularTotalesDominio(lineas).total,
       tipo_fiscal: tipoFiscal,
       limites,
       notas: (pedido.notas as string | null) ?? null,
@@ -1323,4 +1327,113 @@ export const generarTicket80Textil = createServerFn({ method: "POST" })
       .from("facturas")
       .createSignedUrl(ruta, 60 * 10);
     return { url: (firmada?.signedUrl as string | undefined) ?? null };
+  });
+
+// ============ CANJE Y ANULACIÓN DE TICKETS ============
+
+/** Una línea congelada, lista para volver a emitirse igual (o en negativo). */
+function lineasDeSnapshotTextil(snapshot: unknown, signo: 1 | -1 = 1) {
+  return ((Array.isArray(snapshot) ? snapshot : []) as any[]).map((l) => ({
+    descripcion: String(l.descripcion ?? ""),
+    cantidad: signo * Number(l.cantidad ?? 0),
+    unidad: String(l.unidad ?? "ud"),
+    precio_unitario: Number(l.precio_unitario ?? 0),
+    iva_rate: Number(l.iva_rate ?? 0),
+  }));
+}
+
+async function leerTicketTextil(supabase: any, facturaId: string) {
+  const { data: ticket } = await tabla(supabase, "textil_facturas")
+    .select(
+      "id, numero, tipo, cliente_id, marca_id, textil_pedido_id, lineas_snapshot, receptor_snapshot",
+    )
+    .eq("id", facturaId)
+    .maybeSingle();
+  if (!ticket) throw new Error("El ticket no existe");
+  if (ticket.tipo !== "simplificada") throw new Error("Esto solo vale para tickets");
+  return ticket;
+}
+
+/**
+ * Canjea un ticket textil por una factura completa (en Verifactu, F3): mismas
+ * líneas, datos fiscales del cliente, el ticket intacto. La base comprueba el
+ * resto.
+ */
+export const canjearTicketTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        factura_id: z.string().uuid(),
+        nombre: z.string().trim().min(1, "El canje necesita el nombre del cliente"),
+        nif: z.string().trim().min(1, "El canje necesita el NIF del cliente"),
+        direccion: z.string().trim().nullable().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ticket = await leerTicketTextil(context.supabase, data.factura_id);
+    const receptor: Record<string, string> = { nombre: data.nombre, nif: data.nif };
+    if (data.direccion) receptor.direccion = data.direccion;
+    return llamarRpcTextil<{ id: string; referencia: string }>(
+      supabaseAdmin,
+      "emitir_factura_textil",
+      {
+        _usuario_id: context.userId,
+        _receptor: receptor,
+        _lineas: lineasDeSnapshotTextil(ticket.lineas_snapshot),
+        _marca_id: ticket.marca_id ?? null,
+        _fecha: new Date().toISOString().slice(0, 10),
+        _cliente_id: ticket.cliente_id ?? null,
+        _sustituye_a_id: ticket.id,
+      },
+    );
+  });
+
+/**
+ * Anula un ticket textil con su rectificativa (R5, la de las facturas
+ * simplificadas): las mismas líneas en negativo. El ticket no se borra ni se
+ * modifica; los dos quedan en el libro y suman cero.
+ */
+export const anularTicketTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ticket = await leerTicketTextil(context.supabase, data.factura_id);
+
+    const [{ data: rect }, { data: canje }] = await Promise.all([
+      tabla(context.supabase, "textil_facturas")
+        .select("numero")
+        .eq("rectifica_a_id", ticket.id)
+        .maybeSingle(),
+      tabla(context.supabase, "textil_facturas")
+        .select("numero")
+        .eq("sustituye_a_id", ticket.id)
+        .maybeSingle(),
+    ]);
+    if (rect) throw new Error(`El ticket ${ticket.numero} ya está anulado con ${rect.numero}`);
+    if (canje) {
+      throw new Error(
+        `El ticket ${ticket.numero} se canjeó por la factura ${canje.numero}: rectifica esa.`,
+      );
+    }
+
+    return llamarRpcTextil<{ id: string; referencia: string }>(
+      supabaseAdmin,
+      "emitir_factura_textil",
+      {
+        _usuario_id: context.userId,
+        _receptor: ticket.receptor_snapshot ?? {},
+        _lineas: lineasDeSnapshotTextil(ticket.lineas_snapshot, -1),
+        _marca_id: ticket.marca_id ?? null,
+        _fecha: new Date().toISOString().slice(0, 10),
+        _cliente_id: ticket.cliente_id ?? null,
+        _notas: `Anulación del ticket ${ticket.numero}`,
+        _rectifica_a_id: ticket.id,
+        _motivo_rectificacion: "R5",
+        _textil_pedido_id: ticket.textil_pedido_id ?? null,
+      },
+    );
   });

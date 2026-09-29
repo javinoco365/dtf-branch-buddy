@@ -6,6 +6,22 @@ import { generarFacturaPDF } from "@/lib/pdf-factura";
 import type { TicketPDFData } from "@/lib/pdf-ticket";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
+// El dominio se importa aquí arriba y no con await import() dentro de cada
+// función: un módulo que se carga de las dos formas obliga al empaquetador a
+// generar un auxiliar que acabó en el arranque del servidor, en una
+// importación circular que tiró el panel entero en producción («This page
+// didn't load»). Son módulos puros y pequeños: no hay nada que ganar
+// cargándolos a demanda.
+import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { calcularTotales } from "@/dominio/importes";
+import {
+  LIMITES_TICKET,
+  clasificarParaTickets,
+  decidirDocumento,
+  documentoVigente,
+  esTipoFiscal,
+  estaCobrado,
+} from "@/dominio/tickets";
 
 // El cliente de servicio, sin tipar de más: types.ts no conoce varias de estas tablas.
 type Sb = any;
@@ -375,7 +391,6 @@ async function comprobarAccesoTienda(sb: Sb, tiendaId: string, userId: string) {
 
 /** Los límites del ticket de la empresa. Sin la migración de tickets, los de la ley. */
 async function leerLimitesTicket(sb: Sb, empresaId: string | null) {
-  const { LIMITES_TICKET } = await import("@/dominio/tickets");
   if (!empresaId) return LIMITES_TICKET;
   const { data } = await tabla(sb, "empresas")
     .select("limite_simplificada, limite_simplificada_particular")
@@ -416,9 +431,6 @@ async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
 
 /** Todo lo que hace falta para emitir el documento de un pedido. Solo lee. */
 async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string) {
-  const { receptorDesdePedido, lineasDesdePedido } = await import("@/dominio/factura-desde-pedido");
-  const { documentoVigente, esTipoFiscal } = await import("@/dominio/tickets");
-
   // tabla() y no .from(): direccion_facturacion no está en types.ts.
   const { data: pedido, error: pErr } = await tabla(sb, "pedidos")
     .select(
@@ -478,8 +490,6 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { calcularTotales } = await import("@/dominio/importes");
-    const { decidirDocumento } = await import("@/dominio/tickets");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
@@ -599,8 +609,6 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { clasificarParaTickets, documentoVigente, estaCobrado, esTipoFiscal } =
-      await import("@/dominio/tickets");
     const sb = adminComoUsuario(context.userId);
     await comprobarAccesoTienda(sb, data.tienda_id, context.userId);
 
@@ -720,8 +728,6 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario, supabaseAdmin } =
       await import("@/integrations/supabase/client.server");
-    const { calcularTotales } = await import("@/dominio/importes");
-    const { decidirDocumento } = await import("@/dominio/tickets");
     const sb = adminComoUsuario(context.userId);
     const fecha = new Date().toISOString().slice(0, 10);
 
@@ -795,6 +801,17 @@ export const anularFactura = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Un ticket canjeado ya no es el documento de esa venta: lo es la factura
+    // que lo sustituyó, y es esa la que se rectifica.
+    const { data: canje } = await tabla(supabaseAdmin, "facturas")
+      .select("serie, ejercicio, numero")
+      .eq("sustituye_a_id", data.factura_id)
+      .maybeSingle();
+    if (canje) {
+      throw new Error(
+        `Este ticket se canjeó por la factura ${referenciaFactura(canje.serie, canje.ejercicio, canje.numero)}: rectifica esa.`,
+      );
+    }
     return llamarRpc<ResultadoEmision>(supabaseAdmin, "anular_factura", {
       _usuario_id: context.userId,
       _factura_id: data.factura_id,
@@ -896,4 +913,60 @@ export const fijarInicioSerie = createServerFn({ method: "POST" })
         _siguiente: data.siguiente,
       },
     );
+  });
+
+/** Una línea congelada, lista para volver a emitirse igual. */
+function lineasDeSnapshot(snapshot: unknown) {
+  return ((Array.isArray(snapshot) ? snapshot : []) as any[]).map((l) => ({
+    descripcion: String(l.descripcion ?? ""),
+    cantidad: Number(l.cantidad ?? 0),
+    unidad: String(l.unidad ?? "ud"),
+    precio_unitario: Number(l.precio_unitario ?? 0),
+    iva_rate: Number(l.iva_rate ?? 0),
+  }));
+}
+
+/**
+ * Canjea un ticket de tienda por una factura completa (en Verifactu, F3).
+ *
+ * La factura nueva lleva las mismas líneas que se congelaron en el ticket y
+ * los datos fiscales que da ahora el cliente. El ticket no se toca. La base
+ * comprueba que es un ticket, que no se canjeó ni rectificó antes y que la
+ * factura suma lo mismo.
+ */
+export const canjearTicket = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        factura_id: z.string().uuid(),
+        receptor: receptorSchema.extend({
+          nif: z.string().trim().min(1, "El canje necesita el NIF del cliente"),
+        }),
+        fecha: z.string().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario, supabaseAdmin } =
+      await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    const { data: ticket } = await tabla(sb, "facturas")
+      .select("id, tienda_id, tipo, cliente_id, lineas_snapshot")
+      .eq("id", data.factura_id)
+      .maybeSingle();
+    if (!ticket) throw new Error("El ticket no existe");
+    await comprobarAccesoTienda(sb, ticket.tienda_id, context.userId);
+    if (ticket.tipo !== "simplificada") throw new Error("Solo se canjean tickets");
+
+    return llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+      _usuario_id: context.userId,
+      _tienda_id: ticket.tienda_id,
+      _receptor: data.receptor,
+      _lineas: lineasDeSnapshot(ticket.lineas_snapshot),
+      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _cliente_id: ticket.cliente_id ?? null,
+      _notas: null,
+      _sustituye_a_id: ticket.id,
+    });
   });
