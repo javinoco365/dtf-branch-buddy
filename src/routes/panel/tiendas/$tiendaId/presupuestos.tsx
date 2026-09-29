@@ -32,12 +32,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EstadoVacio } from "@/components/EstadoVacio";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { PresupuestoFormDialog } from "@/components/presupuestos/PresupuestoFormDialog";
 import { eur, fechaCorta } from "@/lib/format";
 import {
   borrarPresupuesto,
   cambiarEstadoPresupuesto,
+  confirmarPresupuesto,
   listPresupuestosTienda,
   type Presupuesto,
 } from "@/lib/presupuestos.functions";
@@ -74,11 +85,13 @@ function PresupuestosTienda() {
   const listar = useServerFn(listPresupuestosTienda);
   const cambiarEstado = useServerFn(cambiarEstadoPresupuesto);
   const borrar = useServerFn(borrarPresupuesto);
+  const confirmar = useServerFn(confirmarPresupuesto);
 
   const [filtro, setFiltro] = useState<FiltroPresupuestos>(FILTRO_PRESUPUESTOS_TODO);
   const [editando, setEditando] = useState<Presupuesto | null>(null);
   const [nuevo, setNuevo] = useState(false);
   const [borrando, setBorrando] = useState<Presupuesto | null>(null);
+  const [confirmando, setConfirmando] = useState<Presupuesto | null>(null);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda-nombre", tiendaId],
@@ -106,6 +119,18 @@ function PresupuestosTienda() {
     onSuccess: () => {
       toast.success("Estado actualizado");
       refrescar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const confirmarMut = useMutation({
+    mutationFn: (id: string) => confirmar({ data: { id } }),
+    onSuccess: (r) => {
+      toast.success(r.numero ? `Pedido ${r.numero} creado` : "Pedido creado");
+      setConfirmando(null);
+      refrescar();
+      qc.invalidateQueries({ queryKey: ["pedidos"] });
+      qc.invalidateQueries({ queryKey: ["cobros-pendientes-pedidos"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -242,6 +267,11 @@ function PresupuestosTienda() {
                         <Badge variant={VARIANTE[visible]}>
                           {etiquetaEstadoPresupuesto(visible)}
                         </Badge>
+                        {p.pedido?.numero && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Pedido <span className="font-mono">{p.pedido.numero}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">
                         {eur(Number(p.total))}
@@ -260,11 +290,18 @@ function PresupuestosTienda() {
                             >
                               Editar
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setConfirmando(p)}
+                              disabled={!!p.pedido_id || p.estado === "rechazado"}
+                            >
+                              Confirmar: crear el pedido
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {ESTADOS_PRESUPUESTO.filter((e) => e.valor !== p.estado).map((e) => (
                               <DropdownMenuItem
                                 key={e.valor}
                                 onClick={() => estadoMut.mutate({ id: p.id, estado: e.valor })}
+                                disabled={!!p.pedido_id}
                               >
                                 Marcar como {e.etiqueta.toLowerCase()}
                               </DropdownMenuItem>
@@ -305,6 +342,31 @@ function PresupuestosTienda() {
           refrescar();
         }}
       />
+
+      <AlertDialog open={!!confirmando} onOpenChange={(o) => !o && setConfirmando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar el presupuesto {confirmando?.numero}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se crea un pedido de esta tienda con las mismas líneas e importes (
+              {eur(Number(confirmando?.total ?? 0))}). El presupuesto queda aceptado y ya no se
+              edita. Los cobros, parciales o no, se registran luego en el pedido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmarMut.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirmando) confirmarMut.mutate(confirmando.id);
+              }}
+            >
+              {confirmarMut.isPending ? "Creando…" : "Crear el pedido"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ConfirmarBorrado
         abierto={!!borrando}

@@ -30,13 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, PackageCheck } from "lucide-react";
 import {
   listPresupuestos,
   upsertPresupuesto,
   deletePresupuesto,
   updatePresupuestoEstado,
-  convertirPresupuestoEnFactura,
+  confirmarPresupuestoTextil,
   listMarcas,
   listTextilClientes,
   getEmpresaGlobal,
@@ -66,7 +66,9 @@ export const Route = createFileRoute("/panel/textil/presupuestos")({
   component: PresupuestosPage,
 });
 
-const ESTADOS = ["borrador", "enviado", "aceptado", "rechazado", "facturado"] as const;
+// «facturado» ya no se elige: el textil no va por factura. Solo lo llevan los
+// presupuestos que se facturaron antes, y se siguen enseñando tal cual.
+const ESTADOS = ["borrador", "enviado", "aceptado", "rechazado"] as const;
 const ESTADO_COLOR: Record<string, string> = {
   borrador: "bg-muted text-muted-foreground",
   enviado: "bg-blue-500/10 text-blue-700",
@@ -81,7 +83,7 @@ function PresupuestosPage() {
   const upsertFn = useServerFn(upsertPresupuesto);
   const delFn = useServerFn(deletePresupuesto);
   const estFn = useServerFn(updatePresupuestoEstado);
-  const convFn = useServerFn(convertirPresupuestoEnFactura);
+  const confirmarFn = useServerFn(confirmarPresupuestoTextil);
   const marcasFn = useServerFn(listMarcas);
   const cliFn = useServerFn(listTextilClientes);
   const empFn = useServerFn(getEmpresaGlobal);
@@ -101,12 +103,13 @@ function PresupuestosPage() {
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
-  const [facturando, setFacturando] = useState<any>(null);
+  const [confirmando, setConfirmando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["textil-presupuestos"] });
-    qc.invalidateQueries({ queryKey: ["textil-facturas"] });
+    qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
+    qc.invalidateQueries({ queryKey: ["textil-stock"] });
   };
 
   const save = useMutation({
@@ -130,11 +133,11 @@ function PresupuestosPage() {
     mutationFn: ({ id, estado }: any) => estFn({ data: { id, estado } }),
     onSuccess: () => invalidate(),
   });
-  const conv = useMutation({
-    mutationFn: (id: string) => convFn({ data: { id } }),
-    onSuccess: (r: any) => {
+  const confirmar = useMutation({
+    mutationFn: (id: string) => confirmarFn({ data: { id } }),
+    onSuccess: (r) => {
       invalidate();
-      toast.success(`Factura ${r.numero} creada`);
+      toast.success(r.numero ? `Pedido ${r.numero} creado` : "Pedido creado");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -147,7 +150,7 @@ function PresupuestosPage() {
         <div>
           <h1 className="text-2xl font-bold">Presupuestos</h1>
           <p className="text-sm text-muted-foreground">
-            Crea presupuestos y conviértelos en facturas con un clic.
+            Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido.
           </p>
         </div>
         <Button
@@ -203,7 +206,7 @@ function PresupuestosPage() {
                     <Select
                       value={p.estado}
                       onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
-                      disabled={p.estado === "facturado"}
+                      disabled={p.estado === "facturado" || !!p.pedido_id}
                     >
                       <SelectTrigger className={`h-7 w-32 text-xs ${ESTADO_COLOR[p.estado] ?? ""}`}>
                         <SelectValue />
@@ -214,24 +217,35 @@ function PresupuestosPage() {
                             {e}
                           </SelectItem>
                         ))}
+                        {p.estado === "facturado" && (
+                          <SelectItem value="facturado">facturado</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
+                    {p.pedido?.numero && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Pedido <span className="font-mono">{p.pedido.numero}</span>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
                   <TableCell className="text-right">
-                    {p.estado !== "facturado" && (
+                    {!p.pedido_id && p.estado !== "facturado" && p.estado !== "rechazado" && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="Convertir en factura"
-                        onClick={() => setFacturando(p)}
+                        title="Confirmar: crear el pedido"
+                        onClick={() => setConfirmando(p)}
+                        disabled={confirmar.isPending}
                       >
-                        <FileText className="h-4 w-4 text-primary" />
+                        <PackageCheck className="h-4 w-4 text-primary" />
                       </Button>
                     )}
                     <Button
                       variant="ghost"
                       size="icon"
+                      title={p.pedido_id ? "Ya es un pedido: no se cambia" : "Editar"}
+                      disabled={!!p.pedido_id}
                       onClick={() => {
                         setEditing(p);
                         setOpen(true);
@@ -261,24 +275,24 @@ function PresupuestosPage() {
         }}
       />
 
-      <AlertDialog open={!!facturando} onOpenChange={(o) => !o && setFacturando(null)}>
+      <AlertDialog open={!!confirmando} onOpenChange={(o) => !o && setConfirmando(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Facturar el presupuesto {facturando?.numero}?</AlertDialogTitle>
+            <AlertDialogTitle>¿Confirmar el presupuesto {confirmando?.numero}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se emitirá una factura con número correlativo. Una vez emitida no se edita ni se
-              borra: solo se corrige con una rectificativa.
+              Se crea un pedido con las mismas líneas e importes, y aparta el stock que lleve. El
+              presupuesto queda aceptado. Los cobros se registran luego en el pedido.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                conv.mutate(facturando.id);
-                setFacturando(null);
+                confirmar.mutate(confirmando.id);
+                setConfirmando(null);
               }}
             >
-              Emitir factura
+              Crear el pedido
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
