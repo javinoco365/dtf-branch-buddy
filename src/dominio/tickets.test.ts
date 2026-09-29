@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest";
+import {
+  cabeEnTicket,
+  decidirDocumento,
+  esTipoFiscal,
+  etiquetaTipoFiscal,
+  explicarDecision,
+  LIMITES_TICKET,
+  limiteTicket,
+  tieneDatosFiscales,
+  type DecisionDocumento,
+} from "./tickets";
+
+const SIN_DATOS = { nombre: null, nif: null, tipo_fiscal: null };
+const PARTICULAR = { nombre: "Vecina", nif: null, tipo_fiscal: "particular" as const };
+const PROFESIONAL = { nombre: "Taller", nif: null, tipo_fiscal: "profesional" as const };
+const CON_NIF = { nombre: "Talleres Pérez S.L.", nif: "B-12.345.678", tipo_fiscal: null };
+
+describe("decidirDocumento: la tabla del RD 1619/2012 art. 4", () => {
+  it("con nombre y NIF, factura completa sea cual sea el importe", () => {
+    expect(decidirDocumento(12, CON_NIF)).toEqual({ documento: "factura" });
+    expect(decidirDocumento(5000, CON_NIF)).toEqual({ documento: "factura" });
+  });
+
+  it("particular: ticket hasta 3000 €, datos por encima", () => {
+    expect(decidirDocumento(3000, PARTICULAR)).toEqual({ documento: "ticket", limite: 3000 });
+    expect(decidirDocumento(3000.01, PARTICULAR)).toEqual({
+      documento: "pedir_datos",
+      limite: 3000,
+    });
+  });
+
+  it("profesional: ticket hasta 400 €, factura obligatoria por encima", () => {
+    expect(decidirDocumento(400, PROFESIONAL)).toEqual({ documento: "ticket", limite: 400 });
+    expect(decidirDocumento(484, PROFESIONAL)).toEqual({ documento: "pedir_datos", limite: 400 });
+  });
+
+  it("sin saber quién es: ticket hasta 400, pregunta hasta 3000, datos por encima", () => {
+    expect(decidirDocumento(36.3, SIN_DATOS)).toEqual({ documento: "ticket", limite: 400 });
+    expect(decidirDocumento(484, SIN_DATOS)).toEqual({
+      documento: "preguntar_tipo",
+      limite: 400,
+      limite_particular: 3000,
+    });
+    expect(decidirDocumento(3025, SIN_DATOS)).toEqual({ documento: "pedir_datos", limite: 400 });
+    expect(decidirDocumento(36.3, null)).toEqual({ documento: "ticket", limite: 400 });
+  });
+
+  it("sin importe no hay documento", () => {
+    expect(decidirDocumento(0, SIN_DATOS)).toEqual({ documento: "sin_importe" });
+    expect(decidirDocumento(-10, CON_NIF)).toEqual({ documento: "sin_importe" });
+    expect(decidirDocumento(0.004, SIN_DATOS)).toEqual({ documento: "sin_importe" });
+  });
+
+  it("usa los límites de la empresa, no los de por defecto", () => {
+    const limites = { general: 500, particular: 2000 };
+    expect(decidirDocumento(450, SIN_DATOS, limites)).toEqual({ documento: "ticket", limite: 500 });
+    expect(decidirDocumento(2500, PARTICULAR, limites)).toEqual({
+      documento: "pedir_datos",
+      limite: 2000,
+    });
+  });
+});
+
+describe("el límite exacto, en céntimos", () => {
+  it("400,00 cabe; 400,01 no; la suma en coma flotante no engaña", () => {
+    expect(cabeEnTicket(400, null)).toBe(true);
+    expect(cabeEnTicket(400.01, null)).toBe(false);
+    // 0.1 + 0.2 + 399.7 da 400.00000000000006 en coma flotante.
+    expect(cabeEnTicket(0.1 + 0.2 + 399.7, null)).toBe(true);
+  });
+
+  it("sin indicar cuenta como profesional", () => {
+    expect(limiteTicket(null)).toBe(LIMITES_TICKET.general);
+    expect(limiteTicket("profesional")).toBe(400);
+    expect(limiteTicket("particular")).toBe(3000);
+  });
+});
+
+describe("datos fiscales", () => {
+  it("hace falta nombre y NIF; el NIF con espacios o guiones cuenta", () => {
+    expect(tieneDatosFiscales(CON_NIF)).toBe(true);
+    expect(tieneDatosFiscales({ nombre: "Sin NIF", nif: "  " })).toBe(false);
+    expect(tieneDatosFiscales({ nombre: " ", nif: "B12345678" })).toBe(false);
+    expect(tieneDatosFiscales(null)).toBe(false);
+  });
+
+  it("tipo fiscal y etiquetas", () => {
+    expect(esTipoFiscal("particular")).toBe(true);
+    expect(esTipoFiscal("autonomo")).toBe(false);
+    expect(etiquetaTipoFiscal(null)).toBe("Sin indicar");
+    expect(etiquetaTipoFiscal("profesional")).toBe("Profesional o empresa");
+  });
+
+  it("cada decisión tiene su explicación", () => {
+    const todas: DecisionDocumento[] = [
+      { documento: "factura" },
+      { documento: "ticket", limite: 400 },
+      { documento: "pedir_datos", limite: 400 },
+      { documento: "preguntar_tipo", limite: 400, limite_particular: 3000 },
+      { documento: "sin_importe" },
+    ];
+    for (const d of todas) expect(explicarDecision(d)).not.toBe("");
+  });
+});
