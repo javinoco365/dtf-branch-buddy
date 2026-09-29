@@ -1,4 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
+import { normalizarTexto } from "@/dominio/clientes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
@@ -48,7 +56,25 @@ function InversionPage() {
   });
   const { data: cat } = useQuery({ queryKey: ["caja-catalogos"], queryFn: () => catalogos() });
 
-  const movimientos = data?.movimientos ?? [];
+  const movimientos = useMemo(() => data?.movimientos ?? [], [data]);
+  // Los filtros viven en la dirección.
+  const {
+    valores: filtros,
+    cambiar,
+    quitar,
+    hay,
+  } = useFiltrosUrl({ q: "", socio: "todos", tipo: "todos" });
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return movimientos.filter(
+      (m) =>
+        (filtros.socio === "todos" || m.socio_id === filtros.socio) &&
+        (filtros.tipo === "todos" || m.tipo === filtros.tipo) &&
+        (!q ||
+          normalizarTexto(m.socio_nombre).includes(q) ||
+          normalizarTexto(m.observaciones).includes(q)),
+    );
+  }, [movimientos, filtros.q, filtros.socio, filtros.tipo]);
   const totales = useMemo(() => totalesInversion(movimientos), [movimientos]);
   const socios = useMemo(() => porSocioInversion(movimientos), [movimientos]);
 
@@ -169,6 +195,33 @@ function InversionPage() {
         </CardContent>
       </Card>
 
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar socio u observaciones…"
+        />
+        <SelectFiltro
+          etiqueta="Socio"
+          valor={filtros.socio}
+          alCambiar={(socio) => cambiar({ socio })}
+          opciones={[
+            { valor: "todos", etiqueta: "Todos los socios" },
+            ...(cat?.socios ?? []).map((s) => ({ valor: s.id, etiqueta: s.nombre })),
+          ]}
+        />
+        <SelectFiltro
+          etiqueta="Tipo"
+          valor={filtros.tipo}
+          alCambiar={(tipo) => cambiar({ tipo })}
+          opciones={[
+            { valor: "todos", etiqueta: "Aportaciones y retiradas" },
+            { valor: "aportacion", etiqueta: "Aportaciones" },
+            { valor: "retirada", etiqueta: "Retiradas" },
+          ]}
+        />
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -204,7 +257,7 @@ function InversionPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {movimientos.map((m) => (
+              {filtrados.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="tabular-nums">{fechaCorta(m.fecha)}</TableCell>
                   <TableCell>{m.socio_nombre}</TableCell>

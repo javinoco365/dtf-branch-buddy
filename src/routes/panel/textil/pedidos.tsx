@@ -52,6 +52,14 @@ import {
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { resumenCobros } from "@/dominio/cobros";
+import { normalizarTexto } from "@/dominio/clientes";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -59,6 +67,8 @@ export const Route = createFileRoute("/panel/textil/pedidos")({
 });
 
 const ESTADOS = ["pendiente", "en_produccion", "listo", "enviado", "entregado", "cancelado"];
+
+const FILTROS_PEDIDOS_TEXTIL = { q: "", estado: "todos", cobro: "todos" };
 
 function PedidosPage() {
   const qc = useQueryClient();
@@ -72,6 +82,7 @@ function PedidosPage() {
   const stockFn = useServerFn(listStock);
 
   const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS_TEXTIL);
   const { data: clientes = [] } = useQuery({
     queryKey: ["textil-clientes"],
     queryFn: () => cliFn(),
@@ -96,6 +107,26 @@ function PedidosPage() {
     return m;
   }, [datosCobros]);
   const cobrosDisponibles = datosCobros?.disponible ?? true;
+
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return (data as any[]).filter((p) => {
+      if (filtros.estado !== "todos" && p.estado !== filtros.estado) return false;
+      if (filtros.cobro !== "todos") {
+        // «Con algo pendiente» incluye lo cobrado en parte.
+        const e = resumenCobros(p.total, cobrosPorPedido.get(p.id) ?? []).estado;
+        if (filtros.cobro === "pendiente" && e !== "pendiente" && e !== "parcial") return false;
+        if (filtros.cobro === "parcial" && e !== "parcial") return false;
+        if (filtros.cobro === "cobrado" && e !== "cobrado" && e !== "excedido") return false;
+      }
+      return (
+        !q ||
+        normalizarTexto(p.numero).includes(q) ||
+        normalizarTexto(p.cliente_nombre).includes(q) ||
+        normalizarTexto(p.marca?.nombre).includes(q)
+      );
+    });
+  }, [data, filtros.q, filtros.estado, filtros.cobro, cobrosPorPedido]);
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
@@ -158,6 +189,39 @@ function PedidosPage() {
           </CardContent>
         </Card>
       )}
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar nº, cliente o marca…"
+        />
+        <SelectFiltro
+          etiqueta="Estado"
+          valor={filtros.estado}
+          alCambiar={(estado) => cambiar({ estado })}
+          opciones={[
+            { valor: "todos", etiqueta: "Todos los estados" },
+            ...ESTADOS.map((e) => ({ valor: e, etiqueta: e.replace("_", " ") })),
+          ]}
+        />
+        {cobrosDisponibles && (
+          <SelectFiltro
+            etiqueta="Cobro"
+            valor={filtros.cobro}
+            alCambiar={(cobro) => cambiar({ cobro })}
+            opciones={[
+              { valor: "todos", etiqueta: "Cobrado o no" },
+              { valor: "pendiente", etiqueta: "Con algo pendiente" },
+              { valor: "parcial", etiqueta: "Cobrado en parte" },
+              { valor: "cobrado", etiqueta: "Cobrado entero" },
+            ]}
+          />
+        )}
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+        <div className="text-xs text-muted-foreground ml-auto">
+          {filtrados.length} pedido{filtrados.length === 1 ? "" : "s"}
+        </div>
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -175,14 +239,14 @@ function PedidosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.length === 0 && (
+              {filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    Sin pedidos.
+                    {data.length === 0 ? "Sin pedidos." : "Ningún pedido cumple los filtros."}
                   </TableCell>
                 </TableRow>
               )}
-              {data.map((p: any) => {
+              {filtrados.map((p: any) => {
                 const cobro = resumenCobros(p.total, cobrosPorPedido.get(p.id) ?? []);
                 return (
                   <TableRow key={p.id}>

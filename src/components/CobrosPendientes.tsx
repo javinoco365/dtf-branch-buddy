@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eur, fechaCorta } from "@/lib/format";
 import { toast } from "sonner";
-import { CheckCircle2, AlertTriangle, Clock, Wallet, Search } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Clock, Wallet, Search, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { useTiendas } from "@/lib/periodo";
 
 type Factura = {
   id: string;
@@ -38,9 +47,15 @@ function diasVencidos(f: Factura) {
   return diff;
 }
 
+const FILTROS_FACTURAS = { fq: "", ftienda: "todas", festado: "todas" };
+
 export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   const qc = useQueryClient();
-  const [busqueda, setBusqueda] = useState("");
+  // Con prefijo «f»: comparten la dirección con los filtros de la pestaña de
+  // pedidos y no deben pisarse.
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_FACTURAS);
+  const [busqueda, setBusqueda] = useTextoDiferido(filtros.fq, (fq) => cambiar({ fq }));
+  const { data: tiendasLista = [] } = useTiendas();
 
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ["cobros-pendientes", tiendaId ?? "global"],
@@ -73,15 +88,20 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   });
 
   const filtradas = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return facturas;
-    return facturas.filter(
-      (f) =>
+    const q = filtros.fq.trim().toLowerCase();
+    return facturas.filter((f) => {
+      if (!tiendaId && filtros.ftienda !== "todas" && f.tienda_id !== filtros.ftienda) return false;
+      if (filtros.festado === "vencida" && diasVencidos(f) <= 0) return false;
+      if (filtros.festado === "al_dia" && diasVencidos(f) > 0) return false;
+      if (filtros.festado === "borrador" && f.estado !== "borrador") return false;
+      if (!q) return true;
+      return (
         (f.cliente_nombre ?? "").toLowerCase().includes(q) ||
         `${f.serie}-${f.numero}`.toLowerCase().includes(q) ||
-        (f.tiendas?.nombre ?? "").toLowerCase().includes(q),
-    );
-  }, [facturas, busqueda]);
+        (f.tiendas?.nombre ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [facturas, filtros.fq, filtros.ftienda, filtros.festado, tiendaId]);
 
   const totalPendiente = filtradas.reduce((s, f) => s + Number(f.total), 0);
   const vencidas = filtradas.filter((f) => diasVencidos(f) > 0);
@@ -112,8 +132,8 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
       </div>
 
       <Card>
-        <CardContent className="p-4">
-          <div className="relative max-w-md">
+        <CardContent className="p-4 flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar cliente, nº factura o tienda…"
@@ -122,6 +142,37 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
               className="pl-9"
             />
           </div>
+          {!tiendaId && (
+            <Select value={filtros.ftienda} onValueChange={(ftienda) => cambiar({ ftienda })}>
+              <SelectTrigger className="w-[180px]" aria-label="Tienda">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las tiendas</SelectItem>
+                {tiendasLista.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={filtros.festado} onValueChange={(festado) => cambiar({ festado })}>
+            <SelectTrigger className="w-[170px]" aria-label="Situación">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              <SelectItem value="vencida">Vencidas</SelectItem>
+              <SelectItem value="al_dia">Sin vencer</SelectItem>
+              <SelectItem value="borrador">Borradores</SelectItem>
+            </SelectContent>
+          </Select>
+          {hay() && (
+            <Button variant="ghost" size="sm" onClick={() => quitar()}>
+              <X className="h-4 w-4 mr-1" /> Quitar filtros
+            </Button>
+          )}
         </CardContent>
       </Card>
 

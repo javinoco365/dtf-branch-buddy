@@ -26,12 +26,12 @@ import { AlertTriangle, CheckCircle2, Clock, Search, Wallet, X } from "lucide-re
 import { eur, fechaCorta } from "@/lib/format";
 import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { useTiendas } from "@/lib/periodo";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import type { Cobro } from "@/lib/cobros.functions";
 import { CobrosPedidoDialog } from "@/components/cobros/CobrosPedidoDialog";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
   DIAS_ANTIGUO,
-  FILTRO_PENDIENTES_TODO,
   ORIGENES_PENDIENTE,
   diasDesde,
   filtrarPendientes,
@@ -43,6 +43,9 @@ import {
   type PedidoPendiente,
 } from "@/dominio/pendientes";
 
+/** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
+const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
+
 const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_PENDIENTE.map((o) => [o.valor, o.etiqueta]));
 
 /**
@@ -53,8 +56,17 @@ const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_PENDIENTE.map((o) => [o.valo
  * cobrado sale de aquí en cuanto el pedido queda saldado.
  */
 export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
-  const [filtro, setFiltro] = useState<FiltroPendientes>(
-    tiendaId ? { ...FILTRO_PENDIENTES_TODO, tienda: tiendaId } : FILTRO_PENDIENTES_TODO,
+  // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
+  const { valores: u, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_URL);
+  const [texto, setTexto] = useTextoDiferido(u.q, (q) => cambiar({ q }));
+  const filtro: FiltroPendientes = useMemo(
+    () => ({
+      texto: u.q,
+      tienda: tiendaId ?? u.tienda,
+      origen: u.origen as FiltroPendientes["origen"],
+      soloParciales: u.parciales,
+    }),
+    [u.q, u.tienda, u.origen, u.parciales, tiendaId],
   );
   const [cobrando, setCobrando] = useState<PedidoPendiente | null>(null);
 
@@ -84,11 +96,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
   );
   const resumen = useMemo(() => resumirPendientes(filtrados, hoy), [filtrados, hoy]);
 
-  const hayFiltro =
-    filtro.texto.trim() !== "" ||
-    (!tiendaId && filtro.tienda !== "todas") ||
-    filtro.origen !== "todos" ||
-    filtro.soloParciales;
+  const hayFiltro = hay();
 
   if (data && !data.disponible) {
     return (
@@ -132,16 +140,13 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar cliente o nº de pedido…"
-              value={filtro.texto}
-              onChange={(e) => setFiltro((f) => ({ ...f, texto: e.target.value }))}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
               className="pl-9"
             />
           </div>
           {!tiendaId && (
-            <Select
-              value={filtro.tienda}
-              onValueChange={(v) => setFiltro((f) => ({ ...f, tienda: v }))}
-            >
+            <Select value={filtro.tienda} onValueChange={(tienda) => cambiar({ tienda })}>
               <SelectTrigger className="w-[190px]" aria-label="Tienda">
                 <SelectValue />
               </SelectTrigger>
@@ -155,12 +160,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
               </SelectContent>
             </Select>
           )}
-          <Select
-            value={filtro.origen}
-            onValueChange={(v) =>
-              setFiltro((f) => ({ ...f, origen: v as FiltroPendientes["origen"] }))
-            }
-          >
+          <Select value={filtro.origen} onValueChange={(v) => cambiar({ origen: v })}>
             <SelectTrigger className="w-[180px]" aria-label="Origen">
               <SelectValue />
             </SelectTrigger>
@@ -176,22 +176,12 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
           <label className="flex items-center gap-2 text-sm cursor-pointer px-2">
             <Checkbox
               checked={filtro.soloParciales}
-              onCheckedChange={(v) => setFiltro((f) => ({ ...f, soloParciales: v === true }))}
+              onCheckedChange={(v) => cambiar({ parciales: v === true })}
             />
             Solo cobrados en parte
           </label>
           {hayFiltro && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                setFiltro(
-                  tiendaId
-                    ? { ...FILTRO_PENDIENTES_TODO, tienda: tiendaId }
-                    : FILTRO_PENDIENTES_TODO,
-                )
-              }
-            >
+            <Button variant="ghost" size="sm" onClick={() => quitar()}>
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}

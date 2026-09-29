@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { usePeriodoUrl } from "@/lib/filtros-url";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -66,8 +67,8 @@ function etiquetaPeriodo(ref: Date, periodo: Periodo) {
 
 function FacturacionTienda() {
   const { tiendaId } = Route.useParams();
-  const [periodo, setPeriodo] = useState<Periodo>("mes");
-  const [ref, setRef] = useState(new Date());
+  // El periodo va en la dirección: sobrevive a recargar y se comparte.
+  const { periodo, ref, setPeriodo, setRef } = usePeriodoUrl();
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda-facturacion", tiendaId],

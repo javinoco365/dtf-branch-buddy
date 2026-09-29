@@ -1,4 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from "react";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { useTiendas } from "@/lib/periodo";
+import { escribirFecha, esPeriodo, leerFecha, type Periodo } from "@/dominio/filtros";
 import {
   addMonths,
   addWeeks,
@@ -48,6 +51,7 @@ import {
   RefreshCw,
   Search,
   Truck,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
@@ -86,8 +90,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-type Periodo = "mes" | "semana";
 
 export type { Direccion };
 
@@ -153,6 +155,17 @@ const ESTADO_LABEL: Record<string, string> = {
 
 const ESTADOS = Object.keys(ESTADO_LABEL);
 
+const FILTROS_PEDIDOS = {
+  periodo: "mes",
+  /** Día de referencia del periodo, yyyy-MM-dd. Vacío: hoy. */
+  fecha: "",
+  q: "",
+  estado: "todos",
+  cobro: "todos",
+  origen: "todos",
+  tienda: "todas",
+};
+
 function estadoVariant(estado: string): "default" | "secondary" | "destructive" | "outline" {
   if (estado === "entregado") return "default";
   if (estado === "cancelado") return "destructive";
@@ -162,10 +175,17 @@ function estadoVariant(estado: string): "default" | "secondary" | "destructive" 
 
 export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const queryClient = useQueryClient();
-  const [periodo, setPeriodo] = useState<Periodo>("mes");
-  const [ref, setRef] = useState(new Date());
-  const [busqueda, setBusqueda] = useState("");
-  const [estadoFiltro, setEstadoFiltro] = useState<string>("todos");
+  // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
+  const { valores: f, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS);
+  const periodo: Periodo = esPeriodo(f.periodo) ? f.periodo : "mes";
+  const ref = leerFecha(f.fecha);
+  const setPeriodo = (p: Periodo) => cambiar({ periodo: p, fecha: escribirFecha(ref, p) });
+  const setRef = (d: Date) => cambiar({ fecha: escribirFecha(d, periodo) });
+  const [busqueda, setBusqueda] = useTextoDiferido(f.q, (q) => cambiar({ q }));
+  const estadoFiltro = f.estado;
+  // En la vista global se puede elegir tienda, y se pide solo esa al servidor.
+  const tiendaConsulta = tiendaId ?? (f.tienda !== "todas" ? f.tienda : undefined);
+  const { data: tiendasLista = [] } = useTiendas();
   const [expandida, setExpandida] = useState<string | null>(null);
 
   const [nuevoOpen, setNuevoOpen] = useState(false);
@@ -194,13 +214,13 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const setEstadoFn = useServerFn(updatePedidoEstado);
   const delFn = useServerFn(deletePedido);
 
-  const queryKey = ["pedidos", tiendaId ?? "all", desde.toISOString(), hasta.toISOString()];
+  const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: () =>
       list({
-        data: { tiendaId, desde: desde.toISOString(), hasta: hasta.toISOString() },
+        data: { tiendaId: tiendaConsulta, desde: desde.toISOString(), hasta: hasta.toISOString() },
       }),
   });
 
@@ -229,9 +249,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   });
 
   const filtrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
+    const q = f.q.trim().toLowerCase();
     return pedidos.filter((p) => {
       if (estadoFiltro !== "todos" && p.estado !== estadoFiltro) return false;
+      if (f.origen === "web" && p.origen !== "woocommerce") return false;
+      if (f.origen === "manual" && p.origen === "woocommerce") return false;
+      if (f.cobro !== "todos") {
+        // «Pendiente» incluye lo cobrado en parte: es lo que falta por cobrar.
+        const e = resumenCobros(p.total, p.cobros ?? []).estado;
+        if (f.cobro === "pendiente" && e !== "pendiente" && e !== "parcial") return false;
+        if (f.cobro === "parcial" && e !== "parcial") return false;
+        if (f.cobro === "cobrado" && e !== "cobrado" && e !== "excedido") return false;
+      }
       if (!q) return true;
       return (
         (p.cliente_nombre ?? "").toLowerCase().includes(q) ||
@@ -239,7 +268,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         p.numero.toLowerCase().includes(q)
       );
     });
-  }, [pedidos, busqueda, estadoFiltro]);
+  }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
 
   // Agrupar por día
   const grupos = useMemo(() => {
@@ -382,8 +411,23 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               className="pl-9"
             />
           </div>
-          <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
-            <SelectTrigger className="w-[180px]">
+          {!tiendaId && (
+            <Select value={f.tienda} onValueChange={(tienda) => cambiar({ tienda })}>
+              <SelectTrigger className="w-[170px]" aria-label="Tienda">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las tiendas</SelectItem>
+                {tiendasLista.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={estadoFiltro} onValueChange={(estado) => cambiar({ estado })}>
+            <SelectTrigger className="w-[170px]" aria-label="Estado">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
             <SelectContent>
@@ -395,6 +439,34 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               ))}
             </SelectContent>
           </Select>
+          {cobrosDisponibles && (
+            <Select value={f.cobro} onValueChange={(cobro) => cambiar({ cobro })}>
+              <SelectTrigger className="w-[170px]" aria-label="Cobro">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Cobrado o no</SelectItem>
+                <SelectItem value="pendiente">Con algo pendiente</SelectItem>
+                <SelectItem value="parcial">Cobrado en parte</SelectItem>
+                <SelectItem value="cobrado">Cobrado entero</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={f.origen} onValueChange={(origen) => cambiar({ origen })}>
+            <SelectTrigger className="w-[150px]" aria-label="Origen">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Web y manuales</SelectItem>
+              <SelectItem value="web">Solo web</SelectItem>
+              <SelectItem value="manual">Solo manuales</SelectItem>
+            </SelectContent>
+          </Select>
+          {hay(["periodo", "fecha"]) && (
+            <Button variant="ghost" size="sm" onClick={() => quitar(["periodo", "fecha"])}>
+              <X className="h-4 w-4 mr-1" /> Quitar filtros
+            </Button>
+          )}
           <div className="text-xs text-muted-foreground ml-auto">
             {filtrados.length} pedidos ·{" "}
             <span className="font-semibold text-foreground">
