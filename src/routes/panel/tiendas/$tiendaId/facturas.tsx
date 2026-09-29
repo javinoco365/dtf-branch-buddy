@@ -49,6 +49,7 @@ import {
   generarYSubirFacturaPDF,
 } from "@/lib/facturas.functions";
 import { toast } from "sonner";
+import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
 import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2, Undo2 } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
@@ -162,20 +163,23 @@ function Facturas() {
             Numeración única de la sociedad. El número lo asigna la base al emitir.
           </p>
         </div>
-        <Dialog open={abierto} onOpenChange={setAbierto}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" /> Nueva factura
-            </Button>
-          </DialogTrigger>
-          <NuevaFacturaDialog
-            tiendaId={tiendaId}
-            onDone={() => {
-              setAbierto(false);
-              qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
-            }}
-          />
-        </Dialog>
+        <div className="flex flex-wrap gap-2">
+          <TicketsPendientesDialog tiendaId={tiendaId} />
+          <Dialog open={abierto} onOpenChange={setAbierto}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" /> Nueva factura
+              </Button>
+            </DialogTrigger>
+            <NuevaFacturaDialog
+              tiendaId={tiendaId}
+              onDone={() => {
+                setAbierto(false);
+                qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+              }}
+            />
+          </Dialog>
+        </div>
       </div>
 
       <BarraFiltros>
