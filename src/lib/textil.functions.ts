@@ -1017,6 +1017,8 @@ export const generarPdfFacturaTextil = createServerFn({ method: "POST" })
 
     const pdfData: FacturaPDFData = {
       referencia: factura.numero,
+      // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
+      titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
       logo: await descargarLogo(emisor.logo_url),
       fecha: factura.fecha ?? new Date().toISOString(),
       fecha_vencimiento: factura.vencimiento,
@@ -1087,4 +1089,187 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
       .from("facturas")
       .createSignedUrl(factura.pdf_path, 60 * 10);
     return { url: firmada?.signedUrl ?? null };
+  });
+
+// ============ TICKET O FACTURA DE UN PEDIDO ============
+//
+// Lo mismo que en las tiendas (src/lib/facturas.functions.ts), para pedidos
+// textil. Es opcional: nada obliga a emitir, y nada se emite solo. Qué toca lo
+// decide decidirDocumento(); el límite y un documento por pedido los impone la
+// base en emitir_factura_textil().
+
+/** Todo lo que hace falta para el documento de un pedido textil. Solo lee. */
+async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
+  const { receptorDesdePedido, lineasDesdePedido } = await import("@/dominio/factura-desde-pedido");
+  const { documentoVigente, esTipoFiscal, LIMITES_TICKET } = await import("@/dominio/tickets");
+
+  const { data: pedido, error } = await supabase
+    .from("textil_pedidos")
+    .select("id, numero, cliente_id, cliente_nombre, cliente_email, marca_id, envio, notas")
+    .eq("id", pedidoId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!pedido) throw new Error("Pedido no encontrado");
+
+  const [{ data: items }, { data: docs }, clienteRes, { data: empresa }] = await Promise.all([
+    supabase
+      .from("textil_pedido_items")
+      .select("descripcion, cantidad, precio_unitario, iva_pct")
+      .eq("pedido_id", pedidoId),
+    tabla(supabase, "textil_facturas")
+      .select("id, numero, tipo, estado, rectifica_a_id")
+      .eq("textil_pedido_id", pedidoId),
+    pedido.cliente_id
+      ? tabla(supabase, "clientes")
+          .select(
+            "nombre, nif, direccion, codigo_postal, ciudad, provincia, pais, email, tipo_fiscal",
+          )
+          .eq("id", pedido.cliente_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    tabla(supabase, "empresas")
+      .select("limite_simplificada, limite_simplificada_particular")
+      .eq("activa", true)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const lista = (docs ?? []) as {
+    id: string;
+    numero: string;
+    tipo: "ordinaria" | "rectificativa" | "simplificada";
+    estado: string | null;
+    rectifica_a_id: string | null;
+  }[];
+  const ids = lista.map((d) => d.id);
+  const { data: rect } = ids.length
+    ? await tabla(supabase, "textil_facturas").select("rectifica_a_id").in("rectifica_a_id", ids)
+    : { data: [] };
+  const vigente = documentoVigente(
+    lista,
+    (rect ?? []).map((r: { rectifica_a_id: string }) => r.rectifica_a_id),
+  );
+
+  const receptor = receptorDesdePedido(
+    clienteRes.data,
+    null,
+    pedido.cliente_nombre,
+    pedido.cliente_email,
+  );
+  const lineas = lineasDesdePedido(
+    ((items ?? []) as any[]).map((it) => ({
+      descripcion: it.descripcion,
+      cantidad: Number(it.cantidad),
+      unidad: "ud",
+      precio_unitario: Number(it.precio_unitario),
+      iva_rate: Number(it.iva_pct),
+    })),
+    Number(pedido.envio || 0),
+  );
+  const general = Number(empresa?.limite_simplificada);
+  const particular = Number(empresa?.limite_simplificada_particular);
+  const limites = general > 0 && particular > 0 ? { general, particular } : LIMITES_TICKET;
+  const tipoFiscal = esTipoFiscal(clienteRes.data?.tipo_fiscal)
+    ? (clienteRes.data.tipo_fiscal as "particular" | "profesional")
+    : null;
+
+  return { pedido, vigente, receptor, lineas, limites, tipoFiscal };
+}
+
+/** Lo que el diálogo necesita para proponer ticket o factura. Solo lee. */
+export const prepararDocumentoTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ textil_pedido_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { calcularTotales } = await import("@/dominio/importes");
+    const { pedido, vigente, receptor, lineas, limites, tipoFiscal } =
+      await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
+
+    if (vigente) {
+      return {
+        ya_facturado: true as const,
+        factura: { id: vigente.id, tipo: vigente.tipo, referencia: vigente.numero },
+      };
+    }
+    if (lineas.length === 0) {
+      throw new Error("Este pedido no tiene líneas: no hay nada que documentar.");
+    }
+    return {
+      ya_facturado: false as const,
+      receptor,
+      lineas,
+      total: calcularTotales(lineas).total,
+      tipo_fiscal: tipoFiscal,
+      limites,
+      notas: (pedido.notas as string | null) ?? null,
+    };
+  });
+
+/**
+ * Emite el ticket o la factura de un pedido textil.
+ *
+ * Las líneas se vuelven a leer del pedido aquí, en el servidor: del navegador
+ * solo llega qué documento y los datos del cliente. La marca del pedido pone
+ * el nombre comercial y el logo; la identidad fiscal es la de la sociedad.
+ */
+export const emitirDocumentoTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        textil_pedido_id: z.string().uuid(),
+        documento: z.enum(["ticket", "factura"]),
+        nombre: z.string().nullable().optional(),
+        nif: z.string().nullable().optional(),
+        direccion: z.string().nullable().optional(),
+        tipo_fiscal: z.enum(["particular", "profesional"]).nullable().optional(),
+        fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        notas: z.string().nullable().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { pedido, vigente, receptor, lineas } = await leerPedidoTextilParaDocumento(
+      context.supabase,
+      data.textil_pedido_id,
+    );
+    if (vigente) throw new Error(`El pedido ya tiene el documento ${vigente.numero}.`);
+    if (lineas.length === 0) throw new Error("Este pedido no tiene líneas.");
+
+    const nombre = data.nombre?.trim() || "";
+    let receptorEmision: Record<string, string>;
+    if (data.documento === "ticket") {
+      // El ticket no lleva NIF: si el cliente lo da, lo que toca es factura.
+      receptorEmision = {};
+      if (nombre) receptorEmision.nombre = nombre;
+      if (data.tipo_fiscal) receptorEmision.tipo_fiscal = data.tipo_fiscal;
+    } else {
+      if (!nombre) throw new Error("Una factura necesita el nombre del cliente");
+      receptorEmision = Object.fromEntries(
+        Object.entries({
+          ...receptor,
+          nombre,
+          nif: data.nif?.trim() || null,
+          direccion: data.direccion?.trim() || null,
+        }).filter(([, v]) => v != null && v !== ""),
+      ) as Record<string, string>;
+    }
+
+    return llamarRpcTextil<{ id: string; referencia: string }>(
+      supabaseAdmin,
+      "emitir_factura_textil",
+      {
+        _usuario_id: context.userId,
+        _receptor: receptorEmision,
+        _lineas: lineas,
+        _marca_id: pedido.marca_id ?? null,
+        _fecha: data.fecha,
+        _cliente_id: pedido.cliente_id ?? null,
+        _notas: data.notas?.trim() || null,
+        _simplificada: data.documento === "ticket",
+        _textil_pedido_id: data.textil_pedido_id,
+      },
+    );
   });

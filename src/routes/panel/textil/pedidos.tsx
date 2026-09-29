@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Wallet } from "lucide-react";
+import { Plus, Pencil, Receipt, Trash2, Wallet } from "lucide-react";
 import {
   listTextilPedidos,
   upsertTextilPedido,
@@ -51,6 +51,7 @@ import {
 } from "@/components/textil/SelectorClienteTextil";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
+import { DocumentoTextilDialog } from "@/components/textil/DocumentoTextilDialog";
 import { resumenCobros } from "@/dominio/cobros";
 import { normalizarTexto } from "@/dominio/clientes";
 import { useFiltrosUrl } from "@/lib/filtros-url";
@@ -132,6 +133,8 @@ function PedidosPage() {
   const [borrando, setBorrando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
   const [cobrando, setCobrando] = useState<any>(null);
+  // Ticket o factura: opcional, nada obliga a emitirlo.
+  const [documentando, setDocumentando] = useState<any>(null);
 
   const inv = () => qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
   const save = useMutation({
@@ -291,6 +294,16 @@ function PedidosPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label="Ticket o factura"
+                        title="Ticket o factura"
+                        disabled={p.estado === "cancelado"}
+                        onClick={() => setDocumentando(p)}
+                      >
+                        <Receipt className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => {
                           setEditing(p);
                           setOpen(true);
@@ -325,6 +338,15 @@ function PedidosPage() {
           setBorrando(null);
         }}
       />
+
+      {documentando && (
+        <DocumentoTextilDialog
+          open={!!documentando}
+          onOpenChange={(o) => !o && setDocumentando(null)}
+          pedidoId={documentando.id}
+          numeroPedido={documentando.numero}
+        />
+      )}
 
       {cobrando && (
         <CobrosPedidoDialog
