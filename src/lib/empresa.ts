@@ -24,6 +24,9 @@ export type Empresa = {
   telefono: string | null;
   serie_factura: string | null;
   serie_rectificativa: string | null;
+  serie_simplificada: string | null;
+  limite_simplificada: number | null;
+  limite_simplificada_particular: number | null;
   coste_consumibles_metro: number | null;
   coste_packaging_metro: number | null;
   coste_electricidad_metro: number | null;
