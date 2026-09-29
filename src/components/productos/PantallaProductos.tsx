@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { eur } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { tabla } from "@/lib/rpc";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 
 export type Producto = {
   id: string;
@@ -83,9 +84,13 @@ type Ambito = "todos" | "tienda" | "generales";
  */
 export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [filtro, setFiltro] = useState<"todos" | "dtf" | "otros" | "inactivos">("todos");
-  const [ambito, setAmbito] = useState<Ambito>("todos");
+  // Los filtros viven en la dirección.
+  const { valores: filtros, cambiar } = useFiltrosUrl({ q: "", tipo: "todos", ambito: "todos" });
+  const [search, setSearch] = useTextoDiferido(filtros.q, (q) => cambiar({ q }));
+  const filtro = filtros.tipo as "todos" | "dtf" | "otros" | "inactivos";
+  const setFiltro = (tipo: string) => cambiar({ tipo });
+  const ambito = filtros.ambito as Ambito;
+  const setAmbito = (a: Ambito) => cambiar({ ambito: a });
   const [editing, setEditing] = useState<Partial<Producto> | null>(null);
   const [borrando, setBorrando] = useState<Producto | null>(null);
 
@@ -102,7 +107,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
   });
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
+    const q = filtros.q.toLowerCase().trim();
     return productos.filter((p) => {
       if (filtro === "dtf" && p.unidad !== "m") return false;
       if (filtro === "otros" && p.unidad === "m") return false;
@@ -116,7 +121,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
         (p.descripcion ?? "").toLowerCase().includes(q)
       );
     });
-  }, [productos, search, filtro, ambito]);
+  }, [productos, filtros.q, filtro, ambito]);
 
   const save = useMutation({
     mutationFn: async (p: Partial<Producto>) => {

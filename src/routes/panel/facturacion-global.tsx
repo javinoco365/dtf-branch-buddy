@@ -1,14 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import {
-  addMonths,
-  addWeeks,
-  endOfMonth,
-  endOfWeek,
-  format,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { useMemo } from "react";
+import { addMonths, addWeeks, endOfWeek, format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +26,8 @@ import {
 import { eur, fechaCorta, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import { escribirFecha, esPeriodo, leerFecha, rangoPeriodo, type Periodo } from "@/dominio/filtros";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, etiquetaMetodo, type MetodoCobro } from "@/dominio/cobros";
 import {
@@ -77,18 +71,16 @@ export const Route = createFileRoute("/panel/facturacion-global")({
   component: FacturacionGlobal,
 });
 
-type Periodo = "mes" | "semana";
-
+/** Los filtros de la pantalla, en la dirección; aquí sus valores por defecto. */
 /** Cuántas semanas muestra la serie histórica. */
 const SEMANAS_HISTORICO = 12;
 
-function rangoPeriodo(ref: Date, periodo: Periodo) {
-  if (periodo === "mes") return { desde: startOfMonth(ref), hasta: endOfMonth(ref) };
-  return {
-    desde: startOfWeek(ref, { weekStartsOn: 1 }),
-    hasta: endOfWeek(ref, { weekStartsOn: 1 }),
-  };
-}
+const FILTROS_CONSOLIDADA = {
+  periodo: "mes",
+  fecha: "",
+  criterio: "pedido",
+  ...FILTRO_TODO,
+};
 
 function etiquetaPeriodo(ref: Date, periodo: Periodo) {
   if (periodo === "mes") {
@@ -127,14 +119,28 @@ const COLORES_BARRA = [
 ];
 
 function FacturacionGlobal() {
-  const [periodo, setPeriodo] = useState<Periodo>("mes");
-  const [ref, setRef] = useState(new Date());
-  // Por defecto, por la fecha del pedido: lo vendido en el periodo, se cobrara
-  // cuando se cobrara.
-  const [criterio, setCriterio] = useState<CriterioFecha>("pedido");
-  const [filtro, setFiltro] = useState<FiltroConsolidada>(FILTRO_TODO);
+  // Los filtros viven en la dirección. Por defecto, por la fecha del pedido:
+  // lo vendido en el periodo, se cobrara cuando se cobrara.
+  const { valores: f, cambiar, quitar } = useFiltrosUrl(FILTROS_CONSOLIDADA);
+  const periodo: Periodo = esPeriodo(f.periodo) ? f.periodo : "mes";
+  const ref = leerFecha(f.fecha);
+  const setPeriodo = (p: Periodo) => cambiar({ periodo: p, fecha: escribirFecha(ref, p) });
+  const setRef = (d: Date | ((r: Date) => Date)) =>
+    cambiar({ fecha: escribirFecha(typeof d === "function" ? d(ref) : d, periodo) });
+  const criterio: CriterioFecha = f.criterio === "cobro" ? "cobro" : "pedido";
+  const setCriterio = (c: CriterioFecha) => cambiar({ criterio: c });
+  const filtro: FiltroConsolidada = useMemo(
+    () => ({
+      metodo: f.metodo as FiltroConsolidada["metodo"],
+      tienda: f.tienda,
+      origen: f.origen as FiltroConsolidada["origen"],
+    }),
+    [f.metodo, f.tienda, f.origen],
+  );
+  const setFiltro = (siguiente: (actual: FiltroConsolidada) => FiltroConsolidada) =>
+    cambiar(siguiente(filtro));
 
-  const { desde, hasta } = useMemo(() => rangoPeriodo(ref, periodo), [ref, periodo]);
+  const { desde, hasta } = rangoPeriodo(ref, periodo);
 
   const consultaTiendas = useTiendas();
   const consultaCobros = useCobrosPeriodo({ desde, hasta }, criterio);
@@ -401,7 +407,11 @@ function FacturacionGlobal() {
           </Select>
 
           {hayFiltro && (
-            <Button variant="ghost" size="sm" onClick={() => setFiltro(FILTRO_TODO)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => quitar(["periodo", "fecha", "criterio"])}
+            >
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}

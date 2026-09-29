@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +51,14 @@ import {
 } from "@/components/textil/SelectorClienteTextil";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import { normalizarTexto } from "@/dominio/clientes";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -90,6 +98,18 @@ function PresupuestosPage() {
   const stockFn = useServerFn(listStock);
 
   const { data = [] } = useQuery({ queryKey: ["textil-presupuestos"], queryFn: () => listFn() });
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return (data as any[]).filter(
+      (p) =>
+        (filtros.estado === "todos" || p.estado === filtros.estado) &&
+        (!q ||
+          normalizarTexto(p.numero).includes(q) ||
+          normalizarTexto(p.cliente_nombre).includes(q) ||
+          normalizarTexto(p.pedido?.numero).includes(q)),
+    );
+  }, [data, filtros.q, filtros.estado]);
   const { data: marcas = [] } = useQuery({
     queryKey: ["textil-marcas"],
     queryFn: () => marcasFn(),
@@ -162,6 +182,26 @@ function PresupuestosPage() {
           <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
         </Button>
       </div>
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar nº, cliente o pedido…"
+        />
+        <SelectFiltro
+          etiqueta="Estado"
+          valor={filtros.estado}
+          alCambiar={(estado) => cambiar({ estado })}
+          opciones={[
+            { valor: "todos", etiqueta: "Todos los estados" },
+            ...[...ESTADOS, "facturado"].map((e) => ({ valor: e, etiqueta: e })),
+          ]}
+        />
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+        <div className="text-xs text-muted-foreground ml-auto">
+          {filtrados.length} presupuesto{filtrados.length === 1 ? "" : "s"}
+        </div>
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -177,14 +217,16 @@ function PresupuestosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.length === 0 && (
+              {filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Sin presupuestos.
+                    {data.length === 0
+                      ? "Sin presupuestos."
+                      : "Ningún presupuesto cumple los filtros."}
                   </TableCell>
                 </TableRow>
               )}
-              {data.map((p: any) => (
+              {filtrados.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-mono text-xs">{p.numero}</TableCell>
                   <TableCell>{fechaCorta(p.fecha)}</TableCell>

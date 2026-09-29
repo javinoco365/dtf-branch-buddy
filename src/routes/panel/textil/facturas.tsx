@@ -1,5 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
+import { normalizarTexto } from "@/dominio/clientes";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
@@ -35,6 +43,19 @@ function FacturasPage() {
   const [borrando, setBorrando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
   const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
+  // Los filtros viven en la dirección.
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return (data as any[]).filter(
+      (f) =>
+        (filtros.estado === "todos" || f.estado === filtros.estado) &&
+        (!q ||
+          normalizarTexto(f.numero).includes(q) ||
+          normalizarTexto(f.cliente_nombre).includes(q) ||
+          normalizarTexto(f.marca?.nombre).includes(q)),
+    );
+  }, [data, filtros.q, filtros.estado]);
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
@@ -86,6 +107,25 @@ function FacturasPage() {
           Las facturas se generan al convertir un presupuesto aceptado.
         </p>
       </div>
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar nº, cliente o marca…"
+        />
+        <SelectFiltro
+          etiqueta="Estado"
+          valor={filtros.estado}
+          alCambiar={(estado) => cambiar({ estado })}
+          opciones={[
+            { valor: "todos", etiqueta: "Todos los estados" },
+            ...[...new Set((data as any[]).map((f) => String(f.estado)))]
+              .sort()
+              .map((e) => ({ valor: e, etiqueta: e })),
+          ]}
+        />
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -108,7 +148,7 @@ function FacturasPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {data.map((f: any) => (
+              {filtrados.map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell className="font-mono text-xs">{f.numero}</TableCell>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>

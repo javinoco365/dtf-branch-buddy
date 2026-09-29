@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
+import { normalizarTexto } from "@/dominio/clientes";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +58,22 @@ function StockPage() {
     queryKey: ["textil-stock"],
     queryFn: () => listFn(),
   });
+  // Los filtros viven en la dirección.
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", bajo: false });
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return (data as any[]).filter((it) => {
+      // «Poco stock» mira lo disponible, como el aviso de la tabla.
+      const disponible = Number(it.cantidad) - Number(it.cantidad_reservada ?? 0);
+      if (filtros.bajo && disponible > Number(it.cantidad_minima)) return false;
+      return (
+        !q ||
+        [it.sku, it.nombre, it.categoria, it.color, it.talla].some((v) =>
+          normalizarTexto(v).includes(q),
+        )
+      );
+    });
+  }, [data, filtros.q, filtros.bajo]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [entrada, setEntrada] = useState<Item | null>(null);
@@ -112,6 +136,23 @@ function StockPage() {
           <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
         </Button>
       </div>
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar SKU, nombre, categoría, color o talla…"
+        />
+        <SelectFiltro
+          etiqueta="Existencias"
+          valor={filtros.bajo ? "bajo" : "todo"}
+          alCambiar={(v) => cambiar({ bajo: v === "bajo" })}
+          opciones={[
+            { valor: "todo", etiqueta: "Todo el stock" },
+            { valor: "bajo", etiqueta: "Solo poco stock" },
+          ]}
+        />
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -153,7 +194,7 @@ function StockPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {data.map((it: any) => {
+              {filtrados.map((it: any) => {
                 const reservado = Number(it.cantidad_reservada ?? 0);
                 const disponible = Number(it.cantidad) - reservado;
                 // El aviso mira lo disponible, no lo físico: tener 20 en el

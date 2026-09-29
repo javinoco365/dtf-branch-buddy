@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import {
+  BarraFiltros,
+  CampoBusqueda,
+  QuitarFiltros,
+  SelectFiltro,
+} from "@/components/filtros/Filtros";
+import { normalizarTexto } from "@/dominio/clientes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -81,6 +89,18 @@ function Facturas() {
           .order("fecha", { ascending: false })
       ).data ?? [],
   });
+  // Los filtros viven en la dirección.
+  const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  const filtrados = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return (facturas as any[]).filter(
+      (f) =>
+        (filtros.estado === "todos" || f.estado === filtros.estado) &&
+        (!q ||
+          normalizarTexto(`${f.serie}-${String(f.numero).padStart(5, "0")}`).includes(q) ||
+          normalizarTexto(f.cliente_nombre).includes(q)),
+    );
+  }, [facturas, filtros.q, filtros.estado]);
 
   // El navegador ya no puede escribir en facturas: perdió el permiso cuando la
   // factura pasó a ser inmutable. El estado de cobro no es parte del documento
@@ -158,6 +178,25 @@ function Facturas() {
         </Dialog>
       </div>
 
+      <BarraFiltros>
+        <CampoBusqueda
+          valor={filtros.q}
+          alCambiar={(q) => cambiar({ q })}
+          placeholder="Buscar nº o cliente…"
+        />
+        <SelectFiltro
+          etiqueta="Estado"
+          valor={filtros.estado}
+          alCambiar={(estado) => cambiar({ estado })}
+          opciones={[
+            { valor: "todos", etiqueta: "Todos los estados" },
+            ...[...new Set((facturas as any[]).map((f) => String(f.estado)))]
+              .sort()
+              .map((e) => ({ valor: e, etiqueta: e })),
+          ]}
+        />
+        <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
+      </BarraFiltros>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -174,7 +213,7 @@ function Facturas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {facturas.map((f: any) => (
+              {filtrados.map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
                   <TableCell className="font-mono text-xs">

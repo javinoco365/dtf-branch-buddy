@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { tabla } from "@/lib/rpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -115,8 +116,12 @@ function filtroInicial(contexto: ContextoClientes): FiltroOrigen {
  */
 export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const qc = useQueryClient();
-  const [texto, setTexto] = useState("");
-  const [origen, setOrigen] = useState<FiltroOrigen>(() => filtroInicial(contexto));
+  // Los filtros viven en la dirección. El origen por defecto depende de desde
+  // dónde se entra: la tienda, el textil o todos.
+  const { valores: filtros, cambiar } = useFiltrosUrl({ q: "", origen: filtroInicial(contexto) });
+  const [texto, setTexto] = useTextoDiferido(filtros.q, (q) => cambiar({ q }));
+  const origen = filtros.origen as FiltroOrigen;
+  const setOrigen = (o: FiltroOrigen) => cambiar({ origen: o });
   const [editing, setEditing] = useState<Partial<Cliente> | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [borrando, setBorrando] = useState<Cliente | null>(null);
@@ -142,8 +147,8 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const nombreTienda = (id: string) => tiendas.find((t) => t.id === id)?.nombre;
 
   const filtrados = useMemo(
-    () => filtrarClientes(clientes, { texto, origen }),
-    [clientes, texto, origen],
+    () => filtrarClientes(clientes, { texto: filtros.q, origen }),
+    [clientes, filtros.q, origen],
   );
 
   function refrescar() {

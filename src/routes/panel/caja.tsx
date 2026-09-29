@@ -1,4 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useFiltrosUrl } from "@/lib/filtros-url";
+import { CampoBusqueda, QuitarFiltros } from "@/components/filtros/Filtros";
+import { normalizarTexto } from "@/dominio/clientes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
@@ -51,11 +54,23 @@ function rangoDelAnio() {
 }
 
 function CajaPage() {
+  // Los filtros viven en la dirección. Por defecto, el año en curso.
   const inicial = rangoDelAnio();
-  const [desde, setDesde] = useState(inicial.desde);
-  const [hasta, setHasta] = useState(inicial.hasta);
-  const [filtroCategoria, setFiltroCategoria] = useState<string>("todas");
-  const [filtroSocio, setFiltroSocio] = useState<string>("todos");
+  const {
+    valores: filtros,
+    cambiar,
+    quitar,
+    hay,
+  } = useFiltrosUrl({
+    desde: inicial.desde,
+    hasta: inicial.hasta,
+    categoria: "todas",
+    socio: "todos",
+    q: "",
+  });
+  const { desde, hasta } = filtros;
+  const filtroCategoria = filtros.categoria;
+  const filtroSocio = filtros.socio;
   const [abierto, setAbierto] = useState(false);
   const [editando, setEditando] = useState<MovimientoCaja | undefined>();
   const [borrando, setBorrando] = useState<MovimientoCaja | null>(null);
@@ -74,15 +89,19 @@ function CajaPage() {
 
   const movimientos = data?.movimientos ?? [];
 
-  const visibles = useMemo(
-    () =>
-      movimientos.filter(
-        (m) =>
-          (filtroCategoria === "todas" || m.categoria === filtroCategoria) &&
-          (filtroSocio === "todos" || m.socio_id === filtroSocio),
-      ),
-    [movimientos, filtroCategoria, filtroSocio],
-  );
+  const visibles = useMemo(() => {
+    const q = normalizarTexto(filtros.q);
+    return movimientos.filter(
+      (m) =>
+        (filtroCategoria === "todas" || m.categoria === filtroCategoria) &&
+        (filtroSocio === "todos" || m.socio_id === filtroSocio) &&
+        (!q ||
+          normalizarTexto(m.concepto_nombre).includes(q) ||
+          normalizarTexto(m.cliente_nombre).includes(q) ||
+          normalizarTexto(m.socio_nombre).includes(q) ||
+          normalizarTexto(m.observaciones).includes(q)),
+    );
+  }, [movimientos, filtroCategoria, filtroSocio, filtros.q]);
 
   // Los totales salen del módulo de dominio, no de una suma escrita aquí.
   const totales = useMemo(() => totalesCaja(visibles), [visibles]);
@@ -162,7 +181,7 @@ function CajaPage() {
               type="date"
               className="w-40"
               value={desde}
-              onChange={(e) => setDesde(e.target.value)}
+              onChange={(e) => cambiar({ desde: e.target.value })}
             />
           </div>
           <div className="space-y-1">
@@ -171,12 +190,12 @@ function CajaPage() {
               type="date"
               className="w-40"
               value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
+              onChange={(e) => cambiar({ hasta: e.target.value })}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Categoría</Label>
-            <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+            <Select value={filtroCategoria} onValueChange={(categoria) => cambiar({ categoria })}>
               <SelectTrigger className="w-36">
                 <SelectValue />
               </SelectTrigger>
@@ -189,7 +208,7 @@ function CajaPage() {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Socio</Label>
-            <Select value={filtroSocio} onValueChange={setFiltroSocio}>
+            <Select value={filtroSocio} onValueChange={(socio) => cambiar({ socio })}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -203,6 +222,12 @@ function CajaPage() {
               </SelectContent>
             </Select>
           </div>
+          <CampoBusqueda
+            valor={filtros.q}
+            alCambiar={(q) => cambiar({ q })}
+            placeholder="Buscar concepto, cliente u observaciones…"
+          />
+          <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
         </CardContent>
       </Card>
 

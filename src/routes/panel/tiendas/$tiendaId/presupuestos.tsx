@@ -45,6 +45,7 @@ import {
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { PresupuestoFormDialog } from "@/components/presupuestos/PresupuestoFormDialog";
 import { eur, fechaCorta } from "@/lib/format";
+import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import {
   borrarPresupuesto,
   cambiarEstadoPresupuesto,
@@ -54,7 +55,6 @@ import {
 } from "@/lib/presupuestos.functions";
 import {
   ESTADOS_PRESUPUESTO,
-  FILTRO_PRESUPUESTOS_TODO,
   estadoVisible,
   etiquetaEstadoPresupuesto,
   filtrarPresupuestos,
@@ -87,7 +87,13 @@ function PresupuestosTienda() {
   const borrar = useServerFn(borrarPresupuesto);
   const confirmar = useServerFn(confirmarPresupuesto);
 
-  const [filtro, setFiltro] = useState<FiltroPresupuestos>(FILTRO_PRESUPUESTOS_TODO);
+  // Los filtros viven en la dirección.
+  const { valores: u, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  const [texto, setTexto] = useTextoDiferido(u.q, (q) => cambiar({ q }));
+  const filtro: FiltroPresupuestos = useMemo(
+    () => ({ texto: u.q, estado: u.estado as FiltroPresupuestos["estado"] }),
+    [u.q, u.estado],
+  );
   const [editando, setEditando] = useState<Presupuesto | null>(null);
   const [nuevo, setNuevo] = useState(false);
   const [borrando, setBorrando] = useState<Presupuesto | null>(null);
@@ -110,7 +116,7 @@ function PresupuestosTienda() {
     [data, filtro, hoy],
   );
   const totalFiltrado = filtrados.reduce((s, p) => s + Number(p.total), 0);
-  const hayFiltro = filtro.texto.trim() !== "" || filtro.estado !== "todos";
+  const hayFiltro = hay();
 
   const refrescar = () => qc.invalidateQueries({ queryKey: ["presupuestos", tiendaId] });
 
@@ -184,17 +190,12 @@ function PresupuestosTienda() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar cliente o nº de presupuesto…"
-              value={filtro.texto}
-              onChange={(e) => setFiltro((f) => ({ ...f, texto: e.target.value }))}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
               className="pl-9"
             />
           </div>
-          <Select
-            value={filtro.estado}
-            onValueChange={(v) =>
-              setFiltro((f) => ({ ...f, estado: v as FiltroPresupuestos["estado"] }))
-            }
-          >
+          <Select value={filtro.estado} onValueChange={(v) => cambiar({ estado: v })}>
             <SelectTrigger className="w-[180px]" aria-label="Estado">
               <SelectValue />
             </SelectTrigger>
@@ -209,7 +210,7 @@ function PresupuestosTienda() {
             </SelectContent>
           </Select>
           {hayFiltro && (
-            <Button variant="ghost" size="sm" onClick={() => setFiltro(FILTRO_PRESUPUESTOS_TODO)}>
+            <Button variant="ghost" size="sm" onClick={() => quitar()}>
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
