@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   cabeEnTicket,
+  clasificarParaTickets,
   decidirDocumento,
+  documentoVigente,
   esTipoFiscal,
+  estaCobrado,
   etiquetaTipoFiscal,
   explicarDecision,
   LIMITES_TICKET,
@@ -101,5 +104,77 @@ describe("datos fiscales", () => {
       { documento: "sin_importe" },
     ];
     for (const d of todas) expect(explicarDecision(d)).not.toBe("");
+  });
+});
+
+describe("documentoVigente", () => {
+  const doc = (
+    id: string,
+    tipo: "ordinaria" | "rectificativa" | "simplificada",
+    extra: Partial<{ estado: string; rectifica_a_id: string }> = {},
+  ) => ({
+    id,
+    tipo,
+    estado: extra.estado ?? "emitida",
+    rectifica_a_id: extra.rectifica_a_id ?? null,
+  });
+
+  it("el ticket o la factura del pedido, si no están rectificados", () => {
+    expect(documentoVigente([doc("t1", "simplificada")])?.id).toBe("t1");
+    expect(documentoVigente([])).toBeNull();
+  });
+
+  it("rectificado, deja de contar; y el nuevo cuenta", () => {
+    const docs = [
+      doc("t1", "simplificada"),
+      doc("r1", "rectificativa", { rectifica_a_id: "t1" }),
+      doc("t2", "simplificada"),
+    ];
+    expect(documentoVigente(docs)?.id).toBe("t2");
+    expect(documentoVigente([doc("t1", "simplificada")], ["t1"])).toBeNull();
+  });
+
+  it("borradores y anuladas no cuentan", () => {
+    expect(documentoVigente([doc("b", "ordinaria", { estado: "borrador" })])).toBeNull();
+    expect(documentoVigente([doc("a", "ordinaria", { estado: "anulada" })])).toBeNull();
+  });
+});
+
+describe("estaCobrado", () => {
+  it("cobrado entero al céntimo, y sin importe nunca", () => {
+    expect(estaCobrado(36.3, 36.3)).toBe(true);
+    expect(estaCobrado(36.3, 36.29)).toBe(false);
+    expect(estaCobrado(36.3, 40)).toBe(true);
+    expect(estaCobrado(0, 0)).toBe(false);
+  });
+});
+
+describe("clasificarParaTickets", () => {
+  const p = (
+    id: string,
+    total: number,
+    cliente: Parameters<typeof decidirDocumento>[1] = null,
+  ) => ({
+    id,
+    numero: id,
+    total,
+    cliente,
+  });
+
+  it("en bloque solo lo que no admite duda", () => {
+    const r = clasificarParaTickets([
+      p("a", 36.3),
+      p("b", 484),
+      p("c", 60, CON_NIF),
+      p("d", 900, PARTICULAR),
+      p("e", 500, PROFESIONAL),
+      p("f", 0),
+    ]);
+    expect(r.tickets.map((x) => x.id)).toEqual(["a", "d"]);
+    expect(r.facturas.map((x) => x.id)).toEqual(["c"]);
+    expect(r.revisar.map((x) => [x.pedido.id, x.decision.documento])).toEqual([
+      ["b", "preguntar_tipo"],
+      ["e", "pedir_datos"],
+    ]);
   });
 });

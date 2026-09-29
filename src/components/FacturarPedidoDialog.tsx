@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -21,25 +21,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, FileText } from "lucide-react";
+import { AlertTriangle, FileText, Receipt } from "lucide-react";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import {
+  cabeEnTicket,
+  decidirDocumento,
+  explicarDecision,
+  type TipoFiscal,
+} from "@/dominio/tickets";
+import {
   emitirFactura,
+  emitirTicket,
   generarYSubirFacturaPDF,
   prepararFacturaPedido,
 } from "@/lib/facturas.functions";
 
 /**
- * Facturar un pedido con un botón: el receptor y las líneas salen del
- * propio pedido, no hay nada que volver a escribir.
+ * El documento de un pedido con un botón: ticket o factura, según el cliente y
+ * el importe (src/dominio/tickets.ts). Las líneas salen del pedido, no hay
+ * nada que volver a escribir.
  *
- * Aun así no emite al primer clic. Primero se piden los datos
+ * No emite al primer clic. Primero se piden los datos
  * (`prepararFacturaPedido`, de solo lectura) y se enseñan; solo al confirmar
- * se llama a `emitirFactura`, que es lo único que de verdad escribe. Una
- * factura no se puede editar ni borrar después, así que el hueco para
- * revisar antes de emitir importa más aquí que en casi cualquier otro sitio
- * de la aplicación.
+ * se emite. Un ticket o una factura no se pueden editar ni borrar después, así
+ * que el hueco para revisar antes de emitir importa más aquí que en casi
+ * cualquier otro sitio de la aplicación.
  */
 export function FacturarPedidoDialog({
   open,
@@ -56,11 +63,17 @@ export function FacturarPedidoDialog({
 }) {
   const qc = useQueryClient();
   const prepararFn = useServerFn(prepararFacturaPedido);
-  const emitirFn = useServerFn(emitirFactura);
+  const emitirFacturaFn = useServerFn(emitirFactura);
+  const emitirTicketFn = useServerFn(emitirTicket);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
 
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [notas, setNotas] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [nif, setNif] = useState("");
+  const [direccion, setDireccion] = useState("");
+  // Lo que se contesta cuando la regla pregunta si el cliente es particular.
+  const [tipoElegido, setTipoElegido] = useState<TipoFiscal | null>(null);
   const [emitiendo, setEmitiendo] = useState(false);
 
   const { data, isLoading, error } = useQuery({
@@ -72,42 +85,107 @@ export function FacturarPedidoDialog({
   useEffect(() => {
     if (!open) return;
     setFecha(new Date().toISOString().slice(0, 10));
+    setTipoElegido(null);
   }, [open]);
 
   useEffect(() => {
-    if (data && !data.ya_facturado) setNotas(data.notas ?? "");
+    if (!data || data.ya_facturado) return;
+    setNotas(data.notas ?? "");
+    setNombre(data.receptor.nombre ?? "");
+    setNif(data.receptor.nif ?? "");
+    setDireccion(data.receptor.direccion ?? "");
   }, [data]);
 
-  const totales = data && !data.ya_facturado ? calcularTotales(data.lineas) : null;
+  const preparado = data && !data.ya_facturado ? data : null;
+  const totales = preparado ? calcularTotales(preparado.lineas) : null;
+  const tipoFiscal = tipoElegido ?? preparado?.tipo_fiscal ?? null;
 
-  async function emitir() {
-    if (!data || data.ya_facturado) return;
+  // Se recalcula con lo que haya en los campos: si alguien escribe el NIF, pasa a factura.
+  const decision = useMemo(
+    () =>
+      preparado
+        ? decidirDocumento(
+            preparado.total,
+            { nombre, nif, tipo_fiscal: tipoFiscal },
+            preparado.limites,
+          )
+        : null,
+    [preparado, nombre, nif, tipoFiscal],
+  );
+
+  const puedeTicket = !!preparado && cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
+  const puedeFactura = nombre.trim() !== "";
+
+  async function abrirPDF(id: string, emitido: string) {
+    try {
+      const res = await generarPDFFn({ data: { factura_id: id } });
+      if (res?.url) window.open(res.url, "_blank");
+      toast.success(emitido);
+    } catch (errPdf: any) {
+      toast.warning(
+        `${emitido}, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
+      );
+    }
+  }
+
+  function terminar() {
+    qc.invalidateQueries({ queryKey: ["facturas"] });
+    qc.invalidateQueries({ queryKey: ["preparar-factura-pedido", pedidoId] });
+    qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+    onEmitida();
+  }
+
+  async function emitirComoTicket() {
+    if (!preparado) return;
     setEmitiendo(true);
     try {
-      const factura = await emitirFn({
+      const t = await emitirTicketFn({
         data: {
-          tienda_id: data.tienda_id,
-          receptor: data.receptor,
-          lineas: data.lineas,
+          tienda_id: preparado.tienda_id,
+          lineas: preparado.lineas,
           fecha,
-          cliente_id: data.cliente_id,
+          cliente_id: preparado.cliente_id,
+          pedido_id: pedidoId,
+          nombre: nombre.trim() || null,
+          tipo_fiscal: tipoFiscal,
+          notas: notas.trim() || null,
+        },
+      });
+      await abrirPDF(t.id, `Ticket ${t.referencia} emitido`);
+      terminar();
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo emitir el ticket");
+    } finally {
+      setEmitiendo(false);
+    }
+  }
+
+  async function emitirComoFactura() {
+    if (!preparado) return;
+    if (!puedeFactura) {
+      toast.error("Una factura necesita el nombre del cliente");
+      return;
+    }
+    setEmitiendo(true);
+    try {
+      const f = await emitirFacturaFn({
+        data: {
+          tienda_id: preparado.tienda_id,
+          receptor: {
+            ...preparado.receptor,
+            nombre: nombre.trim(),
+            nif: nif.trim() || null,
+            direccion: direccion.trim() || null,
+          },
+          lineas: preparado.lineas,
+          fecha,
+          cliente_id: preparado.cliente_id,
           pedido_id: pedidoId,
           notas: notas.trim() || null,
         },
       });
-
-      try {
-        const res = await generarPDFFn({ data: { factura_id: factura.id } });
-        if (res?.url) window.open(res.url, "_blank");
-        toast.success(`Factura ${factura.referencia} emitida`);
-      } catch (errPdf: any) {
-        toast.warning(
-          `Factura ${factura.referencia} emitida, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
-        );
-      }
-      qc.invalidateQueries({ queryKey: ["facturas"] });
-      qc.invalidateQueries({ queryKey: ["preparar-factura-pedido", pedidoId] });
-      onEmitida();
+      await abrirPDF(f.id, `Factura ${f.referencia} emitida`);
+      terminar();
     } catch (e: any) {
       toast.error(e?.message ?? "No se pudo emitir la factura");
     } finally {
@@ -115,13 +193,15 @@ export function FacturarPedidoDialog({
     }
   }
 
+  const principal = decision?.documento === "ticket" ? "ticket" : "factura";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Facturar pedido {numeroPedido}</DialogTitle>
+          <DialogTitle>Ticket o factura · pedido {numeroPedido}</DialogTitle>
           <DialogDescription>
-            El receptor y las líneas salen del pedido. Revísalos y emite.
+            Las líneas salen del pedido. La aplicación propone qué documento toca; revísalo y emite.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,7 +209,7 @@ export function FacturarPedidoDialog({
 
         {error && (
           <p className="py-6 text-center text-sm text-destructive">
-            {(error as Error).message || "No se pudo preparar la factura"}
+            {(error as Error).message || "No se pudo preparar el documento"}
           </p>
         )}
 
@@ -137,35 +217,90 @@ export function FacturarPedidoDialog({
           <div className="py-6 text-center space-y-2">
             <FileText className="h-8 w-8 mx-auto text-muted-foreground" />
             <p className="text-sm">
-              Este pedido ya tiene la factura <strong>{data.factura.referencia}</strong>.
+              Este pedido ya tiene{" "}
+              {data.factura.tipo === "simplificada" ? "el ticket" : "la factura"}{" "}
+              <strong>{data.factura.referencia}</strong>.
             </p>
             <p className="text-xs text-muted-foreground">
-              Si de verdad hace falta otra —una corrección, un envío facturado aparte—, se emite a
-              mano desde «Nueva factura», en Facturas.
+              Para cambiarlo, rectifícalo desde Facturas; después se puede emitir otro.
             </p>
           </div>
         )}
 
-        {data && !data.ya_facturado && (
+        {preparado && decision && (
           <div className="space-y-4">
-            <div>
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Receptor
-              </Label>
-              <p className="font-medium">{data.receptor.nombre}</p>
-              <p className="text-sm text-muted-foreground">
-                {[data.receptor.direccion, data.receptor.ciudad, data.receptor.pais]
-                  .filter(Boolean)
-                  .join(", ") || "Sin dirección"}
+            <div
+              className={
+                decision.documento === "ticket" || decision.documento === "factura"
+                  ? "rounded-md border p-3 text-sm"
+                  : "rounded-md border border-status-pendiente/40 bg-status-pendiente/5 p-3 text-sm"
+              }
+            >
+              <p className="flex items-center gap-2 font-medium">
+                {decision.documento === "ticket" ? (
+                  <Receipt className="h-4 w-4 shrink-0" />
+                ) : decision.documento === "factura" ? (
+                  <FileText className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-status-pendiente" />
+                )}
+                {explicarDecision(decision)}
               </p>
-              {data.sin_nif ? (
-                <p className="mt-1 flex items-center gap-1.5 text-xs text-status-pendiente">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  Sin NIF: este pedido no tiene un cliente vinculado con NIF en su ficha. La factura
-                  va a salir sin NIF.
+              {decision.documento === "ticket" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Límite del ticket para este cliente: {eur(decision.limite)}.
                 </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">NIF: {data.receptor.nif}</p>
+              )}
+              {decision.documento === "preguntar_tipo" && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Suma {eur(preparado.total)}: más de {eur(decision.limite)}, menos de{" "}
+                    {eur(decision.limite_particular)}.
+                  </span>
+                  <Button size="sm" variant="outline" onClick={() => setTipoElegido("particular")}>
+                    Es particular
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setTipoElegido("profesional")}>
+                    Es profesional o empresa
+                  </Button>
+                </div>
+              )}
+              {decision.documento === "pedir_datos" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Suma {eur(preparado.total)} y el límite es {eur(decision.limite)}. Rellena abajo
+                  el nombre y el NIF.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Cliente {principal === "ticket" && "(opcional en un ticket)"}
+              </Label>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  placeholder="Nombre o razón social"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  aria-label="Nombre del cliente"
+                />
+                <Input
+                  placeholder="NIF"
+                  value={nif}
+                  onChange={(e) => setNif(e.target.value)}
+                  aria-label="NIF del cliente"
+                />
+              </div>
+              <Input
+                placeholder="Dirección"
+                value={direccion}
+                onChange={(e) => setDireccion(e.target.value)}
+                aria-label="Dirección del cliente"
+              />
+              {principal === "ticket" && (
+                <p className="text-xs text-muted-foreground">
+                  El ticket no lleva NIF. Si el cliente lo da, pasa a factura.
+                </p>
               )}
             </div>
 
@@ -174,7 +309,7 @@ export function FacturarPedidoDialog({
                 <Label>Fecha de emisión</Label>
                 <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
                 <p className="text-xs text-muted-foreground">
-                  No puede ser anterior a la última factura emitida.
+                  No puede ser anterior al último documento de su serie.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -183,32 +318,30 @@ export function FacturarPedidoDialog({
               </div>
             </div>
 
-            <div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead className="text-right">Cantidad</TableHead>
-                    <TableHead className="text-right">Precio</TableHead>
-                    <TableHead className="text-right">IVA</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead className="text-right">Cantidad</TableHead>
+                  <TableHead className="text-right">Precio</TableHead>
+                  <TableHead className="text-right">IVA</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preparado.lineas.map((l, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{l.descripcion}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {l.cantidad} {l.unidad}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {eur(l.precio_unitario)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{l.iva_rate} %</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.lineas.map((l, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{l.descripcion}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {l.cantidad} {l.unidad}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {eur(l.precio_unitario)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{l.iva_rate} %</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
 
             {totales && (
               <div className="grid grid-cols-3 gap-3 text-sm pt-2 border-t">
@@ -226,14 +359,44 @@ export function FacturarPedidoDialog({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          {data && !data.ya_facturado && (
-            <Button onClick={emitir} disabled={emitiendo}>
-              {emitiendo ? "Emitiendo…" : "Emitir factura"}
-            </Button>
+          {preparado && decision && (
+            <>
+              {principal === "factura" && puedeTicket && (
+                <Button variant="outline" onClick={emitirComoTicket} disabled={emitiendo}>
+                  Emitir ticket
+                </Button>
+              )}
+              {principal === "ticket" && (
+                <Button
+                  variant="outline"
+                  onClick={emitirComoFactura}
+                  disabled={emitiendo || !puedeFactura}
+                >
+                  Emitir factura
+                </Button>
+              )}
+              {principal === "ticket" ? (
+                <Button onClick={emitirComoTicket} disabled={emitiendo}>
+                  {emitiendo ? "Emitiendo…" : "Emitir ticket"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={emitirComoFactura}
+                  disabled={
+                    emitiendo ||
+                    !puedeFactura ||
+                    decision.documento === "preguntar_tipo" ||
+                    (decision.documento === "pedir_datos" && nif.trim() === "")
+                  }
+                >
+                  {emitiendo ? "Emitiendo…" : "Emitir factura"}
+                </Button>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>

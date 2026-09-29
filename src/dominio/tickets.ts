@@ -62,7 +62,7 @@ export type LimitesTicket = {
 export const LIMITES_TICKET: LimitesTicket = { general: 400, particular: 3000 };
 
 /** Lo que se sabe del cliente al emitir. Todo opcional: puede no saberse nada. */
-export type ClienteFiscal = {
+export type ClienteDocumento = {
   nombre?: string | null;
   nif?: string | null;
   tipo_fiscal?: TipoFiscal | null;
@@ -81,7 +81,7 @@ export type DecisionDocumento =
   | { documento: "sin_importe" };
 
 /** Nombre y NIF: lo mínimo para una factura completa. */
-export function tieneDatosFiscales(cliente: ClienteFiscal | null | undefined): boolean {
+export function tieneDatosFiscales(cliente: ClienteDocumento | null | undefined): boolean {
   return (cliente?.nombre ?? "").trim() !== "" && normalizarNif(cliente?.nif) !== "";
 }
 
@@ -110,7 +110,7 @@ export function cabeEnTicket(
 /** Qué documento toca. Ver la tabla del principio. */
 export function decidirDocumento(
   total: number,
-  cliente: ClienteFiscal | null | undefined,
+  cliente: ClienteDocumento | null | undefined,
   limites: LimitesTicket = LIMITES_TICKET,
 ): DecisionDocumento {
   if (centimos(total) <= 0) return { documento: "sin_importe" };
@@ -148,4 +148,82 @@ export function explicarDecision(d: DecisionDocumento): string {
     case "sin_importe":
       return "Sin importe no hay nada que documentar.";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos: si ya tienen documento, si están cobrados, y cuáles van en bloque
+// ---------------------------------------------------------------------------
+
+/** Un documento fiscal de un pedido: lo justo para saber si sigue vigente. */
+export type DocumentoPedido = {
+  id: string;
+  tipo: "ordinaria" | "rectificativa" | "simplificada";
+  estado: string | null;
+  rectifica_a_id: string | null;
+};
+
+/**
+ * El documento que cuenta para el pedido: su factura o su ticket, mientras no
+ * esté rectificado. Es la misma regla con la que la base se niega a emitir un
+ * segundo documento para el mismo pedido.
+ *
+ * `rectificados` son los ids que alguna rectificativa corrige, por si esa
+ * rectificativa no lleva el pedido y no está en `docs`.
+ */
+export function documentoVigente<T extends DocumentoPedido>(
+  docs: readonly T[],
+  rectificados: Iterable<string> = [],
+): T | null {
+  const corregidos = new Set<string>(rectificados);
+  for (const d of docs) if (d.rectifica_a_id) corregidos.add(d.rectifica_a_id);
+  return (
+    docs.find(
+      (d) =>
+        (d.tipo === "ordinaria" || d.tipo === "simplificada") &&
+        d.estado !== "borrador" &&
+        d.estado !== "anulada" &&
+        !corregidos.has(d.id),
+    ) ?? null
+  );
+}
+
+/** Cobrado entero: lo cobrado llega al total del pedido, céntimo a céntimo. */
+export function estaCobrado(total: number, cobrado: number): boolean {
+  return centimos(total) > 0 && centimos(cobrado) >= centimos(total);
+}
+
+/** Un pedido cobrado y sin documento, candidato a ticket. */
+export type PedidoSinDocumento = {
+  id: string;
+  numero: string;
+  total: number;
+  cliente: ClienteDocumento | null;
+};
+
+export type ClasificacionTickets<P extends PedidoSinDocumento> = {
+  /** Caben en un ticket sin preguntar nada: se emiten en bloque. */
+  tickets: P[];
+  /** Tienen NIF: factura completa, una a una desde el pedido. */
+  facturas: P[];
+  /** Hay que preguntar si es particular o pedir datos: uno a uno. */
+  revisar: { pedido: P; decision: DecisionDocumento }[];
+};
+
+/**
+ * Qué pedidos se pueden despachar con un ticket en bloque y cuáles necesitan
+ * a alguien delante. En bloque solo va lo que no admite duda: sin NIF y por
+ * debajo del límite que corresponde.
+ */
+export function clasificarParaTickets<P extends PedidoSinDocumento>(
+  pedidos: readonly P[],
+  limites: LimitesTicket = LIMITES_TICKET,
+): ClasificacionTickets<P> {
+  const salida: ClasificacionTickets<P> = { tickets: [], facturas: [], revisar: [] };
+  for (const p of pedidos) {
+    const decision = decidirDocumento(p.total, p.cliente, limites);
+    if (decision.documento === "ticket") salida.tickets.push(p);
+    else if (decision.documento === "factura") salida.facturas.push(p);
+    else if (decision.documento !== "sin_importe") salida.revisar.push({ pedido: p, decision });
+  }
+  return salida;
 }

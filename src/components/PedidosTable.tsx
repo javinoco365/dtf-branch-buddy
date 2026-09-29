@@ -805,7 +805,7 @@ function FilaPedido({
               <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
               <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
               {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
-              <DropdownMenuItem onClick={onFacturar}>Facturar</DropdownMenuItem>
+              <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>
               <DropdownMenuItem onClick={onBorrar} className="text-destructive">
                 Borrar
               </DropdownMenuItem>

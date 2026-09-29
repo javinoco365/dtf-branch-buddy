@@ -6,6 +6,8 @@ export type LogoPDF = { dataUrl: string; formato: "PNG" | "JPEG" | "WEBP" };
 export type FacturaPDFData = {
   /** La referencia visible: 2026/0001, R2026/0001. La compone la base. */
   referencia: string;
+  /** Lo que se imprime arriba. FACTURA si no se dice otra cosa. */
+  titulo?: string;
   fecha: string;
   fecha_vencimiento?: string | null;
   emisor: {
@@ -65,7 +67,7 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
 
   doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.text("FACTURA", 15, y);
+  doc.text(d.titulo ?? "FACTURA", 15, y);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.text(`Nº ${d.referencia}`, W - 15, 18, { align: "right" });
