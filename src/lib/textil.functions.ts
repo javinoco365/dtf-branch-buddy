@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import type { Cobro } from "./cobros.functions";
-import type { FacturaPDFData } from "@/lib/pdf-factura";
+import type { TicketPDFData } from "@/lib/pdf-ticket";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
@@ -964,6 +964,87 @@ export const getEmpresaGlobal = createServerFn({ method: "GET" })
   });
 
 /**
+ * Lo que hace falta para imprimir una factura o un ticket textil, sacado de lo
+ * que se congeló al emitir. Solo administradores, como hasta ahora.
+ */
+async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId: string) {
+  const { descargarLogo } = await import("@/lib/logo-descarga");
+  const { data: esAdmin } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!esAdmin) throw new Error("Solo un administrador puede generar esta factura");
+
+  const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
+    .select("*")
+    .eq("id", facturaId)
+    .maybeSingle();
+  if (!factura) throw new Error("La factura no existe");
+  if (factura.estado === "borrador") {
+    throw new Error("La factura todavía es un borrador: emítela antes de generar el PDF.");
+  }
+
+  const { data: items } = await supabaseAdmin
+    .from("textil_factura_items")
+    .select("descripcion, cantidad, precio_unitario, iva_pct, subtotal")
+    .eq("factura_id", factura.id);
+
+  // El emisor sale del snapshot y solo de ahí: leerlo de empresas hoy sería
+  // arriesgarse a imprimir unos datos fiscales distintos de los emitidos.
+  const emisor = (factura.emisor_snapshot ?? {}) as Record<string, string | null>;
+  const receptor = (factura.receptor_snapshot ?? {}) as Record<string, string | null>;
+
+  const pdfData: TicketPDFData = {
+    nombre_comercial: emisor.nombre_comercial ?? null,
+    desglose: Array.isArray(factura.desglose_iva)
+      ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
+          tipo: Number(r.tipo),
+          base: Number(r.base),
+          cuota: Number(r.cuota),
+        }))
+      : null,
+    referencia: factura.numero,
+    // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
+    titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
+    logo: await descargarLogo(emisor.logo_url),
+    fecha: factura.fecha ?? new Date().toISOString(),
+    fecha_vencimiento: factura.vencimiento,
+    emisor: {
+      nombre: emisor.razon_social ?? emisor.nombre ?? "",
+      cif: emisor.cif ?? "",
+      direccion: emisor.direccion ?? "",
+    },
+    cliente: {
+      nombre: receptor.nombre ?? factura.cliente_nombre ?? "",
+      nif: receptor.nif ?? factura.cliente_nif,
+      direccion: receptor.direccion ?? factura.cliente_direccion,
+    },
+    items: (items ?? []).map((it: any) => {
+      const base = Number(it.subtotal ?? 0);
+      const iva = redondearImporte((base * Number(it.iva_pct ?? 0)) / 100);
+      return {
+        descripcion: it.descripcion ?? "",
+        cantidad: Number(it.cantidad ?? 0),
+        unidad: "ud",
+        precio_unitario: Number(it.precio_unitario ?? 0),
+        iva_rate: Number(it.iva_pct ?? 0),
+        subtotal: base,
+        iva,
+        total: redondearImporte(base + iva),
+      };
+    }),
+    base_imponible: Number(factura.subtotal ?? 0),
+    iva_total: Number(factura.iva ?? 0),
+    total: Number(factura.total ?? 0),
+    notas: factura.notas,
+  };
+
+  return { factura, pdfData };
+}
+
+/**
  * Genera el PDF de una factura textil y lo deja en Storage.
  *
  * Reutiliza el mismo generador que las facturas de DTF: una factura de la
@@ -985,72 +1066,13 @@ export const generarPdfFacturaTextil = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const { generarFacturaPDF } = await import("@/lib/pdf-factura");
-    const { descargarLogo } = await import("@/lib/logo-descarga");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: esAdmin } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!esAdmin) throw new Error("Solo un administrador puede generar esta factura");
-
-    const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
-      .select("*")
-      .eq("id", data.factura_id)
-      .maybeSingle();
-    if (!factura) throw new Error("La factura no existe");
-    if (factura.estado === "borrador") {
-      throw new Error("La factura todavía es un borrador: emítela antes de generar el PDF.");
-    }
-
-    const { data: items } = await context.supabase
-      .from("textil_factura_items")
-      .select("descripcion, cantidad, precio_unitario, iva_pct, subtotal")
-      .eq("factura_id", factura.id);
-
-    // El emisor sale del snapshot y solo de ahí: leerlo de empresas hoy sería
-    // arriesgarse a imprimir unos datos fiscales distintos de los emitidos.
-    const emisor = (factura.emisor_snapshot ?? {}) as Record<string, string | null>;
-    const receptor = (factura.receptor_snapshot ?? {}) as Record<string, string | null>;
-
-    const pdfData: FacturaPDFData = {
-      referencia: factura.numero,
-      // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
-      titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
-      logo: await descargarLogo(emisor.logo_url),
-      fecha: factura.fecha ?? new Date().toISOString(),
-      fecha_vencimiento: factura.vencimiento,
-      emisor: {
-        nombre: emisor.razon_social ?? emisor.nombre ?? "",
-        cif: emisor.cif ?? "",
-        direccion: emisor.direccion ?? "",
-      },
-      cliente: {
-        nombre: receptor.nombre ?? factura.cliente_nombre ?? "",
-        nif: receptor.nif ?? factura.cliente_nif,
-        direccion: receptor.direccion ?? factura.cliente_direccion,
-      },
-      items: (items ?? []).map((it: any) => {
-        const base = Number(it.subtotal ?? 0);
-        const iva = redondearImporte((base * Number(it.iva_pct ?? 0)) / 100);
-        return {
-          descripcion: it.descripcion ?? "",
-          cantidad: Number(it.cantidad ?? 0),
-          unidad: "ud",
-          precio_unitario: Number(it.precio_unitario ?? 0),
-          iva_rate: Number(it.iva_pct ?? 0),
-          subtotal: base,
-          iva,
-          total: redondearImporte(base + iva),
-        };
-      }),
-      base_imponible: Number(factura.subtotal ?? 0),
-      iva_total: Number(factura.iva ?? 0),
-      total: Number(factura.total ?? 0),
-      notas: factura.notas,
-    };
+    const { factura, pdfData } = await leerDatosPdfTextil(
+      supabaseAdmin,
+      data.factura_id,
+      context.userId,
+    );
 
     const blob = await generarFacturaPDF(pdfData);
     const ruta = `textil/${factura.id}.pdf`;
@@ -1272,4 +1294,33 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         _textil_pedido_id: data.textil_pedido_id,
       },
     );
+  });
+
+/** El ticket textil en 80 mm, para la impresora térmica. URL de un rato. */
+export const generarTicket80Textil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { generarTicketPDF } = await import("@/lib/pdf-ticket");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const { factura, pdfData } = await leerDatosPdfTextil(
+      supabaseAdmin,
+      data.factura_id,
+      context.userId,
+    );
+
+    const blob = await generarTicketPDF(pdfData);
+    const ruta = `textil/${factura.id}-80mm.pdf`;
+    const { error } = await supabaseAdmin.storage
+      .from("facturas")
+      .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (error) throw new Error(`No se pudo guardar el ticket: ${error.message}`);
+    const { data: firmada } = await supabaseAdmin.storage
+      .from("facturas")
+      .createSignedUrl(ruta, 60 * 10);
+    return { url: (firmada?.signedUrl as string | undefined) ?? null };
   });

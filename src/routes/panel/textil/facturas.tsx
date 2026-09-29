@@ -21,11 +21,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, FileText, Loader2, Trash2 } from "lucide-react";
+import { Download, FileText, Loader2, Printer, Trash2 } from "lucide-react";
 import {
   listTextilFacturas,
   deleteTextilFactura,
   generarPdfFacturaTextil,
+  generarTicket80Textil,
   urlFacturaTextil,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
@@ -68,6 +69,21 @@ function FacturasPage() {
   const [generando, setGenerando] = useState<string | null>(null);
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
+  const ticket80Fn = useServerFn(generarTicket80Textil);
+
+  /** El ticket en 80 mm, con la pestaña abierta antes de la llamada por lo mismo que abajo. */
+  async function abrirTicket80(factura: any) {
+    const ventana = window.open("", "_blank");
+    try {
+      const { url } = await ticket80Fn({ data: { factura_id: factura.id } });
+      if (!url) throw new Error("No se pudo obtener el ticket");
+      if (ventana) ventana.location.href = url;
+      else window.location.href = url;
+    } catch (e: any) {
+      ventana?.close();
+      toast.error(e?.message ?? "No se pudo generar el ticket");
+    }
+  }
 
   /**
    * Genera el PDF si hace falta y lo abre.
@@ -150,7 +166,14 @@ function FacturasPage() {
               )}
               {filtrados.map((f: any) => (
                 <TableRow key={f.id}>
-                  <TableCell className="font-mono text-xs">{f.numero}</TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap">
+                    {f.numero}
+                    {f.tipo === "simplificada" && (
+                      <Badge variant="outline" className="ml-2 font-sans">
+                        Ticket
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
                   <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
                   <TableCell>
@@ -186,6 +209,17 @@ function FacturasPage() {
                         <FileText className="h-4 w-4" />
                       )}
                     </Button>
+                    {f.tipo === "simplificada" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Ticket en 80 mm"
+                        aria-label="Ticket en 80 mm"
+                        onClick={() => abrirTicket80(f)}
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>

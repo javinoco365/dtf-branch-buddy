@@ -90,8 +90,11 @@ export function DocumentoPedidoDialog({
   claveQuery: readonly unknown[];
   preparar: () => Promise<DocumentoPreparado>;
   emitir: (p: PeticionDocumento) => Promise<{ id: string; referencia: string }>;
-  /** Genera el PDF y devuelve una URL para abrirlo, si la hay. */
-  abrirPdf: (id: string) => Promise<string | null>;
+  /**
+   * Genera el PDF y devuelve una URL para abrirlo, si la hay. Un ticket sale en
+   * 80 mm, para la impresora de tickets; una factura, en A4.
+   */
+  abrirPdf: (id: string, documento: "ticket" | "factura") => Promise<string | null>;
   alEmitir: () => void;
 }) {
   const qc = useQueryClient();
@@ -151,6 +154,9 @@ export function DocumentoPedidoDialog({
       return;
     }
     setEmitiendo(true);
+    // La pestaña del PDF se abre ya, con el clic: al volver de la red el
+    // navegador no deja abrir ventanas. Se le pone la dirección cuando llega.
+    const ventana = window.open("", "_blank");
     try {
       const r = await emitir({
         documento,
@@ -166,10 +172,12 @@ export function DocumentoPedidoDialog({
           ? `Ticket ${r.referencia} emitido`
           : `Factura ${r.referencia} emitida`;
       try {
-        const url = await abrirPdf(r.id);
-        if (url) window.open(url, "_blank");
+        const url = await abrirPdf(r.id, documento);
+        if (url && ventana) ventana.location.href = url;
+        else ventana?.close();
         toast.success(emitido);
       } catch (errPdf: any) {
+        ventana?.close();
         toast.warning(
           `${emitido}, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
         );
@@ -177,6 +185,7 @@ export function DocumentoPedidoDialog({
       qc.invalidateQueries({ queryKey: claveQuery });
       alEmitir();
     } catch (e: any) {
+      ventana?.close();
       toast.error(
         e?.message ??
           (documento === "ticket" ? "No se pudo emitir el ticket" : "No se pudo emitir la factura"),

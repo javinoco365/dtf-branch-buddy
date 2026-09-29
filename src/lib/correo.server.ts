@@ -50,6 +50,8 @@ export type Mensaje = {
   asunto: string;
   texto: string;
   html: string;
+  /** Ficheros adjuntos: el PDF de una factura o de un ticket, por ejemplo. */
+  adjuntos?: { nombre: string; contenido: Uint8Array; tipo: string }[];
 };
 
 /**
@@ -88,6 +90,11 @@ export async function enviarCorreo(
       subject: m.asunto,
       text: m.texto,
       html: m.html,
+      attachments: m.adjuntos?.map((a) => ({
+        filename: a.nombre,
+        content: Buffer.from(a.contenido),
+        contentType: a.tipo,
+      })),
     });
     return { ok: true };
   } catch (error) {
