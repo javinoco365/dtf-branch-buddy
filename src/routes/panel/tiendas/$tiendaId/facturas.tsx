@@ -40,17 +40,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import {
   anularFactura,
   cambiarEstadoCobro,
   emitirFactura,
+  generarTicket80,
   generarYSubirFacturaPDF,
 } from "@/lib/facturas.functions";
 import { toast } from "sonner";
 import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
-import { Download, FileText, Plus, Trash2, CheckCircle2, Loader2, Undo2 } from "lucide-react";
+import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
+import {
+  Download,
+  FileText,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Loader2,
+  Mail,
+  Printer,
+  Undo2,
+} from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
@@ -70,6 +82,8 @@ function Facturas() {
   const [abierto, setAbierto] = useState(false);
   const [generandoId, setGenerandoId] = useState<string | null>(null);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
+  const ticket80Fn = useServerFn(generarTicket80);
+  const [porCorreo, setPorCorreo] = useState<any>(null);
   const cambiarEstadoCobroFn = useServerFn(cambiarEstadoCobro);
   const anularFacturaFn = useServerFn(anularFactura);
 
@@ -98,7 +112,7 @@ function Facturas() {
       (f) =>
         (filtros.estado === "todos" || f.estado === filtros.estado) &&
         (!q ||
-          normalizarTexto(`${f.serie}-${String(f.numero).padStart(5, "0")}`).includes(q) ||
+          normalizarTexto(referenciaFactura(f.serie, f.ejercicio, f.numero)).includes(q) ||
           normalizarTexto(f.cliente_nombre).includes(q)),
     );
   }, [facturas, filtros.q, filtros.estado]);
@@ -122,7 +136,7 @@ function Facturas() {
   const anular = useMutation({
     mutationFn: async (id: string) => anularFacturaFn({ data: { factura_id: id, motivo: "R1" } }),
     onSuccess: (r: any) => {
-      toast.success(`Anulada con la rectificativa ${r.serie}-${String(r.numero).padStart(5, "0")}`);
+      toast.success(`Anulada con la rectificativa ${r.referencia}`);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => toast.error(e.message ?? "No se pudo anular"),
@@ -220,8 +234,13 @@ function Facturas() {
               {filtrados.map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {f.serie}-{String(f.numero).padStart(5, "0")}
+                  <TableCell className="font-mono text-xs whitespace-nowrap">
+                    {referenciaFactura(f.serie, f.ejercicio, f.numero)}
+                    {f.tipo === "simplificada" && (
+                      <Badge variant="outline" className="ml-2 font-sans">
+                        Ticket
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
                   <TableCell>
@@ -255,6 +274,39 @@ function Facturas() {
                           <Download className="h-4 w-4" />
                         )}
                       </Button>
+                      {f.tipo === "simplificada" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Ticket en 80 mm"
+                          aria-label="Ticket en 80 mm"
+                          onClick={async () => {
+                            // La pestaña se abre antes de la llamada: al volver de
+                            // la red el navegador ya no deja abrir ventanas.
+                            const ventana = window.open("", "_blank");
+                            try {
+                              const r = await ticket80Fn({ data: { factura_id: f.id } });
+                              if (!r.url) throw new Error("No se pudo obtener el ticket");
+                              if (ventana) ventana.location.href = r.url;
+                              else window.location.href = r.url;
+                            } catch (e: any) {
+                              ventana?.close();
+                              toast.error(e?.message ?? "No se pudo generar el ticket");
+                            }
+                          }}
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Enviar por correo"
+                        aria-label="Enviar por correo"
+                        onClick={() => setPorCorreo(f)}
+                      >
+                        <Mail className="h-4 w-4" />
+                      </Button>
                       {f.estado !== "pagada" && (
                         <Button
                           size="sm"
@@ -273,7 +325,7 @@ function Facturas() {
                           onClick={() => {
                             if (
                               window.confirm(
-                                `Se emitirá una factura rectificativa que anula la ${f.serie}-${String(f.numero).padStart(5, "0")}. La original no se borra ni se modifica. ¿Continuar?`,
+                                `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
                               )
                             ) {
                               anular.mutate(f.id);
@@ -301,6 +353,17 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      {porCorreo && (
+        <EnviarDocumentoDialog
+          open={!!porCorreo}
+          onOpenChange={(o) => !o && setPorCorreo(null)}
+          facturaId={porCorreo.id}
+          referencia={referenciaFactura(porCorreo.serie, porCorreo.ejercicio, porCorreo.numero)}
+          esTicket={porCorreo.tipo === "simplificada"}
+          emailInicial={porCorreo.receptor_snapshot?.email ?? null}
+        />
+      )}
     </div>
   );
 }

@@ -2,9 +2,124 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { llamarRpc, tabla } from "./rpc";
-import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
+import { generarFacturaPDF } from "@/lib/pdf-factura";
+import type { TicketPDFData } from "@/lib/pdf-ticket";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
+
+// El cliente de servicio, sin tipar de más: types.ts no conoce varias de estas tablas.
+type Sb = any;
+
+/**
+ * Lo que hace falta para imprimir una factura o un ticket de tienda, sacado
+ * de lo que se congeló al emitir. Comprueba antes que quien lo pide es de la
+ * tienda.
+ */
+async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId: string) {
+  const data = { factura_id: facturaId };
+  const { data: factura, error: fErr } = await tabla(supabaseAdmin, "facturas")
+    .select(
+      "id, tienda_id, serie, numero, tipo, fecha, desglose_iva, receptor_snapshot, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
+    )
+    .eq("id", data.factura_id)
+    .maybeSingle();
+  if (fErr || !factura) throw new Error("Factura no encontrada");
+
+  // Comprobar acceso a la tienda
+  const { data: miembro } = await supabaseAdmin
+    .from("tienda_usuarios")
+    .select("tienda_id")
+    .eq("tienda_id", factura.tienda_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const { data: rol } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (!miembro && !rol) throw new Error("Sin acceso a esta factura");
+
+  const { data: items } = await supabaseAdmin
+    .from("factura_items")
+    .select("descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total")
+    .eq("factura_id", factura.id);
+
+  // Respaldo cuando la factura no tiene snapshot de emisor. Sale de empresas,
+  // que es de donde emitir_factura() congela el emisor: leer de otro sitio es
+  // arriesgarse a imprimir unos datos fiscales distintos de los emitidos.
+  const { data: empresa } = await tabla(supabaseAdmin, "empresas")
+    .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
+    .eq("activa", true)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  const empresaDireccion =
+    [
+      empresa?.direccion,
+      [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
+      empresa?.provincia,
+      empresa?.pais,
+    ]
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter(Boolean)
+      .join(", ") || "";
+
+  const emisorNombre =
+    (factura.emisor_nombre && factura.emisor_nombre.trim()) || empresa?.razon_social || "";
+  const emisorCif = (factura.emisor_cif && factura.emisor_cif.trim()) || empresa?.cif || "";
+  const emisorDireccion =
+    (factura.emisor_direccion && factura.emisor_direccion.trim()) || empresaDireccion;
+
+  // El logo va congelado en el snapshot del emisor, junto al resto de la
+  // identidad: una factura tiene que imprimirse siempre como se emitió,
+  // aunque la tienda cambie de logo después.
+  const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
+
+  const emisorSnapshot = (factura.emisor_snapshot ?? {}) as { nombre_comercial?: string };
+  const pdfData: TicketPDFData = {
+    nombre_comercial: emisorSnapshot.nombre_comercial ?? null,
+    desglose: Array.isArray(factura.desglose_iva)
+      ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
+          tipo: Number(r.tipo),
+          base: Number(r.base),
+          cuota: Number(r.cuota),
+        }))
+      : null,
+    referencia: referenciaFactura(factura.serie, factura.ejercicio, factura.numero),
+    // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
+    titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
+    logo: await descargarLogo(logoUrl),
+    fecha: factura.fecha ?? new Date().toISOString(),
+    fecha_vencimiento: factura.fecha_vencimiento,
+    emisor: {
+      nombre: emisorNombre,
+      cif: emisorCif,
+      direccion: emisorDireccion,
+    },
+    cliente: {
+      nombre: factura.cliente_nombre ?? "",
+      nif: factura.cliente_nif,
+      direccion: factura.cliente_direccion,
+    },
+    items: ((items ?? []) as any[]).map((it) => ({
+      descripcion: it.descripcion ?? "",
+      cantidad: Number(it.cantidad ?? 0),
+      unidad: it.unidad ?? "u",
+      precio_unitario: Number(it.precio_unitario ?? 0),
+      iva_rate: Number(it.iva_rate ?? 0),
+      subtotal: Number(it.subtotal ?? 0),
+      iva: Number(it.iva ?? 0),
+      total: Number(it.total ?? 0),
+    })),
+    base_imponible: Number(factura.base_imponible ?? 0),
+    iva_total: Number(factura.iva_total ?? 0),
+    total: Number(factura.total ?? 0),
+    notas: factura.notas,
+  };
+
+  return { factura, pdfData };
+}
 
 /**
  * Genera el PDF de una factura, lo sube al bucket privado `facturas`
@@ -17,98 +132,11 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
-
-    const { data: factura, error: fErr } = await tabla(supabaseAdmin, "facturas")
-      .select(
-        "id, tienda_id, serie, numero, tipo, fecha, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
-      )
-      .eq("id", data.factura_id)
-      .maybeSingle();
-    if (fErr || !factura) throw new Error("Factura no encontrada");
-
-    // Comprobar acceso a la tienda
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", factura.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta factura");
-
-    const { data: items } = await supabaseAdmin
-      .from("factura_items")
-      .select("descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total")
-      .eq("factura_id", factura.id);
-
-    // Respaldo cuando la factura no tiene snapshot de emisor. Sale de empresas,
-    // que es de donde emitir_factura() congela el emisor: leer de otro sitio es
-    // arriesgarse a imprimir unos datos fiscales distintos de los emitidos.
-    const { data: empresa } = await tabla(supabaseAdmin, "empresas")
-      .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
-      .eq("activa", true)
-      .order("created_at")
-      .limit(1)
-      .maybeSingle();
-    const empresaDireccion =
-      [
-        empresa?.direccion,
-        [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
-        empresa?.provincia,
-        empresa?.pais,
-      ]
-        .map((s) => (typeof s === "string" ? s.trim() : ""))
-        .filter(Boolean)
-        .join(", ") || "";
-
-    const emisorNombre =
-      (factura.emisor_nombre && factura.emisor_nombre.trim()) || empresa?.razon_social || "";
-    const emisorCif = (factura.emisor_cif && factura.emisor_cif.trim()) || empresa?.cif || "";
-    const emisorDireccion =
-      (factura.emisor_direccion && factura.emisor_direccion.trim()) || empresaDireccion;
-
-    // El logo va congelado en el snapshot del emisor, junto al resto de la
-    // identidad: una factura tiene que imprimirse siempre como se emitió,
-    // aunque la tienda cambie de logo después.
-    const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
-
-    const pdfData: FacturaPDFData = {
-      referencia: referenciaFactura(factura.serie, factura.ejercicio, factura.numero),
-      // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
-      titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
-      logo: await descargarLogo(logoUrl),
-      fecha: factura.fecha ?? new Date().toISOString(),
-      fecha_vencimiento: factura.fecha_vencimiento,
-      emisor: {
-        nombre: emisorNombre,
-        cif: emisorCif,
-        direccion: emisorDireccion,
-      },
-      cliente: {
-        nombre: factura.cliente_nombre ?? "",
-        nif: factura.cliente_nif,
-        direccion: factura.cliente_direccion,
-      },
-      items: (items ?? []).map((it) => ({
-        descripcion: it.descripcion ?? "",
-        cantidad: Number(it.cantidad ?? 0),
-        unidad: it.unidad ?? "u",
-        precio_unitario: Number(it.precio_unitario ?? 0),
-        iva_rate: Number(it.iva_rate ?? 0),
-        subtotal: Number(it.subtotal ?? 0),
-        iva: Number(it.iva ?? 0),
-        total: Number(it.total ?? 0),
-      })),
-      base_imponible: Number(factura.base_imponible ?? 0),
-      iva_total: Number(factura.iva_total ?? 0),
-      total: Number(factura.total ?? 0),
-      notas: factura.notas,
-    };
+    const { factura, pdfData } = await leerDatosPdfFactura(
+      supabaseAdmin,
+      data.factura_id,
+      context.userId,
+    );
 
     const blob = await generarFacturaPDF(pdfData);
     const arrayBuffer = await blob.arrayBuffer();
@@ -131,6 +159,112 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
     await supabaseAdmin.from("facturas").update({ pdf_url: signed.signedUrl }).eq("id", factura.id);
 
     return { ok: true, path, url: signed.signedUrl };
+  });
+
+/**
+ * El ticket en 80 mm, para la impresora térmica. Se genera cada vez desde lo
+ * congelado en la factura y se devuelve una URL de un rato para abrirlo.
+ */
+export const generarTicket80 = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { generarTicketPDF } = await import("@/lib/pdf-ticket");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const { factura, pdfData } = await leerDatosPdfFactura(
+      supabaseAdmin,
+      data.factura_id,
+      context.userId,
+    );
+
+    const blob = await generarTicketPDF(pdfData);
+    const path = `${factura.tienda_id}/${factura.id}-80mm.pdf`;
+    const { error: upErr } = await supabaseAdmin.storage
+      .from("facturas")
+      .upload(path, new Uint8Array(await blob.arrayBuffer()), {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (upErr) throw new Error(`Error subiendo el ticket: ${upErr.message}`);
+
+    const { data: firmada } = await supabaseAdmin.storage
+      .from("facturas")
+      .createSignedUrl(path, 60 * 10);
+    return { url: (firmada?.signedUrl as string | undefined) ?? null };
+  });
+
+/**
+ * Manda por correo una factura o un ticket de tienda, con el PDF en A4
+ * adjunto. Sale con el remitente y el servidor de correo de la tienda, los
+ * mismos que el aviso de pedido enviado.
+ *
+ * Devuelve qué ha pasado en vez de lanzar si el servidor de correo falla: lo
+ * enseña la pantalla a quien lo ha pedido.
+ */
+export const enviarDocumentoPorCorreo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        factura_id: z.string().uuid(),
+        para: z.string().trim().email("Escribe un email válido"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const { factura, pdfData } = await leerDatosPdfFactura(
+      supabaseAdmin,
+      data.factura_id,
+      context.userId,
+    );
+
+    const { data: tienda } = await tabla(supabaseAdmin, "tiendas")
+      .select("nombre, correo_remitente_nombre, correo_remitente_email")
+      .eq("id", factura.tienda_id)
+      .maybeSingle();
+    if (!tienda?.correo_remitente_email) {
+      return {
+        ok: false as const,
+        error: "La tienda no tiene remitente de correo. Ponlo en los ajustes de la tienda.",
+      };
+    }
+
+    const esTicket = factura.tipo === "simplificada";
+    const que = esTicket ? "el ticket" : "la factura";
+    const asunto = `${esTicket ? "Ticket" : "Factura"} ${pdfData.referencia} · ${tienda.nombre}`;
+    const texto =
+      `Hola${pdfData.cliente.nombre ? ` ${pdfData.cliente.nombre}` : ""}:\n\n` +
+      `Te adjuntamos ${que} ${pdfData.referencia}.\n\n` +
+      `Un saludo,\n${tienda.nombre}`;
+
+    const { enviarCorreo, textoAHtml } = await import("./correo.server");
+    const { leerCredencialesSmtp } = await import("./smtp-credenciales");
+    const blob = await generarFacturaPDF(pdfData);
+    const resultado = await enviarCorreo(
+      {
+        de: tienda.correo_remitente_nombre
+          ? `${tienda.correo_remitente_nombre} <${tienda.correo_remitente_email}>`
+          : tienda.correo_remitente_email,
+        para: data.para,
+        asunto,
+        texto,
+        html: textoAHtml(texto),
+        adjuntos: [
+          {
+            nombre: `${pdfData.referencia.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`,
+            contenido: new Uint8Array(await blob.arrayBuffer()),
+            tipo: "application/pdf",
+          },
+        ],
+      },
+      await leerCredencialesSmtp(supabaseAdmin, factura.tienda_id),
+    );
+    return resultado.ok
+      ? { ok: true as const, para: data.para }
+      : { ok: false as const, error: resultado.error };
   });
 
 /* ==========================================================================
@@ -224,8 +358,6 @@ export const emitirFactura = createServerFn({ method: "POST" })
  * pase del límite ni salgan dos documentos para el mismo pedido lo impide la
  * base, en emitir_factura(). Aquí solo se reúnen los datos y se llama.
  * ========================================================================== */
-
-type Sb = any;
 
 /** Miembro de la tienda o administrador. SECURITY DEFINER no mira la RLS, así que se mira aquí. */
 async function comprobarAccesoTienda(sb: Sb, tiendaId: string, userId: string) {
