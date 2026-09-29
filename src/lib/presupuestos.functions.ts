@@ -50,6 +50,8 @@ export type Presupuesto = {
   total: number;
   notas: string | null;
   pedido_id: string | null;
+  /** El pedido que salió al confirmarlo, si salió. */
+  pedido: { numero: string } | null;
   created_at: string;
   items: LineaPresupuestoGuardada[];
 };
@@ -61,7 +63,7 @@ export const listPresupuestosTienda = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ tiendaId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: filas, error } = await tabla(context.supabase, "presupuestos")
-      .select("*, items:presupuesto_items(*)")
+      .select("*, items:presupuesto_items(*), pedido:pedidos(numero)")
       .eq("tienda_id", data.tiendaId)
       .order("fecha", { ascending: false })
       .order("numero", { ascending: false });
@@ -217,4 +219,23 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
     const { error } = await tabla(context.supabase, "presupuestos").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+/**
+ * Confirma un presupuesto: crea su pedido con las mismas líneas e importes, y
+ * lo deja aceptado. Lo hace confirmar_presupuesto() en la base, en una sola
+ * transacción y con el presupuesto bloqueado: dos clics no crean dos pedidos.
+ */
+export const confirmarPresupuesto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const pedidoId = await llamarRpc<string>(context.supabase, "confirmar_presupuesto", {
+      _presupuesto_id: data.id,
+    });
+    const { data: pedido } = await tabla(context.supabase, "pedidos")
+      .select("id, numero")
+      .eq("id", pedidoId)
+      .maybeSingle();
+    return { id: pedidoId, numero: (pedido?.numero as string | undefined) ?? null };
   });

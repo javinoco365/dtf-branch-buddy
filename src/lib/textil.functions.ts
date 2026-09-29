@@ -297,10 +297,15 @@ export const deleteTextilCliente = createServerFn({ method: "POST" })
 export const listPresupuestos = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("textil_presupuestos")
-      .select("*, items:textil_presupuesto_items(*), marca:textil_marcas(id,nombre,color)")
-      .order("fecha", { ascending: false });
+    const campos = "*, items:textil_presupuesto_items(*), marca:textil_marcas(id,nombre,color)";
+    const leer = (select: string) =>
+      context.supabase.from("textil_presupuestos").select(select).order("fecha", {
+        ascending: false,
+      });
+    // Con el pedido que salió de cada uno. Sin la migración que añade
+    // pedido_id, PostgREST no encuentra la relación (PGRST200): se lee sin él.
+    let { data, error } = await leer(`${campos}, pedido:textil_pedidos(numero)`);
+    if (error?.code === "PGRST200") ({ data, error } = await leer(campos));
     if (error) throw error;
     return data ?? [];
   });
@@ -550,6 +555,15 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
 
     let presupuestoId = id;
     if (id) {
+      // select("*"): pedido_id solo existe con la migración de confirmar.
+      const { data: actual } = await context.supabase
+        .from("textil_presupuestos")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if ((actual as { pedido_id?: string | null } | null)?.pedido_id) {
+        throw new Error("Este presupuesto ya es un pedido: no se puede cambiar.");
+      }
       const { error } = await context.supabase
         .from("textil_presupuestos")
         .update(payload)
@@ -611,13 +625,14 @@ export const updatePresupuestoEstado = createServerFn({ method: "POST" })
   });
 
 /**
- * Convierte un presupuesto aceptado en factura.
+ * Confirma un presupuesto textil: crea su pedido con las mismas líneas y lo
+ * deja aceptado y enlazado. El textil no va por factura: lo que se cobra del
+ * pedido va a Cobros, y de ahí a la Facturación Consolidada.
  *
- * El número lo asigna emitir_factura_textil() en la base, con la fila de la
- * serie bloqueada durante toda la emisión: una factura no puede tener huecos.
- * El contador de presupuestos y pedidos no vale aquí, porque sí los admite.
+ * El pedido se guarda por el mismo camino que el formulario de pedidos, así
+ * que aparta el stock igual y, si no hay existencias, falla igual.
  */
-export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
+export const confirmarPresupuestoTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
@@ -625,44 +640,59 @@ export const convertirPresupuestoEnFactura = createServerFn({ method: "POST" })
       .from("textil_presupuestos")
       .select("*, items:textil_presupuesto_items(*)")
       .eq("id", data.id)
-      .single();
-    if (error) throw error;
-    if (pres.factura_id) throw new Error("Este presupuesto ya está facturado");
-    if (!pres.items?.length) throw new Error("El presupuesto no tiene líneas");
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!pres) throw new Error("Sin acceso a este presupuesto");
+    const p = pres as any;
+    if (p.pedido_id) throw new Error(`El presupuesto ${p.numero} ya es un pedido`);
+    if (p.estado === "rechazado") {
+      throw new Error(`El presupuesto ${p.numero} está rechazado: no se confirma`);
+    }
+    if (!p.items?.length) throw new Error("El presupuesto no tiene líneas");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const hoy = new Date();
+    const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+    const { id: pedidoId } = await guardarPedidoTextil(context.supabase, {
+      cliente_id: p.cliente_id ?? null,
+      cliente_nombre: p.cliente_nombre ?? null,
+      cliente_email: p.cliente_email ?? null,
+      marca_id: p.marca_id ?? null,
+      fecha,
+      estado: "pendiente",
+      metodo_pago: null,
+      envio: 0,
+      notas: [`Del presupuesto ${p.numero}`, p.notas?.trim()].filter(Boolean).join("\n"),
+      items: p.items.map((it: any) => ({
+        descripcion: it.descripcion,
+        cantidad: Number(it.cantidad),
+        precio_unitario: Number(it.precio_unitario),
+        iva_pct: Number(it.iva_pct),
+        stock_id: it.stock_id ?? null,
+      })),
+    });
 
-    const factura = await llamarRpcTextil<{ id: string; numero: string; total: number }>(
-      supabaseAdmin,
-      "emitir_factura_textil",
-      {
-        _usuario_id: context.userId,
-        _receptor: {
-          nombre: pres.cliente_nombre,
-          email: pres.cliente_email,
-          nif: pres.cliente_nif,
-          direccion: pres.cliente_direccion,
-        },
-        _lineas: pres.items.map((it: any) => ({
-          descripcion: it.descripcion,
-          cantidad: Number(it.cantidad),
-          unidad: "ud",
-          precio_unitario: Number(it.precio_unitario),
-          iva_rate: Number(it.iva_pct),
-        })),
-        _marca_id: pres.marca_id,
-        _cliente_id: pres.cliente_id,
-        _presupuesto_id: pres.id,
-        _notas: pres.notas,
-      },
-    );
+    // Solo si nadie lo confirmó mientras tanto.
+    const { data: enlazados, error: errEnlace } = await tabla(
+      context.supabase,
+      "textil_presupuestos",
+    )
+      .update({ pedido_id: pedidoId, estado: "aceptado" })
+      .eq("id", p.id)
+      .is("pedido_id", null)
+      .select("id");
+    if (errEnlace) throw new Error(errEnlace.message);
+    if (!enlazados?.length) {
+      throw new Error(
+        `El presupuesto ${p.numero} se ha confirmado a la vez desde otro sitio: revisa Pedidos por si hay uno de más.`,
+      );
+    }
 
-    await context.supabase
-      .from("textil_presupuestos")
-      .update({ estado: "facturado", factura_id: factura.id })
-      .eq("id", pres.id);
-
-    return { facturaId: factura.id, numero: factura.numero };
+    const { data: pedido } = await context.supabase
+      .from("textil_pedidos")
+      .select("numero")
+      .eq("id", pedidoId)
+      .maybeSingle();
+    return { id: pedidoId, numero: (pedido?.numero as string | undefined) ?? null };
   });
 
 // ============ FACTURAS ============
@@ -736,84 +766,94 @@ const pedidoSchema = z.object({
 export const upsertTextilPedido = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => pedidoSchema.parse(d))
-  .handler(async ({ data, context }) => {
-    const { items, id, ...header } = data;
-    // El envío dentro de la base imponible, artículo 78 LIVA. Antes se sumaba
-    // al total después del IVA.
-    const totals = calcularTotales(items, header.envio ?? 0);
+  .handler(async ({ data, context }) => guardarPedidoTextil(context.supabase, data));
 
-    // Lo que este pedido ya tenía apartado, para no contarlo dos veces al editar.
-    const previos = id ? await itemsDelPedido(context.supabase, id) : new Map<string, number>();
-    const estadoPrevio = id ? await estadoDelPedido(context.supabase, id) : null;
-    const nuevos = agruparStock(items);
-    if (header.estado !== "cancelado") {
-      await validarDisponibilidad(context.supabase, nuevos, previos);
+/**
+ * Alta o edición de un pedido textil, con su stock: reservas mientras no
+ * sale, movimientos del libro cuando sale. Lo usan el formulario de pedidos y
+ * «Confirmar presupuesto», para que los dos caminos hagan exactamente lo mismo.
+ */
+async function guardarPedidoTextil(
+  supabase: any,
+  data: z.infer<typeof pedidoSchema>,
+): Promise<{ id: string }> {
+  const { items, id, ...header } = data;
+  // El envío dentro de la base imponible, artículo 78 LIVA. Antes se sumaba
+  // al total después del IVA.
+  const totals = calcularTotales(items, header.envio ?? 0);
+
+  // Lo que este pedido ya tenía apartado, para no contarlo dos veces al editar.
+  const previos = id ? await itemsDelPedido(supabase, id) : new Map<string, number>();
+  const estadoPrevio = id ? await estadoDelPedido(supabase, id) : null;
+  const nuevos = agruparStock(items);
+  if (header.estado !== "cancelado") {
+    await validarDisponibilidad(supabase, nuevos, previos);
+  }
+
+  const payload = {
+    ...header,
+    subtotal: totals.subtotal,
+    iva: totals.iva,
+    total: totals.total,
+  };
+  let pedidoId = id;
+  if (id) {
+    const { error } = await supabase.from("textil_pedidos").update(payload).eq("id", id);
+    if (error) throw error;
+    await supabase.from("textil_pedido_items").delete().eq("pedido_id", id);
+  } else {
+    const numero = await nextNumero(supabase, "textil_pedido", "TPD");
+    const { data: row, error } = await supabase
+      .from("textil_pedidos")
+      .insert({ ...payload, numero })
+      .select("id")
+      .single();
+    if (error) throw error;
+    pedidoId = row.id;
+  }
+  const { error: itErr } = await supabase.from("textil_pedido_items").insert(
+    totals.itemsCalc.map((it) => ({
+      pedido_id: pedidoId!,
+      descripcion: it.descripcion,
+      cantidad: it.cantidad,
+      precio_unitario: it.precio_unitario,
+      iva_pct: it.iva_pct,
+      subtotal: it.subtotal,
+      stock_id: it.stock_id ?? null,
+    })),
+  );
+  if (itErr) throw itErr;
+
+  // Stock. Mientras el pedido no haya salido, lo único que cambia son las
+  // reservas y el físico no se toca. En cuanto sale, la aritmética es sobre
+  // mercancía de verdad y se anota en el libro.
+  const empresaId = await empresaActiva(supabase);
+  const salioAntes = estadoPrevio !== null && ESTADOS_SALIDA.has(estadoPrevio);
+  const saleAhora = ESTADOS_SALIDA.has(header.estado);
+  // Un pedido cancelado no aparta nada.
+  const objetivo = header.estado === "cancelado" ? new Map<string, number>() : nuevos;
+
+  if (salioAntes && saleAhora) {
+    // Ya estaba entregado y se corrige: solo se mueve la diferencia.
+    const delta = new Map<string, number>();
+    for (const k of new Set([...nuevos.keys(), ...previos.keys()])) {
+      const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
+      if (d !== 0) delta.set(k, d);
     }
-
-    const payload = {
-      ...header,
-      subtotal: totals.subtotal,
-      iva: totals.iva,
-      total: totals.total,
-    };
-    let pedidoId = id;
-    if (id) {
-      const { error } = await context.supabase.from("textil_pedidos").update(payload).eq("id", id);
-      if (error) throw error;
-      await context.supabase.from("textil_pedido_items").delete().eq("pedido_id", id);
-    } else {
-      const numero = await nextNumero(context.supabase, "textil_pedido", "TPD");
-      const { data: row, error } = await context.supabase
-        .from("textil_pedidos")
-        .insert({ ...payload, numero })
-        .select("id")
-        .single();
-      if (error) throw error;
-      pedidoId = row.id;
+    await ajustarStock(supabase, delta, empresaId, pedidoId);
+  } else if (salioAntes && !saleAhora) {
+    // Vuelve atrás: la mercancía regresa a la estantería y queda apartada.
+    await ajustarStock(supabase, negar(previos), empresaId, pedidoId);
+    await sincronizarReservas(supabase, pedidoId!, empresaId, objetivo);
+  } else {
+    await sincronizarReservas(supabase, pedidoId!, empresaId, objetivo);
+    if (saleAhora) {
+      await llamarRpc(supabase, "textil_pedido_entregar", { _pedido_id: pedidoId });
     }
-    const { error: itErr } = await context.supabase.from("textil_pedido_items").insert(
-      totals.itemsCalc.map((it) => ({
-        pedido_id: pedidoId!,
-        descripcion: it.descripcion,
-        cantidad: it.cantidad,
-        precio_unitario: it.precio_unitario,
-        iva_pct: it.iva_pct,
-        subtotal: it.subtotal,
-        stock_id: it.stock_id ?? null,
-      })),
-    );
-    if (itErr) throw itErr;
+  }
 
-    // Stock. Mientras el pedido no haya salido, lo único que cambia son las
-    // reservas y el físico no se toca. En cuanto sale, la aritmética es sobre
-    // mercancía de verdad y se anota en el libro.
-    const empresaId = await empresaActiva(context.supabase);
-    const salioAntes = estadoPrevio !== null && ESTADOS_SALIDA.has(estadoPrevio);
-    const saleAhora = ESTADOS_SALIDA.has(header.estado);
-    // Un pedido cancelado no aparta nada.
-    const objetivo = header.estado === "cancelado" ? new Map<string, number>() : nuevos;
-
-    if (salioAntes && saleAhora) {
-      // Ya estaba entregado y se corrige: solo se mueve la diferencia.
-      const delta = new Map<string, number>();
-      for (const k of new Set([...nuevos.keys(), ...previos.keys()])) {
-        const d = (nuevos.get(k) ?? 0) - (previos.get(k) ?? 0);
-        if (d !== 0) delta.set(k, d);
-      }
-      await ajustarStock(context.supabase, delta, empresaId, pedidoId);
-    } else if (salioAntes && !saleAhora) {
-      // Vuelve atrás: la mercancía regresa a la estantería y queda apartada.
-      await ajustarStock(context.supabase, negar(previos), empresaId, pedidoId);
-      await sincronizarReservas(context.supabase, pedidoId!, empresaId, objetivo);
-    } else {
-      await sincronizarReservas(context.supabase, pedidoId!, empresaId, objetivo);
-      if (saleAhora) {
-        await llamarRpc(context.supabase, "textil_pedido_entregar", { _pedido_id: pedidoId });
-      }
-    }
-
-    return { id: pedidoId };
-  });
+  return { id: pedidoId! };
+}
 
 export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
