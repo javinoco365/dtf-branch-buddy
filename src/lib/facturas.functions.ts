@@ -380,7 +380,7 @@ export const cambiarEstadoCobro = createServerFn({ method: "POST" })
  * ========================================================================== */
 
 export type EstadoSerie = {
-  tipo: "ordinaria" | "rectificativa";
+  tipo: "ordinaria" | "rectificativa" | "simplificada";
   serie: string;
   ejercicio: number;
   numero_inicial: number;
@@ -425,7 +425,7 @@ export const fijarInicioSerie = createServerFn({ method: "POST" })
       .object({
         empresa_id: z.string().uuid(),
         ejercicio: z.number().int(),
-        tipo: z.enum(["ordinaria", "rectificativa"]),
+        tipo: z.enum(["ordinaria", "rectificativa", "simplificada"]),
         siguiente: z.number().int().min(1, "La próxima factura no puede ser la número 0"),
       })
       .parse(d),

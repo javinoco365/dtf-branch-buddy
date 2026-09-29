@@ -33,6 +33,9 @@ type EmpresaForm = {
   coste_electricidad_metro: number;
   serie_factura: string;
   serie_rectificativa: string;
+  serie_simplificada: string;
+  limite_simplificada: number;
+  limite_simplificada_particular: number;
 };
 
 const EMPTY: EmpresaForm = {
@@ -50,6 +53,9 @@ const EMPTY: EmpresaForm = {
   coste_electricidad_metro: 0,
   serie_factura: "",
   serie_rectificativa: "R",
+  serie_simplificada: "T",
+  limite_simplificada: 400,
+  limite_simplificada_particular: 3000,
 };
 
 function EmpresaPage() {
@@ -80,6 +86,9 @@ function EmpresaPage() {
         coste_electricidad_metro: Number(data.coste_electricidad_metro ?? 0),
         serie_factura: data.serie_factura ?? "",
         serie_rectificativa: data.serie_rectificativa ?? "R",
+        serie_simplificada: data.serie_simplificada ?? "T",
+        limite_simplificada: Number(data.limite_simplificada ?? 400),
+        limite_simplificada_particular: Number(data.limite_simplificada_particular ?? 3000),
       });
     }
   }, [data]);
@@ -91,7 +100,17 @@ function EmpresaPage() {
     setSaving(true);
     try {
       if (!data?.id) throw new Error("No hay ninguna empresa activa que guardar");
-      await guardarEmpresa(data.id, f);
+      // Sin la migración de tickets aplicada, esas columnas no existen: no se
+      // mandan, o el guardado entero fallaría.
+      const conTickets = "serie_simplificada" in data;
+      const { serie_simplificada, limite_simplificada, limite_simplificada_particular, ...resto } =
+        f;
+      await guardarEmpresa(
+        data.id,
+        conTickets
+          ? { ...resto, serie_simplificada, limite_simplificada, limite_simplificada_particular }
+          : resto,
+      );
       toast.success("Datos de la empresa guardados");
       qc.invalidateQueries({ queryKey: CLAVE_EMPRESA });
     } catch (e: any) {
@@ -202,14 +221,15 @@ function EmpresaPage() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Las rectificativas llevan serie propia por obligación legal (RD 1619/2012 art.
-                    6.1.a), y por eso los dos prefijos no pueden ser iguales.
+                    6.1.a), y los tickets (facturas simplificadas) también van aparte: los tres
+                    prefijos tienen que ser distintos.
                   </p>
                   <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
                     Cambiar un prefijo abre una serie nueva que empieza otra vez por 1. No lo toques
                     con facturas ya emitidas este año.
                   </p>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <Field
                     label="Prefijo ordinario"
                     v={f.serie_factura}
@@ -224,6 +244,34 @@ function EmpresaPage() {
                     disabled={!isAdmin}
                     placeholder="R"
                   />
+                  <Field
+                    label="Prefijo de tickets"
+                    v={f.serie_simplificada}
+                    on={(v) => set("serie_simplificada", v)}
+                    disabled={!isAdmin}
+                    placeholder="T"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Hasta dónde puede llegar un ticket, IVA incluido (RD 1619/2012 art. 4). Por
+                    encima hay que emitir factura completa con los datos del cliente.
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <NumberField
+                      label="Límite general (€)"
+                      v={f.limite_simplificada}
+                      on={(v) => set("limite_simplificada", v)}
+                      disabled={!isAdmin}
+                    />
+                    <NumberField
+                      label="Límite a particulares (€)"
+                      v={f.limite_simplificada_particular}
+                      on={(v) => set("limite_simplificada_particular", v)}
+                      disabled={!isAdmin}
+                    />
+                  </div>
                 </div>
 
                 {data?.id && <PorDondeVaLaNumeracion empresaId={data.id} isAdmin={isAdmin} />}
@@ -360,6 +408,12 @@ function Field({
   );
 }
 
+const ETIQUETA_SERIE: Record<EstadoSerie["tipo"], string> = {
+  ordinaria: "Ordinaria",
+  rectificativa: "Rectificativa",
+  simplificada: "Tickets",
+};
+
 /**
  * Por dónde va la numeración, y por dónde empieza.
  *
@@ -409,7 +463,7 @@ function PorDondeVaLaNumeracion({ empresaId, isAdmin }: { empresaId: string; isA
       <p className="text-xs font-medium">Por dónde va la numeración de {ejercicio}</p>
       {data.series.map((s) => (
         <div key={s.tipo} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <span className="w-28 shrink-0 capitalize text-muted-foreground">{s.tipo}</span>
+          <span className="w-28 shrink-0 text-muted-foreground">{ETIQUETA_SERIE[s.tipo]}</span>
           <span className="font-medium tabular-nums">
             {s.emitidas === 0
               ? `sin facturas · la próxima será la ${s.proximo_numero}`

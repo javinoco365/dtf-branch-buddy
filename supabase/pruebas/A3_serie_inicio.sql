@@ -165,9 +165,10 @@ WHEN OTHERS THEN
 END $$;
 RESET ROLE;
 
--- 14. Pero si puede leer en que punto va la numeracion.
+-- 14. Pero si puede leer en que punto va la numeracion: ordinaria,
+--     rectificativa y tickets.
 SET ROLE authenticated;
-SELECT CASE WHEN count(*) = 2
+SELECT CASE WHEN count(*) = 3
             THEN 'BIEN 14. authenticated si puede leer el estado de las series'
             ELSE 'MAL  14. ha devuelto ' || count(*) || ' series' END
 FROM public.serie_estado(current_setting('prueba.empresa')::UUID,
