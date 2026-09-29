@@ -6,6 +6,22 @@ import { generarFacturaPDF } from "@/lib/pdf-factura";
 import type { TicketPDFData } from "@/lib/pdf-ticket";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
+// El dominio se importa aquí arriba y no con await import() dentro de cada
+// función: un módulo que se carga de las dos formas obliga al empaquetador a
+// generar un auxiliar que acabó en el arranque del servidor, en una
+// importación circular que tiró el panel entero en producción («This page
+// didn't load»). Son módulos puros y pequeños: no hay nada que ganar
+// cargándolos a demanda.
+import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { calcularTotales } from "@/dominio/importes";
+import {
+  LIMITES_TICKET,
+  clasificarParaTickets,
+  decidirDocumento,
+  documentoVigente,
+  esTipoFiscal,
+  estaCobrado,
+} from "@/dominio/tickets";
 
 // El cliente de servicio, sin tipar de más: types.ts no conoce varias de estas tablas.
 type Sb = any;
@@ -375,7 +391,6 @@ async function comprobarAccesoTienda(sb: Sb, tiendaId: string, userId: string) {
 
 /** Los límites del ticket de la empresa. Sin la migración de tickets, los de la ley. */
 async function leerLimitesTicket(sb: Sb, empresaId: string | null) {
-  const { LIMITES_TICKET } = await import("@/dominio/tickets");
   if (!empresaId) return LIMITES_TICKET;
   const { data } = await tabla(sb, "empresas")
     .select("limite_simplificada, limite_simplificada_particular")
@@ -416,9 +431,6 @@ async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
 
 /** Todo lo que hace falta para emitir el documento de un pedido. Solo lee. */
 async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string) {
-  const { receptorDesdePedido, lineasDesdePedido } = await import("@/dominio/factura-desde-pedido");
-  const { documentoVigente, esTipoFiscal } = await import("@/dominio/tickets");
-
   // tabla() y no .from(): direccion_facturacion no está en types.ts.
   const { data: pedido, error: pErr } = await tabla(sb, "pedidos")
     .select(
@@ -478,8 +490,6 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { calcularTotales } = await import("@/dominio/importes");
-    const { decidirDocumento } = await import("@/dominio/tickets");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
@@ -599,8 +609,6 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { clasificarParaTickets, documentoVigente, estaCobrado, esTipoFiscal } =
-      await import("@/dominio/tickets");
     const sb = adminComoUsuario(context.userId);
     await comprobarAccesoTienda(sb, data.tienda_id, context.userId);
 
@@ -720,8 +728,6 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario, supabaseAdmin } =
       await import("@/integrations/supabase/client.server");
-    const { calcularTotales } = await import("@/dominio/importes");
-    const { decidirDocumento } = await import("@/dominio/tickets");
     const sb = adminComoUsuario(context.userId);
     const fecha = new Date().toISOString().slice(0, 10);
 

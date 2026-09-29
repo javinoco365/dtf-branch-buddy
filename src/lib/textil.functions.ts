@@ -9,6 +9,14 @@ import {
   calcularTotales as calcularTotalesDominio,
   redondear as redondearImporte,
 } from "@/dominio/importes";
+// El dominio se importa aquí arriba y no con await import() dentro de cada
+// función: un módulo que se carga de las dos formas obliga al empaquetador a
+// generar un auxiliar que acabó en el arranque del servidor, en una
+// importación circular que tiró el panel entero en producción («This page
+// didn't load»). Son módulos puros y pequeños: no hay nada que ganar
+// cargándolos a demanda.
+import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1122,9 +1130,6 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
 
 /** Todo lo que hace falta para el documento de un pedido textil. Solo lee. */
 async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
-  const { receptorDesdePedido, lineasDesdePedido } = await import("@/dominio/factura-desde-pedido");
-  const { documentoVigente, esTipoFiscal, LIMITES_TICKET } = await import("@/dominio/tickets");
-
   const { data: pedido, error } = await supabase
     .from("textil_pedidos")
     .select("id, numero, cliente_id, cliente_nombre, cliente_email, marca_id, envio, notas")
@@ -1204,7 +1209,6 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ textil_pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { calcularTotales } = await import("@/dominio/importes");
     const { pedido, vigente, receptor, lineas, limites, tipoFiscal } =
       await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
 
@@ -1221,7 +1225,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       ya_facturado: false as const,
       receptor,
       lineas,
-      total: calcularTotales(lineas).total,
+      total: calcularTotalesDominio(lineas).total,
       tipo_fiscal: tipoFiscal,
       limites,
       notas: (pedido.notas as string | null) ?? null,
