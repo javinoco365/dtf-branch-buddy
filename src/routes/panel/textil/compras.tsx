@@ -243,7 +243,7 @@ function ComprasPage() {
       </BarraFiltros>
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha</TableHead>
@@ -408,7 +408,7 @@ function RevisarCompra({
         />
       </div>
 
-      <Table>
+      <Table movil="tarjetas">
         <TableHeader>
           <TableRow>
             <TableHead>Concepto</TableHead>

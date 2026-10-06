@@ -153,7 +153,7 @@ function InversionPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>Socio</TableHead>
@@ -224,7 +224,7 @@ function InversionPage() {
       </BarraFiltros>
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-28">Fecha</TableHead>

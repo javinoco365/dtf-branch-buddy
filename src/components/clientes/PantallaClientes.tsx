@@ -270,7 +270,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
@@ -750,7 +750,7 @@ function Historial({
       </h3>
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>Número</TableHead>

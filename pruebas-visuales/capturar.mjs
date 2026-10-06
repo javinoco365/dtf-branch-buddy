@@ -103,6 +103,17 @@ for (const [tamano, viewport] of Object.entries(TAMANOS)) {
       content: "*, *::before, *::after { transition: none !important; }",
     });
     await pagina.waitForTimeout(1500);
+    // La captura de página entera cambia el tamaño de la ventana, y eso hace
+    // que las gráficas se redibujen con animación: la foto las pillaba a
+    // medias, y a medias distintas según lo que tardase la página. Así que
+    // primero se agranda la ventana a lo que mide la página, se deja que las
+    // gráficas terminen, y luego se hace la foto.
+    const alto = await pagina.evaluate(() => document.documentElement.scrollHeight);
+    await pagina.setViewportSize({
+      width: viewport.width,
+      height: Math.max(alto, viewport.height),
+    });
+    await pagina.waitForTimeout(2000);
     await pagina.screenshot({
       path: join(carpeta, tamano, `${nombre}.png`),
       fullPage: true,

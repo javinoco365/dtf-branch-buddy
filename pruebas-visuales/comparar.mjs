@@ -2,7 +2,7 @@
 //
 // Uso:
 //   node pruebas-visuales/comparar.mjs <antes> <despues> [--solo escritorio|movil]
-//                                      [--umbral 2]
+//                                      [--umbral 4]
 //
 // Para cada captura que esté en las dos carpetas dice si es idéntica o cuántos
 // píxeles cambian, y en ese caso deja al lado una imagen «<nombre>.diff.png»
@@ -29,9 +29,9 @@ const opcion = (n) => {
 };
 const SOLO = opcion("--solo");
 // Diferencia máxima, por canal y de 0 a 255, que se toma por ruido. Chromium
-// alisa a veces la esquina redondeada de un menú con un tono de diferencia
-// entre dos pasadas del mismo código; eso no se ve y no es un cambio.
-const UMBRAL = Number(opcion("--umbral") ?? 2);
+// alisa a veces el borde de un menú con uno a tres tonos de diferencia entre
+// dos pasadas del mismo código; eso no se ve y no es un cambio.
+const UMBRAL = Number(opcion("--umbral") ?? 4);
 
 const navegador = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || undefined,

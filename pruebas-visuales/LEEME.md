@@ -82,8 +82,8 @@ esa captura.
   Madrid), y los datos están alrededor de esa fecha. Si se cambia una, hay que
   cambiar la otra.
 - **Ruido de un tono.** Entre dos pasadas del mismo código, Chromium a veces
-  alisa distinto la esquina redondeada de un menú: un canal cambia en 1 de 255.
-  `comparar.mjs` no cuenta como cambio una diferencia de 2 o menos por canal;
+  alisa distinto el borde de un menú: un canal cambia en 1 a 3 de 255.
+  `comparar.mjs` no cuenta como cambio una diferencia de 4 o menos por canal;
   `--umbral 0` lo hace estricto.
 - **El móvil no se compara contra nada fijo**: es lo que se está arreglando. Se
   mira a ojo.
