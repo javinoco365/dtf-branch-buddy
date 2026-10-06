@@ -188,7 +188,7 @@ function Ajustes() {
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto max-md:h-auto">
           <TabsTrigger value="woo" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             WooCommerce

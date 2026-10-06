@@ -495,7 +495,7 @@ function FacturacionGlobal() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <Table>
+                <Table movil="tarjetas">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tienda</TableHead>
@@ -551,7 +551,7 @@ function FacturacionGlobal() {
                 <CardTitle className="text-base">Por método de cobro</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
+                <Table movil="tarjetas">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Método</TableHead>
@@ -693,7 +693,7 @@ function FacturacionGlobal() {
             </CardHeader>
             <CardContent>
               <div className="max-h-[480px] overflow-auto">
-                <Table>
+                <Table movil="tarjetas">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Cobro</TableHead>

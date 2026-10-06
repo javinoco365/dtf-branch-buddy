@@ -349,7 +349,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             Semana
           </Button>
         </div>
-        <div className="inline-flex items-center gap-1">
+        <div className="inline-flex items-center gap-1 max-md:w-full">
           <Button
             variant="outline"
             size="icon"
@@ -357,7 +357,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="min-w-[180px] text-center text-sm font-medium capitalize">
+          <div className="min-w-[180px] text-center text-sm font-medium capitalize max-md:min-w-0 max-md:flex-1">
             {tituloPeriodo}
           </div>
           <Button
@@ -371,7 +371,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             Hoy
           </Button>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2 max-md:ml-0 max-md:flex-wrap">
           {/* Solo con una tienda delante: sincronizar «todas» no significa
               nada, cada una tiene sus credenciales y su web. */}
           {tiendaId && (
@@ -413,7 +413,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           </div>
           {!tiendaId && (
             <Select value={f.tienda} onValueChange={(tienda) => cambiar({ tienda })}>
-              <SelectTrigger className="w-[170px]" aria-label="Tienda">
+              <SelectTrigger className="w-[170px] max-md:w-[calc(50%-0.25rem)]" aria-label="Tienda">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -427,7 +427,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </Select>
           )}
           <Select value={estadoFiltro} onValueChange={(estado) => cambiar({ estado })}>
-            <SelectTrigger className="w-[170px]" aria-label="Estado">
+            <SelectTrigger className="w-[170px] max-md:w-[calc(50%-0.25rem)]" aria-label="Estado">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
             <SelectContent>
@@ -441,7 +441,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           </Select>
           {cobrosDisponibles && (
             <Select value={f.cobro} onValueChange={(cobro) => cambiar({ cobro })}>
-              <SelectTrigger className="w-[170px]" aria-label="Cobro">
+              <SelectTrigger className="w-[170px] max-md:w-[calc(50%-0.25rem)]" aria-label="Cobro">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -453,7 +453,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </Select>
           )}
           <Select value={f.origen} onValueChange={(origen) => cambiar({ origen })}>
-            <SelectTrigger className="w-[150px]" aria-label="Origen">
+            <SelectTrigger className="w-[150px] max-md:w-[calc(50%-0.25rem)]" aria-label="Origen">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -503,17 +503,39 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         {grupos.map((g) => (
           <div key={g.fecha}>
             <div className="flex items-center justify-between pb-2 border-b mb-2">
-              <div className="text-sm font-semibold uppercase tracking-wider text-primary">
+              <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:text-xs">
                 {format(new Date(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{eur(g.total)}</span>
-                <Badge variant="outline">
+                <Badge variant="outline" className="whitespace-nowrap">
                   {g.lista.length} {g.lista.length === 1 ? "pedido" : "pedidos"}
                 </Badge>
               </div>
             </div>
-            <Card>
+            {/* En el móvil, una tarjeta por pedido: una tabla de once columnas
+                no cabe en 390 px y desplazarla de lado esconde lo importante. */}
+            <div className="space-y-2 md:hidden">
+              {g.lista.map((p) => {
+                const abierta = expandida === p.id;
+                return (
+                  <TarjetaPedido
+                    key={p.id}
+                    pedido={p}
+                    abierta={abierta}
+                    mostrarTienda={!tiendaId}
+                    onToggle={() => setExpandida(abierta ? null : p.id)}
+                    onEstadoChange={(estado) => estadoMut.mutate({ id: p.id, estado })}
+                    onEditar={() => setEditar(p)}
+                    onTracking={() => setTracking(p)}
+                    onBorrar={() => setBorrar(p)}
+                    onFacturar={() => setFacturar(p)}
+                    onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
+                  />
+                );
+              })}
+            </div>
+            <Card className="max-md:hidden">
               <CardContent className="p-0">
                 {/*
                   Cada día es una tabla aparte, y una tabla HTML reparte el
@@ -527,17 +549,25 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   Solo Cliente se queda sin ancho fijo: se lleva lo que sobre.
                   El `min-w` es para que en pantallas estrechas la tabla se
                   desplace en horizontal en vez de estrujar las columnas.
+
+                  Ojo con la suma: los anchos fijos dan 912 px, así que a
+                  Cliente le quedan al menos 168 y unos 220 en un portátil de
+                  1440. Llegaron a sumar 1184, más que la propia tabla, y
+                  Cliente se quedaba en cero: el nombre desaparecía y su
+                  cabecera se montaba encima de la de Tienda. Por eso la tienda
+                  va debajo del número y el método de pago debajo del total.
+                  Si se añade una columna, que le quite el sitio a otra.
                 */}
                 <Table className="table-fixed min-w-[1080px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead className="w-40">Nº Pedido</TableHead>
+                      <TableHead className="w-40">
+                        {tiendaId ? "Nº Pedido" : "Nº Pedido · Tienda"}
+                      </TableHead>
                       <TableHead>Cliente</TableHead>
-                      {!tiendaId && <TableHead className="w-32">Tienda</TableHead>}
-                      <TableHead className="w-36">Origen</TableHead>
-                      <TableHead className="w-40">Estado</TableHead>
-                      <TableHead className="w-28">Pago</TableHead>
+                      <TableHead className="w-32">Origen</TableHead>
+                      <TableHead className="w-36">Estado</TableHead>
                       <TableHead className="w-28 text-right">Total</TableHead>
                       <TableHead className="w-28 text-right">Cobrado</TableHead>
                       <TableHead className="w-28 text-right">Pendiente</TableHead>
@@ -657,18 +687,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   );
 }
 
-function FilaPedido({
-  pedido,
-  abierta,
-  mostrarTienda,
-  onToggle,
-  onEstadoChange,
-  onEditar,
-  onTracking,
-  onBorrar,
-  onFacturar,
-  onCobros,
-}: {
+type PropsPedido = {
   pedido: PedidoFila;
   abierta: boolean;
   mostrarTienda: boolean;
@@ -680,19 +699,35 @@ function FilaPedido({
   onFacturar: () => void;
   /** Sin él, la migración de cobros no está aplicada y no se ofrece. */
   onCobros?: () => void;
-}) {
+};
+
+// El número que ve el cliente, siempre. Antes esta línea era al revés: si
+// el pedido venía de WooCommerce se pintaba `#` + el id interno de
+// WordPress, tirando a la basura el `numero` que la sincronización ya
+// guardaba bien. Con un plugin de numeración eso enseñaba #432 donde el
+// cliente tiene DCUL-23-2026, y al llamar preguntando por su pedido no
+// había forma de encontrarlo.
+//
+// El id solo se usa si no hay número, que es lo único que puede pasarle a
+// un pedido importado antes de que existiera esa columna.
+function numeroVisible(pedido: PedidoFila) {
+  return pedido.numero?.trim() || (pedido.woo_order_id ? `#${pedido.woo_order_id}` : "—");
+}
+
+function FilaPedido({
+  pedido,
+  abierta,
+  mostrarTienda,
+  onToggle,
+  onEstadoChange,
+  onEditar,
+  onTracking,
+  onBorrar,
+  onFacturar,
+  onCobros,
+}: PropsPedido) {
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
-  // El número que ve el cliente, siempre. Antes esta línea era al revés: si
-  // el pedido venía de WooCommerce se pintaba `#` + el id interno de
-  // WordPress, tirando a la basura el `numero` que la sincronización ya
-  // guardaba bien. Con un plugin de numeración eso enseñaba #432 donde el
-  // cliente tiene DCUL-23-2026, y al llamar preguntando por su pedido no
-  // había forma de encontrarlo.
-  //
-  // El id solo se usa si no hay número, que es lo único que puede pasarle a
-  // un pedido importado antes de que existiera esa columna.
-  const numeroLabel =
-    pedido.numero?.trim() || (pedido.woo_order_id ? `#${pedido.woo_order_id}` : "—");
+  const numeroLabel = numeroVisible(pedido);
   const cancelado = pedido.estado === "cancelado";
   const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
 
@@ -702,7 +737,17 @@ function FilaPedido({
         <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
-        <TableCell className="font-mono text-sm truncate">{numeroLabel}</TableCell>
+        <TableCell>
+          <div className="font-mono text-sm truncate">{numeroLabel}</div>
+          {mostrarTienda && (
+            <div
+              className="text-xs text-muted-foreground truncate"
+              title={pedido.tienda_nombre ?? undefined}
+            >
+              {pedido.tienda_nombre ?? "—"}
+            </div>
+          )}
+        </TableCell>
         <TableCell>
           {/* Con table-fixed la celda ya no se estira: un correo largo se
               recorta con puntos suspensivos en vez de descuadrar la fila.
@@ -716,11 +761,6 @@ function FilaPedido({
             </div>
           )}
         </TableCell>
-        {mostrarTienda && (
-          <TableCell className="text-xs text-muted-foreground truncate">
-            {pedido.tienda_nombre ?? "—"}
-          </TableCell>
-        )}
         <TableCell>
           <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
             {origenLabel}
@@ -730,32 +770,16 @@ function FilaPedido({
           {/* Se ve como el Origen, una etiqueta y ya. Sigue cambiándose: la
               etiqueta abre el menú. Un desplegable por fila llenaba la tabla
               de cajas y hacía difícil leer la columna de un vistazo. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" title="Cambiar el estado">
-                <Badge
-                  variant={estadoVariant(pedido.estado)}
-                  className="cursor-pointer hover:opacity-80"
-                >
-                  {ESTADO_LABEL[pedido.estado] ?? pedido.estado}
-                </Badge>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {ESTADOS.map((e) => (
-                <DropdownMenuItem key={e} onClick={() => onEstadoChange(e)}>
-                  <Badge variant={estadoVariant(e)} className="mr-2">
-                    {ESTADO_LABEL[e]}
-                  </Badge>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
         </TableCell>
-        <TableCell className="text-xs text-muted-foreground max-w-[140px]">
-          {pedido.metodo_pago ?? "—"}
+        <TableCell className="text-right">
+          <div className="font-semibold">{eur(pedido.total)}</div>
+          {pedido.metodo_pago && (
+            <div className="text-xs text-muted-foreground truncate" title={pedido.metodo_pago}>
+              {pedido.metodo_pago}
+            </div>
+          )}
         </TableCell>
-        <TableCell className="text-right font-semibold">{eur(pedido.total)}</TableCell>
         <TableCell className="text-right tabular-nums">
           {onCobros ? eur(cobro.cobrado) : "—"}
         </TableCell>
@@ -795,101 +819,259 @@ function FilaPedido({
           </Button>
         </TableCell>
         <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
-              <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
-              {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
-              <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>
-              <DropdownMenuItem onClick={onBorrar} className="text-destructive">
-                Borrar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <MenuAcciones
+            onEditar={onEditar}
+            onTracking={onTracking}
+            onCobros={onCobros}
+            onFacturar={onFacturar}
+            onBorrar={onBorrar}
+          />
         </TableCell>
       </TableRow>
       {abierta && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
-          <TableCell colSpan={mostrarTienda ? 11 : 10}>
-            <div className="py-2 space-y-2">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Líneas del pedido
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead className="text-right">Cantidad</TableHead>
-                    <TableHead className="text-right">Precio</TableHead>
-                    <TableHead className="text-right">Subtotal</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pedido.items.map((l) => (
-                    <TableRow key={l.id}>
-                      <TableCell>{l.descripcion}</TableCell>
-                      <TableCell className="text-right">
-                        {l.cantidad} {l.unidad}
-                      </TableCell>
-                      <TableCell className="text-right">{eur(l.precio_unitario)}</TableCell>
-                      <TableCell className="text-right font-medium">{eur(l.subtotal)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="grid grid-cols-4 gap-4 pt-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Subtotal:</span>{" "}
-                  <span className="font-medium">{eur(pedido.subtotal)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">IVA:</span>{" "}
-                  <span className="font-medium">{eur(pedido.iva)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Envío:</span>{" "}
-                  <span className="font-medium">{eur(pedido.envio)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total:</span>{" "}
-                  <span className="font-semibold">{eur(pedido.total)}</span>
-                </div>
-              </div>
-              <DatosDelCliente pedido={pedido} />
-
-              {pedido.tracking?.codigo_seguimiento && (
-                <div className="text-xs text-muted-foreground">
-                  Envío: {pedido.tracking.transportista} ·{" "}
-                  <span className="font-mono">{pedido.tracking.codigo_seguimiento}</span>
-                  {pedido.tracking.url && (
-                    <>
-                      {" · "}
-                      <a
-                        href={pedido.tracking.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        Seguir envío
-                      </a>
-                    </>
-                  )}
-                </div>
-              )}
-              {pedido.notas && (
-                <div className="text-xs text-muted-foreground">Notas: {pedido.notas}</div>
-              )}
-            </div>
+          <TableCell colSpan={9}>
+            <DetallePedido pedido={pedido} />
           </TableCell>
         </TableRow>
       )}
     </>
+  );
+}
+
+/**
+ * El mismo pedido que FilaPedido, en tarjeta, para el móvil. Arriba lo que se
+ * busca de un vistazo (número, cliente, total); debajo el estado y lo que
+ * queda por cobrar, que es lo que se toca; el resto al desplegar.
+ */
+function TarjetaPedido({
+  pedido,
+  abierta,
+  mostrarTienda,
+  onToggle,
+  onEstadoChange,
+  onEditar,
+  onTracking,
+  onBorrar,
+  onFacturar,
+  onCobros,
+}: PropsPedido) {
+  const cancelado = pedido.estado === "cancelado";
+  const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
+  const conTracking = !!pedido.tracking?.codigo_seguimiento;
+
+  return (
+    <Card>
+      <CardContent className="p-3 space-y-2">
+        <div className="flex items-start gap-2">
+          <button
+            type="button"
+            className="flex-1 min-w-0 text-left"
+            onClick={onToggle}
+            aria-expanded={abierta}
+          >
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="font-mono">{numeroVisible(pedido)}</span>
+              {mostrarTienda && pedido.tienda_nombre && (
+                <span className="truncate">· {pedido.tienda_nombre}</span>
+              )}
+            </div>
+            <div className="font-medium truncate">{pedido.cliente_nombre ?? "—"}</div>
+            {pedido.cliente_email && (
+              <div className="text-xs text-muted-foreground truncate">{pedido.cliente_email}</div>
+            )}
+          </button>
+          <div className="text-right shrink-0">
+            <div className="font-semibold tabular-nums">{eur(pedido.total)}</div>
+            <div className="text-xs text-muted-foreground">{pedido.metodo_pago ?? ""}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
+          <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
+            {pedido.origen === "woocommerce" ? "WooCommerce" : "Manual"}
+          </Badge>
+          {onCobros && !cancelado && (
+            <button
+              type="button"
+              className="ml-auto text-right text-sm"
+              title="Ver y registrar cobros"
+              onClick={onCobros}
+            >
+              <span className="tabular-nums font-medium">{eur(Math.max(cobro.pendiente, 0))}</span>{" "}
+              <EstadoCobroTexto estado={cobro.estado} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 border-t pt-2 -mb-1">
+          <Button variant="ghost" size="sm" className="h-8 px-2" onClick={onToggle}>
+            {abierta ? (
+              <ChevronUp className="h-4 w-4 mr-1" />
+            ) : (
+              <ChevronDown className="h-4 w-4 mr-1" />
+            )}
+            {abierta ? "Ocultar" : "Detalle"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 ml-auto"
+            onClick={onTracking}
+            aria-label={conTracking ? "Ver tracking del envío" : "Añadir tracking del envío"}
+          >
+            <Truck
+              className={`h-4 w-4 ${conTracking ? "text-primary" : "text-muted-foreground"}`}
+            />
+          </Button>
+          <MenuAcciones
+            onEditar={onEditar}
+            onTracking={onTracking}
+            onCobros={onCobros}
+            onFacturar={onFacturar}
+            onBorrar={onBorrar}
+          />
+        </div>
+
+        {abierta && (
+          <div className="rounded-md bg-muted/30 px-2">
+            <DetallePedido pedido={pedido} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SelectorEstado({
+  estado,
+  onEstadoChange,
+}: {
+  estado: string;
+  onEstadoChange: (estado: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" title="Cambiar el estado">
+          <Badge variant={estadoVariant(estado)} className="cursor-pointer hover:opacity-80">
+            {ESTADO_LABEL[estado] ?? estado}
+          </Badge>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {ESTADOS.map((e) => (
+          <DropdownMenuItem key={e} onClick={() => onEstadoChange(e)}>
+            <Badge variant={estadoVariant(e)} className="mr-2">
+              {ESTADO_LABEL[e]}
+            </Badge>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MenuAcciones({
+  onEditar,
+  onTracking,
+  onCobros,
+  onFacturar,
+  onBorrar,
+}: {
+  onEditar: () => void;
+  onTracking: () => void;
+  onCobros?: () => void;
+  onFacturar: () => void;
+  onBorrar: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
+        <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
+        {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
+        <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>
+        <DropdownMenuItem onClick={onBorrar} className="text-destructive">
+          Borrar
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Lo que se ve al desplegar un pedido: líneas, totales, cliente y envío. */
+function DetallePedido({ pedido }: { pedido: PedidoFila }) {
+  return (
+    <div className="py-2 space-y-2">
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        Líneas del pedido
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Producto</TableHead>
+            <TableHead className="text-right">Cantidad</TableHead>
+            <TableHead className="text-right">Precio</TableHead>
+            <TableHead className="text-right">Subtotal</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {pedido.items.map((l) => (
+            <TableRow key={l.id}>
+              <TableCell>{l.descripcion}</TableCell>
+              <TableCell className="text-right">
+                {l.cantidad} {l.unidad}
+              </TableCell>
+              <TableCell className="text-right">{eur(l.precio_unitario)}</TableCell>
+              <TableCell className="text-right font-medium">{eur(l.subtotal)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <div className="grid grid-cols-4 gap-4 pt-2 text-sm max-md:grid-cols-2 max-md:gap-2">
+        <div>
+          <span className="text-muted-foreground">Subtotal:</span>{" "}
+          <span className="font-medium">{eur(pedido.subtotal)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">IVA:</span>{" "}
+          <span className="font-medium">{eur(pedido.iva)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Envío:</span>{" "}
+          <span className="font-medium">{eur(pedido.envio)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Total:</span>{" "}
+          <span className="font-semibold">{eur(pedido.total)}</span>
+        </div>
+      </div>
+      <DatosDelCliente pedido={pedido} />
+
+      {pedido.tracking?.codigo_seguimiento && (
+        <div className="text-xs text-muted-foreground">
+          Envío: {pedido.tracking.transportista} ·{" "}
+          <span className="font-mono">{pedido.tracking.codigo_seguimiento}</span>
+          {pedido.tracking.url && (
+            <>
+              {" · "}
+              <a href={pedido.tracking.url} target="_blank" rel="noreferrer" className="underline">
+                Seguir envío
+              </a>
+            </>
+          )}
+        </div>
+      )}
+      {pedido.notas && <div className="text-xs text-muted-foreground">Notas: {pedido.notas}</div>}
+    </div>
   );
 }
 

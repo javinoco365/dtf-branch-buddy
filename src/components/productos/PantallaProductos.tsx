@@ -233,7 +233,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>SKU</TableHead>

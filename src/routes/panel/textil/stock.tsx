@@ -155,7 +155,7 @@ function StockPage() {
       </BarraFiltros>
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>SKU</TableHead>
@@ -662,7 +662,7 @@ function HistorialDialog({ item, onClose }: any) {
         ) : data.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin movimientos.</p>
         ) : (
-          <Table>
+          <Table movil="tarjetas">
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha</TableHead>
