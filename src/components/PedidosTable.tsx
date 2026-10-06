@@ -549,17 +549,25 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   Solo Cliente se queda sin ancho fijo: se lleva lo que sobre.
                   El `min-w` es para que en pantallas estrechas la tabla se
                   desplace en horizontal en vez de estrujar las columnas.
+
+                  Ojo con la suma: los anchos fijos dan 912 px, así que a
+                  Cliente le quedan al menos 168 y unos 220 en un portátil de
+                  1440. Llegaron a sumar 1184, más que la propia tabla, y
+                  Cliente se quedaba en cero: el nombre desaparecía y su
+                  cabecera se montaba encima de la de Tienda. Por eso la tienda
+                  va debajo del número y el método de pago debajo del total.
+                  Si se añade una columna, que le quite el sitio a otra.
                 */}
                 <Table className="table-fixed min-w-[1080px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead className="w-40">Nº Pedido</TableHead>
+                      <TableHead className="w-40">
+                        {tiendaId ? "Nº Pedido" : "Nº Pedido · Tienda"}
+                      </TableHead>
                       <TableHead>Cliente</TableHead>
-                      {!tiendaId && <TableHead className="w-32">Tienda</TableHead>}
-                      <TableHead className="w-36">Origen</TableHead>
-                      <TableHead className="w-40">Estado</TableHead>
-                      <TableHead className="w-28">Pago</TableHead>
+                      <TableHead className="w-32">Origen</TableHead>
+                      <TableHead className="w-36">Estado</TableHead>
                       <TableHead className="w-28 text-right">Total</TableHead>
                       <TableHead className="w-28 text-right">Cobrado</TableHead>
                       <TableHead className="w-28 text-right">Pendiente</TableHead>
@@ -729,7 +737,17 @@ function FilaPedido({
         <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
-        <TableCell className="font-mono text-sm truncate">{numeroLabel}</TableCell>
+        <TableCell>
+          <div className="font-mono text-sm truncate">{numeroLabel}</div>
+          {mostrarTienda && (
+            <div
+              className="text-xs text-muted-foreground truncate"
+              title={pedido.tienda_nombre ?? undefined}
+            >
+              {pedido.tienda_nombre ?? "—"}
+            </div>
+          )}
+        </TableCell>
         <TableCell>
           {/* Con table-fixed la celda ya no se estira: un correo largo se
               recorta con puntos suspensivos en vez de descuadrar la fila.
@@ -743,11 +761,6 @@ function FilaPedido({
             </div>
           )}
         </TableCell>
-        {mostrarTienda && (
-          <TableCell className="text-xs text-muted-foreground truncate">
-            {pedido.tienda_nombre ?? "—"}
-          </TableCell>
-        )}
         <TableCell>
           <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
             {origenLabel}
@@ -759,10 +772,14 @@ function FilaPedido({
               de cajas y hacía difícil leer la columna de un vistazo. */}
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
         </TableCell>
-        <TableCell className="text-xs text-muted-foreground max-w-[140px]">
-          {pedido.metodo_pago ?? "—"}
+        <TableCell className="text-right">
+          <div className="font-semibold">{eur(pedido.total)}</div>
+          {pedido.metodo_pago && (
+            <div className="text-xs text-muted-foreground truncate" title={pedido.metodo_pago}>
+              {pedido.metodo_pago}
+            </div>
+          )}
         </TableCell>
-        <TableCell className="text-right font-semibold">{eur(pedido.total)}</TableCell>
         <TableCell className="text-right tabular-nums">
           {onCobros ? eur(cobro.cobrado) : "—"}
         </TableCell>
@@ -814,7 +831,7 @@ function FilaPedido({
       {abierta && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
-          <TableCell colSpan={mostrarTienda ? 11 : 10}>
+          <TableCell colSpan={9}>
             <DetallePedido pedido={pedido} />
           </TableCell>
         </TableRow>
