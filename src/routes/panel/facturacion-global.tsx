@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { addMonths, addWeeks, endOfWeek, format, startOfWeek } from "date-fns";
+import { addWeeks, endOfWeek, format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,10 @@ import {
 import { eur, fechaCorta, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
-import { useFiltrosUrl } from "@/lib/filtros-url";
-import { escribirFecha, esPeriodo, leerFecha, rangoPeriodo, type Periodo } from "@/dominio/filtros";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { PERIODOS_CUADRO } from "@/dominio/periodos";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { LineaVariacion } from "@/components/TarjetaKpi";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, etiquetaMetodo, type MetodoCobro } from "@/dominio/cobros";
 import {
@@ -44,8 +46,6 @@ import {
 } from "@/dominio/facturacion";
 import type { LucideIcon } from "lucide-react";
 import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   HandCoins,
   Receipt,
@@ -76,19 +76,9 @@ export const Route = createFileRoute("/panel/facturacion-global")({
 const SEMANAS_HISTORICO = 12;
 
 const FILTROS_CONSOLIDADA = {
-  periodo: "mes",
-  fecha: "",
   criterio: "pedido",
   ...FILTRO_TODO,
 };
-
-function etiquetaPeriodo(ref: Date, periodo: Periodo) {
-  if (periodo === "mes") {
-    return format(ref, "LLLL yyyy", { locale: es }).replace(/^./, (c) => c.toUpperCase());
-  }
-  const { desde, hasta } = rangoPeriodo(ref, periodo);
-  return `${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
-}
 
 /** Las últimas N semanas naturales, de la más antigua a la actual. */
 function semanasRecientes(hoy: Date, cuantas: number) {
@@ -122,11 +112,8 @@ function FacturacionGlobal() {
   // Los filtros viven en la dirección. Por defecto, por la fecha del pedido:
   // lo vendido en el periodo, se cobrara cuando se cobrara.
   const { valores: f, cambiar, quitar } = useFiltrosUrl(FILTROS_CONSOLIDADA);
-  const periodo: Periodo = esPeriodo(f.periodo) ? f.periodo : "mes";
-  const ref = leerFecha(f.fecha);
-  const setPeriodo = (p: Periodo) => cambiar({ periodo: p, fecha: escribirFecha(ref, p) });
-  const setRef = (d: Date | ((r: Date) => Date)) =>
-    cambiar({ fecha: escribirFecha(typeof d === "function" ? d(ref) : d, periodo) });
+  const periodo = usePeriodoUrl("mes");
+  const { comparacion } = periodo;
   const criterio: CriterioFecha = f.criterio === "cobro" ? "cobro" : "pedido";
   const setCriterio = (c: CriterioFecha) => cambiar({ criterio: c });
   const filtro: FiltroConsolidada = useMemo(
@@ -140,10 +127,16 @@ function FacturacionGlobal() {
   const setFiltro = (siguiente: (actual: FiltroConsolidada) => FiltroConsolidada) =>
     cambiar(siguiente(filtro));
 
-  const { desde, hasta } = rangoPeriodo(ref, periodo);
+  // Sin «todo» en la lista, siempre hay rango.
+  const { desde, hasta } = periodo.rango!;
 
   const consultaTiendas = useTiendas();
   const consultaCobros = useCobrosPeriodo({ desde, hasta }, criterio);
+  // Sin comparación, un rango vacío: la consulta no puede ser condicional.
+  const consultaPrevia = useCobrosPeriodo(
+    comparacion?.previo ?? { desde: hasta, hasta: desde },
+    criterio,
+  );
 
   // Una sola consulta para las doce semanas, no una por barra.
   const semanas = useMemo(() => semanasRecientes(new Date(), SEMANAS_HISTORICO), []);
@@ -177,6 +170,11 @@ function FacturacionGlobal() {
     [cobros, tiendasYTextil, filtro.tienda],
   );
   const totales = useMemo(() => totalizar(cobros), [cobros]);
+  const totalesPrevios = useMemo(
+    () => totalizar(filtrarCobros(consultaPrevia.data?.cobros ?? [], filtro)),
+    [consultaPrevia.data, filtro],
+  );
+  const frente = comparacion?.etiqueta;
   const porMetodo = useMemo(() => desglosePorMetodo(cobros), [cobros]);
   const detalle = useMemo(
     () => [...cobros].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
@@ -211,10 +209,6 @@ function FacturacionGlobal() {
   const cargando = consultaCobros.isPending || consultaTiendas.isPending;
   const error = consultaCobros.error ?? consultaTiendas.error;
   const sinCobros = !cargando && !error && disponible && cobros.length === 0;
-
-  function navegar(dir: -1 | 1) {
-    setRef((r) => (periodo === "mes" ? addMonths(r, dir) : addWeeks(r, dir)));
-  }
 
   function exportar() {
     const fil: (string | number)[][] = [
@@ -283,37 +277,7 @@ function FacturacionGlobal() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border bg-card p-0.5">
-            {(["mes", "semana"] as Periodo[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriodo(p)}
-                className={`px-3 py-1.5 text-sm font-medium rounded ${
-                  periodo === p
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p === "mes" ? "Mes" : "Semana"}
-              </button>
-            ))}
-          </div>
-
-          <div className="inline-flex items-center gap-1 rounded-md border bg-card px-1">
-            <Button variant="ghost" size="icon" onClick={() => navegar(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="px-2 text-sm font-medium min-w-[160px] text-center">
-              {etiquetaPeriodo(ref, periodo)}
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => navegar(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <Button variant="outline" size="sm" onClick={() => setRef(new Date())}>
-            Hoy
-          </Button>
+          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
           <Button onClick={exportar} size="sm" disabled={cobros.length === 0}>
             <Download className="h-4 w-4 mr-2" />
@@ -407,11 +371,7 @@ function FacturacionGlobal() {
           </Select>
 
           {hayFiltro && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => quitar(["periodo", "fecha", "criterio"])}
-            >
+            <Button variant="ghost" size="sm" onClick={() => quitar(["criterio"])}>
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
@@ -464,6 +424,8 @@ function FacturacionGlobal() {
               valor={eur(totales.total)}
               icon={Wallet}
               tono="success"
+              delta={variacion(totales.total, totalesPrevios.total)}
+              frente={frente}
             />
             <TarjetaTotal
               titulo="Base imponible"
@@ -471,6 +433,8 @@ function FacturacionGlobal() {
               valor={eur(totales.base)}
               icon={Receipt}
               tono="primary"
+              delta={variacion(totales.base, totalesPrevios.base)}
+              frente={frente}
             />
             <TarjetaTotal
               titulo="IVA repercutido"
@@ -478,6 +442,8 @@ function FacturacionGlobal() {
               valor={eur(totales.iva)}
               icon={Percent}
               tono="info"
+              delta={variacion(totales.iva, totalesPrevios.iva)}
+              frente={frente}
             />
             <TarjetaTotal
               titulo="Propinas"
@@ -485,6 +451,8 @@ function FacturacionGlobal() {
               valor={eur(totales.propina)}
               icon={HandCoins}
               tono="warn"
+              delta={variacion(totales.propina, totalesPrevios.propina)}
+              frente={frente}
             />
           </div>
 
@@ -744,12 +712,16 @@ function TarjetaTotal({
   valor,
   icon: Icon,
   tono,
+  delta = null,
+  frente,
 }: {
   titulo: string;
   subtitulo: string;
   valor: string;
   icon: LucideIcon;
   tono: "primary" | "info" | "warn" | "success";
+  delta?: number | null;
+  frente?: string;
 }) {
   const tonos: Record<string, string> = {
     primary: "bg-primary/10 text-primary",
@@ -774,6 +746,7 @@ function TarjetaTotal({
           </div>
         </div>
         <div className="mt-3 text-2xl font-bold tracking-tight">{valor}</div>
+        <LineaVariacion delta={delta} frente={frente} />
       </CardContent>
     </Card>
   );

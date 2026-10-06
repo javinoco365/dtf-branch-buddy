@@ -4,37 +4,26 @@ import { useMemo } from "react";
 import { usePeriodoUrl } from "@/lib/filtros-url";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  addMonths,
-  addWeeks,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
-import { eur, metros, numero } from "@/lib/format";
+import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
-import { agruparPorDia, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
-import type { LucideIcon } from "lucide-react";
+import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { TarjetaKpi } from "@/components/TarjetaKpi";
 import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   Euro,
   Receipt,
   ShoppingCart,
   Ruler,
   XCircle,
-  TrendingUp,
-  TrendingDown,
   Percent,
   Inbox,
 } from "lucide-react";
@@ -45,34 +34,12 @@ export const Route = createFileRoute("/panel/")({
   component: DashboardGlobal,
 });
 
-type Periodo = "mes" | "semana";
-
-function rangoPeriodo(ref: Date, periodo: Periodo) {
-  if (periodo === "mes") {
-    return { desde: startOfMonth(ref), hasta: endOfMonth(ref) };
-  }
-  return {
-    desde: startOfWeek(ref, { weekStartsOn: 1 }),
-    hasta: endOfWeek(ref, { weekStartsOn: 1 }),
-  };
-}
-
-function rangoAnterior(ref: Date, periodo: Periodo) {
-  const refPrev = periodo === "mes" ? addMonths(ref, -1) : addWeeks(ref, -1);
-  return rangoPeriodo(refPrev, periodo);
-}
-
-function etiquetaPeriodo(ref: Date, periodo: Periodo) {
-  if (periodo === "mes") {
-    return format(ref, "LLLL yyyy", { locale: es }).replace(/^./, (c) => c.toUpperCase());
-  }
-  const { desde, hasta } = rangoPeriodo(ref, periodo);
-  return `${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
-}
-
 function DashboardGlobal() {
   // El periodo va en la dirección: sobrevive a recargar y se comparte.
-  const { periodo, ref, setPeriodo, setRef } = usePeriodoUrl();
+  const periodo = usePeriodoUrl("mes");
+  const { comparacion } = periodo;
+  // Sin «todo» en la lista, siempre hay rango.
+  const { desde, hasta } = periodo.rango!;
 
   const { data: empresa } = useQuery({
     queryKey: ["empresa_costes"],
@@ -91,10 +58,10 @@ function DashboardGlobal() {
     Number(empresa?.coste_packaging_metro ?? 0) +
     Number(empresa?.coste_electricidad_metro ?? 0);
 
-  const { desde, hasta } = useMemo(() => rangoPeriodo(ref, periodo), [ref, periodo]);
-  const ant = useMemo(() => rangoAnterior(ref, periodo), [ref, periodo]);
-
   const consultaPedidos = usePedidosPeriodo({ desde, hasta });
+  // Sin comparación se pide un rango vacío: la consulta existe igual (los
+  // ganchos no pueden ser condicionales) pero no trae nada.
+  const ant = comparacion?.previo ?? { desde: hasta, hasta: desde };
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta });
   const consultaLineas = useLineasPeriodo({ desde, hasta });
 
@@ -108,12 +75,10 @@ function DashboardGlobal() {
   const margenPer = k.bruta - costePer;
   const margenPrev = kPrev.bruta - costeMetro * kPrev.metros;
 
-  const ingresosDiarios = useMemo(() => {
-    const dias = eachDayOfInterval({ start: desde, end: hasta });
-    return agruparPorDia(pedidos, dias).map((d) => ({
-      dia: format(d.dia, "d MMM", { locale: es }),
-      total: d.total,
-    }));
+  const grafica = useMemo(() => {
+    const { por, tramos } = tramosGrafica({ desde, hasta });
+    const totales = agruparPorRangos(pedidos, tramos);
+    return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
   }, [pedidos, desde, hasta]);
 
   const topProductos = useMemo(
@@ -124,10 +89,6 @@ function DashboardGlobal() {
   const cargando = consultaPedidos.isPending;
   const error = consultaPedidos.error;
   const sinDatos = !cargando && !error && pedidos.length === 0;
-
-  function navegar(dir: -1 | 1) {
-    setRef((r) => (periodo === "mes" ? addMonths(r, dir) : addWeeks(r, dir)));
-  }
 
   function exportar() {
     const filas: (string | number)[][] = [
@@ -157,37 +118,7 @@ function DashboardGlobal() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border bg-card p-0.5">
-            {(["mes", "semana"] as Periodo[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriodo(p)}
-                className={`px-3 py-1.5 text-sm font-medium rounded ${
-                  periodo === p
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p === "mes" ? "Mes" : "Semana"}
-              </button>
-            ))}
-          </div>
-
-          <div className="inline-flex items-center gap-1 rounded-md border bg-card px-1">
-            <Button variant="ghost" size="icon" onClick={() => navegar(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="px-2 text-sm font-medium min-w-[160px] text-center">
-              {etiquetaPeriodo(ref, periodo)}
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => navegar(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <Button variant="outline" size="sm" onClick={() => setRef(new Date())}>
-            Hoy
-          </Button>
+          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
           <Button onClick={exportar} size="sm" disabled={pedidos.length === 0}>
             <Download className="h-4 w-4 mr-2" />
@@ -223,42 +154,48 @@ function DashboardGlobal() {
       {!cargando && !error && !sinDatos && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            <KPI
+            <TarjetaKpi
               titulo="Total periodo"
               valor={eur(k.total)}
+              frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
               icon={Euro}
             />
-            <KPI
+            <TarjetaKpi
               titulo="Facturación bruta"
               valor={eur(k.bruta)}
+              frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
             />
-            <KPI
+            <TarjetaKpi
               titulo="Ticket medio"
               valor={eur(k.ticket)}
+              frente={comparacion?.etiqueta}
               delta={variacion(k.ticket, kPrev.ticket)}
               icon={ShoppingCart}
             />
-            <KPI
+            <TarjetaKpi
               titulo="Metros vendidos"
               valor={metros(k.metros)}
+              frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
               icon={Ruler}
             />
-            <KPI
+            <TarjetaKpi
               titulo="Cancelados"
               valor={String(k.cancelados)}
+              frente={comparacion?.etiqueta}
               delta={variacion(k.cancelados, kPrev.cancelados)}
               icon={XCircle}
               color="destructive"
               deltaInverso
             />
-            <KPI
+            <TarjetaKpi
               titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
               valor={costeMetro === 0 ? "—" : eur(margenPer)}
               delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
+              frente={comparacion?.etiqueta}
               icon={Percent}
             />
           </div>
@@ -273,11 +210,13 @@ function DashboardGlobal() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Ingresos diarios</CardTitle>
+                <CardTitle className="text-base">
+                  {grafica.por === "dia" ? "Ingresos por día" : "Ingresos por mes"}
+                </CardTitle>
               </CardHeader>
               <CardContent className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={ingresosDiarios}>
+                  <BarChart data={grafica.datos}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                     <YAxis
@@ -343,58 +282,5 @@ function DashboardGlobal() {
         </>
       )}
     </div>
-  );
-}
-
-function KPI({
-  titulo,
-  valor,
-  delta,
-  icon: Icon,
-  color = "primary",
-  deltaInverso = false,
-}: {
-  titulo: string;
-  valor: string;
-  /** `null` cuando el periodo anterior no da para comparar. */
-  delta: number | null;
-  icon: LucideIcon;
-  color?: "primary" | "destructive";
-  deltaInverso?: boolean;
-}) {
-  const iconBg =
-    color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
-  const valorColor = color === "destructive" ? "text-destructive" : "text-foreground";
-
-  const subiendo = (delta ?? 0) >= 0;
-  // En "inverso" (por ejemplo, cancelados), subir es malo.
-  const positivo = deltaInverso ? !subiendo : subiendo;
-
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {titulo}
-          </div>
-          <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-        <div className={`mt-3 text-3xl font-bold tracking-tight ${valorColor}`}>{valor}</div>
-        {delta === null ? (
-          <div className="mt-1 text-xs text-muted-foreground">Sin periodo anterior comparable</div>
-        ) : (
-          <div
-            className={`mt-1 flex items-center gap-1 text-xs font-medium ${
-              positivo ? "text-status-completado" : "text-status-cancelado"
-            }`}
-          >
-            {subiendo ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {numero(Math.abs(delta), 1)}% vs periodo anterior
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }

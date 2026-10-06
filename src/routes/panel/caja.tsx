@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { CampoBusqueda, QuitarFiltros } from "@/components/filtros/Filtros";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { PERIODOS_CUADRO } from "@/dominio/periodos";
+import { format } from "date-fns";
 import { normalizarTexto } from "@/dominio/clientes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -8,7 +11,6 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -44,31 +46,23 @@ export const Route = createFileRoute("/panel/caja")({
   component: CajaPage,
 });
 
-/** El año en curso, que es el rango con el que se abre. */
-function rangoDelAnio() {
-  const hoy = new Date();
-  return {
-    desde: `${hoy.getFullYear()}-01-01`,
-    hasta: `${hoy.getFullYear()}-12-31`,
-  };
-}
-
 function CajaPage() {
-  // Los filtros viven en la dirección. Por defecto, el año en curso.
-  const inicial = rangoDelAnio();
+  // Los filtros viven en la dirección. Por defecto, el año en curso. Los
+  // enlaces de antes, con desde y hasta sueltos, abren como fechas libres.
+  const periodo = usePeriodoUrl("anio");
   const {
     valores: filtros,
     cambiar,
     quitar,
     hay,
   } = useFiltrosUrl({
-    desde: inicial.desde,
-    hasta: inicial.hasta,
     categoria: "todas",
     socio: "todos",
     q: "",
   });
-  const { desde, hasta } = filtros;
+  // Sin «todo» en la lista, siempre hay rango. El servidor quiere días.
+  const desde = format(periodo.rango!.desde, "yyyy-MM-dd");
+  const hasta = format(periodo.rango!.hasta, "yyyy-MM-dd");
   const filtroCategoria = filtros.categoria;
   const filtroSocio = filtros.socio;
   const [abierto, setAbierto] = useState(false);
@@ -175,23 +169,9 @@ function CajaPage() {
 
       <Card>
         <CardContent className="p-4 flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Desde</Label>
-            <Input
-              type="date"
-              className="w-40"
-              value={desde}
-              onChange={(e) => cambiar({ desde: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Hasta</Label>
-            <Input
-              type="date"
-              className="w-40"
-              value={hasta}
-              onChange={(e) => cambiar({ hasta: e.target.value })}
-            />
+          <div className="space-y-1 max-md:w-full">
+            <Label className="text-xs">Periodo</Label>
+            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Categoría</Label>

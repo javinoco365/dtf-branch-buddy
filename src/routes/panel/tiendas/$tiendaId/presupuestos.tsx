@@ -45,7 +45,9 @@ import {
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { PresupuestoFormDialog } from "@/components/presupuestos/PresupuestoFormDialog";
 import { eur, fechaCorta } from "@/lib/format";
-import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import {
   borrarPresupuesto,
   cambiarEstadoPresupuesto,
@@ -89,6 +91,8 @@ function PresupuestosTienda() {
 
   // Los filtros viven en la dirección.
   const { valores: u, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   const [texto, setTexto] = useTextoDiferido(u.q, (q) => cambiar({ q }));
   const filtro: FiltroPresupuestos = useMemo(
     () => ({ texto: u.q, estado: u.estado as FiltroPresupuestos["estado"] }),
@@ -112,8 +116,11 @@ function PresupuestosTienda() {
 
   const hoy = useMemo(() => new Date(), []);
   const filtrados = useMemo(
-    () => filtrarPresupuestos(data?.presupuestos ?? [], filtro, hoy),
-    [data, filtro, hoy],
+    () =>
+      filtrarPresupuestos(data?.presupuestos ?? [], filtro, hoy).filter((p) =>
+        enRango(p.fecha, periodo.rango),
+      ),
+    [data, filtro, hoy, periodo.rango],
   );
   const totalFiltrado = filtrados.reduce((s, p) => s + Number(p.total), 0);
   const hayFiltro = hay();
@@ -209,6 +216,7 @@ function PresupuestosTienda() {
               <SelectItem value="caducado">Caducado</SelectItem>
             </SelectContent>
           </Select>
+          <SelectorPeriodo periodo={periodo} />
           {hayFiltro && (
             <Button variant="ghost" size="sm" onClick={() => quitar()}>
               <X className="h-4 w-4 mr-1" /> Quitar filtros

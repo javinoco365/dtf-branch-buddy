@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
-  escribirFecha,
   escribirFiltros,
-  esPeriodo,
   hayFiltros,
-  leerFecha,
   leerFiltros,
   quitarFiltros,
   type Filtros,
-  type Periodo,
 } from "@/dominio/filtros";
+import {
+  compararCon,
+  escribirSeleccion,
+  esComparar,
+  leerSeleccion,
+  rangoDe,
+  type Comparar,
+  type Seleccion,
+  type TipoPeriodo,
+} from "@/dominio/periodos";
 
 /** `{ bajo: false }` da `boolean`, no `false`: el filtro podrá valer las dos cosas. */
 type Ensanchar<T> = {
@@ -129,15 +135,38 @@ export function useTextoDiferido(
 }
 
 /**
- * El periodo de una pantalla (mes o semana) y su día de referencia, en la
- * dirección. Sin nada en la dirección, el mes actual.
+ * El periodo de una pantalla, y con qué se compara, en la dirección.
+ *
+ * `porDefecto` es lo que se ve sin nada en la dirección: «mes» en los
+ * cuadros de mando, «todo» en las listas. `comparar` es la comparación por
+ * defecto; las pantallas que no comparan no la usan.
  */
-export function usePeriodoUrl() {
-  const { valores, cambiar } = useFiltrosUrl({ periodo: "mes", fecha: "" });
-  const periodo: Periodo = esPeriodo(valores.periodo) ? valores.periodo : "mes";
-  const ref = leerFecha(valores.fecha);
-  const setPeriodo = (p: Periodo) => cambiar({ periodo: p, fecha: escribirFecha(ref, p) });
-  const setRef = (d: Date | ((actual: Date) => Date)) =>
-    cambiar({ fecha: escribirFecha(typeof d === "function" ? d(ref) : d, periodo) });
-  return { periodo, ref, setPeriodo, setRef };
+export function usePeriodoUrl(
+  porDefecto: TipoPeriodo = "mes",
+  { comparar: compararPorDefecto = "anterior" as Comparar } = {},
+) {
+  const { valores, cambiar } = useFiltrosUrl({
+    periodo: porDefecto as string,
+    fecha: "",
+    desde: "",
+    hasta: "",
+    comparar: compararPorDefecto as string,
+  });
+  const { periodo, fecha, desde, hasta } = valores;
+  // Las fechas se recalculan solo si cambia la dirección: así los rangos son
+  // los mismos objetos de un render a otro y no relanzan consultas.
+  const seleccion = useMemo(
+    () => leerSeleccion({ periodo, fecha, desde, hasta }, porDefecto),
+    [periodo, fecha, desde, hasta, porDefecto],
+  );
+  const rango = useMemo(() => rangoDe(seleccion), [seleccion]);
+  const comparar: Comparar = esComparar(valores.comparar) ? valores.comparar : compararPorDefecto;
+  const comparacion = useMemo(() => compararCon(seleccion, comparar), [seleccion, comparar]);
+
+  const elegir = useCallback((sel: Seleccion) => cambiar(escribirSeleccion(sel)), [cambiar]);
+  const setComparar = useCallback((c: Comparar) => cambiar({ comparar: c }), [cambiar]);
+
+  return { seleccion, rango, elegir, comparar, setComparar, comparacion, porDefecto };
 }
+
+export type PeriodoUrl = ReturnType<typeof usePeriodoUrl>;

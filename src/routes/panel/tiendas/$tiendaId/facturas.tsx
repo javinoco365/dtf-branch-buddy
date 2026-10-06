@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import {
   BarraFiltros,
   CampoBusqueda,
@@ -112,6 +114,8 @@ function Facturas() {
   });
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   // Qué le ha pasado a cada ticket: canjeado, anulado o intacto.
   const situaciones = useMemo(() => {
     const docs = (facturas as any[]).map((f) => ({
@@ -131,12 +135,13 @@ function Facturas() {
     const q = normalizarTexto(filtros.q);
     return (facturas as any[]).filter(
       (f) =>
+        enRango(f.fecha, periodo.rango) &&
         (filtros.estado === "todos" || f.estado === filtros.estado) &&
         (!q ||
           normalizarTexto(referenciaFactura(f.serie, f.ejercicio, f.numero)).includes(q) ||
           normalizarTexto(f.cliente_nombre).includes(q)),
     );
-  }, [facturas, filtros.q, filtros.estado]);
+  }, [facturas, filtros.q, filtros.estado, periodo.rango]);
 
   // El navegador ya no puede escribir en facturas: perdió el permiso cuando la
   // factura pasó a ser inmutable. El estado de cobro no es parte del documento
@@ -238,6 +243,7 @@ function Facturas() {
               .map((e) => ({ valor: e, etiqueta: e })),
           ]}
         />
+        <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
       <Card>

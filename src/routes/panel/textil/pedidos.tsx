@@ -54,7 +54,9 @@ import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/Cobros
 import { DocumentoTextilDialog } from "@/components/textil/DocumentoTextilDialog";
 import { resumenCobros } from "@/dominio/cobros";
 import { normalizarTexto } from "@/dominio/clientes";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import {
   BarraFiltros,
   CampoBusqueda,
@@ -84,6 +86,8 @@ function PedidosPage() {
 
   const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS_TEXTIL);
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   const { data: clientes = [] } = useQuery({
     queryKey: ["textil-clientes"],
     queryFn: () => cliFn(),
@@ -112,6 +116,7 @@ function PedidosPage() {
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (data as any[]).filter((p) => {
+      if (!enRango(p.fecha, periodo.rango)) return false;
       if (filtros.estado !== "todos" && p.estado !== filtros.estado) return false;
       if (filtros.cobro !== "todos") {
         // «Con algo pendiente» incluye lo cobrado en parte.
@@ -127,7 +132,7 @@ function PedidosPage() {
         normalizarTexto(p.marca?.nombre).includes(q)
       );
     });
-  }, [data, filtros.q, filtros.estado, filtros.cobro, cobrosPorPedido]);
+  }, [data, filtros.q, filtros.estado, filtros.cobro, cobrosPorPedido, periodo.rango]);
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
@@ -220,6 +225,7 @@ function PedidosPage() {
             ]}
           />
         )}
+        <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
         <div className="text-xs text-muted-foreground ml-auto">
           {filtrados.length} pedido{filtrados.length === 1 ? "" : "s"}
