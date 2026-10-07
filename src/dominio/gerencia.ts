@@ -11,7 +11,13 @@
  */
 
 import { redondear } from "./importes";
-import { calcularKpis, costeProduccion, type KpisPeriodo, type PedidoResumen } from "./kpis";
+import {
+  calcularKpis,
+  costeProduccion,
+  ESTADO_CANCELADO,
+  type KpisPeriodo,
+  type PedidoResumen,
+} from "./kpis";
 import { TIENDA_TEXTIL } from "./cobros";
 import { diasDesde, type PedidoPendiente } from "./pendientes";
 import type { CobroConsolidado } from "./facturacion";
@@ -40,7 +46,19 @@ export function etiquetaCanal(c: Canal): string {
  * Un pedido, venga de una tienda o del textil. Es un PedidoResumen, así que
  * vale para calcularKpis; `tienda_id` del textil es TIENDA_TEXTIL.id.
  */
-export type Venta = PedidoResumen & { canal: Canal; cliente_id: string | null };
+export type Venta = PedidoResumen & {
+  canal: Canal;
+  cliente_id: string | null;
+  /** El pedido, para cruzarlo con sus facturas. Solo lo traen las lecturas que lo necesitan. */
+  id?: string;
+  /** Solo textil: la marca del pedido. */
+  marca_id?: string | null;
+  /**
+   * Solo textil: lo que costó la ropa que salió del almacén para el pedido, al
+   * coste medio congelado en la salida. Nulo si todavía no ha salido nada.
+   */
+  coste_textil?: number | null;
+};
 
 /** Un pedido de tienda tal como lo lee usePedidosPeriodo. */
 export function ventaDeTienda(p: PedidoResumen): Venta {
@@ -53,6 +71,10 @@ export function ventaDeTienda(p: PedidoResumen): Venta {
 
 /** Un pedido textil: sin metros, sin devoluciones y fechado por su día. */
 export type PedidoTextilResumen = {
+  id?: string;
+  marca_id?: string | null;
+  /** Coste de la ropa que salió del almacén para el pedido (ver Venta.coste_textil). */
+  coste?: number | null;
   fecha: string;
   estado: string;
   subtotal: Numerico;
@@ -75,6 +97,9 @@ export function ventaDeTextil(p: PedidoTextilResumen): Venta {
     metros_total: 0,
     canal: "textil",
     cliente_id: p.cliente_id,
+    ...(p.id ? { id: p.id } : {}),
+    ...(p.marca_id !== undefined ? { marca_id: p.marca_id } : {}),
+    ...(p.coste !== undefined ? { coste_textil: p.coste } : {}),
   };
 }
 
@@ -134,8 +159,14 @@ export function filtrarPendientesGerencia(
 // ---------------------------------------------------------------------------
 
 export type CifrasGerencia = KpisPeriodo & {
-  /** Coste de producción DTF (metros × coste por metro). El textil no lo tiene aún. */
+  /** Coste DTF más coste textil. */
   coste: number;
+  /** Coste de producción DTF: metros × coste por metro congelado. */
+  costeDtf: number;
+  /** Coste de la ropa que salió del almacén para los pedidos textil. */
+  costeTextil: number;
+  /** Pedidos textil no cancelados sin salida de almacén todavía: su margen va sin coste. */
+  textilSinCoste: number;
   /** Facturación bruta − coste. */
   margen: number;
   /** Base imponible por metro, solo de los pedidos que llevan metros. */
@@ -144,11 +175,17 @@ export type CifrasGerencia = KpisPeriodo & {
 
 export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): CifrasGerencia {
   const k = calcularKpis(ventas);
-  const coste = costeProduccion(ventas, costeActual);
+  const costeDtf = costeProduccion(ventas, costeActual);
+  const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
+  const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
+  const coste = redondear(costeDtf + costeTextil);
   const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
   return {
     ...k,
     coste,
+    costeDtf,
+    costeTextil,
+    textilSinCoste: textil.filter((v) => v.coste_textil == null).length,
     margen: redondear(k.bruta - coste),
     euroMetro: conMetros.metros > 0 ? redondear(conMetros.bruta / conMetros.metros) : 0,
   };

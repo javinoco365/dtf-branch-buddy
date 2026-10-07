@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
+import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "@/lib/rpc";
 import { leerTodas, trozos } from "@/lib/paginar";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
@@ -29,24 +29,51 @@ import type { VentaCliente } from "@/dominio/clientela";
 import type { PresupuestoResumen } from "@/dominio/comercial";
 import { ESTADOS_ABIERTOS, type EnvioPedido, type PedidoTaller } from "@/dominio/produccion";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
+import {
+  costePorPedido,
+  type ArticuloStock,
+  type LineaTextil,
+  type MovimientoCoste,
+} from "@/dominio/textil";
+import type { CompraResumen, DocumentoDePedido, DocumentoFiscal } from "@/dominio/fiscal";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
-/** Pedidos textil del rango, con lo justo para agregar. */
+/**
+ * Pedidos textil del rango, con lo justo para agregar y lo que costó la ropa
+ * que salió del almacén para cada uno (ver costePorPedido).
+ */
 function useTextilPeriodo(rango: RangoFechas) {
   return useQuery({
     queryKey: ["textil-periodo", dia(rango.desde), dia(rango.hasta)],
     queryFn: async (): Promise<PedidoTextilResumen[]> => {
-      const { data, error } = await leerTodas<PedidoTextilResumen>((a, b) =>
+      const { data, error } = await leerTodas<PedidoTextilResumen & { id: string }>((a, b) =>
         tabla(supabase, "textil_pedidos")
-          .select("fecha, estado, subtotal, iva, envio, total, cliente_id")
+          .select("id, fecha, estado, subtotal, iva, envio, total, cliente_id, marca_id")
           .gte("fecha", dia(rango.desde))
           .lte("fecha", dia(rango.hasta))
           .order("id")
           .range(a, b),
       );
       if (error) throw error;
-      return (data ?? []) as PedidoTextilResumen[];
+
+      const movs: MovimientoCoste[] = [];
+      let conAlmacen = true;
+      for (const trozo of trozos(data.map((p) => p.id))) {
+        const r = await tabla(supabase, "textil_stock_movimientos")
+          .select("textil_pedido_id, motivo, cantidad, coste_unitario")
+          .in("textil_pedido_id", trozo)
+          .in("motivo", ["venta", "devolucion_cliente"]);
+        // Sin la migración del almacén no hay coste: el textil va sin él.
+        if (faltaLaTabla(r.error)) {
+          conAlmacen = false;
+          break;
+        }
+        if (r.error) throw new Error(r.error.message);
+        movs.push(...((r.data ?? []) as MovimientoCoste[]));
+      }
+      const costes = costePorPedido(movs);
+      return data.map((p) => ({ ...p, coste: conAlmacen ? (costes.get(p.id) ?? null) : null }));
     },
   });
 }
@@ -405,6 +432,208 @@ export function useEnvios(rango: RangoFechas) {
         tienda_id: p.tienda_id,
         canal: canalDeOrigen(p.origen),
       }));
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Margen, Fiscal y Textil
+// ---------------------------------------------------------------------------
+
+/** Una clave corta para una lista de ids: cambia si cambia la lista. */
+function claveIds(ids: readonly string[]): string {
+  let h = 0;
+  for (const id of ids) for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return `${ids.length}:${h}`;
+}
+
+export type HuecoSerie = { serie: string; ejercicio: number; numero_ausente: number };
+
+export type DatosFiscal = {
+  documentos: DocumentoFiscal[];
+  /** Nulo si la tabla de compras no existe todavía. */
+  compras: CompraResumen[] | null;
+  huecos: HuecoSerie[];
+};
+
+/** Facturas, tickets y rectificativas emitidos en el rango, compras del rango y huecos de numeración. */
+export function useFiscal(rango: RangoFechas) {
+  const desde = dia(rango.desde);
+  const hasta = dia(rango.hasta);
+  return useQuery({
+    queryKey: ["gerencia-fiscal", desde, hasta],
+    queryFn: async (): Promise<DatosFiscal> => {
+      const enRango = (nombre: string, campos: string) =>
+        leerTodas<Record<string, unknown>>((a, b) =>
+          tabla(supabase, nombre)
+            .select(campos)
+            .gte("fecha", desde)
+            .lte("fecha", hasta)
+            .order("id")
+            .range(a, b),
+        );
+      const [f, t, c] = await Promise.all([
+        enRango(
+          "facturas",
+          "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva",
+        ),
+        enRango("textil_facturas", "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva"),
+        enRango("textil_compras", "id, estado, base, iva, total"),
+      ]);
+      if (f.error) throw new Error(f.error.message);
+      if (t.error) throw new Error(t.error.message);
+      if (c.error && !faltaLaTabla(c.error)) throw new Error(c.error.message);
+
+      let huecos: HuecoSerie[] = [];
+      try {
+        huecos = await llamarRpc<HuecoSerie[]>(supabase, "facturas_huecos_en_serie", {});
+      } catch {
+        // Sin la función no se puede comprobar: se enseña sin el control.
+        huecos = [];
+      }
+
+      const documentos: DocumentoFiscal[] = [
+        ...f.data.map((x) => ({
+          id: x.id as string,
+          tipo: x.tipo as DocumentoFiscal["tipo"],
+          estado: x.estado as string,
+          fecha: x.fecha as string,
+          tienda_id: x.tienda_id as string,
+          base: x.base_imponible as number,
+          iva: x.iva_total as number,
+          total: x.total as number,
+          desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
+        })),
+        ...t.data.map((x) => ({
+          id: x.id as string,
+          tipo: (x.tipo ?? "ordinaria") as DocumentoFiscal["tipo"],
+          estado: x.estado as string,
+          fecha: x.fecha as string,
+          tienda_id: TIENDA_TEXTIL.id,
+          base: x.subtotal as number,
+          iva: x.iva as number,
+          total: x.total as number,
+          desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
+        })),
+      ];
+      return {
+        documentos,
+        compras: faltaLaTabla(c.error) ? null : (c.data as CompraResumen[]),
+        huecos: (huecos ?? []).map((h) => ({
+          serie: h.serie,
+          ejercicio: h.ejercicio,
+          numero_ausente: h.numero_ausente,
+        })),
+      };
+    },
+  });
+}
+
+/** Lee los documentos de unos pedidos y las rectificativas que los corrigen. */
+async function documentosDe(
+  nombre: "facturas" | "textil_facturas",
+  campoPedido: "pedido_id" | "textil_pedido_id",
+  ids: readonly string[],
+): Promise<DocumentoDePedido[]> {
+  const docs: DocumentoDePedido[] = [];
+  const campos = `id, tipo, estado, rectifica_a_id, ${campoPedido}`;
+  const leer = async (columna: string, valores: string[]) => {
+    for (const trozo of trozos(valores)) {
+      const r = await tabla(supabase, nombre).select(campos).in(columna, trozo);
+      if (r.error) throw new Error(r.error.message);
+      for (const d of (r.data ?? []) as Record<string, string | null>[]) {
+        docs.push({
+          id: d.id as string,
+          tipo: d.tipo as DocumentoDePedido["tipo"],
+          estado: d.estado,
+          rectifica_a_id: d.rectifica_a_id,
+          pedido_id: d[campoPedido],
+        });
+      }
+    }
+  };
+  await leer(campoPedido, [...ids]);
+  // Las rectificativas pueden no llevar el pedido: se buscan por lo que rectifican.
+  await leer(
+    "rectifica_a_id",
+    docs.map((d) => d.id),
+  );
+  return docs;
+}
+
+/**
+ * Los documentos fiscales de unos pedidos (tienda y textil), para saber
+ * cuáles se han vendido sin factura ni ticket.
+ */
+export function useDocumentosDePedidos(ventas: readonly Venta[]) {
+  const tienda = ventas.filter((v) => v.canal !== "textil" && v.id).map((v) => v.id as string);
+  const textil = ventas.filter((v) => v.canal === "textil" && v.id).map((v) => v.id as string);
+  return useQuery({
+    queryKey: ["gerencia-docs-pedidos", claveIds(tienda), claveIds(textil)],
+    queryFn: async (): Promise<DocumentoDePedido[]> => {
+      const deTienda = await documentosDe("facturas", "pedido_id", tienda);
+      let delTextil: DocumentoDePedido[] = [];
+      try {
+        delTextil = await documentosDe("textil_facturas", "textil_pedido_id", textil);
+      } catch (e) {
+        // Antes de la migración de tickets la factura textil no sabe su pedido.
+        if (!(e instanceof Error) || !/textil_pedido_id/.test(e.message)) throw e;
+      }
+      return [...deTienda, ...delTextil];
+    },
+  });
+}
+
+export type DatosTextil = {
+  lineas: LineaTextil[];
+  stock: ArticuloStock[] | null;
+  marcas: { id: string; nombre: string }[];
+  compras: CompraResumen[] | null;
+};
+
+/** Las líneas de los pedidos textil dados, el almacén, las marcas y las compras del rango. */
+export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]) {
+  const desde = dia(rango.desde);
+  const hasta = dia(rango.hasta);
+  return useQuery({
+    queryKey: ["gerencia-textil", desde, hasta, claveIds(pedidos)],
+    queryFn: async (): Promise<DatosTextil> => {
+      const lineas: LineaTextil[] = [];
+      for (const trozo of trozos([...pedidos])) {
+        const r = await tabla(supabase, "textil_pedido_items")
+          .select("descripcion, cantidad, subtotal")
+          .in("pedido_id", trozo);
+        if (r.error) throw new Error(r.error.message);
+        lineas.push(...((r.data ?? []) as LineaTextil[]));
+      }
+      const [stock, marcas, compras] = await Promise.all([
+        leerTodas<ArticuloStock>((a, b) =>
+          tabla(supabase, "textil_stock")
+            .select(
+              "id, nombre, talla, color, cantidad, cantidad_minima, cantidad_reservada, coste_unitario, activa",
+            )
+            .order("id")
+            .range(a, b),
+        ),
+        tabla(supabase, "textil_marcas").select("id, nombre"),
+        leerTodas<CompraResumen>((a, b) =>
+          tabla(supabase, "textil_compras")
+            .select("id, estado, base, iva, total")
+            .gte("fecha", desde)
+            .lte("fecha", hasta)
+            .order("id")
+            .range(a, b),
+        ),
+      ]);
+      if (stock.error && !faltaLaTabla(stock.error)) throw new Error(stock.error.message);
+      if (marcas.error) throw new Error(marcas.error.message);
+      if (compras.error && !faltaLaTabla(compras.error)) throw new Error(compras.error.message);
+      return {
+        lineas,
+        stock: stock.error ? null : stock.data,
+        marcas: (marcas.data ?? []) as { id: string; nombre: string }[],
+        compras: compras.error ? null : compras.data,
+      };
     },
   });
 }
