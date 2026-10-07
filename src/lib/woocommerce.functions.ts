@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { tabla } from "./rpc";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
+import { lineaPedidoWoo, metrosPedidoWoo } from "@/dominio/metros-woo";
 import {
   clientesInvitadosNuevos,
   estadoPagoPorDevolucion,
@@ -269,10 +270,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
         };
 
         const filasPedidos = orders.map((o) => {
-          const metros_total = (o.line_items || []).reduce(
-            (s: number, li: any) => s + Number(li.quantity || 0),
-            0,
-          );
+          // Los metros que mide el trabajo (montador), no la cantidad: ver
+          // src/dominio/metros-woo.ts.
+          const metros_total = metrosPedidoWoo(o.line_items);
           // Las direcciones del PEDIDO, no las de la ficha del cliente. Un
           // pedido de invitado no trae customer_id y se quedaba sin nombre ni
           // correo: es el «—» de la columna Cliente. Estos datos sí vienen
@@ -338,15 +338,16 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
             const pedido_id = idPorWooId.get(o.id);
             if (!pedido_id) return [];
             return (o.line_items || []).map((li: any) => {
-              const cant = Number(li.quantity || 0);
               const sub = Number(li.subtotal || 0);
               const ivaLi = Number(li.subtotal_tax || 0);
+              // En metros si es un trabajo del montador; en unidades si no.
+              const { cantidad, unidad, precio_unitario } = lineaPedidoWoo(li);
               return {
                 pedido_id,
                 descripcion: li.name,
-                cantidad: cant,
-                unidad: "m",
-                precio_unitario: cant > 0 ? sub / cant : 0,
+                cantidad,
+                unidad,
+                precio_unitario,
                 iva_rate: 21,
                 subtotal: sub,
                 iva: ivaLi,
