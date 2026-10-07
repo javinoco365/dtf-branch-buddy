@@ -25,6 +25,7 @@ import {
 import { AlertTriangle, CheckCircle2, Clock, Search, Wallet, X } from "lucide-react";
 import { eur, fechaCorta } from "@/lib/format";
 import { faltaLaTabla, tabla } from "@/lib/rpc";
+import { leerTodas } from "@/lib/paginar";
 import { useTiendas } from "@/lib/periodo";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import type { Cobro } from "@/lib/cobros.functions";
@@ -73,9 +74,12 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["cobros-pendientes-pedidos", tiendaId ?? "todas"],
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoPendiente[] }> => {
-      let q = tabla(supabase, "pedidos_pendientes_cobro").select("*");
-      if (tiendaId) q = q.eq("tienda_id", tiendaId);
-      const { data, error } = await q;
+      // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+      const { data, error } = await leerTodas<PedidoPendiente>((a, b) => {
+        let q = tabla(supabase, "pedidos_pendientes_cobro").select("*");
+        if (tiendaId) q = q.eq("tienda_id", tiendaId);
+        return q.order("tipo").order("id").range(a, b);
+      });
       if (faltaLaTabla(error)) return { disponible: false, pedidos: [] };
       if (error) throw error;
       return { disponible: true, pedidos: (data ?? []) as PedidoPendiente[] };

@@ -37,11 +37,14 @@ function useTextilPeriodo(rango: RangoFechas) {
   return useQuery({
     queryKey: ["textil-periodo", dia(rango.desde), dia(rango.hasta)],
     queryFn: async (): Promise<PedidoTextilResumen[]> => {
-      const { data, error } = await supabase
-        .from("textil_pedidos")
-        .select("fecha, estado, subtotal, iva, envio, total, cliente_id")
-        .gte("fecha", dia(rango.desde))
-        .lte("fecha", dia(rango.hasta));
+      const { data, error } = await leerTodas<PedidoTextilResumen>((a, b) =>
+        tabla(supabase, "textil_pedidos")
+          .select("fecha, estado, subtotal, iva, envio, total, cliente_id")
+          .gte("fecha", dia(rango.desde))
+          .lte("fecha", dia(rango.hasta))
+          .order("id")
+          .range(a, b),
+      );
       if (error) throw error;
       return (data ?? []) as PedidoTextilResumen[];
     },
@@ -71,7 +74,13 @@ export function usePendientesCobro() {
   return useQuery({
     queryKey: ["cobros-pendientes-pedidos", "todas"],
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoPendiente[] }> => {
-      const { data, error } = await tabla(supabase, "pedidos_pendientes_cobro").select("*");
+      const { data, error } = await leerTodas<PedidoPendiente>((a, b) =>
+        tabla(supabase, "pedidos_pendientes_cobro")
+          .select("*")
+          .order("tipo")
+          .order("id")
+          .range(a, b),
+      );
       if (faltaLaTabla(error)) return { disponible: false, pedidos: [] };
       if (error) throw error;
       return { disponible: true, pedidos: (data ?? []) as PedidoPendiente[] };
