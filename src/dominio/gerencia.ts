@@ -490,9 +490,20 @@ export type Objetivo = {
 
 export type AjustesGerencia = {
   web_sin_pagar_cuenta: boolean;
+  /** Tipo del Impuesto sobre Sociedades, en %. 15 para nueva creación. */
+  tipo_is: number;
+  /** Cuota íntegra del último modelo 200: base de los pagos fraccionados. */
+  cuota_is_anterior: number | null;
+  /** Precio del metro DTF sin IVA. */
+  precio_metro: number;
 };
 
-export const AJUSTES_POR_DEFECTO: AjustesGerencia = { web_sin_pagar_cuenta: true };
+export const AJUSTES_POR_DEFECTO: AjustesGerencia = {
+  web_sin_pagar_cuenta: true,
+  tipo_is: 15,
+  cuota_is_anterior: null,
+  precio_metro: 7,
+};
 
 /** Un día `yyyy-MM-dd` como fecha local a mediodía, sin líos de huso. */
 function diaLocalDe(texto: string): Date {
@@ -637,7 +648,7 @@ export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): n
 /** Si los pedidos web sin pagar no cuentan, se quitan de las ventas. */
 export function aplicarAjustesVentas<T extends Pick<Venta, "canal" | "estado">>(
   ventas: readonly T[],
-  a: AjustesGerencia,
+  a: Pick<AjustesGerencia, "web_sin_pagar_cuenta">,
 ): T[] {
   if (a.web_sin_pagar_cuenta) return [...ventas];
   return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));

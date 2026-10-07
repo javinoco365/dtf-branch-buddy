@@ -5,6 +5,8 @@ import {
   cargosDelRango,
   cuentaResultados,
   impuestosDeCargos,
+  impuestosPorTrimestre,
+  trimestresDelRango,
   pagoFraccionado,
   plazoTrimestre,
   trimestreDe,
@@ -176,5 +178,64 @@ describe("cuenta de resultados", () => {
       tipoIs: 15,
     });
     expect(r).toMatchObject({ bai: -150, impuestoSociedades: 0, beneficioNeto: -150 });
+  });
+});
+
+describe("impuestos por trimestre", () => {
+  it("los trimestres que toca un rango", () => {
+    const t = trimestresDelRango({ desde: d(2026, 2, 15), hasta: d(2026, 7, 1) });
+    expect(t.map((x) => x.numero)).toEqual([1, 2, 3]);
+  });
+
+  it("IVA de facturas, compras y gastos, y retenciones, por trimestre", () => {
+    const [q] = impuestosPorTrimestre({
+      rango: { desde: d(2026, 10, 1), hasta: d(2026, 10, 31) },
+      documentos: [
+        {
+          id: "f",
+          tipo: "ordinaria",
+          estado: "emitida",
+          fecha: "2026-11-03",
+          tienda_id: "t",
+          base: 10000,
+          iva: 2100,
+          total: 12100,
+        },
+        {
+          id: "b",
+          tipo: "ordinaria",
+          estado: "borrador",
+          fecha: "2026-11-03",
+          tienda_id: "t",
+          base: 999,
+          iva: 999,
+          total: 999,
+        },
+        {
+          id: "x",
+          tipo: "ordinaria",
+          estado: "emitida",
+          fecha: "2026-09-30",
+          tienda_id: "t",
+          base: 1,
+          iva: 1,
+          total: 1,
+        },
+      ],
+      compras: [
+        { estado: "registrada", base: 1000, iva: 210, total: 1210, fecha: "2026-12-01" },
+        { estado: "borrador", base: 1000, iva: 210, total: 1210, fecha: "2026-12-01" },
+      ],
+      gastos: [alquiler],
+      cuotaIsAnterior: null,
+    });
+    // Repercutido 2.100; soportado 210 de compras + 630 de tres alquileres.
+    expect(q).toMatchObject({ ivaRepercutido: 2100, ivaSoportado: 840, irpf111: 0, irpf115: 570 });
+    expect(q.lineas.map((l) => [l.modelo, l.importe])).toEqual([
+      ["303", 1260],
+      ["111", 0],
+      ["115", 570],
+    ]);
+    expect(q.aPagar).toBe(1830);
   });
 });

@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { faltaLaTabla, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
+import { TIPOS_GASTO } from "@/dominio/impuestos";
 import {
   AJUSTES_POR_DEFECTO,
   type AjustesGerencia,
@@ -47,6 +48,8 @@ function errorLegible(error: { code?: string; message: string }): Error {
 export type DatosAjustesGerencia = {
   /** Falso si la migración 20261008100000_gerencia_ajustes no está aplicada. */
   disponible: boolean;
+  /** Falso si la migración 20261010100000_gastos_impuestos no está aplicada. */
+  impuestosDisponibles: boolean;
   ajustes: AjustesGerencia;
   gastos: GastoFijo[];
   objetivos: Objetivo[];
@@ -55,24 +58,53 @@ export type DatosAjustesGerencia = {
 export const leerAjustesGerencia = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<DatosAjustesGerencia> => {
-    const [a, g, o] = await Promise.all([
-      tabla(context.supabase, "gerencia_ajustes").select("web_sin_pagar_cuenta").limit(1),
+    // Sin la migración de impuestos (20261010100000) las columnas nuevas no
+    // existen: se leen las de antes y valen los valores por defecto.
+    const leerAjustes = (nuevas: boolean) =>
+      tabla(context.supabase, "gerencia_ajustes")
+        .select(`web_sin_pagar_cuenta${nuevas ? ", tipo_is, cuota_is_anterior, precio_metro" : ""}`)
+        .limit(1);
+    const leerGastos = (nuevas: boolean) =>
       tabla(context.supabase, "gerencia_gastos_fijos")
-        .select("id, concepto, importe_mensual, desde, hasta, notas")
-        .order("desde", { ascending: false }),
+        .select(
+          `id, concepto, importe_mensual, desde, hasta, notas${nuevas ? ", periodicidad, tipo, iva_pct, irpf_pct" : ""}`,
+        )
+        .order("desde", { ascending: false });
+    const [a0, g0, o] = await Promise.all([
+      leerAjustes(true),
+      leerGastos(true),
       tabla(context.supabase, "gerencia_objetivos")
         .select("id, desde, metros, vendido")
         .order("desde", { ascending: false }),
     ]);
+    const conImpuestos = !faltaLaColumna(a0.error) && !faltaLaColumna(g0.error);
+    const a = faltaLaColumna(a0.error) ? await leerAjustes(false) : a0;
+    const g = faltaLaColumna(g0.error) ? await leerGastos(false) : g0;
     if (faltaLaTabla(a.error) || faltaLaTabla(g.error) || faltaLaTabla(o.error)) {
-      return { disponible: false, ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
+      return {
+        disponible: false,
+        impuestosDisponibles: false,
+        ajustes: AJUSTES_POR_DEFECTO,
+        gastos: [],
+        objetivos: [],
+      };
     }
     const error = a.error ?? g.error ?? o.error;
     if (error) throw new Error(error.message);
-    const fila = (a.data ?? [])[0] as AjustesGerencia | undefined;
+    const fila = (a.data ?? [])[0] as Partial<Record<keyof AjustesGerencia, unknown>> | undefined;
     return {
       disponible: true,
-      ajustes: fila ?? AJUSTES_POR_DEFECTO,
+      impuestosDisponibles: conImpuestos,
+      ajustes: {
+        web_sin_pagar_cuenta:
+          typeof fila?.web_sin_pagar_cuenta === "boolean"
+            ? fila.web_sin_pagar_cuenta
+            : AJUSTES_POR_DEFECTO.web_sin_pagar_cuenta,
+        tipo_is: fila?.tipo_is != null ? Number(fila.tipo_is) : AJUSTES_POR_DEFECTO.tipo_is,
+        cuota_is_anterior: fila?.cuota_is_anterior != null ? Number(fila.cuota_is_anterior) : null,
+        precio_metro:
+          fila?.precio_metro != null ? Number(fila.precio_metro) : AJUSTES_POR_DEFECTO.precio_metro,
+      },
       gastos: (g.data ?? []) as GastoFijo[],
       objetivos: (o.data ?? []) as Objetivo[],
     };
@@ -80,13 +112,24 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
 
 export const guardarAjustesGerencia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ web_sin_pagar_cuenta: z.boolean() }).parse(d))
+  .inputValidator((d) =>
+    z
+      .object({
+        web_sin_pagar_cuenta: z.boolean().optional(),
+        tipo_is: z.number().min(0).max(100).optional(),
+        cuota_is_anterior: z.number().min(0).nullable().optional(),
+        precio_metro: z.number().positive("El metro tiene que valer más de 0").optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
     const empresa_id = await empresaActiva(supabaseAdmin);
+    // Solo lo que llega: cambiar un ajuste no toca los demás.
+    const cambios = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
     const { error } = await tabla(supabaseAdmin, "gerencia_ajustes").upsert(
-      { empresa_id, web_sin_pagar_cuenta: data.web_sin_pagar_cuenta },
+      { empresa_id, ...cambios },
       { onConflict: "empresa_id" },
     );
     if (error) throw errorLegible(error);
@@ -106,6 +149,10 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
         desde: dia,
         hasta: dia.nullable(),
         notas: z.string().nullable().optional(),
+        periodicidad: z.enum(["mensual", "trimestral", "anual", "puntual"]).optional(),
+        tipo: z.enum(TIPOS_GASTO.map((t) => t.valor) as [string, ...string[]]).optional(),
+        iva_pct: z.number().min(0).max(100).optional(),
+        irpf_pct: z.number().min(0).max(100).optional(),
       })
       .parse(d),
   )
@@ -118,6 +165,15 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
       desde: data.desde,
       hasta: data.hasta,
       notas: data.notas?.trim() || null,
+      // Sin la migración de impuestos no se mandan: la base no las conoce.
+      ...(data.periodicidad !== undefined
+        ? {
+            periodicidad: data.periodicidad,
+            tipo: data.tipo ?? "otros",
+            iva_pct: data.iva_pct ?? 0,
+            irpf_pct: data.irpf_pct ?? 0,
+          }
+        : {}),
     };
     if (data.id) {
       const { error } = await tabla(supabaseAdmin, "gerencia_gastos_fijos")

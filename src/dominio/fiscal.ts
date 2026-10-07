@@ -114,7 +114,14 @@ export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
 }
 
 /** Una factura de compra con lo justo para el IVA. */
-export type CompraResumen = { estado: string; base: Numerico; iva: Numerico; total: Numerico };
+export type CompraResumen = {
+  estado: string;
+  base: Numerico;
+  iva: Numerico;
+  total: Numerico;
+  /** `yyyy-MM-dd`; para repartir por trimestres. */
+  fecha?: string;
+};
 
 export type IvaSoportado = CuentaFiscal & {
   /** Compras subidas que aún no se han registrado: no cuentan. */
