@@ -208,3 +208,32 @@ describe("cobrosDeTiendas", () => {
     expect(cobrosDeTiendas(cobros, "t2").map((x) => x.tienda_id)).toEqual(["t2"]);
   });
 });
+
+describe("consolidarCobro con un pedido sin fecha", () => {
+  it("no se rompe: la fecha del pedido queda vacía", () => {
+    const c = consolidarCobro(
+      {
+        id: "c",
+        fecha: "2026-10-01",
+        importe: 10,
+        propina: 0,
+        metodo: "efectivo",
+        previo: false,
+        tienda_id: "t1",
+        pedido: {
+          id: "p",
+          numero: "N",
+          fecha: null as unknown as string,
+          cliente_nombre: null,
+          total: 10,
+          iva: 0,
+          envio: 0,
+          metros: 0,
+        },
+      },
+      "cobro",
+    );
+    expect(c.fecha_pedido).toBe("");
+    expect(c.importe).toBe(10);
+  });
+});

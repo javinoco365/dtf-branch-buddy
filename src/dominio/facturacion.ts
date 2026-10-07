@@ -76,6 +76,8 @@ export type CobroConsolidado = {
   /** Instante por el que se agrupa en semanas: el del pedido o el del cobro. */
   fecha: string;
   fecha_cobro: string;
+  /** Día del pedido, `yyyy-MM-dd`, o vacío si el pedido no tiene fecha. */
+  fecha_pedido: string;
   tienda_id: string;
   pedido_id: string;
   pedido_numero: string;
@@ -101,6 +103,19 @@ function instante(fecha: string): string {
 }
 
 /**
+ * El día de una fecha en hora de Madrid. Un instante (pedido de tienda) se
+ * pasa a la hora local; un día suelto (pedido textil) se deja como está.
+ */
+function diaLocal(fecha: string | null | undefined): string {
+  // Un pedido sin fecha no puede tumbar la lectura de todos los cobros.
+  if (!fecha) return "";
+  if (fecha.length <= 10) return fecha;
+  const d = new Date(fecha);
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
+
+/**
  * Reparte el cobro en la proporción del pedido: el IVA como el del pedido
  * (desglosarCobro), y los envíos y los metros en la parte que se ha cobrado.
  * Un pedido cobrado entero suma sus metros y su envío completos; uno cobrado a
@@ -118,6 +133,7 @@ export function consolidarCobro(c: CobroLeido, criterio: CriterioFecha): CobroCo
     id: c.id,
     fecha: instante(criterio === "pedido" ? c.pedido.fecha : c.fecha),
     fecha_cobro: c.fecha.slice(0, 10),
+    fecha_pedido: diaLocal(c.pedido.fecha),
     tienda_id: c.tienda_id,
     pedido_id: c.pedido.id,
     pedido_numero: c.pedido.numero,

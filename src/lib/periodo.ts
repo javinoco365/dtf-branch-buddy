@@ -17,7 +17,8 @@ import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/domin
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
 
-const CAMPOS_PEDIDO = "fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total";
+const CAMPOS_PEDIDO =
+  "fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id";
 
 export type RangoFechas = { desde: Date; hasta: Date };
 

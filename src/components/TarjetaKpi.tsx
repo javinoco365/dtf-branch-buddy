@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,8 +19,11 @@ export function TarjetaKpi({
   color = "primary",
   deltaInverso = false,
   explicacion,
+  pie,
 }: {
   titulo: string;
+  /** Debajo de todo: un enlace al detalle, una nota. */
+  pie?: ReactNode;
   /** La definición que sale en su ⓘ (ver dominio/definiciones.ts). */
   explicacion?: ClaveDefinicion;
   valor: string;
@@ -49,6 +53,7 @@ export function TarjetaKpi({
         </div>
         <div className={`mt-3 text-3xl font-bold tracking-tight ${valorColor}`}>{valor}</div>
         <LineaVariacion delta={delta} frente={frente} inverso={deltaInverso} />
+        {pie && <div className="mt-2 text-xs">{pie}</div>}
       </CardContent>
     </Card>
   );
