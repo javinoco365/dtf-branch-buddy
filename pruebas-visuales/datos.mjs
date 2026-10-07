@@ -624,7 +624,35 @@ const COMPRAS = [0, 1].map((i) => ({
   lineas: [],
 }));
 
+// Gerencia › Ajustes: un gasto fijo vigente, otro dado de baja y un objetivo.
+const GASTOS_FIJOS = [
+  {
+    id: id("9f", 1),
+    empresa_id: EMPRESA,
+    concepto: "Alquiler nave",
+    importe_mensual: 300,
+    desde: "2026-01-01",
+    hasta: null,
+    notas: null,
+  },
+  {
+    id: id("9f", 2),
+    empresa_id: EMPRESA,
+    concepto: "Gestoría",
+    importe_mensual: 90,
+    desde: "2026-01-01",
+    hasta: "2026-06-30",
+    notas: "Cambiamos de gestoría",
+  },
+];
+const OBJETIVOS = [
+  { id: id("0b", 1), empresa_id: EMPRESA, desde: "2026-09-01", metros: 40, vendido: 1500 },
+];
+
 Object.assign(DATOS, {
+  gerencia_ajustes: [{ empresa_id: EMPRESA, web_sin_pagar_cuenta: true }],
+  gerencia_gastos_fijos: GASTOS_FIJOS,
+  gerencia_objetivos: OBJETIVOS,
   clientes: CLIENTES,
   clientes_posibles_duplicados: [],
   pedidos: PEDIDOS,

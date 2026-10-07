@@ -33,6 +33,7 @@ export const RUTAS = {
   gerencia: "/panel/gerencia",
   "gerencia-ventas": "/panel/gerencia?pestana=ventas",
   "gerencia-tesoreria": "/panel/gerencia?pestana=tesoreria",
+  "gerencia-ajustes": "/panel/gerencia?pestana=ajustes",
   pedidos: "/panel/pedidos",
   consolidada: "/panel/facturacion-global",
   cobros: "/panel/cobros",
