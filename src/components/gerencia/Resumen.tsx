@@ -5,6 +5,7 @@ import {
   Clock,
   Euro,
   Gauge,
+  PiggyBank,
   Percent,
   Receipt,
   Ruler,
@@ -22,20 +23,28 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { Explicacion } from "@/components/Explicacion";
 import { eur, metros } from "@/lib/format";
+import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
 import { tramosGrafica } from "@/dominio/periodos";
 import {
   antiguedadPendientes,
+  avanceObjetivo,
   avisosGerencia,
+  beneficioEstimado,
   cifrasGerencia,
   cobradoPorTramos,
+  objetivoDelRango,
+  parteTranscurrida,
   resumenBanco,
-  webSinPagar,
+  type CifrasGerencia,
 } from "@/dominio/gerencia";
 import {
+  DESTINO_AJUSTES,
   destinoAviso,
   destinoCobros,
   destinoPedidos,
@@ -62,10 +71,10 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       avisosGerencia({
         tramos: antiguedadPendientes(d.pendientes, d.hoy),
         variacionVendido: frente ? variacion(c.total, p.total) : null,
-        webSinPagar: webSinPagar(d.ventas),
+        webSinPagar: { ...d.webSinPagar, cuentan: d.ajustes.web_sin_pagar_cuenta },
         banco: d.banco ? resumenBanco(d.banco) : null,
       }),
-    [d.pendientes, d.hoy, frente, c.total, p.total, d.ventas, d.banco],
+    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco],
   );
 
   const grafica = useMemo(() => {
@@ -163,6 +172,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
       </div>
 
+      <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Avisos</CardTitle>
@@ -224,5 +235,157 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Lo que se configura en Ajustes: el beneficio tras los gastos fijos y cómo
+ * se va frente al objetivo. Son cifras de toda la empresa, así que con un
+ * filtro de tienda o canal no se enseñan: compararían una parte con el todo.
+ */
+function BeneficioYObjetivos({
+  d,
+  c,
+  p,
+  sinCostes,
+}: {
+  d: DatosGerencia;
+  c: CifrasGerencia;
+  p: CifrasGerencia;
+  sinCostes: boolean;
+}) {
+  const frente = d.comparacion?.etiqueta;
+  const objetivo = objetivoDelRango(d.objetivos, d.rango);
+  const hayGastos = d.gastos.length > 0;
+  const hayObjetivo = objetivo.vendido !== null || objetivo.metros !== null;
+  const sinFiltros = d.filtro.tienda === "todas" && d.filtro.canal === "todos";
+
+  if (!hayGastos && !hayObjetivo) {
+    return (
+      <Nota>
+        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio estimado y
+        cómo vas frente al objetivo. <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
+      </Nota>
+    );
+  }
+  if (!sinFiltros) {
+    return (
+      <Nota>
+        El beneficio estimado y los objetivos son de toda la empresa: se ven con «Todas las tiendas»
+        y «Todos los canales».
+      </Nota>
+    );
+  }
+
+  const transcurrido = parteTranscurrida(d.rango, d.hoy);
+  const actual = beneficioEstimado(c.margen, d.gastos, d.rango, d.hoy);
+  const previo = d.comparacion ? beneficioEstimado(p.margen, d.gastos, d.comparacion.previo) : null;
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {hayGastos && (
+        <TarjetaKpi
+          titulo="Beneficio estimado"
+          explicacion="g_beneficio"
+          valor={sinCostes ? "—" : eur(actual.beneficio)}
+          color={!sinCostes && actual.beneficio < 0 ? "destructive" : "primary"}
+          frente={frente}
+          delta={
+            sinCostes || !previo || previo.beneficio <= 0
+              ? null
+              : variacion(actual.beneficio, previo.beneficio)
+          }
+          icon={PiggyBank}
+          pie={
+            <span className="text-muted-foreground">
+              {sinCostes
+                ? "Falta el coste por metro para calcular el margen."
+                : `Margen ${eur(c.margen)} − gastos fijos ${eur(actual.gastos)}${actual.hastaHoy ? " hasta hoy" : ""}`}
+            </span>
+          }
+        />
+      )}
+      {objetivo.vendido !== null && (
+        <TarjetaObjetivo
+          titulo="Objetivo de ventas"
+          clave="g_objetivo_vendido"
+          conseguido={c.total}
+          objetivo={objetivo.vendido}
+          transcurrido={transcurrido}
+          formato={eur}
+        />
+      )}
+      {objetivo.metros !== null && (
+        <TarjetaObjetivo
+          titulo="Objetivo de metros"
+          clave="g_objetivo_metros"
+          conseguido={c.metros}
+          objetivo={objetivo.metros}
+          transcurrido={transcurrido}
+          formato={metros}
+        />
+      )}
+    </div>
+  );
+}
+
+function Nota({ children }: { children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardContent className="py-4 text-sm text-muted-foreground">{children}</CardContent>
+    </Card>
+  );
+}
+
+function TarjetaObjetivo({
+  titulo,
+  clave,
+  conseguido,
+  objetivo,
+  transcurrido,
+  formato,
+}: {
+  titulo: string;
+  clave: "g_objetivo_vendido" | "g_objetivo_metros";
+  conseguido: number;
+  objetivo: number;
+  transcurrido: number;
+  formato: (n: number) => string;
+}) {
+  const a = avanceObjetivo(conseguido, objetivo, transcurrido);
+  if (!a) return null;
+  const terminado = transcurrido >= 1;
+  const delante = a.diferencia >= 0;
+  const ritmo = terminado
+    ? delante
+      ? `Superado en ${formato(a.diferencia)}`
+      : `Faltaron ${formato(-a.diferencia)}`
+    : delante
+      ? `A este ritmo, ${formato(a.diferencia)} por delante`
+      : `A este ritmo, ${formato(-a.diferencia)} por detrás`;
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <span>{titulo}</span>
+          <Explicacion titulo={titulo} definicion={DEFINICIONES[clave]} />
+        </div>
+        <div className="mt-3 text-3xl font-bold tracking-tight">
+          {a.porcentaje.toLocaleString("es-ES")} %
+        </div>
+        <Progress value={Math.min(100, a.porcentaje)} className="mt-3" />
+        <p className="mt-2 text-xs text-muted-foreground">
+          {formato(conseguido)} de {formato(objetivo)}
+        </p>
+        <p
+          className={`mt-1 text-xs font-medium ${
+            delante ? "text-status-completado" : "text-status-pendiente"
+          }`}
+        >
+          {ritmo}
+        </p>
+      </CardContent>
+    </Card>
   );
 }

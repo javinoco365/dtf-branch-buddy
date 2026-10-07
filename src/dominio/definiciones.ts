@@ -98,7 +98,8 @@ export const DEFINICIONES = {
   // --- Gerencia: tiendas y textil, con los filtros de arriba ---------------
   g_vendido: {
     que: "Lo vendido en el periodo, con IVA y envío, en tiendas y textil.",
-    calculo: "Suma del total de los pedidos no cancelados, menos lo devuelto.",
+    calculo:
+      "Suma del total de los pedidos no cancelados, menos lo devuelto. Los pedidos web sin pagar cuentan o no según lo elegido en Gerencia › Ajustes; eso vale para todas las cifras de pedidos de Gerencia.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_cobrado: {
@@ -116,8 +117,29 @@ export const DEFINICIONES = {
   g_margen: {
     que: "Lo que queda de lo vendido en DTF después del coste de producción.",
     calculo:
-      "Facturación bruta − metros × coste por metro congelado en cada pedido. El textil todavía no tiene coste en el CRM: su margen aquí es su bruta. No incluye gastos fijos.",
+      "Facturación bruta − metros × coste por metro congelado en cada pedido. El textil todavía no tiene coste en el CRM: su margen aquí es su bruta. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
+  },
+  g_beneficio: {
+    que: "Lo que queda del margen después de pagar los gastos fijos del periodo.",
+    calculo:
+      "Margen estimado − gastos fijos. Cada gasto fijo, que se apunta al mes y sin IVA, se reparte por los días del periodo en que está vigente: medio mes de un alquiler de 800 € son 400 €. Si el periodo está en curso, solo cuentan los días hasta hoy, igual que las ventas.",
+    fuente:
+      "Pedidos de tiendas y textil del periodo y los gastos fijos de Gerencia › Ajustes. Solo sin filtros de tienda ni canal: los gastos fijos son de toda la empresa. Sin impuestos sobre beneficios.",
+  },
+  g_objetivo_vendido: {
+    que: "Cuánto se lleva vendido frente al objetivo del periodo.",
+    calculo:
+      "Vendido ÷ objetivo de ventas. El objetivo, que se pone al mes, se reparte por días: el periodo de una quincena tiene la mitad del objetivo del mes. «A este ritmo» compara con lo que tocaría llevar hoy si se vendiera lo mismo cada día.",
+    fuente:
+      "Objetivos de Gerencia › Ajustes y pedidos del periodo. Solo sin filtros de tienda ni canal: el objetivo es de toda la empresa.",
+  },
+  g_objetivo_metros: {
+    que: "Cuántos metros se llevan vendidos frente al objetivo del periodo.",
+    calculo:
+      "Metros vendidos ÷ objetivo de metros. El objetivo, que se pone al mes, se reparte por días, igual que el de ventas.",
+    fuente:
+      "Objetivos de Gerencia › Ajustes y pedidos del periodo. Solo sin filtros de tienda ni canal: el objetivo es de toda la empresa.",
   },
   g_pedidos: {
     que: "Cuántos pedidos se han hecho.",

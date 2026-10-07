@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AJUSTES_POR_DEFECTO,
   aplicarAjustesVentas,
+  avanceObjetivo,
+  beneficioEstimado,
   gastosFijosDelRango,
   objetivoDelRango,
   parteTranscurrida,
@@ -252,7 +254,7 @@ describe("avisos", () => {
     const a = avisosGerencia({
       tramos,
       variacionVendido: -25,
-      webSinPagar: { pedidos: 2, importe: 80 },
+      webSinPagar: { pedidos: 2, importe: 80, cuentan: true },
       banco: resumenBanco([{ fecha: "2026-10-01", importe: 10, conciliado: false }]),
     });
     expect(a.map((x) => x.tipo)).toEqual([
@@ -268,7 +270,7 @@ describe("avisos", () => {
     const a = avisosGerencia({
       tramos: [],
       variacionVendido: -10,
-      webSinPagar: { pedidos: 0, importe: 0 },
+      webSinPagar: { pedidos: 0, importe: 0, cuentan: true },
       banco: null,
     });
     expect(a).toEqual([]);
@@ -390,5 +392,52 @@ describe("pedidos web sin pagar según el ajuste", () => {
     ];
     expect(aplicarAjustesVentas(ventas, AJUSTES_POR_DEFECTO)).toHaveLength(3);
     expect(aplicarAjustesVentas(ventas, { web_sin_pagar_cuenta: false })).toHaveLength(2);
+  });
+});
+
+describe("avance contra objetivo", () => {
+  it("porcentaje conseguido y diferencia con el ritmo que toca", () => {
+    // A un tercio del mes, con 4.000 € de un objetivo de 15.000 €.
+    expect(avanceObjetivo(4000, 15000, 1 / 3)).toEqual({
+      porcentaje: 26.7,
+      esperado: 5000,
+      diferencia: -1000,
+    });
+    // Periodo terminado: lo esperado es el objetivo entero.
+    expect(avanceObjetivo(16000, 15000, 1)).toMatchObject({ esperado: 15000, diferencia: 1000 });
+  });
+
+  it("sin objetivo no hay avance", () => {
+    expect(avanceObjetivo(100, 0, 0.5)).toBeNull();
+  });
+});
+
+describe("beneficio estimado", () => {
+  it("margen menos los gastos fijos del rango", () => {
+    const gastos = [
+      { id: "a", concepto: "Alquiler", importe_mensual: 800, desde: "2026-01-01", hasta: null },
+    ];
+    const quincena = { desde: new Date(2026, 8, 1), hasta: new Date(2026, 8, 15, 23, 59) };
+    expect(beneficioEstimado(1000, gastos, quincena)).toEqual({
+      gastos: 400,
+      beneficio: 600,
+      hastaHoy: false,
+    });
+    expect(beneficioEstimado(100, gastos, quincena).beneficio).toBe(-300);
+  });
+
+  it("en un periodo en curso, los gastos solo hasta hoy", () => {
+    const gastos = [
+      { id: "a", concepto: "Alquiler", importe_mensual: 900, desde: "2026-01-01", hasta: null },
+    ];
+    const septiembre = { desde: new Date(2026, 8, 1), hasta: new Date(2026, 8, 30, 23, 59) };
+    // El 10 de septiembre van 10 de 30 días: 300 €.
+    expect(beneficioEstimado(1000, gastos, septiembre, new Date(2026, 8, 10, 9))).toEqual({
+      gastos: 300,
+      beneficio: 700,
+      hastaHoy: true,
+    });
+    // Un periodo que aún no ha empezado no tiene gastos.
+    expect(beneficioEstimado(0, gastos, septiembre, new Date(2026, 7, 20)).gastos).toBe(0);
   });
 });

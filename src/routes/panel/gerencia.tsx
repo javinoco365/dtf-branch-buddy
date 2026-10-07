@@ -8,10 +8,12 @@ import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { Resumen } from "@/components/gerencia/Resumen";
 import { Ventas } from "@/components/gerencia/Ventas";
 import { Tesoreria } from "@/components/gerencia/Tesoreria";
+import { Ajustes } from "@/components/gerencia/Ajustes";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import {
+  useAjustesGerencia,
   useBancoPeriodo,
   useCajaPeriodo,
   useCosteMetroActual,
@@ -21,12 +23,15 @@ import {
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
+  AJUSTES_POR_DEFECTO,
+  aplicarAjustesVentas,
   CANALES,
   filtrarCobrosGerencia,
   filtrarPendientesGerencia,
   filtrarVentas,
   type Canal,
   type FiltroGerencia,
+  webSinPagar,
 } from "@/dominio/gerencia";
 
 export const Route = createFileRoute("/panel/gerencia")({
@@ -35,6 +40,8 @@ export const Route = createFileRoute("/panel/gerencia")({
 });
 
 const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos" };
+
+const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
 
 const esCanal = (v: string): v is Canal => CANALES.some((c) => c.valor === v);
 
@@ -61,11 +68,16 @@ function Gerencia() {
   const caja = useCajaPeriodo(rango);
   const banco = useBancoPeriodo(rango);
   const costeMetro = useCosteMetroActual();
+  const ajustes = useAjustesGerencia();
   const { data: tiendas = [] } = useTiendas();
   const hoy = useMemo(() => new Date(), []);
 
   const datos: DatosGerencia | null = useMemo(() => {
-    if (!ventas.data) return null;
+    // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
+    const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
+    if (!ventas.data || !aj) return null;
+    const a = aj.ajustes;
+    const delPeriodo = filtrarVentas(ventas.data, filtro);
     return {
       filtro,
       seleccion: periodo.seleccion,
@@ -73,8 +85,12 @@ function Gerencia() {
       comparacion: periodo.comparacion,
       costeMetro,
       tiendas,
-      ventas: filtrarVentas(ventas.data, filtro),
-      ventasPrevias: filtrarVentas(ventasPrevias.data ?? [], filtro),
+      ventas: aplicarAjustesVentas(delPeriodo, a),
+      ventasPrevias: aplicarAjustesVentas(filtrarVentas(ventasPrevias.data ?? [], filtro), a),
+      webSinPagar: webSinPagar(delPeriodo),
+      ajustes: a,
+      gastos: aj.gastos,
+      objetivos: aj.objetivos,
       cobros: filtrarCobrosGerencia(cobros.data?.cobros ?? [], filtro),
       cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios.data?.cobros ?? [], filtro),
       cobrosDisponibles: cobros.data?.disponible ?? false,
@@ -87,6 +103,8 @@ function Gerencia() {
   }, [
     ventas.data,
     ventasPrevias.data,
+    ajustes.data,
+    ajustes.isError,
     cobros.data,
     cobrosPrevios.data,
     pendientes.data,
@@ -110,6 +128,8 @@ function Gerencia() {
     { valor: "todos", etiqueta: "Todos los canales" },
     ...CANALES.map((c) => ({ valor: c.valor, etiqueta: c.etiqueta })),
   ];
+  // Los ajustes no dependen del periodo ni de los filtros.
+  const enAjustes = f.pestana === "ajustes";
 
   return (
     <div className="space-y-6">
@@ -121,7 +141,7 @@ function Gerencia() {
         </p>
       </div>
 
-      <Card>
+      <Card className={enAjustes ? "hidden" : undefined}>
         <CardContent className="p-4 flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
           <SelectFiltro
@@ -141,7 +161,7 @@ function Gerencia() {
         </CardContent>
       </Card>
 
-      {ventas.error && (
+      {ventas.error && !enAjustes && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
             No se han podido cargar los pedidos: {ventas.error.message}
@@ -154,9 +174,14 @@ function Gerencia() {
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="ventas">Ventas</TabsTrigger>
           <TabsTrigger value="tesoreria">Cobros y tesorería</TabsTrigger>
+          <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
         </TabsList>
 
-        {!datos ? (
+        <TabsContent value="ajustes" className="mt-4">
+          <Ajustes />
+        </TabsContent>
+
+        {enAjustes ? null : !datos ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-[124px] w-full rounded-xl" />

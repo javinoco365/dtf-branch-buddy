@@ -3,7 +3,15 @@ import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { escribirSeleccion, type Comparacion, type Seleccion } from "@/dominio/periodos";
 import type { CobroConsolidado } from "@/dominio/facturacion";
 import type { PedidoPendiente } from "@/dominio/pendientes";
-import type { Aviso, FiltroGerencia, MovimientoBancoResumen, Venta } from "@/dominio/gerencia";
+import type {
+  AjustesGerencia,
+  Aviso,
+  FiltroGerencia,
+  GastoFijo,
+  MovimientoBancoResumen,
+  Objetivo,
+  Venta,
+} from "@/dominio/gerencia";
 import type { MovimientoCaja } from "@/lib/caja.functions";
 
 /** Todo lo que leen las pestañas, ya filtrado por tienda y canal. */
@@ -14,8 +22,14 @@ export type DatosGerencia = {
   comparacion: Comparacion | null;
   costeMetro: number;
   tiendas: readonly { id: string; nombre: string }[];
+  /** Ya sin los pedidos web sin pagar si en Ajustes se ha dicho que no cuentan. */
   ventas: Venta[];
   ventasPrevias: Venta[];
+  /** Los pedidos web sin pagar del periodo, cuenten o no. */
+  webSinPagar: { pedidos: number; importe: number };
+  ajustes: AjustesGerencia;
+  gastos: GastoFijo[];
+  objetivos: Objetivo[];
   cobros: CobroConsolidado[];
   cobrosPrevios: CobroConsolidado[];
   cobrosDisponibles: boolean;
@@ -76,6 +90,8 @@ export function destinoCaja(sel: Seleccion): Destino {
   return { to: "/panel/caja", search: periodoEnDireccion(sel) };
 }
 
+export const DESTINO_AJUSTES: Destino = { to: "/panel/gerencia", search: { pestana: "ajustes" } };
+
 export const DESTINO_CONCILIACION: Destino = { to: "/panel/conciliacion" };
 
 /** El texto de cada aviso. Las cifras van formateadas como en el resto del CRM. */
@@ -86,7 +102,7 @@ export function textoAviso(a: Aviso, frente?: string): string {
     case "caida_ventas":
       return `Lo vendido cae un ${numero(a.porcentaje, 1)} %${frente ? ` frente a ${frente}` : ""}.`;
     case "web_sin_pagar":
-      return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). Cuentan en lo vendido.`;
+      return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). ${a.cuentan ? "Cuentan" : "No cuentan"} en lo vendido (se cambia en Ajustes).`;
     case "banco_sin_casar":
       return `${a.movimientos} ${a.movimientos === 1 ? "entrada del banco está" : "entradas del banco están"} sin casar con una factura (${eur(a.importe)}).`;
   }

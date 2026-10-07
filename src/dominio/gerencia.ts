@@ -325,7 +325,14 @@ export function resumenBanco(movs: readonly MovimientoBancoResumen[]): ResumenBa
 export type Aviso =
   | { tipo: "deuda_antigua"; nivel: "alto"; pedidos: number; importe: number }
   | { tipo: "caida_ventas"; nivel: "medio"; porcentaje: number }
-  | { tipo: "web_sin_pagar"; nivel: "medio"; pedidos: number; importe: number }
+  | {
+      tipo: "web_sin_pagar";
+      nivel: "medio";
+      pedidos: number;
+      importe: number;
+      /** Si cuentan en lo vendido (Gerencia › Ajustes). */
+      cuentan: boolean;
+    }
   | { tipo: "banco_sin_casar"; nivel: "medio"; movimientos: number; importe: number };
 
 /** Cuánto tiene que caer lo vendido, en %, para avisar. */
@@ -339,8 +346,8 @@ export function avisosGerencia(d: {
   tramos: readonly TramoAntiguedad[];
   /** Variación de lo vendido frente a la comparación, en %. */
   variacionVendido: number | null;
-  /** Pedidos web del periodo todavía sin pagar. */
-  webSinPagar: { pedidos: number; importe: number };
+  /** Pedidos web del periodo todavía sin pagar, y si cuentan en lo vendido. */
+  webSinPagar: { pedidos: number; importe: number; cuentan: boolean };
   banco: ResumenBanco | null;
 }): Aviso[] {
   const avisos: Aviso[] = [];
@@ -556,4 +563,54 @@ export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): n
 export function aplicarAjustesVentas(ventas: readonly Venta[], a: AjustesGerencia): Venta[] {
   if (a.web_sin_pagar_cuenta) return [...ventas];
   return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));
+}
+
+export type AvanceObjetivo = {
+  /** Lo conseguido sobre el objetivo del periodo, en %. */
+  porcentaje: number;
+  /** Lo que tocaría llevar hoy yendo a ritmo constante. */
+  esperado: number;
+  /** Lo conseguido menos lo esperado: positivo, por delante. */
+  diferencia: number;
+};
+
+/**
+ * Cómo se va frente a un objetivo: qué parte se lleva y si se va por delante
+ * o por detrás del ritmo que toca a estas alturas del periodo.
+ */
+export function avanceObjetivo(
+  conseguido: number,
+  objetivo: number,
+  transcurrido: number,
+): AvanceObjetivo | null {
+  if (!(objetivo > 0)) return null;
+  const esperado = objetivo * Math.min(1, Math.max(0, transcurrido));
+  return {
+    porcentaje: redondear((conseguido / objetivo) * 100, 1),
+    esperado: redondear(esperado, 2),
+    diferencia: redondear(conseguido - esperado, 2),
+  };
+}
+
+/**
+ * Beneficio estimado de un rango: el margen menos los gastos fijos que le
+ * tocan, ambos sin IVA. Con `hoy`, los gastos se cuentan solo hasta hoy: a
+ * mitad de mes se compara lo vendido hasta hoy con lo gastado hasta hoy, no
+ * con el mes entero.
+ */
+export function beneficioEstimado(
+  margen: number,
+  gastos: readonly GastoFijo[],
+  r: { desde: Date; hasta: Date },
+  hoy?: Date,
+): { gastos: number; beneficio: number; hastaHoy: boolean } {
+  const finHoy = hoy
+    ? new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59)
+    : null;
+  const hastaHoy = finHoy !== null && finHoy < r.hasta;
+  const g =
+    hastaHoy && finHoy < r.desde
+      ? 0
+      : gastosFijosDelRango(gastos, { desde: r.desde, hasta: hastaHoy ? finHoy : r.hasta });
+  return { gastos: g, beneficio: redondear(margen - g), hastaHoy };
 }
