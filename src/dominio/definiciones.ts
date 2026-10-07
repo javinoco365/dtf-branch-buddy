@@ -40,7 +40,7 @@ export const DEFINICIONES = {
   margen: {
     que: "Lo que queda de la facturación bruta después del coste de producción.",
     calculo:
-      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad, de Ajustes › Datos de la empresa). Es una estimación: no incluye gastos fijos.",
+      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad). Cada pedido usa el coste que había en Ajustes › Datos de la empresa al crearse, así que cambiar el coste no altera el margen de meses pasados. Es una estimación: no incluye gastos fijos.",
     fuente: PEDIDOS_TIENDAS,
   },
   ticket: {

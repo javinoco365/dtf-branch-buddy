@@ -14,7 +14,13 @@ import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { useCobrosPeriodo, usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
-import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import {
+  agruparPorRangos,
+  calcularKpis,
+  costeProduccion,
+  topPorMetros,
+  variacion,
+} from "@/dominio/kpis";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
@@ -81,9 +87,13 @@ function DashboardGlobal() {
   const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [])).cobrado;
   const cobradoPrev = totalizar(cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [])).cobrado;
 
-  const costePer = costeMetro * k.metros;
+  // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
+  // con el de hoy.
+  const costePer = costeProduccion(pedidos, costeMetro);
   const margenPer = k.bruta - costePer;
-  const margenPrev = kPrev.bruta - costeMetro * kPrev.metros;
+  const margenPrev = kPrev.bruta - costeProduccion(pedidosAnt, costeMetro);
+  // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
+  const sinCostes = costeMetro === 0 && costePer === 0;
 
   const grafica = useMemo(() => {
     const { por, tramos } = tramosGrafica({ desde, hasta });
@@ -189,10 +199,10 @@ function DashboardGlobal() {
               icon={Wallet}
             />
             <TarjetaKpi
-              titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
+              titulo={sinCostes ? "Margen" : "Margen estimado"}
               explicacion="margen"
-              valor={costeMetro === 0 ? "—" : eur(margenPer)}
-              delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
+              valor={sinCostes ? "—" : eur(margenPer)}
+              delta={sinCostes ? null : variacion(margenPer, margenPrev)}
               frente={comparacion?.etiqueta}
               icon={Percent}
             />
@@ -233,7 +243,7 @@ function DashboardGlobal() {
             />
           </div>
 
-          {costeMetro === 0 && (
+          {sinCostes && (
             <p className="-mt-2 text-xs text-muted-foreground">
               Configura los costes por metro en Ajustes › Datos de la empresa para calcular el
               margen.

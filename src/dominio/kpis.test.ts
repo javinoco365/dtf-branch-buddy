@@ -4,6 +4,7 @@ import {
   agruparPorRangos,
   agruparPorTienda,
   calcularKpis,
+  costeProduccion,
   KPIS_VACIOS,
   parteVendida,
   topPorMetros,
@@ -277,5 +278,27 @@ describe("topPorMetros", () => {
       unidad: "m",
     }));
     expect(topPorMetros(lineas, 3)).toHaveLength(3);
+  });
+});
+
+describe("costeProduccion", () => {
+  it("cada pedido con su coste congelado; sin él, con el de hoy", () => {
+    const coste = costeProduccion(
+      [
+        pedido({ metros_total: 10, coste_metro_snapshot: 1.5 }),
+        pedido({ metros_total: 4, coste_metro_snapshot: null }),
+        pedido({ metros_total: 2, coste_metro_snapshot: "2" }),
+      ],
+      3,
+    );
+    expect(coste).toBe(10 * 1.5 + 4 * 3 + 2 * 2);
+  });
+
+  it("los cancelados no cuestan", () => {
+    expect(costeProduccion([pedido({ estado: "cancelado", metros_total: 50 })], 2)).toBe(0);
+  });
+
+  it("un coste congelado a cero es cero, no el de hoy", () => {
+    expect(costeProduccion([pedido({ metros_total: 10, coste_metro_snapshot: 0 })], 5)).toBe(0);
   });
 });

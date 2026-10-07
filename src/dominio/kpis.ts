@@ -31,6 +31,11 @@ export type PedidoResumen = {
    * lo vendido: un pedido de 100 € con 30 € devueltos son 70 € de venta.
    */
   devuelto?: number | string | null;
+  /**
+   * Coste de producción por metro congelado al crear el pedido. Nulo en los
+   * pedidos de antes de congelarlo, o si la migración no está aplicada.
+   */
+  coste_metro_snapshot?: number | string | null;
 };
 
 /** Una línea de pedido con lo mínimo para agrupar por producto. */
@@ -119,6 +124,24 @@ export function calcularKpis(pedidos: readonly PedidoResumen[]): KpisPeriodo {
     cancelados: pedidos.length - validos.length,
     ticket: validos.length ? redondear(total / validos.length) : 0,
   };
+}
+
+/**
+ * Coste de producción de los pedidos no cancelados: metros × coste por metro.
+ *
+ * Cada pedido con su coste congelado; los que no lo tienen, con el coste de
+ * hoy (`costeActual`), que es lo único que se sabe de ellos.
+ */
+export function costeProduccion(pedidos: readonly PedidoResumen[], costeActual: number): number {
+  return redondear(
+    pedidos
+      .filter((p) => p.estado !== ESTADO_CANCELADO)
+      .reduce((s, p) => {
+        const congelado = p.coste_metro_snapshot;
+        const coste = congelado == null || congelado === "" ? costeActual : num(congelado);
+        return s + num(p.metros_total) * coste;
+      }, 0),
+  );
 }
 
 /**
