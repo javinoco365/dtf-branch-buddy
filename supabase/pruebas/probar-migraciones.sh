@@ -184,6 +184,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/B4_cifras_fiables.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
 
 echo
+echo "== Ajustes de Gerencia =="
+$PSQL -f "$RAIZ/supabase/pruebas/B5_gerencia_ajustes.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
+
+echo
 echo "== Credenciales de WooCommerce en Vault =="
 $PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'

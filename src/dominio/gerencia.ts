@@ -325,7 +325,14 @@ export function resumenBanco(movs: readonly MovimientoBancoResumen[]): ResumenBa
 export type Aviso =
   | { tipo: "deuda_antigua"; nivel: "alto"; pedidos: number; importe: number }
   | { tipo: "caida_ventas"; nivel: "medio"; porcentaje: number }
-  | { tipo: "web_sin_pagar"; nivel: "medio"; pedidos: number; importe: number }
+  | {
+      tipo: "web_sin_pagar";
+      nivel: "medio";
+      pedidos: number;
+      importe: number;
+      /** Si cuentan en lo vendido (Gerencia › Ajustes). */
+      cuentan: boolean;
+    }
   | { tipo: "banco_sin_casar"; nivel: "medio"; movimientos: number; importe: number };
 
 /** Cuánto tiene que caer lo vendido, en %, para avisar. */
@@ -339,8 +346,8 @@ export function avisosGerencia(d: {
   tramos: readonly TramoAntiguedad[];
   /** Variación de lo vendido frente a la comparación, en %. */
   variacionVendido: number | null;
-  /** Pedidos web del periodo todavía sin pagar. */
-  webSinPagar: { pedidos: number; importe: number };
+  /** Pedidos web del periodo todavía sin pagar, y si cuentan en lo vendido. */
+  webSinPagar: { pedidos: number; importe: number; cuentan: boolean };
   banco: ResumenBanco | null;
 }): Aviso[] {
   const avisos: Aviso[] = [];
@@ -398,4 +405,212 @@ export function cobradoPorTramos(
         .reduce((s, c) => s + c.importe, 0),
     ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Ajustes: gastos fijos, objetivos y web sin pagar
+// ---------------------------------------------------------------------------
+
+export type GastoFijo = {
+  id: string;
+  concepto: string;
+  /** Al mes, sin IVA. */
+  importe_mensual: Numerico;
+  /** `yyyy-MM-dd`, primer día en que se paga. */
+  desde: string;
+  /** `yyyy-MM-dd`, último día; nulo si se sigue pagando. */
+  hasta: string | null;
+  notas?: string | null;
+};
+
+export type Objetivo = {
+  id: string;
+  /** `yyyy-MM-01`: el mes desde el que vale. */
+  desde: string;
+  metros: Numerico;
+  /** Vendido al mes, con IVA. */
+  vendido: Numerico;
+};
+
+export type AjustesGerencia = {
+  web_sin_pagar_cuenta: boolean;
+};
+
+export const AJUSTES_POR_DEFECTO: AjustesGerencia = { web_sin_pagar_cuenta: true };
+
+/** Un día `yyyy-MM-dd` como fecha local a mediodía, sin líos de huso. */
+function diaLocalDe(texto: string): Date {
+  const [a, m, d] = texto.slice(0, 10).split("-").map(Number);
+  return new Date(a, m - 1, d, 12);
+}
+
+/** Medianoche de un día: así dos fechas del mismo día se comparan bien. */
+function soloDia(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * Cada mes que toca el rango, con cuántos de sus días caen dentro: la base
+ * para prorratear algo que se expresa «al mes».
+ */
+function mesesDelRango(r: { desde: Date; hasta: Date }): {
+  inicio: Date;
+  diasDelMes: number;
+  dias: number;
+  primero: Date;
+  ultimo: Date;
+}[] {
+  const desde = soloDia(r.desde);
+  const hasta = soloDia(r.hasta);
+  const meses = [];
+  let inicio = new Date(desde.getFullYear(), desde.getMonth(), 1);
+  while (inicio <= hasta) {
+    const fin = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 0);
+    const primero = desde > inicio ? desde : inicio;
+    const ultimo = hasta < fin ? hasta : fin;
+    meses.push({
+      inicio,
+      diasDelMes: fin.getDate(),
+      dias: Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1,
+      primero,
+      ultimo,
+    });
+    inicio = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 1);
+  }
+  return meses;
+}
+
+/**
+ * Cuánto suman los gastos fijos en un rango de fechas. Cada gasto se reparte
+ * por días dentro de cada mes: un alquiler de 800 € al mes son 400 € en la
+ * primera quincena de un mes de 30 días, y 25,81 € por día en uno de 31. Solo
+ * cuentan los días en que el gasto está vigente.
+ */
+export function gastosFijosDelRango(
+  gastos: readonly GastoFijo[],
+  r: { desde: Date; hasta: Date },
+): number {
+  let total = 0;
+  for (const mes of mesesDelRango(r)) {
+    for (const g of gastos) {
+      const ini = soloDia(diaLocalDe(g.desde));
+      const fin = g.hasta ? soloDia(diaLocalDe(g.hasta)) : null;
+      const primero = ini > mes.primero ? ini : mes.primero;
+      const ultimo = fin && fin < mes.ultimo ? fin : mes.ultimo;
+      if (ultimo < primero) continue;
+      const dias = Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1;
+      total += (num(g.importe_mensual) * dias) / mes.diasDelMes;
+    }
+  }
+  return redondear(total);
+}
+
+/** El objetivo que vale para un mes: el último que empezó ese mes o antes. */
+function objetivoDelMes(objetivos: readonly Objetivo[], mes: Date): Objetivo | null {
+  let vigente: Objetivo | null = null;
+  for (const o of objetivos) {
+    const desde = diaLocalDe(o.desde);
+    const inicio = new Date(desde.getFullYear(), desde.getMonth(), 1);
+    if (inicio > mes) continue;
+    if (!vigente || diaLocalDe(vigente.desde) < desde) vigente = o;
+  }
+  return vigente;
+}
+
+export type ObjetivoDelRango = {
+  /** Metros que tocan en el rango, o nulo si no hay objetivo de metros. */
+  metros: number | null;
+  vendido: number | null;
+};
+
+/**
+ * El objetivo de un rango, prorrateado por días como los gastos fijos: el
+ * objetivo de octubre entero para «octubre», la mitad para su primera
+ * quincena, y la suma de los tres meses para un trimestre.
+ */
+export function objetivoDelRango(
+  objetivos: readonly Objetivo[],
+  r: { desde: Date; hasta: Date },
+): ObjetivoDelRango {
+  let metros: number | null = null;
+  let vendido: number | null = null;
+  for (const mes of mesesDelRango(r)) {
+    const o = objetivoDelMes(objetivos, mes.inicio);
+    if (!o) continue;
+    const parte = mes.dias / mes.diasDelMes;
+    if (o.metros != null && o.metros !== "") metros = (metros ?? 0) + num(o.metros) * parte;
+    if (o.vendido != null && o.vendido !== "") vendido = (vendido ?? 0) + num(o.vendido) * parte;
+  }
+  return {
+    metros: metros === null ? null : redondear(metros, 2),
+    vendido: vendido === null ? null : redondear(vendido),
+  };
+}
+
+/**
+ * Qué parte del rango ha pasado ya, de 0 a 1: para saber si se va por delante
+ * o por detrás del objetivo cuando el periodo aún no ha terminado.
+ */
+export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): number {
+  const total = mesesDelRango(r).reduce((s, m) => s + m.dias, 0);
+  if (soloDia(hoy) < soloDia(r.desde)) return 0;
+  if (soloDia(hoy) >= soloDia(r.hasta)) return 1;
+  const pasados = mesesDelRango({ desde: r.desde, hasta: hoy }).reduce((s, m) => s + m.dias, 0);
+  return total > 0 ? pasados / total : 1;
+}
+
+/** Si los pedidos web sin pagar no cuentan, se quitan de las ventas. */
+export function aplicarAjustesVentas(ventas: readonly Venta[], a: AjustesGerencia): Venta[] {
+  if (a.web_sin_pagar_cuenta) return [...ventas];
+  return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));
+}
+
+export type AvanceObjetivo = {
+  /** Lo conseguido sobre el objetivo del periodo, en %. */
+  porcentaje: number;
+  /** Lo que tocaría llevar hoy yendo a ritmo constante. */
+  esperado: number;
+  /** Lo conseguido menos lo esperado: positivo, por delante. */
+  diferencia: number;
+};
+
+/**
+ * Cómo se va frente a un objetivo: qué parte se lleva y si se va por delante
+ * o por detrás del ritmo que toca a estas alturas del periodo.
+ */
+export function avanceObjetivo(
+  conseguido: number,
+  objetivo: number,
+  transcurrido: number,
+): AvanceObjetivo | null {
+  if (!(objetivo > 0)) return null;
+  const esperado = objetivo * Math.min(1, Math.max(0, transcurrido));
+  return {
+    porcentaje: redondear((conseguido / objetivo) * 100, 1),
+    esperado: redondear(esperado, 2),
+    diferencia: redondear(conseguido - esperado, 2),
+  };
+}
+
+/**
+ * Beneficio estimado de un rango: el margen menos los gastos fijos que le
+ * tocan, ambos sin IVA. Con `hoy`, los gastos se cuentan solo hasta hoy: a
+ * mitad de mes se compara lo vendido hasta hoy con lo gastado hasta hoy, no
+ * con el mes entero.
+ */
+export function beneficioEstimado(
+  margen: number,
+  gastos: readonly GastoFijo[],
+  r: { desde: Date; hasta: Date },
+  hoy?: Date,
+): { gastos: number; beneficio: number; hastaHoy: boolean } {
+  const finHoy = hoy
+    ? new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59)
+    : null;
+  const hastaHoy = finHoy !== null && finHoy < r.hasta;
+  const g =
+    hastaHoy && finHoy < r.desde
+      ? 0
+      : gastosFijosDelRango(gastos, { desde: r.desde, hasta: hastaHoy ? finHoy : r.hasta });
+  return { gastos: g, beneficio: redondear(margen - g), hastaHoy };
 }

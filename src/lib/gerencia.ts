@@ -15,6 +15,7 @@ import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
 import { listMovimientosBanco } from "@/lib/banco.functions";
+import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import {
   ventaDeTextil,
   ventaDeTienda,
@@ -131,4 +132,10 @@ export function useCosteMetroActual(): number {
     Number(data?.coste_packaging_metro ?? 0) +
     Number(data?.coste_electricidad_metro ?? 0)
   );
+}
+
+/** Gastos fijos, objetivos y ajustes de Gerencia. */
+export function useAjustesGerencia() {
+  const leer = useServerFn(leerAjustesGerencia);
+  return useQuery({ queryKey: ["gerencia-ajustes"], queryFn: () => leer() });
 }
