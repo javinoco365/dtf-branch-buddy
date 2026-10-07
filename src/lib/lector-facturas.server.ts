@@ -46,8 +46,30 @@ Reglas:
 - Los descuentos, portes y recargos van como líneas más, con su importe y su
   signo.`;
 
-export function hayLectorConfigurado(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+// La clave del Vault se guarda unos minutos para no pedirla en cada factura.
+const MINUTOS_CACHE = 10;
+let claveVault: { valor: string | null; hasta: number } | null = null;
+
+/**
+ * La clave de la API: la variable ANTHROPIC_API_KEY del despliegue si está
+ * puesta y, si no, el secreto «facturas_key» del Vault de Supabase (lo lee
+ * el rol de servicio; ni el navegador ni un usuario pueden).
+ */
+async function claveLector(): Promise<string | null> {
+  const delEntorno = process.env.ANTHROPIC_API_KEY ?? process.env.FACTURAS_KEY;
+  if (delEntorno) return delEntorno;
+  if (claveVault && claveVault.hasta > Date.now()) return claveVault.valor;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await (supabaseAdmin as any).rpc("clave_lector_facturas");
+  // Sin la migración 20261018100000, la función no existe: no hay clave.
+  const valor = !error && typeof data === "string" && data.trim() !== "" ? data.trim() : null;
+  // Si no la encuentra, vuelve a mirar enseguida: acaban de ponerla, quizá.
+  claveVault = { valor, hasta: Date.now() + (valor ? MINUTOS_CACHE * 60_000 : 30_000) };
+  return valor;
+}
+
+export async function hayLectorConfigurado(): Promise<boolean> {
+  return (await claveLector()) !== null;
 }
 
 /**
@@ -58,11 +80,11 @@ export function hayLectorConfigurado(): boolean {
  * dominio, no aquí: así se pueden probar sin red.
  */
 export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<unknown> {
-  const clave = process.env.ANTHROPIC_API_KEY;
+  const clave = await claveLector();
   if (!clave) {
     throw new Error(
-      "Falta ANTHROPIC_API_KEY. Configúrala en el entorno del despliegue para " +
-        "poder leer facturas; mientras tanto, la compra se puede dar de alta a mano.",
+      "Falta la clave del lector: el secreto «facturas_key» en el Vault de Supabase. " +
+        "Mientras tanto, la compra se puede dar de alta a mano.",
     );
   }
   if (tipoMime !== "application/pdf" && !esImagen(tipoMime)) {

@@ -489,9 +489,51 @@ const BANCO = [0, 1, 2].map((i) => ({
   huella: `h${i}`,
   origen: "extracto.csv",
   created_at: fechaDia(3 + i, 9),
+  cuenta_id: null,
+  traspaso_con: null,
   conciliacion: [],
   banco_conciliaciones: [],
 }));
+// Para el motor de conciliación (20261017100000): un verde por nombre, un
+// ámbar (pago con tarjeta que no dice a quién), un traspaso entre cuentas y un
+// enlace ya guardado en «revisar».
+const movBanco = (n, cuenta, fecha, concepto, importe, traspaso_con = null) => ({
+  id: id("9", 10 + n),
+  empresa_id: EMPRESA,
+  fecha,
+  concepto,
+  importe,
+  huella: `hm${n}`,
+  origen: "extracto.csv",
+  created_at: `${fecha}T09:00:00Z`,
+  cuenta_id: id("cb", cuenta),
+  traspaso_con,
+  conciliacion: [],
+  banco_conciliaciones: [],
+});
+BANCO.push(
+  movBanco(1, 1, "2026-10-03", "RECIBO INMOBILIARIA NAVE ALQUILER", -306),
+  movBanco(2, 2, "2026-10-06", "COMPRA TARJETA 4589 DTF", -108.9),
+  movBanco(3, 1, "2026-10-08", "ADEUDO SEUR ENVIOS", -30.25),
+  movBanco(4, 1, "2026-10-10", "TRASPASO A TARJETAS", -500),
+  movBanco(5, 2, "2026-10-11", "TRASPASO DESDE BBVA", 500),
+  movBanco(6, 1, "2026-09-20", "PAGO PROVEEDOR", -363),
+);
+const CONCILIACIONES = [
+  {
+    id: id("bc", 1),
+    movimiento_id: id("9", 16),
+    factura_id: null,
+    compra_id: id("k", 1),
+    textil_factura_id: null,
+    estado: "revisar",
+    grupo: id("bg", 1),
+    motivo: "importe_fecha",
+    diferencia: 0,
+    importe: -363,
+    marco_pagada: false,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Textil
@@ -919,6 +961,7 @@ Object.assign(DATOS, {
   caja_movimientos: CAJA,
   inversion_movimientos: INVERSION,
   banco_movimientos: BANCO,
+  banco_conciliaciones: CONCILIACIONES,
   banco_cuentas: CUENTAS_BANCO,
   banco_extractos: EXTRACTOS_BANCO,
   textil_marcas: MARCAS,

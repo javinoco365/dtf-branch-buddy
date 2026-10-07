@@ -439,8 +439,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
             <div>
               <p className="font-medium">El lector de facturas no está configurado.</p>
               <p className="text-muted-foreground">
-                Falta la variable <span className="font-mono">ANTHROPIC_API_KEY</span> en el entorno
-                del despliegue. Mientras tanto puedes dar las compras de alta a mano.
+                Falta el secreto <span className="font-mono">facturas_key</span> en el Vault de
+                Supabase. Mientras tanto puedes dar las compras de alta a mano.
               </p>
             </div>
           </CardContent>

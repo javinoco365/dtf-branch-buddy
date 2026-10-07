@@ -33,6 +33,8 @@ import {
 } from "@/lib/banco.functions";
 import { CuentasExtractos } from "@/components/banco/CuentasExtractos";
 import { useCuentasBanco } from "@/components/banco/useCuentasBanco";
+import { MotorConciliacion } from "@/components/banco/MotorConciliacion";
+import { verConciliacion } from "@/lib/conciliacion.functions";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -46,6 +48,39 @@ const ETIQUETA_MOTIVO: Record<string, string> = {
 };
 
 function ConciliacionPage() {
+  const qc = useQueryClient();
+  const verFn = useServerFn(verConciliacion);
+  const { data: motor, isLoading } = useQuery({
+    queryKey: ["conciliacion-motor"],
+    queryFn: () => verFn(),
+  });
+  // Sin la migración del motor (20261017100000), la conciliación de antes.
+  if (motor && !motor.disponible) return <ConciliacionAntigua />;
+
+  const refrescar = () => {
+    qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
+    qc.invalidateQueries({ queryKey: ["conciliacion-motor"] });
+  };
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
+        <p className="text-sm text-muted-foreground">
+          Los cargos se casan con las facturas recibidas y los abonos con las emitidas.
+        </p>
+      </div>
+      <CuentasExtractos alImportar={refrescar} />
+      {isLoading || !motor ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : (
+        <MotorConciliacion datos={motor} alCambiar={refrescar} />
+      )}
+    </div>
+  );
+}
+
+/** La conciliación de antes: ingresos contra facturas emitidas, uno a uno. */
+function ConciliacionAntigua() {
   const qc = useQueryClient();
   const ficheroRef = useRef<HTMLInputElement>(null);
   const [elegidas, setElegidas] = useState<Record<string, string>>({});

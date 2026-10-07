@@ -32,7 +32,7 @@ export const hayLector = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     const { hayLectorConfigurado } = await import("./lector-facturas.server");
-    return { disponible: hayLectorConfigurado() };
+    return { disponible: await hayLectorConfigurado() };
   });
 
 /**
