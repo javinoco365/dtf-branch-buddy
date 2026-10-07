@@ -424,6 +424,62 @@ const INVERSION = [0, 1, 2].map((i) => ({
   created_at: fechaDia(1 + i, 9),
 }));
 
+// Cuentas y extractos (20261016100000).
+const CUENTAS_BANCO = [
+  {
+    id: id("cb", 1),
+    empresa_id: EMPRESA,
+    banco: "BBVA",
+    alias: "Principal",
+    iban: ["ES91", "2100", "0418", "4502", "0005", "1332"].join(""),
+    activa: true,
+    created_at: fechaDia(1, 1),
+  },
+  {
+    id: id("cb", 2),
+    empresa_id: EMPRESA,
+    banco: "Revolut",
+    alias: "Tarjetas",
+    iban: null,
+    activa: true,
+    created_at: fechaDia(2, 1),
+  },
+];
+const EXTRACTOS_BANCO = [
+  {
+    id: id("eb", 1),
+    empresa_id: EMPRESA,
+    cuenta_id: id("cb", 1),
+    fichero: "bbva-septiembre.xlsx",
+    formato: { tipo: "excel", ambiguo: [] },
+    desde: "2026-09-01",
+    hasta: "2026-09-30",
+    saldo_inicial: 1800,
+    saldo_final: 1913.96,
+    suma_movimientos: 113.96,
+    movimientos: 3,
+    nuevos: 3,
+    cuadra: true,
+    created_at: fechaDia(1, 10),
+  },
+  {
+    id: id("eb", 2),
+    empresa_id: EMPRESA,
+    cuenta_id: id("cb", 2),
+    fichero: "revolut-septiembre.csv",
+    formato: { tipo: "csv", codificacion: "UTF-8", separador: ",", ambiguo: [] },
+    desde: "2026-09-02",
+    hasta: "2026-09-29",
+    saldo_inicial: null,
+    saldo_final: null,
+    suma_movimientos: -42.1,
+    movimientos: 5,
+    nuevos: 4,
+    cuadra: false,
+    created_at: fechaDia(2, 10),
+  },
+];
+
 const BANCO = [0, 1, 2].map((i) => ({
   id: id("9", i + 1),
   empresa_id: EMPRESA,
@@ -863,6 +919,8 @@ Object.assign(DATOS, {
   caja_movimientos: CAJA,
   inversion_movimientos: INVERSION,
   banco_movimientos: BANCO,
+  banco_cuentas: CUENTAS_BANCO,
+  banco_extractos: EXTRACTOS_BANCO,
   textil_marcas: MARCAS,
   textil_stock: STOCK,
   textil_pedidos: TEXTIL_PEDIDOS,
