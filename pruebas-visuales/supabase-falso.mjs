@@ -89,6 +89,8 @@ function leerTabla(tabla, query) {
       return dir === "desc" ? -c : c;
     });
   }
+  const desde = Number(query.get("offset") ?? "0");
+  if (desde > 0) filas = filas.slice(desde);
   const limite = Number(query.get("limit") ?? "0");
   if (limite > 0) filas = filas.slice(0, limite);
   return filas;
