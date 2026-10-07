@@ -1,75 +1,63 @@
 /**
- * Lee una factura de compra con un modelo de lenguaje.
+ * Lee una factura de compra con un modelo de lenguaje (visión).
  *
  * Solo servidor. La clave de API es un secreto y no puede acabar en el bundle
  * del navegador, así que este módulo se importa dinámicamente dentro del
  * handler, nunca en el nivel superior de un `*.functions.ts`.
  *
- * No usa SDK a propósito: es una llamada HTTP y un `fetch` no arrastra un
- * paquete más ni obliga a seguir sus versiones.
- *
- * Lo que devuelve NO es un dato bueno: es una propuesta. Quien decide si entra
- * en el stock es la persona que revisa la pantalla. Ver `src/dominio/
- * factura-compra.ts`, que comprueba la aritmética antes de enseñarla.
+ * Se pide salida estructurada: la API obliga al modelo a devolver un JSON con
+ * la forma de `ESQUEMA_LECTURA_JSON`. Aun así, lo que devuelve NO es un dato
+ * bueno: es una propuesta. Quien lo valida es `validarLectura` (dominio) y
+ * quien lo confirma, la persona que revisa la cola.
  */
 
-const MODELO = process.env.MODELO_LECTURA ?? "claude-sonnet-5";
+import Anthropic from "@anthropic-ai/sdk";
+import { ESQUEMA_LECTURA_JSON } from "@/dominio/cola-compras";
+import { CATEGORIAS_COMPRA } from "@/dominio/compras";
+
+const MODELO = process.env.MODELO_LECTURA ?? "claude-opus-5-5";
 const MAXIMO_BYTES = 10 * 1024 * 1024;
 
-const TIPOS_ACEPTADOS = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
+const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type TipoImagen = (typeof TIPOS_IMAGEN)[number];
+const esImagen = (t: string): t is TipoImagen => (TIPOS_IMAGEN as readonly string[]).includes(t);
 
 const INSTRUCCIONES = `Eres un lector de facturas de compra de una empresa española de impresión DTF y textil.
 
-Devuelve SOLO un objeto JSON, sin explicación y sin bloque de código, con esta forma:
+Devuelve los datos de la factura con el esquema que se te pide:
 
-{
-  "proveedor": "razón social de quien EMITE la factura",
-  "nif_proveedor": "su NIF o CIF",
-  "numero": "número de la factura",
-  "fecha": "fecha de emisión",
-  "base": "base imponible total",
-  "iva": "cuota de IVA total",
-  "irpf": "retención de IRPF en euros, si la factura la lleva",
-  "total": "total de la factura",
-  "lineas": [
-    {
-      "descripcion": "el concepto tal cual aparece",
-      "cantidad": "unidades",
-      "unidad": "ud, m, cajas… si aparece",
-      "precio_unitario": "precio por unidad",
-      "importe": "importe de la línea"
-    }
-  ]
-}
+- proveedor: razón social de quien EMITE la factura (no de quien la recibe).
+- nif_proveedor: su NIF o CIF.
+- numero: número de la factura.
+- fecha: fecha de emisión, tal como aparece.
+- concepto: en pocas palabras, qué se compra.
+- categoria: una de ${CATEGORIAS_COMPRA.map((c) => `"${c.valor}" (${c.etiqueta})`).join(", ")}. Si no está claro, null.
+- base, iva, irpf, total: base imponible, cuota de IVA, retención de IRPF y total a pagar.
+- lineas: cada concepto con su cantidad, unidad, precio unitario e importe.
+- confianza: de 0 a 1, cuánto te fías de tu lectura en conjunto.
+- dudas: cada cosa que no esté clara (un número borroso, un dato que no aparece, dos tipos de IVA…), en castellano y en una frase. Si no hay, una lista vacía.
 
 Reglas:
-- Copia los números TAL CUAL están escritos, con su coma decimal si la tienen.
+- Copia los importes TAL CUAL están escritos, con su coma decimal si la tienen.
   No los conviertas ni los recalcules.
-- Si un dato no aparece en el documento, pon null. NO lo deduzcas ni lo
-  inventes: un hueco se rellena a mano, un dato inventado no se detecta.
-- El proveedor es quien emite la factura, no quien la recibe.
+- Si un dato no aparece en el documento, pon null y dilo en dudas. NO lo
+  deduzcas ni lo inventes: un hueco se rellena a mano, un dato inventado no se
+  detecta.
 - Los descuentos, portes y recargos van como líneas más, con su importe y su
   signo.`;
-
-export type LecturaBruta = Record<string, unknown>;
 
 export function hayLectorConfigurado(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
 }
 
 /**
- * Manda el fichero al modelo y devuelve lo que ha leído, sin tocar.
+ * Manda el fichero al modelo y devuelve lo que ha leído, sin tocar: un objeto
+ * que hay que validar con `validarLectura` antes de usarlo.
  *
- * La normalización y la revisión de la aritmética viven en el dominio, no
- * aquí: así se pueden probar sin red.
+ * La normalización, la validación y la revisión de la aritmética viven en el
+ * dominio, no aquí: así se pueden probar sin red.
  */
-export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<LecturaBruta> {
+export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<unknown> {
   const clave = process.env.ANTHROPIC_API_KEY;
   if (!clave) {
     throw new Error(
@@ -77,87 +65,65 @@ export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<
         "poder leer facturas; mientras tanto, la compra se puede dar de alta a mano.",
     );
   }
-  if (!TIPOS_ACEPTADOS.has(tipoMime)) {
+  if (tipoMime !== "application/pdf" && !esImagen(tipoMime)) {
     throw new Error(`Formato no admitido (${tipoMime}). Sube un PDF, un JPG o un PNG.`);
   }
   if (bytes.byteLength > MAXIMO_BYTES) {
     throw new Error("El fichero pesa más de 10 MB. Baja la resolución o divide el PDF.");
   }
 
-  const datos = base64(bytes);
-  const contenido =
-    tipoMime === "application/pdf"
-      ? { type: "document", source: { type: "base64", media_type: tipoMime, data: datos } }
-      : { type: "image", source: { type: "base64", media_type: tipoMime, data: datos } };
+  const datos = Buffer.from(bytes).toString("base64");
+  const contenido: Anthropic.Beta.BetaContentBlockParam = esImagen(tipoMime)
+    ? { type: "image", source: { type: "base64", media_type: tipoMime, data: datos } }
+    : { type: "document", source: { type: "base64", media_type: "application/pdf", data: datos } };
 
-  const respuesta = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": clave,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
+  const cliente = new Anthropic({ apiKey: clave });
+  let respuesta: Anthropic.Beta.BetaMessage;
+  try {
+    respuesta = await cliente.beta.messages.create({
       model: MODELO,
-      max_tokens: 4096,
+      max_tokens: 16000,
+      // Si el modelo declina por seguridad, la API repite la petición con otro.
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
       system: INSTRUCCIONES,
+      output_config: {
+        // Leer bien los números importa más que la velocidad.
+        effort: "medium",
+        format: {
+          type: "json_schema",
+          schema: ESQUEMA_LECTURA_JSON as unknown as Record<string, unknown>,
+        },
+      },
       messages: [
         {
           role: "user",
           content: [contenido, { type: "text", text: "Lee esta factura de compra." }],
         },
       ],
-    }),
-  });
-
-  if (!respuesta.ok) {
+    });
+  } catch (e) {
     // El cuerpo del error puede traer la petición entera. Solo el código.
-    throw new Error(
-      `El lector de facturas ha respondido ${respuesta.status}. Inténtalo de nuevo o ` +
-        "da la compra de alta a mano.",
-    );
+    if (e instanceof Anthropic.APIError) {
+      throw new Error(`El lector de facturas ha respondido ${e.status ?? "sin código"}.`);
+    }
+    throw new Error("No se ha podido llegar al lector de facturas.");
   }
 
-  const json = (await respuesta.json()) as {
-    content?: { type: string; text?: string }[];
-  };
-  const texto = (json.content ?? [])
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
+  if (respuesta.stop_reason === "refusal") {
+    throw new Error("El lector de facturas se ha negado a leer este documento.");
+  }
+  if (respuesta.stop_reason === "max_tokens") {
+    throw new Error("La factura es demasiado larga para leerla de una vez.");
+  }
+  const texto = respuesta.content
+    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+    .map((b) => b.text)
     .join("")
     .trim();
-
-  return extraerJson(texto);
-}
-
-/**
- * Saca el objeto JSON de la respuesta.
- *
- * Se pide sin envoltorio, pero un modelo puede devolverlo dentro de un bloque
- * de código o con una frase delante. Cazar el primer `{` hasta el último `}`
- * es más robusto que confiar en que obedezca.
- */
-function extraerJson(texto: string): LecturaBruta {
-  const desde = texto.indexOf("{");
-  const hasta = texto.lastIndexOf("}");
-  if (desde === -1 || hasta <= desde) {
-    throw new Error("El lector no ha devuelto nada aprovechable. Prueba con otra imagen.");
-  }
   try {
-    return JSON.parse(texto.slice(desde, hasta + 1)) as LecturaBruta;
+    return JSON.parse(texto);
   } catch {
-    throw new Error("El lector ha devuelto algo que no se puede leer. Vuelve a intentarlo.");
+    throw new Error("El lector ha devuelto algo que no es JSON.");
   }
-}
-
-function base64(bytes: Uint8Array): string {
-  // Buffer existe en el servidor de Node de Vercel; el troceado evita reventar
-  // la pila con ficheros grandes si hubiera que caer al camino de abajo.
-  if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-  let binario = "";
-  const trozo = 0x8000;
-  for (let i = 0; i < bytes.length; i += trozo) {
-    binario += String.fromCharCode(...bytes.subarray(i, i + trozo));
-  }
-  return btoa(binario);
 }

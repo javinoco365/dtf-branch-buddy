@@ -64,14 +64,19 @@ EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'BIEN  4. las lineas de una compra registrada estan congeladas';
 END $$;
 
--- 5. Y el mismo número del mismo proveedor no se da de alta dos veces.
+-- 5. Y el mismo número del mismo proveedor no se registra dos veces. Desde
+--    20261015100000 una copia puede esperar en la cola (para avisar de que es
+--    un duplicado), pero no registrarse.
 DO $$
+DECLARE v UUID;
 BEGIN
   INSERT INTO public.textil_compras (empresa_id, proveedor, numero)
-  VALUES (current_setting('prueba.empresa')::UUID, 'Textiles del Sur S.L.', 'F-2026-114');
-  RAISE NOTICE 'MAL   5. dejo repetir numero y proveedor';
+  VALUES (current_setting('prueba.empresa')::UUID, 'Textiles del Sur S.L.', 'F-2026-114')
+  RETURNING id INTO v;
+  PERFORM public.textil_compra_registrar(v);
+  RAISE NOTICE 'MAL   5. dejo registrar dos veces numero y proveedor';
 EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'BIEN  5. el mismo numero del mismo proveedor no se repite';
+  RAISE NOTICE 'BIEN  5. el mismo numero del mismo proveedor no se registra dos veces';
 END $$;
 
 -- 6. Un borrador sí se borra entero: no ha tocado nada.
