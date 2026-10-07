@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
+import { leerTodas } from "@/lib/paginar";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
@@ -38,17 +39,18 @@ export function usePedidosPeriodo(filtro: Filtro) {
     queryFn: async (): Promise<PedidoResumen[]> => {
       // Con sus devoluciones, para restarlas de lo vendido, y con el coste
       // por metro congelado al crear el pedido (ver kpis.ts).
-      const leer = (conCoste: boolean) => {
-        let consulta = supabase
-          .from("pedidos")
-          .select(
-            `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}, devoluciones:pedido_devoluciones(importe)`,
-          )
-          .gte("fecha_pedido", filtro.desde.toISOString())
-          .lte("fecha_pedido", filtro.hasta.toISOString());
-        if (filtro.tiendaId) consulta = consulta.eq("tienda_id", filtro.tiendaId);
-        return consulta;
-      };
+      // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+      const leer = (conCoste: boolean) =>
+        leerTodas<unknown>((a, b) => {
+          let consulta = tabla(supabase, "pedidos")
+            .select(
+              `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}, devoluciones:pedido_devoluciones(importe)`,
+            )
+            .gte("fecha_pedido", filtro.desde.toISOString())
+            .lte("fecha_pedido", filtro.hasta.toISOString());
+          if (filtro.tiendaId) consulta = consulta.eq("tienda_id", filtro.tiendaId);
+          return consulta.order("id").range(a, b);
+        });
 
       let { data, error } = await leer(true);
       // Sin la migración 20261007100000_cifras_fiables la columna no existe:
@@ -132,7 +134,10 @@ export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
         textil = textil.gte("fecha", dia(rango.desde)).lte("fecha", dia(rango.hasta));
       }
 
-      const [rt, rx] = await Promise.all([tiendas, textil]);
+      const [rt, rx] = await Promise.all([
+        leerTodas<unknown>((a, b) => tiendas.order("id").range(a, b)),
+        leerTodas<unknown>((a, b) => textil.order("id").range(a, b)),
+      ]);
       // Solo «la tabla no existe»; cualquier otro error se enseña.
       if (faltaLaTabla(rt.error)) return { disponible: false, cobros: [] };
       if (rt.error) throw rt.error;
@@ -182,16 +187,15 @@ export function useLineasPeriodo(filtro: Filtro) {
   return useQuery({
     queryKey: ["lineas-periodo", ...claveRango(filtro)],
     queryFn: async (): Promise<LineaResumen[]> => {
-      let consulta = supabase
-        .from("pedido_items")
-        .select("descripcion, cantidad, unidad, pedidos!inner(fecha_pedido, tienda_id, estado)")
-        .gte("pedidos.fecha_pedido", filtro.desde.toISOString())
-        .lte("pedidos.fecha_pedido", filtro.hasta.toISOString())
-        .neq("pedidos.estado", ESTADO_CANCELADO);
-
-      if (filtro.tiendaId) consulta = consulta.eq("pedidos.tienda_id", filtro.tiendaId);
-
-      const { data, error } = await consulta;
+      const { data, error } = await leerTodas<unknown>((a, b) => {
+        let consulta = tabla(supabase, "pedido_items")
+          .select("descripcion, cantidad, unidad, pedidos!inner(fecha_pedido, tienda_id, estado)")
+          .gte("pedidos.fecha_pedido", filtro.desde.toISOString())
+          .lte("pedidos.fecha_pedido", filtro.hasta.toISOString())
+          .neq("pedidos.estado", ESTADO_CANCELADO);
+        if (filtro.tiendaId) consulta = consulta.eq("pedidos.tienda_id", filtro.tiendaId);
+        return consulta.order("id").range(a, b);
+      });
       if (error) throw error;
       return (data ?? []) as LineaResumen[];
     },
