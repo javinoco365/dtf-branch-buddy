@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  AJUSTES_POR_DEFECTO,
+  aplicarAjustesVentas,
+  gastosFijosDelRango,
+  objetivoDelRango,
+  parteTranscurrida,
+  type GastoFijo,
+  type Objetivo,
   antiguedadPendientes,
   avisosGerencia,
   canalDelCobro,
@@ -18,6 +25,7 @@ import {
   type Venta,
 } from "./gerencia";
 import { TIENDA_TEXTIL } from "./cobros";
+import { redondear } from "./importes";
 import type { PedidoPendiente } from "./pendientes";
 import type { CobroConsolidado } from "./facturacion";
 
@@ -291,5 +299,96 @@ describe("cobradoPorTramos", () => {
       tramos,
     );
     expect(r).toEqual([75, 0]);
+  });
+});
+
+describe("gastos fijos prorrateados", () => {
+  const d = (a: number, m: number, dia: number, h = 0, mi = 0) => new Date(a, m - 1, dia, h, mi);
+  const octubre = { desde: d(2026, 10, 1), hasta: d(2026, 10, 31, 23, 59) };
+  const alquiler: GastoFijo = {
+    id: "1",
+    concepto: "Alquiler",
+    importe_mensual: 800,
+    desde: "2026-01-01",
+    hasta: null,
+  };
+
+  it("un mes entero, el importe del mes", () => {
+    expect(gastosFijosDelRango([alquiler], octubre)).toBe(800);
+  });
+
+  it("una quincena de un mes de 30 días, la mitad", () => {
+    const r = { desde: d(2026, 9, 1), hasta: d(2026, 9, 15, 23, 59) };
+    expect(gastosFijosDelRango([alquiler], r)).toBe(400);
+  });
+
+  it("solo los días en que el gasto está vigente", () => {
+    // Del 1 al 10 de octubre: 10 de 31 días.
+    const baja: GastoFijo = { ...alquiler, hasta: "2026-10-10" };
+    expect(gastosFijosDelRango([baja], octubre)).toBe(258.06);
+    // Empieza el 21: 11 de 31 días.
+    const alta: GastoFijo = { ...alquiler, desde: "2026-10-21" };
+    expect(gastosFijosDelRango([alta], octubre)).toBe(283.87);
+  });
+
+  it("un trimestre suma sus tres meses; un gasto que no toca el rango no suma", () => {
+    const t = { desde: d(2026, 10, 1), hasta: d(2026, 12, 31, 23, 59) };
+    const viejo: GastoFijo = { ...alquiler, id: "2", desde: "2025-01-01", hasta: "2025-12-31" };
+    expect(gastosFijosDelRango([alquiler, viejo], t)).toBe(2400);
+  });
+});
+
+describe("objetivos prorrateados", () => {
+  const d = (a: number, m: number, dia: number, h = 0, mi = 0) => new Date(a, m - 1, dia, h, mi);
+  const objetivos: Objetivo[] = [
+    { id: "a", desde: "2026-01-01", metros: 1000, vendido: 8000 },
+    { id: "b", desde: "2026-10-01", metros: 2000, vendido: null },
+  ];
+
+  it("cada mes con el objetivo que le toca", () => {
+    const sep = objetivoDelRango(objetivos, {
+      desde: d(2026, 9, 1),
+      hasta: d(2026, 9, 30, 23, 59),
+    });
+    expect(sep).toEqual({ metros: 1000, vendido: 8000 });
+    const oct = objetivoDelRango(objetivos, {
+      desde: d(2026, 10, 1),
+      hasta: d(2026, 10, 31, 23, 59),
+    });
+    // Desde octubre no hay objetivo de ventas: el nuevo objetivo no lo tiene.
+    expect(oct).toEqual({ metros: 2000, vendido: null });
+  });
+
+  it("antes del primer objetivo no hay objetivo", () => {
+    const r = objetivoDelRango(objetivos, { desde: d(2025, 6, 1), hasta: d(2025, 6, 30) });
+    expect(r).toEqual({ metros: null, vendido: null });
+  });
+
+  it("un rango que cruza el cambio suma la parte de cada uno", () => {
+    // Del 16 al 30 de septiembre (15 de 30 días) y del 1 al 15 de octubre (15 de 31).
+    const r = objetivoDelRango(objetivos, {
+      desde: d(2026, 9, 16),
+      hasta: d(2026, 10, 15, 23, 59),
+    });
+    expect(r.metros).toBe(redondear(500 + (2000 * 15) / 31, 2));
+  });
+
+  it("qué parte del periodo ha pasado", () => {
+    const oct = { desde: d(2026, 10, 1), hasta: d(2026, 10, 31, 23, 59) };
+    expect(parteTranscurrida(oct, d(2026, 10, 5, 10))).toBeCloseTo(5 / 31);
+    expect(parteTranscurrida(oct, d(2026, 11, 2))).toBe(1);
+    expect(parteTranscurrida(oct, d(2026, 9, 20))).toBe(0);
+  });
+});
+
+describe("pedidos web sin pagar según el ajuste", () => {
+  it("cuentan por defecto; si se apaga, se quitan solo los web pendientes", () => {
+    const ventas = [
+      tienda({ estado: "pendiente" }),
+      tienda(),
+      tienda({ origen: "manual", estado: "pendiente" }),
+    ];
+    expect(aplicarAjustesVentas(ventas, AJUSTES_POR_DEFECTO)).toHaveLength(3);
+    expect(aplicarAjustesVentas(ventas, { web_sin_pagar_cuenta: false })).toHaveLength(2);
   });
 });
