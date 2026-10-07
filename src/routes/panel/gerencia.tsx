@@ -13,6 +13,7 @@ import { Clientes } from "@/components/gerencia/Clientes";
 import { Comercial } from "@/components/gerencia/Comercial";
 import { Produccion } from "@/components/gerencia/Produccion";
 import { Margen } from "@/components/gerencia/Margen";
+import { Resultados } from "@/components/gerencia/Resultados";
 import { Fiscal } from "@/components/gerencia/Fiscal";
 import { Textil } from "@/components/gerencia/Textil";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
@@ -184,6 +185,7 @@ function Gerencia() {
           <TabsTrigger value="comercial">Comercial</TabsTrigger>
           <TabsTrigger value="produccion">Producción</TabsTrigger>
           <TabsTrigger value="margen">Margen</TabsTrigger>
+          <TabsTrigger value="resultados">Resultados</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
           <TabsTrigger value="textil">Textil</TabsTrigger>
           <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
@@ -221,6 +223,9 @@ function Gerencia() {
             </TabsContent>
             <TabsContent value="margen" className="mt-4">
               <Margen d={datos} />
+            </TabsContent>
+            <TabsContent value="resultados" className="mt-4">
+              <Resultados d={datos} />
             </TabsContent>
             <TabsContent value="fiscal" className="mt-4">
               <Fiscal d={datos} />

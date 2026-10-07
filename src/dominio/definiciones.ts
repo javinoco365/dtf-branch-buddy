@@ -344,6 +344,28 @@ export const DEFINICIONES = {
     calculo: "Suma de la base de las facturas de compra registradas con fecha en el periodo.",
     fuente: "Compras del textil subidas al CRM.",
   },
+
+  // --- Gerencia › Resultados --------------------------------------------------
+  g_resultado: {
+    que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
+    calculo:
+      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto.",
+    fuente:
+      "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
+  },
+  g_sociedades: {
+    que: "Lo que tocaría de Impuesto sobre Sociedades por el beneficio del periodo.",
+    calculo:
+      "Beneficio antes de impuestos × el tipo de Ajustes (15 % para empresas de nueva creación), solo si hay beneficio. Es una estimación: el impuesto se calcula sobre el año entero y la gestoría hace los ajustes. Se paga en julio del año siguiente (modelo 200) y, desde el segundo año, con pagos fraccionados (202).",
+    fuente: "Cuenta de resultados del periodo y Gerencia › Ajustes.",
+  },
+  g_impuestos_trimestre: {
+    que: "Lo que se presenta a Hacienda por cada trimestre del periodo.",
+    calculo:
+      "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
+    fuente:
+      "Facturas emitidas, compras del textil y gastos de Ajustes, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente.",
+  },
 } as const satisfies Record<string, Definicion>;
 
 export type ClaveDefinicion = keyof typeof DEFINICIONES;
