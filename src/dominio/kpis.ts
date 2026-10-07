@@ -36,6 +36,9 @@ export type PedidoResumen = {
    * pedidos de antes de congelarlo, o si la migración no está aplicada.
    */
   coste_metro_snapshot?: number | string | null;
+  /** `manual` o `woocommerce`. Solo lo traen las consultas que lo necesitan. */
+  origen?: string | null;
+  cliente_id?: string | null;
 };
 
 /** Una línea de pedido con lo mínimo para agrupar por producto. */
