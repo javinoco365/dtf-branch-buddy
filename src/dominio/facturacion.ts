@@ -106,7 +106,7 @@ function instante(fecha: string): string {
  * El día de una fecha en hora de Madrid. Un instante (pedido de tienda) se
  * pasa a la hora local; un día suelto (pedido textil) se deja como está.
  */
-function diaLocal(fecha: string | null | undefined): string {
+export function diaLocal(fecha: string | null | undefined): string {
   // Un pedido sin fecha no puede tumbar la lectura de todos los cobros.
   if (!fecha) return "";
   if (fecha.length <= 10) return fecha;
