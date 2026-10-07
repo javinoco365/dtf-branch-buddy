@@ -164,6 +164,7 @@ function FacturacionTienda() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
+              explicacion="vendido"
               valor={eur(k.total)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
@@ -171,6 +172,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Facturación bruta"
+              explicacion="bruta"
               valor={eur(k.bruta)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
@@ -178,6 +180,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Cobrado"
+              explicacion="cobrado"
               valor={cobrosDisponibles ? eur(cobrado) : "—"}
               frente={comparacion?.etiqueta}
               delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
@@ -185,6 +188,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Pedidos"
+              explicacion="pedidos"
               valor={String(k.pedidos)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.pedidos, kPrev.pedidos)}
@@ -192,6 +196,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Ticket medio"
+              explicacion="ticket"
               valor={eur(k.ticket)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.ticket, kPrev.ticket)}
@@ -199,6 +204,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Metros vendidos"
+              explicacion="metros"
               valor={metros(k.metros)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
@@ -206,6 +212,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Devoluciones"
+              explicacion="devoluciones"
               valor={eur(k.devuelto)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.devuelto, kPrev.devuelto)}
@@ -214,6 +221,7 @@ function FacturacionTienda() {
             />
             <TarjetaKpi
               titulo="Cancelados"
+              explicacion="cancelados"
               valor={String(k.cancelados)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.cancelados, kPrev.cancelados)}
@@ -241,14 +249,14 @@ function FacturacionTienda() {
             />
             <Bloque
               titulo="Envíos"
-              subtitulo="Total cobrado en envíos"
+              subtitulo="Portes sin IVA; ya van dentro de la bruta"
               valor={eur(k.envios)}
               icon={Truck}
               tono="warn"
             />
             <Bloque
               titulo="Total"
-              subtitulo="Bruta + IVA + envíos"
+              subtitulo="Bruta + IVA (el envío va en la bruta)"
               valor={eur(k.total)}
               icon={Wallet}
               tono="success"

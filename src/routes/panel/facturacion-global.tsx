@@ -30,6 +30,8 @@ import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { LineaVariacion } from "@/components/TarjetaKpi";
+import { Explicacion } from "@/components/Explicacion";
+import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, etiquetaMetodo, type MetodoCobro } from "@/dominio/cobros";
 import {
@@ -420,6 +422,7 @@ function FacturacionGlobal() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaTotal
               titulo="Total cobrado"
+              explicacion="total_cobrado"
               subtitulo="Con IVA, envíos y propinas"
               valor={eur(totales.total)}
               icon={Wallet}
@@ -429,6 +432,7 @@ function FacturacionGlobal() {
             />
             <TarjetaTotal
               titulo="Base imponible"
+              explicacion="base_cobrada"
               subtitulo={`${totales.pedidos} ${totales.pedidos === 1 ? "pedido" : "pedidos"} · ${totales.cobros} ${totales.cobros === 1 ? "cobro" : "cobros"}`}
               valor={eur(totales.base)}
               icon={Receipt}
@@ -438,6 +442,7 @@ function FacturacionGlobal() {
             />
             <TarjetaTotal
               titulo="IVA repercutido"
+              explicacion="iva_cobrado"
               subtitulo={`${numero(pctIva, 1)}% sobre la base`}
               valor={eur(totales.iva)}
               icon={Percent}
@@ -447,6 +452,7 @@ function FacturacionGlobal() {
             />
             <TarjetaTotal
               titulo="Propinas"
+              explicacion="propinas"
               subtitulo="Aparte de lo cobrado a los pedidos"
               valor={eur(totales.propina)}
               icon={HandCoins}
@@ -714,7 +720,9 @@ function TarjetaTotal({
   tono,
   delta = null,
   frente,
+  explicacion,
 }: {
+  explicacion?: ClaveDefinicion;
   titulo: string;
   subtitulo: string;
   valor: string;
@@ -734,8 +742,11 @@ function TarjetaTotal({
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {titulo}
+            <div className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <span>{titulo}</span>
+              {explicacion && (
+                <Explicacion titulo={titulo} definicion={DEFINICIONES[explicacion]} />
+              )}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">{subtitulo}</div>
           </div>

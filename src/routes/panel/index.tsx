@@ -166,6 +166,7 @@ function DashboardGlobal() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
+              explicacion="vendido"
               valor={eur(k.total)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
@@ -173,6 +174,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Facturación bruta"
+              explicacion="bruta"
               valor={eur(k.bruta)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
@@ -180,6 +182,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Cobrado"
+              explicacion="cobrado"
               valor={cobrosDisponibles ? eur(cobrado) : "—"}
               frente={comparacion?.etiqueta}
               delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
@@ -187,6 +190,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
+              explicacion="margen"
               valor={costeMetro === 0 ? "—" : eur(margenPer)}
               delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
               frente={comparacion?.etiqueta}
@@ -194,6 +198,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Ticket medio"
+              explicacion="ticket"
               valor={eur(k.ticket)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.ticket, kPrev.ticket)}
@@ -201,6 +206,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Metros vendidos"
+              explicacion="metros"
               valor={metros(k.metros)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
@@ -208,6 +214,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Devoluciones"
+              explicacion="devoluciones"
               valor={eur(k.devuelto)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.devuelto, kPrev.devuelto)}
@@ -216,6 +223,7 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Cancelados"
+              explicacion="cancelados"
               valor={String(k.cancelados)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.cancelados, kPrev.cancelados)}
