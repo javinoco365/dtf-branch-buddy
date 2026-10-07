@@ -3,6 +3,7 @@ import {
   antiguedadPendientes,
   avisosGerencia,
   canalDelCobro,
+  cobradoPorTramos,
   cifrasGerencia,
   desglose,
   diasMediosCobro,
@@ -195,6 +196,10 @@ describe("diasMediosCobro", () => {
     expect(d).toBe(8.1);
   });
 
+  it("un cobro de un pedido sin fecha no cuenta, pero no rompe la media", () => {
+    expect(diasMediosCobro([cobro({ importe: 100 }), cobro({ fecha_pedido: "" })])).toBe(9);
+  });
+
   it("sin cobros no hay media", () => {
     expect(diasMediosCobro([])).toBeNull();
   });
@@ -269,5 +274,22 @@ describe("avisos", () => {
         tienda({ origen: "manual", estado: "pendiente" }),
       ]),
     ).toEqual({ pedidos: 1, importe: 121 });
+  });
+});
+
+describe("cobradoPorTramos", () => {
+  it("reparte lo cobrado, sin propinas, en los tramos de la gráfica", () => {
+    const tramos = [
+      { desde: new Date(2026, 9, 1), hasta: new Date(2026, 9, 1, 23, 59) },
+      { desde: new Date(2026, 9, 2), hasta: new Date(2026, 9, 2, 23, 59) },
+    ];
+    const r = cobradoPorTramos(
+      [
+        cobro({ fecha: "2026-10-01T12:00:00", importe: 50, propina: 5 }),
+        cobro({ fecha: "2026-10-01T18:00:00", importe: 25 }),
+      ],
+      tramos,
+    );
+    expect(r).toEqual([75, 0]);
   });
 });

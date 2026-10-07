@@ -76,7 +76,7 @@ export type CobroConsolidado = {
   /** Instante por el que se agrupa en semanas: el del pedido o el del cobro. */
   fecha: string;
   fecha_cobro: string;
-  /** Día del pedido, `yyyy-MM-dd`: para saber cuánto se tardó en cobrar. */
+  /** Día del pedido, `yyyy-MM-dd`, o vacío si el pedido no tiene fecha. */
   fecha_pedido: string;
   tienda_id: string;
   pedido_id: string;
@@ -106,7 +106,9 @@ function instante(fecha: string): string {
  * El día de una fecha en hora de Madrid. Un instante (pedido de tienda) se
  * pasa a la hora local; un día suelto (pedido textil) se deja como está.
  */
-function diaLocal(fecha: string): string {
+function diaLocal(fecha: string | null | undefined): string {
+  // Un pedido sin fecha no puede tumbar la lectura de todos los cobros.
+  if (!fecha) return "";
   if (fecha.length <= 10) return fecha;
   const d = new Date(fecha);
   const dos = (n: number) => String(n).padStart(2, "0");

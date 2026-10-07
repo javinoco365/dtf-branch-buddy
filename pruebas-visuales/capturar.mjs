@@ -30,6 +30,9 @@ const FILTRO = opcion("--rutas")?.split(",");
 
 export const RUTAS = {
   inicio: "/panel",
+  gerencia: "/panel/gerencia",
+  "gerencia-ventas": "/panel/gerencia?pestana=ventas",
+  "gerencia-tesoreria": "/panel/gerencia?pestana=tesoreria",
   pedidos: "/panel/pedidos",
   consolidada: "/panel/facturacion-global",
   cobros: "/panel/cobros",

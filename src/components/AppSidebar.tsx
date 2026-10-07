@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   LayoutDashboard,
+  Gauge,
   Store,
   Users,
   ShoppingCart,
@@ -100,6 +101,14 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/gerencia")}>
+                  <Link to="/panel/gerencia">
+                    <Gauge />
+                    <span>Gerencia</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/panel"}>
                   <Link to="/panel">

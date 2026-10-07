@@ -254,7 +254,7 @@ export function diasMediosCobro(cobros: readonly CobroConsolidado[]): number | n
   let peso = 0;
   let suma = 0;
   for (const c of cobros) {
-    if (c.importe <= 0) continue;
+    if (c.importe <= 0 || !c.fecha_pedido) continue;
     const dias = diasEntre(c.fecha_pedido, c.fecha_cobro);
     peso += c.importe;
     suma += c.importe * dias;
@@ -377,4 +377,25 @@ export function webSinPagar(ventas: readonly Venta[]): { pedidos: number; import
     pedidos: lista.length,
     importe: redondear(lista.reduce((s, v) => s + num(v.total), 0)),
   };
+}
+
+/**
+ * Lo cobrado (sin propinas, como la cifra de arriba) dentro de cada tramo de
+ * la gráfica. El cobro se sitúa por su `fecha`: la del cobro si se leyó con
+ * el criterio «cobro».
+ */
+export function cobradoPorTramos(
+  cobros: readonly CobroConsolidado[],
+  tramos: readonly { desde: Date; hasta: Date }[],
+): number[] {
+  return tramos.map((t) =>
+    redondear(
+      cobros
+        .filter((c) => {
+          const f = new Date(c.fecha).getTime();
+          return f >= t.desde.getTime() && f <= t.hasta.getTime();
+        })
+        .reduce((s, c) => s + c.importe, 0),
+    ),
+  );
 }
