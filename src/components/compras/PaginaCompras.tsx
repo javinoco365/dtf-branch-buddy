@@ -55,6 +55,14 @@ import {
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { SubidaFacturas } from "./SubidaFacturas";
+import { ColaRevision } from "./ColaRevision";
+import {
+  avisoDuplicado,
+  avisosQueImportan,
+  bloqueaRegistro,
+  duplicadosDe,
+} from "@/dominio/cola-compras";
 import {
   calcularCompra,
   CATEGORIAS_COMPRA,
@@ -88,7 +96,19 @@ type Revision = {
   nota: string;
   concepto: string;
   forma_pago: string | null;
+  /** Si viene de la cola: la fila que se confirma, y por qué había que mirarla. */
+  id?: string;
+  motivos?: string | null;
+  fichero_huella?: string | null;
+  /** Confirmado que no es un duplicado (mismo proveedor, fecha e importe). */
+  otraFactura?: boolean;
 };
+
+/** Está en la cola: la leyó la IA y nadie la ha confirmado, o no se pudo leer. */
+const enCola = (c: any) => c.revision === "pendiente" || c.revision === "error";
+const anioDe = (c: any): string => String(c.ejercicio ?? c.fecha?.slice(0, 4) ?? "");
+const trimestreDe = (c: any): string =>
+  String(c.trimestre ?? (c.fecha ? Math.floor((Number(c.fecha.slice(5, 7)) - 1) / 3) + 1 : ""));
 
 const SIN_GASTO = "ninguno";
 const SIN_FORMA = "sin_forma";
@@ -128,6 +148,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const sinGenerales = general && data?.generales === false;
   // Con la migración de facturas recibidas, la base calcula los importes.
   const recibidas = data?.recibidas === true;
+  // Con la migración de la cola: subir varias, revisarlas y avisar de duplicados.
+  const cola = general && data?.cola === true;
   const ajustesFn = useServerFn(leerAjustesGerencia);
   const { data: ajustes } = useQuery({
     queryKey: ["gerencia-ajustes"],
@@ -149,6 +171,43 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     concepto: "",
     forma_pago: null,
   });
+  /** Una factura de la cola, para revisarla con lo que leyó la IA. */
+  const desdeFila = (c: any): Revision => {
+    const compra: CompraLeida = {
+      proveedor: c.proveedor ?? null,
+      nif_proveedor: c.nif_proveedor ?? null,
+      numero: c.numero ?? null,
+      fecha: c.fecha ?? null,
+      base: Number(c.base ?? 0),
+      iva: Number(c.iva ?? 0),
+      irpf: Number(c.irpf ?? 0),
+      total: Number(c.total ?? 0),
+      lineas: (c.lineas ?? [])
+        .slice()
+        .sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
+        .map((l: any) => ({
+          descripcion: l.descripcion,
+          cantidad: Number(l.cantidad),
+          precio_unitario: Number(l.precio_unitario),
+          importe: Number(l.importe),
+          unidad: l.unidad ?? null,
+        })),
+    };
+    return {
+      ...nueva(compra, null),
+      id: c.id,
+      categoria: c.categoria ?? "",
+      gasto_id: c.gasto_id ?? null,
+      // Si la cuota leída no la explica ningún tipo, que se elija a mano.
+      tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : 0.21,
+      tipo_irpf: Number(c.tipo_irpf ?? 0),
+      concepto: c.concepto ?? "",
+      forma_pago: c.forma_pago ?? null,
+      motivos: c.revision_motivo ?? null,
+      fichero_huella: c.fichero_huella ?? null,
+      otraFactura: false,
+    };
+  };
   // Los filtros viven en la dirección.
   const {
     valores: filtros,
@@ -159,6 +218,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     q: "",
     estado: "todos",
     categoria: "todas",
+    anio: "todos",
+    trimestre: "todos",
+    proveedor: "todos",
   });
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -166,13 +228,43 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     const q = normalizarTexto(filtros.q);
     return (compras as any[]).filter(
       (c) =>
+        // Lo que está en la cola se ve en «Por revisar», no aquí.
+        !(cola && enCola(c)) &&
         enRango(c.fecha, periodo.rango) &&
+        (filtros.anio === "todos" || anioDe(c) === filtros.anio) &&
+        (filtros.trimestre === "todos" || trimestreDe(c) === filtros.trimestre) &&
+        (filtros.proveedor === "todos" || (c.proveedor ?? "") === filtros.proveedor) &&
         // Las borradas solo se ven si se piden.
         (filtros.estado === "todos" ? !c.borrada_en : estadoDe(c) === filtros.estado) &&
         (filtros.categoria === "todas" || (c.categoria ?? "textil") === filtros.categoria) &&
         (!q || normalizarTexto(c.proveedor).includes(q) || normalizarTexto(c.numero).includes(q)),
     );
-  }, [compras, filtros.q, filtros.estado, filtros.categoria, periodo.rango]);
+  }, [
+    compras,
+    cola,
+    filtros.q,
+    filtros.estado,
+    filtros.categoria,
+    filtros.anio,
+    filtros.trimestre,
+    filtros.proveedor,
+    periodo.rango,
+  ]);
+  const enLaCola = useMemo(
+    () => (cola ? (compras as any[]).filter((c) => enCola(c) && !c.borrada_en) : []),
+    [compras, cola],
+  );
+  const anios = useMemo(
+    () => [...new Set((compras as any[]).map(anioDe).filter(Boolean))].sort().reverse(),
+    [compras],
+  );
+  const proveedores = useMemo(
+    () =>
+      [...new Set((compras as any[]).map((c) => c.proveedor).filter(Boolean) as string[])].sort(
+        (a, b) => a.localeCompare(b, "es"),
+      ),
+    [compras],
+  );
 
   const stockFn = useServerFn(listStock);
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
@@ -213,6 +305,11 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       const { id } = (await guardarFn({
         data: {
           ...compra,
+          // De la cola: se confirma la fila que leyó la IA.
+          ...(revisando.id ? { id: revisando.id } : {}),
+          ...(revisando.otraFactura
+            ? { notas: "Confirmada como factura distinta (mismo proveedor, fecha e importe)." }
+            : {}),
           // Las columnas nuevas solo se mandan desde la pantalla general.
           ...(general
             ? { irpf, categoria: revisando.categoria, gasto_id: revisando.gasto_id }
@@ -299,28 +396,32 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           </p>
         </div>
         <div className="flex gap-2">
-          <input
-            ref={ficheroRef}
-            type="file"
-            accept="application/pdf,image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) leer.mutate(f);
-            }}
-          />
-          <Button
-            onClick={() => ficheroRef.current?.click()}
-            disabled={leer.isPending || lector?.disponible === false || sinGenerales}
-          >
-            {leer.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileUp className="h-4 w-4 mr-2" />
-            )}
-            {leer.isPending ? "Leyendo…" : "Subir factura"}
-          </Button>
+          {!cola && (
+            <>
+              <input
+                ref={ficheroRef}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) leer.mutate(f);
+                }}
+              />
+              <Button
+                onClick={() => ficheroRef.current?.click()}
+                disabled={leer.isPending || lector?.disponible === false || sinGenerales}
+              >
+                {leer.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4 mr-2" />
+                )}
+                {leer.isPending ? "Leyendo…" : "Subir factura"}
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             disabled={sinGenerales}
@@ -358,6 +459,20 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         </Card>
       )}
 
+      {cola && (
+        <SubidaFacturas
+          deshabilitado={lector?.disponible === false}
+          alTerminarUna={() => qc.invalidateQueries({ queryKey: ["compras"] })}
+        />
+      )}
+      {cola && (
+        <ColaRevision
+          compras={enLaCola}
+          onRevisar={(c) => setRevisando(desdeFila(c))}
+          onBorrar={(c) => setBorrando(c)}
+        />
+      )}
+
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}
@@ -384,6 +499,42 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               { valor: "todas", etiqueta: "Todas las categorías" },
               ...CATEGORIAS_COMPRA.map((c) => ({ valor: c.valor, etiqueta: c.etiqueta })),
             ]}
+          />
+        )}
+        {general && (
+          <SelectFiltro
+            etiqueta="Año"
+            valor={filtros.anio}
+            alCambiar={(anio) => cambiar({ anio })}
+            opciones={[
+              { valor: "todos", etiqueta: "Todos los años" },
+              ...anios.map((a) => ({ valor: a, etiqueta: a })),
+            ]}
+            ancho="w-[140px]"
+          />
+        )}
+        {general && (
+          <SelectFiltro
+            etiqueta="Trimestre"
+            valor={filtros.trimestre}
+            alCambiar={(trimestre) => cambiar({ trimestre })}
+            opciones={[
+              { valor: "todos", etiqueta: "Todos los trimestres" },
+              ...["1", "2", "3", "4"].map((t) => ({ valor: t, etiqueta: `${t}.º trimestre` })),
+            ]}
+            ancho="w-[170px]"
+          />
+        )}
+        {general && (
+          <SelectFiltro
+            etiqueta="Proveedor"
+            valor={filtros.proveedor}
+            alCambiar={(proveedor) => cambiar({ proveedor })}
+            opciones={[
+              { valor: "todos", etiqueta: "Todos los proveedores" },
+              ...proveedores.map((p) => ({ valor: p, etiqueta: p })),
+            ]}
+            ancho="w-[220px] max-md:w-full"
           />
         )}
         <SelectorPeriodo periodo={periodo} />
@@ -506,12 +657,14 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         onCerrar={() => setBorrando(null)}
         que={`la compra ${borrando?.numero ?? ""}`}
         consecuencias={
-          borrando?.estado === "registrada"
-            ? [
-                "Queda marcada como borrada: deja de contar en Gerencia, en el IVA y en el banco.",
-                "No desaparece: se ve con el filtro «borrada».",
-              ]
-            : ["Es un borrador: no ha tocado el stock."]
+          borrando && enCola(borrando)
+            ? ["No ha contado en ningún sitio: sale de la cola."]
+            : borrando?.estado === "registrada"
+              ? [
+                  "Queda marcada como borrada: deja de contar en Gerencia, en el IVA y en el banco.",
+                  "No desaparece: se ve con el filtro «borrada».",
+                ]
+              : ["Es un borrador: no ha tocado el stock."]
         }
         cargando={borrar.isPending}
         onConfirmar={() => borrando && borrar.mutate(borrando.id)}
@@ -550,6 +703,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           <RevisarCompra
             modo={modo}
             conTipos={recibidas}
+            todas={cola ? compras : []}
+            onDescartar={() => {
+              const fila = compras.find((c: any) => c.id === revisando.id);
+              setRevisando(null);
+              if (fila) setBorrando(fila);
+            }}
             estado={revisando}
             gastos={gastos}
             stock={stock}
@@ -574,6 +733,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 function RevisarCompra({
   modo,
   conTipos,
+  todas,
+  onDescartar,
   estado,
   gastos,
   stock,
@@ -584,6 +745,10 @@ function RevisarCompra({
   modo: Modo;
   /** Con la migración de facturas recibidas: tipos, cálculo y descuadre. */
   conTipos: boolean;
+  /** Todas las compras, para avisar de duplicados (vacío sin la cola). */
+  todas: any[];
+  /** Descartar la factura de la cola (es un duplicado). */
+  onDescartar: () => void;
   estado: Revision;
   gastos: { id: string; concepto: string }[];
   stock: any[];
@@ -594,7 +759,7 @@ function RevisarCompra({
   const { compra, asignaciones } = estado;
   const general = modo === "general";
   const esTextil = estado.categoria === "textil";
-  const avisos = revisarCompra(compra);
+  const avisos = avisosQueImportan(revisarCompra(compra), estado.categoria);
   const sinCasar = esTextil ? compra.lineas.filter((_, i) => !asignaciones[i]).length : 0;
   // Sin categoría no se sabe cómo cuenta: no se registra.
   const sinCategoria = !estado.categoria;
@@ -610,9 +775,31 @@ function RevisarCompra({
   const descuadreSinResolver =
     descuadre !== null &&
     (estado.origen === null || (estado.origen === "factura" && !estado.nota.trim()));
-  const bloqueada = esTextil
-    ? compra.lineas.length === 0 || sinCasar > 0
-    : sinCategoria || (conCalculo && (estado.tipo_iva === null || descuadreSinResolver));
+  // Duplicados: la misma factura registrada impide registrar; un posible
+  // duplicado (o una copia en la cola) hay que confirmarlo.
+  const duplicados =
+    todas.length > 0
+      ? duplicadosDe(
+          {
+            id: estado.id,
+            proveedor: compra.proveedor,
+            nif_proveedor: compra.nif_proveedor,
+            numero: compra.numero,
+            fecha: compra.fecha,
+            liquido: conCalculo ? calculado.liquido : compra.total,
+            fichero_huella: estado.fichero_huella,
+          },
+          todas,
+        )
+      : [];
+  const duplicadoQueBloquea = duplicados.find(bloqueaRegistro);
+  const porConfirmar = duplicados.filter((d) => !bloqueaRegistro(d) && !d.borrada);
+  const bloqueada =
+    !!duplicadoQueBloquea ||
+    (porConfirmar.length > 0 && !estado.otraFactura) ||
+    (esTextil
+      ? compra.lineas.length === 0 || sinCasar > 0
+      : sinCategoria || (conCalculo && (estado.tipo_iva === null || descuadreSinResolver)));
 
   const set = (cambios: Partial<CompraLeida>) =>
     onCambiar({ ...estado, compra: { ...compra, ...cambios } });
@@ -640,6 +827,54 @@ function RevisarCompra({
             : "Comprueba los importes y di qué es: de eso depende cómo cuenta en Gerencia. Una factura registrada no se borra."}
         </DialogDescription>
       </DialogHeader>
+
+      {(estado.motivos || duplicados.length > 0) && (
+        <Card className={duplicadoQueBloquea ? "border-destructive/60" : "border-amber-500/50"}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Qué mirar antes de registrarla
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {duplicados.map((d, i) => (
+              <p
+                key={`d${i}`}
+                className={bloqueaRegistro(d) ? "font-medium text-destructive" : "font-medium"}
+              >
+                {avisoDuplicado(d)}
+                {bloqueaRegistro(d) && " No se puede registrar dos veces."}
+              </p>
+            ))}
+            {String(estado.motivos ?? "")
+              .split("\n")
+              .filter((m) => m && !m.startsWith("Este fichero") && !m.startsWith("Esta factura"))
+              .filter((m) => !m.startsWith("Posible duplicado"))
+              .map((m, i) => (
+                <p key={i} className="text-muted-foreground">
+                  {m}
+                </p>
+              ))}
+            {duplicados.length > 0 && estado.id && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button type="button" size="sm" variant="outline" onClick={onDescartar}>
+                  Es la misma: descartar
+                </Button>
+                {porConfirmar.length > 0 && !duplicadoQueBloquea && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={estado.otraFactura ? "default" : "outline"}
+                    onClick={() => onCambiar({ ...estado, otraFactura: !estado.otraFactura })}
+                  >
+                    Es otra factura
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {avisos.length > 0 && (
         <Card className="border-amber-500/50">
@@ -1021,6 +1256,14 @@ function RevisarCompra({
         )}
         {!sinCategoria && conCalculo && estado.tipo_iva === null && (
           <span className="text-sm text-muted-foreground mr-auto">Elige el tipo de IVA.</span>
+        )}
+        {duplicadoQueBloquea && (
+          <span className="text-sm text-destructive mr-auto">Ya está registrada.</span>
+        )}
+        {!duplicadoQueBloquea && porConfirmar.length > 0 && !estado.otraFactura && (
+          <span className="text-sm text-muted-foreground mr-auto">
+            ¿Es un duplicado? Descártala o confirma que es otra factura.
+          </span>
         )}
         {!sinCategoria && descuadreSinResolver && (
           <span className="text-sm text-muted-foreground mr-auto">

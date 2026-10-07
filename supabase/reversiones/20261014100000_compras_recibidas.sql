@@ -4,7 +4,9 @@
 -- Deja textil_compras como estaba antes. BORRA lo escrito en las columnas
 -- nuevas (concepto, forma de pago, pagos, descuadres, borrados lógicos): las
 -- facturas marcadas como borradas vuelven a contar. Solo con autorización.
--- No vive en migrations/ para que no se aplique sola.
+-- No vive en migrations/ para que no se aplique sola. Si está aplicada
+-- 20261015100000_compras_cola, revertir antes esa: sus índices usan
+-- borrada_en y se irían con ella.
 -- ============================================================================
 
 DROP INDEX IF EXISTS public.textil_compras_por_trimestre;

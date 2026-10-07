@@ -652,8 +652,8 @@ const calculada = (c, pagada = null) => {
     estado_pago: pagada ? "pagada" : "pendiente",
     fecha_pago: pagada,
     borrada_en: null,
-    ejercicio: Number(c.fecha.slice(0, 4)),
-    trimestre: Math.floor((Number(c.fecha.slice(5, 7)) - 1) / 3) + 1,
+    ejercicio: c.fecha ? Number(c.fecha.slice(0, 4)) : null,
+    trimestre: c.fecha ? Math.floor((Number(c.fecha.slice(5, 7)) - 1) / 3) + 1 : null,
   };
 };
 const compraGeneral = (n, proveedor, categoria, fecha, base, iva, irpf = 0, gasto_id = null) => ({
@@ -699,8 +699,47 @@ COMPRAS.forEach((c, i) => {
   COMPRAS[i] = {
     ...calculada(c, c.categoria === "publicidad" ? fechaDia(5).slice(0, 10) : null),
     borrada_en: c.borrada_en ?? null,
+    revision: "revisada",
+    revision_motivo: null,
+    confianza: null,
+    fichero_huella: null,
+    fichero_ruta: null,
   };
 });
+// La cola: lo que ha leído la IA y nadie ha confirmado, y una que no se leyó.
+COMPRAS.push(
+  {
+    ...calculada({
+      ...compraGeneral(7, "Tintas DTF Pro", "consumibles", fechaDia(2).slice(0, 10), 90, 18.9),
+      numero: null,
+      nif_proveedor: "B10000001",
+      estado: "borrador",
+    }),
+    revision: "pendiente",
+    revision_motivo:
+      "Posible duplicado de Tintas DTF Pro del 2026-10-02 (mismo proveedor, fecha e importe).\nLa IA duda: el número de factura no se lee.",
+    confianza: 0.72,
+    fichero_huella: "aa11",
+    fichero_ruta: "ronoca/2026/cola-1.pdf",
+    notas: "Fichero: tintas-octubre.pdf",
+  },
+  {
+    ...calculada({
+      ...compraGeneral(8, null, "otros", fechaDia(6).slice(0, 10), 0, 0),
+      fecha: null,
+      estado: "borrador",
+    }),
+    proveedor: null,
+    revision: "error",
+    revision_motivo:
+      "La lectura no tiene la forma esperada: confianza está fuera de rango. (tras un reintento)",
+    numero: null,
+    confianza: null,
+    fichero_huella: "bb22",
+    fichero_ruta: "ronoca/2026/cola-2.pdf",
+    notas: "Fichero: escaneo-borroso.jpg",
+  },
+);
 
 // Seguimiento de los pedidos enviados o entregados: sale de 0 a 3 días
 // después del pedido (Gerencia › Producción, días hasta el envío).

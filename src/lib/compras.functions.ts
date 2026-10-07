@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
 import { CATEGORIAS_COMPRA, FORMAS_PAGO } from "@/dominio/compras";
+import { avisoDuplicado, type CompraComparable } from "@/dominio/cola-compras";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -50,11 +51,14 @@ export const leerFacturaCompra = createServerFn({ method: "POST" })
     return { fichero };
   })
   .handler(async ({ data }) => {
-    const { leerFactura } = await import("./lector-facturas.server");
+    const { leerYValidar } = await import("./cola-compras.server");
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
-    const bruto = await leerFactura(bytes, data.fichero.type);
+    // Validada contra el esquema, con un reintento; si no, el error se ve.
+    const r = await leerYValidar(bytes, data.fichero.type);
+    if (!r.ok) throw new Error(r.error);
+    const bruto = r.bruto;
 
-    const compra = normalizarCompra(bruto);
+    const compra = normalizarCompra(r.lectura);
     // La lectura en bruto viaja como texto: es JSON libre y el serializador de
     // las server functions solo mueve formas que conoce. Se guarda tal cual
     // para poder comparar después lo que dijo el modelo con lo que se corrigió.
@@ -139,10 +143,38 @@ export const registrarCompra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const movidas = await llamarRpc<number>(context.supabase, "textil_compra_registrar", {
-      _compra_id: data.id,
-    });
-    return { movidas };
+    // Registrarla es confirmarla: la ha revisado una persona.
+    const antes = await tabla(context.supabase, "textil_compras")
+      .select("revision")
+      .eq("id", data.id)
+      .maybeSingle();
+    const conCola = !faltaLaColumna(antes.error) && antes.data?.revision !== undefined;
+    if (conCola && antes.data?.revision !== "revisada") {
+      const { error } = await tabla(context.supabase, "textil_compras")
+        .update({ revision: "revisada" })
+        .eq("id", data.id);
+      if (error) throw new Error(error.message);
+    }
+    try {
+      const movidas = await llamarRpc<number>(context.supabase, "textil_compra_registrar", {
+        _compra_id: data.id,
+      });
+      return { movidas };
+    } catch (e) {
+      // Si no se registra, vuelve a la cola como estaba.
+      if (conCola && antes.data?.revision !== "revisada") {
+        await tabla(context.supabase, "textil_compras")
+          .update({ revision: antes.data?.revision })
+          .eq("id", data.id);
+      }
+      const mensaje = e instanceof Error ? e.message : String(e);
+      if (/textil_compras_factura_unica|duplicate key/i.test(mensaje)) {
+        throw new Error(
+          "Esta factura (mismo proveedor y número) ya está registrada. Si es un duplicado, bórrala.",
+        );
+      }
+      throw e;
+    }
   });
 
 /**
@@ -159,6 +191,9 @@ export const listCompras = createServerFn({ method: "GET" })
     const prueba2 = await tabla(context.supabase, "textil_compras").select("liquido").limit(1);
     // Con la migración 20261014100000 la base calcula los importes.
     const recibidas = !faltaLaColumna(prueba2.error);
+    const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
+    // Con la migración 20261015100000 hay cola de revisión y subida de varias.
+    const cola = !faltaLaColumna(prueba3.error);
     let consulta = tabla(context.supabase, "textil_compras").select(
       "*, lineas:textil_compra_lineas(*)",
     );
@@ -167,7 +202,7 @@ export const listCompras = createServerFn({ method: "GET" })
       .order("fecha", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return { compras: (compras ?? []) as any[], generales, recibidas };
+    return { compras: (compras ?? []) as any[], generales, recibidas, cola };
   });
 
 /**
@@ -234,4 +269,144 @@ export const pagarCompra = createServerFn({ method: "POST" })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// ---------------------------------------------------------------------------
+// Cola de revisión: varias facturas, leídas con IA, que confirma una persona
+// ---------------------------------------------------------------------------
+
+const TIPOS_FICHERO: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+const ficheroDe = (d: unknown) => {
+  if (!(d instanceof FormData)) throw new Error("Falta el fichero");
+  const fichero = d.get("fichero");
+  if (!(fichero instanceof File)) throw new Error("Falta el fichero");
+  if (!TIPOS_FICHERO[fichero.type]) {
+    throw new Error(
+      `Formato no admitido (${fichero.type || "desconocido"}). Sube un PDF, un JPG o un PNG.`,
+    );
+  }
+  if (fichero.size > 10 * 1024 * 1024) throw new Error("El fichero pesa más de 10 MB.");
+  return { fichero };
+};
+
+/**
+ * Sube una factura a la cola: guarda el fichero en compras/ronoca/<año>/,
+ * crea la fila (para que se vea pase lo que pase), la lee con IA y la deja
+ * pendiente de revisión o como error. Si el mismo fichero ya está subido, no
+ * hace nada y lo dice.
+ */
+export const subirFacturaRecibida = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(ficheroDe)
+  .handler(async ({ data, context }) => {
+    const { huellaDe, procesarFactura } = await import("./cola-compras.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    const huella = await huellaDe(bytes);
+
+    const previas = await tabla(context.supabase, "textil_compras")
+      .select("id, proveedor, numero, fecha, estado, borrada_en")
+      .eq("fichero_huella", huella);
+    if (faltaLaColumna(previas.error)) {
+      throw new Error("Falta aplicar la migración 20261015100000 (cola de revisión).");
+    }
+    if (previas.error) throw new Error(previas.error.message);
+    const filas = (previas.data ?? []) as CompraComparable[];
+    const viva = filas.find((p) => !p.borrada_en);
+    if (viva) {
+      return {
+        resultado: "duplicado" as const,
+        motivo: avisoDuplicado({ nivel: "archivo", de: viva, borrada: false }),
+      };
+    }
+    const borrada = filas.find((p) => p.borrada_en);
+
+    const empresa_id = await empresaActiva(context.supabase);
+    const id = crypto.randomUUID();
+    const ruta = `ronoca/${new Date().getFullYear()}/${id}.${TIPOS_FICHERO[data.fichero.type]}`;
+    const admin = adminComoUsuario(context.userId);
+    const subida = await admin.storage
+      .from("compras")
+      .upload(ruta, bytes, { contentType: data.fichero.type, upsert: false });
+    if (subida.error) throw new Error(`No se pudo guardar el fichero: ${subida.error.message}`);
+
+    const { error } = await tabla(context.supabase, "textil_compras").insert({
+      id,
+      empresa_id,
+      categoria: "otros",
+      revision: "pendiente",
+      revision_motivo: "Leyendo con IA…",
+      fichero_ruta: ruta,
+      fichero_huella: huella,
+      notas: `Fichero: ${data.fichero.name}`,
+    });
+    if (error) throw new Error(error.message);
+
+    return procesarFactura(
+      context.supabase,
+      id,
+      bytes,
+      data.fichero.type,
+      borrada ? avisoDuplicado({ nivel: "archivo", de: borrada, borrada: true }) : null,
+    );
+  });
+
+/** Vuelve a leer con IA una factura de la cola (por ejemplo, una que dio error). */
+export const releerFacturaRecibida = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { procesarFactura } = await import("./cola-compras.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { data: fila, error } = await tabla(context.supabase, "textil_compras")
+      .select("estado, fichero_ruta")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!fila) throw new Error("La factura no existe");
+    if (fila.estado !== "borrador") throw new Error("Una factura registrada no se vuelve a leer.");
+    if (!fila.fichero_ruta)
+      throw new Error("Esta factura no tiene fichero: se dio de alta a mano.");
+    const descarga = await adminComoUsuario(context.userId)
+      .storage.from("compras")
+      .download(fila.fichero_ruta);
+    if (descarga.error || !descarga.data) throw new Error("No se encuentra el fichero.");
+    const extension = String(fila.fichero_ruta).split(".").pop() ?? "";
+    const tipo =
+      Object.entries(TIPOS_FICHERO).find(([, ext]) => ext === extension)?.[0] ?? "application/pdf";
+    await tabla(context.supabase, "textil_compras")
+      .update({ revision: "pendiente", revision_motivo: "Leyendo con IA…" })
+      .eq("id", data.id);
+    return procesarFactura(
+      context.supabase,
+      data.id,
+      new Uint8Array(await descarga.data.arrayBuffer()),
+      tipo,
+      null,
+    );
+  });
+
+/** Un enlace temporal (10 minutos) para ver el fichero de una factura. */
+export const verFicheroCompra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { data: fila } = await tabla(context.supabase, "textil_compras")
+      .select("fichero_ruta")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!fila?.fichero_ruta) throw new Error("Esta factura no tiene fichero.");
+    const firmada = await adminComoUsuario(context.userId)
+      .storage.from("compras")
+      .createSignedUrl(fila.fichero_ruta, 600);
+    if (firmada.error || !firmada.data) throw new Error("No se pudo abrir el fichero.");
+    return { url: firmada.data.signedUrl };
   });
