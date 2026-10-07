@@ -35,9 +35,10 @@ export function usePedidosPeriodo(filtro: Filtro) {
   return useQuery({
     queryKey: ["pedidos-periodo", ...claveRango(filtro)],
     queryFn: async (): Promise<PedidoResumen[]> => {
+      // Con sus devoluciones, para restarlas de lo vendido (ver kpis.ts).
       let consulta = supabase
         .from("pedidos")
-        .select(CAMPOS_PEDIDO)
+        .select(`${CAMPOS_PEDIDO}, devoluciones:pedido_devoluciones(importe)`)
         .gte("fecha_pedido", filtro.desde.toISOString())
         .lte("fecha_pedido", filtro.hasta.toISOString());
 
@@ -45,7 +46,11 @@ export function usePedidosPeriodo(filtro: Filtro) {
 
       const { data, error } = await consulta;
       if (error) throw error;
-      return (data ?? []) as PedidoResumen[];
+      type Fila = PedidoResumen & { devoluciones?: { importe: number | string }[] | null };
+      return ((data ?? []) as unknown as Fila[]).map(({ devoluciones, ...p }) => ({
+        ...p,
+        devuelto: (devoluciones ?? []).reduce((s, d) => s + (Number(d.importe) || 0), 0),
+      }));
     },
   });
 }

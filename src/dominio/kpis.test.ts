@@ -5,6 +5,7 @@ import {
   agruparPorTienda,
   calcularKpis,
   KPIS_VACIOS,
+  parteVendida,
   topPorMetros,
   variacion,
   type PedidoResumen,
@@ -73,6 +74,44 @@ describe("calcularKpis", () => {
     const k = calcularKpis([pedido({ subtotal: null, iva: null, envio: null, total: null })]);
     expect(k.bruta).toBe(0);
     expect(k.total).toBe(0);
+  });
+});
+
+describe("devoluciones", () => {
+  it("una devolución parcial se resta del total y, en proporción, de base, IVA y envío", () => {
+    // 126 € con 25,20 € devueltos: queda el 80 %.
+    const k = calcularKpis([pedido({ devuelto: 25.2 })]);
+    expect(k.total).toBe(100.8);
+    expect(k.bruta).toBe(80);
+    expect(k.iva).toBe(16.8);
+    expect(k.envios).toBe(4);
+    expect(k.devuelto).toBe(25.2);
+    expect(k.ticket).toBe(100.8);
+  });
+
+  it("los metros no se tocan: lo impreso, impreso está", () => {
+    expect(calcularKpis([pedido({ devuelto: 63 })]).metros).toBe(10);
+  });
+
+  it("devolver más que el total deja el pedido a cero, no en negativo", () => {
+    expect(parteVendida({ total: 100, devuelto: 150 })).toBe(0);
+    expect(calcularKpis([pedido({ devuelto: 500 })]).total).toBe(0);
+  });
+
+  it("sin devoluciones, o con el importe como cadena, como siempre", () => {
+    expect(parteVendida({ total: 126 })).toBe(1);
+    expect(calcularKpis([pedido({ devuelto: "12.6" })]).total).toBe(113.4);
+  });
+
+  it("lo devuelto de un cancelado no cuenta: el cancelado ya no suma", () => {
+    expect(calcularKpis([pedido({ estado: "cancelado", devuelto: 126 })]).devuelto).toBe(0);
+  });
+
+  it("las gráficas por días y por rangos también restan lo devuelto", () => {
+    const p = pedido({ devuelto: 26 });
+    expect(agruparPorDia([p], [new Date("2026-09-02T12:00:00.000Z")])[0].total).toBe(100);
+    const r = { desde: new Date("2026-09-01"), hasta: new Date("2026-09-30") };
+    expect(agruparPorRangos([p], [r])[0].total).toBe(100);
   });
 });
 

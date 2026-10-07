@@ -26,6 +26,11 @@ export type PedidoResumen = {
   envio: number | string | null;
   total: number | string | null;
   metros_total: number | string | null;
+  /**
+   * Lo devuelto al cliente (reembolsos de WooCommerce), con IVA. Se resta de
+   * lo vendido: un pedido de 100 € con 30 € devueltos son 70 € de venta.
+   */
+  devuelto?: number | string | null;
 };
 
 /** Una línea de pedido con lo mínimo para agrupar por producto. */
@@ -43,6 +48,8 @@ const num = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
 export type KpisPeriodo = {
   /** Pedidos no cancelados. */
   pedidos: number;
+  /** Lo devuelto de esos pedidos, con IVA. Ya está restado de lo demás. */
+  devuelto: number;
   /** Facturación bruta: suma de bases imponibles. */
   bruta: number;
   iva: number;
@@ -57,6 +64,7 @@ export type KpisPeriodo = {
 
 export const KPIS_VACIOS: KpisPeriodo = {
   pedidos: 0,
+  devuelto: 0,
   bruta: 0,
   iva: 0,
   envios: 0,
@@ -66,16 +74,43 @@ export const KPIS_VACIOS: KpisPeriodo = {
   ticket: 0,
 };
 
-/** Los pedidos cancelados no facturan, pero sí se cuentan aparte. */
+/**
+ * Qué parte del pedido sigue vendida después de las devoluciones, de 0 a 1.
+ *
+ * WooCommerce da el importe devuelto con IVA, no qué líneas ni cuánto era
+ * base o envío. Se reparte en proporción: si se devuelve el 30 % del total,
+ * se descuenta el 30 % de la base, del IVA y del envío. Para el IVA es exacto
+ * cuando todo el pedido va al mismo tipo, que es lo normal aquí.
+ */
+export function parteVendida(p: Pick<PedidoResumen, "total" | "devuelto">): number {
+  const total = num(p.total);
+  if (total <= 0) return 1;
+  const queda = (total - num(p.devuelto)) / total;
+  return Math.min(1, Math.max(0, queda));
+}
+
+/** El total del pedido después de las devoluciones. */
+export function totalNeto(p: Pick<PedidoResumen, "total" | "devuelto">): number {
+  return num(p.total) * parteVendida(p);
+}
+
+/**
+ * Los pedidos cancelados no facturan, pero sí se cuentan aparte. Las
+ * devoluciones parciales se restan (ver `parteVendida`); los metros no,
+ * porque no se sabe qué se devolvió y lo impreso, impreso está.
+ */
 export function calcularKpis(pedidos: readonly PedidoResumen[]): KpisPeriodo {
   const validos = pedidos.filter((p) => p.estado !== ESTADO_CANCELADO);
-  const total = validos.reduce((s, p) => s + num(p.total), 0);
+  const total = validos.reduce((s, p) => s + totalNeto(p), 0);
+  const parte = (campo: "subtotal" | "iva" | "envio") =>
+    redondear(validos.reduce((s, p) => s + num(p[campo]) * parteVendida(p), 0));
 
   return {
     pedidos: validos.length,
-    bruta: redondear(validos.reduce((s, p) => s + num(p.subtotal), 0)),
-    iva: redondear(validos.reduce((s, p) => s + num(p.iva), 0)),
-    envios: redondear(validos.reduce((s, p) => s + num(p.envio), 0)),
+    devuelto: redondear(validos.reduce((s, p) => s + num(p.total) - totalNeto(p), 0)),
+    bruta: parte("subtotal"),
+    iva: parte("iva"),
+    envios: parte("envio"),
     total: redondear(total),
     metros: redondear(
       validos.reduce((s, p) => s + num(p.metros_total), 0),
@@ -112,7 +147,7 @@ export function agruparPorDia(
   for (const p of pedidos) {
     if (p.estado === ESTADO_CANCELADO) continue;
     const clave = claveDia(new Date(p.fecha_pedido));
-    porDia.set(clave, (porDia.get(clave) ?? 0) + num(p.total));
+    porDia.set(clave, (porDia.get(clave) ?? 0) + totalNeto(p));
   }
   return dias.map((dia) => ({
     dia,
@@ -144,7 +179,7 @@ export function agruparPorRangos(
         const t = new Date(p.fecha_pedido).getTime();
         return t >= desde && t <= hasta;
       })
-      .reduce((s, p) => s + num(p.total), 0);
+      .reduce((s, p) => s + totalNeto(p), 0);
     return { desde: r.desde, hasta: r.hasta, total: redondear(total) };
   });
 }
