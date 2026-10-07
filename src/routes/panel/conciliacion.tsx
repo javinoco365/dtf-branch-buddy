@@ -31,6 +31,8 @@ import {
   listMovimientosBanco,
   proponerConciliacion,
 } from "@/lib/banco.functions";
+import { CuentasExtractos } from "@/components/banco/CuentasExtractos";
+import { useCuentasBanco } from "@/components/banco/useCuentasBanco";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -67,9 +69,13 @@ function ConciliacionPage() {
   const facturaPorId = useMemo(() => new Map(pendientes.map((f: any) => [f.id, f])), [pendientes]);
 
   const seguras = propuestas.filter(esSegura);
+  // Con la migración de cuentas, el extracto se sube a una cuenta y se revisa antes.
+  const { data: banco } = useCuentasBanco();
+  const conCuentas = banco?.disponible === true;
 
   function refrescar() {
     setElegidas({});
+    qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
     qc.invalidateQueries({ queryKey: ["conciliacion"] });
     qc.invalidateQueries({ queryKey: ["facturas"] });
     qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
@@ -133,25 +139,29 @@ function ConciliacionPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <input
-            ref={ficheroRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) importar.mutate(f);
-            }}
-          />
-          <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
-            {importar.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileUp className="h-4 w-4 mr-2" />
-            )}
-            Subir extracto
-          </Button>
+          {!conCuentas && (
+            <>
+              <input
+                ref={ficheroRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) importar.mutate(f);
+                }}
+              />
+              <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
+                {importar.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4 mr-2" />
+                )}
+                Subir extracto
+              </Button>
+            </>
+          )}
           <Button
             variant="secondary"
             disabled={seguras.length === 0 || aplicar.isPending}
@@ -170,6 +180,8 @@ function ConciliacionPage() {
           </Button>
         </div>
       </div>
+
+      {conCuentas && <CuentasExtractos alImportar={refrescar} />}
 
       <Card>
         <CardContent className="p-0">
