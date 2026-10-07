@@ -6,6 +6,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -41,7 +42,9 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+// `error` llega como `unknown`: lo que se lanza no tiene por qué ser un Error.
+// Las funciones de abajo ya aceptan cualquier cosa.
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
 
   /*
