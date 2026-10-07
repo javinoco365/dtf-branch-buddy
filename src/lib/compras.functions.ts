@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
-import { CATEGORIAS_COMPRA } from "@/dominio/compras";
+import { CATEGORIAS_COMPRA, FORMAS_PAGO } from "@/dominio/compras";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -83,6 +83,16 @@ const compraSchema = z.object({
   irpf: z.number().min(0).optional(),
   categoria: z.enum(CATEGORIAS_COMPRA.map((c) => c.valor) as [string, ...string[]]).optional(),
   gasto_id: z.string().uuid().nullable().optional(),
+  // Con la migración 20261014100000: la base calcula los importes con estos tipos.
+  tipo_iva: z.number().min(0).max(1).optional(),
+  tipo_irpf: z.number().min(0).max(1).optional(),
+  liquido_origen: z.enum(["calculado", "factura"]).optional(),
+  nota_descuadre: z.string().trim().nullable().optional(),
+  concepto: z.string().trim().nullable().optional(),
+  forma_pago: z
+    .enum(FORMAS_PAGO.map((f) => f.valor) as [string, ...string[]])
+    .nullable()
+    .optional(),
   notas: z.string().optional().nullable(),
   lectura_ia: z.string().optional().nullable(),
   lineas: z.array(lineaSchema),
@@ -146,6 +156,9 @@ export const listCompras = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const prueba = await tabla(context.supabase, "textil_compras").select("categoria").limit(1);
     const generales = !faltaLaColumna(prueba.error);
+    const prueba2 = await tabla(context.supabase, "textil_compras").select("liquido").limit(1);
+    // Con la migración 20261014100000 la base calcula los importes.
+    const recibidas = !faltaLaColumna(prueba2.error);
     let consulta = tabla(context.supabase, "textil_compras").select(
       "*, lineas:textil_compra_lineas(*)",
     );
@@ -154,26 +167,71 @@ export const listCompras = createServerFn({ method: "GET" })
       .order("fecha", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return { compras: (compras ?? []) as any[], generales };
+    return { compras: (compras ?? []) as any[], generales, recibidas };
   });
 
+/**
+ * Borra una compra.
+ *
+ * - Un borrador (no ha contado nunca) se borra de verdad.
+ * - Una factura registrada no se borra: se marca como borrada (borrado
+ *   lógico) y deja de contar. La de textil, nunca: ya movió stock.
+ */
 export const borrarCompra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: compra } = await tabla(context.supabase, "textil_compras")
-      .select("estado, numero")
+      .select("*")
       .eq("id", data.id)
       .maybeSingle();
     if (!compra) throw new Error("La compra no existe");
     if (compra.estado === "registrada") {
-      throw new Error(
-        `La compra ${compra.numero ?? ""} ya movió stock y no se borra: queda como ` +
-          "justificante de por qué entró ese género. Para corregir, haz un ajuste " +
-          "de inventario.",
-      );
+      if ((compra.categoria ?? "textil") === "textil") {
+        throw new Error(
+          `La compra ${compra.numero ?? ""} ya movió stock y no se borra: queda como ` +
+            "justificante de por qué entró ese género. Para corregir, haz un ajuste " +
+            "de inventario.",
+        );
+      }
+      if (!("borrada_en" in compra)) {
+        throw new Error(
+          "Una factura registrada no se borra. Falta aplicar la migración 20261014100000.",
+        );
+      }
+      const { error } = await tabla(context.supabase, "textil_compras")
+        .update({ borrada_en: new Date().toISOString() })
+        .eq("id", data.id)
+        .is("borrada_en", null);
+      if (error) throw new Error(error.message);
+      return { ok: true, logico: true };
     }
     const { error } = await tabla(context.supabase, "textil_compras").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, logico: false };
+  });
+
+/** Marca una factura recibida como pagada (con su fecha) o la vuelve a pendiente. */
+export const pagarCompra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        fecha_pago: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida")
+          .nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await tabla(context.supabase, "textil_compras")
+      .update({
+        estado_pago: data.fecha_pago ? "pagada" : "pendiente",
+        fecha_pago: data.fecha_pago,
+      })
+      .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

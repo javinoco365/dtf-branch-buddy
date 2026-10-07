@@ -185,3 +185,93 @@ export function comparacionCompras(
     fila("Mensajería", compradas.envios, estimado.envios),
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Importes de una factura recibida
+// ---------------------------------------------------------------------------
+
+/**
+ * Los importes de una factura recibida, igual que los calcula la base en sus
+ * columnas generadas (20261014100000_compras_recibidas). Aquí solo sirven
+ * para enseñarlos mientras se escribe: lo que se guarda lo calcula la base.
+ * Los tipos van en tanto por uno (0,21).
+ */
+export function calcularCompra(c: { base: number; tipo_iva: number; tipo_irpf: number }): {
+  cuotaIva: number;
+  cuotaIrpf: number;
+  total: number;
+  liquido: number;
+} {
+  const base = redondear(c.base);
+  const cuotaIva = redondear(base * c.tipo_iva);
+  const cuotaIrpf = redondear(base * c.tipo_irpf);
+  return {
+    cuotaIva,
+    cuotaIrpf,
+    total: redondear(base + cuotaIva),
+    liquido: redondear(base + cuotaIva - cuotaIrpf),
+  };
+}
+
+/**
+ * Lo que va del líquido impreso en la factura al calculado. Nulo si cuadran
+ * al céntimo: cualquier diferencia hay que resolverla (eligiendo cuál vale).
+ */
+export function descuadreLiquido(calculado: number, impreso: number): number | null {
+  const d = redondear(impreso - calculado);
+  return Math.abs(d) >= 0.01 ? d : null;
+}
+
+const TIPOS_IVA = [0.21, 0.1, 0.04, 0];
+const TIPOS_IRPF = [0.19, 0.15, 0.07, 0];
+
+/**
+ * El tipo habitual que explica una cuota leída de la factura: 21,00 € sobre
+ * 100 € son el 21 %. Nulo si ninguno la explica (dos tipos en la misma
+ * factura, o una lectura mala): entonces lo elige la persona.
+ */
+export function tipoProbable(base: number, cuota: number, tipos = TIPOS_IVA): number | null {
+  if (!(base > 0)) return cuota === 0 ? 0 : null;
+  return tipos.find((t) => Math.abs(redondear(base * t) - Math.abs(cuota)) <= 0.02) ?? null;
+}
+
+export const tipoIrpfProbable = (base: number, cuota: number) =>
+  tipoProbable(base, cuota, TIPOS_IRPF);
+
+export const FORMAS_PAGO: readonly { valor: string; etiqueta: string }[] = [
+  { valor: "transferencia", etiqueta: "Transferencia" },
+  { valor: "domiciliacion", etiqueta: "Domiciliación" },
+  { valor: "tarjeta", etiqueta: "Tarjeta" },
+  { valor: "efectivo", etiqueta: "Efectivo" },
+  { valor: "bizum", etiqueta: "Bizum" },
+  { valor: "otro", etiqueta: "Otro" },
+];
+
+/**
+ * Los importes que cuentan de una factura recibida, para el IVA, las
+ * retenciones y el banco:
+ *
+ * - Con la migración de importes calculados, los de la base: cuota_iva,
+ *   cuota_irpf y liquido. Si vale el importe impreso (liquido_origen
+ *   «factura», por ejemplo una factura con dos tipos de IVA), las cuotas
+ *   impresas.
+ * - Sin ella, los que se guardaron (los impresos).
+ *
+ * Las borradas no cuentan: devuelve nulo.
+ */
+export function importesDeCompra<T extends CompraResumen>(c: T): T | null {
+  if (c.borrada_en) return null;
+  if (c.cuota_iva === undefined || c.cuota_iva === null) return c;
+  const impresa = c.liquido_origen === "factura";
+  return {
+    ...c,
+    iva: impresa ? c.iva : c.cuota_iva,
+    irpf: impresa ? (c.irpf ?? 0) : (c.cuota_irpf ?? 0),
+    total: c.liquido ?? c.total,
+  };
+}
+
+/** Las facturas recibidas que cuentan, con sus importes buenos. */
+export function comprasQueCuentan<T extends CompraResumen>(compras: readonly T[]): T[] {
+  return compras.map(importesDeCompra).filter((c): c is T => c !== null);
+}

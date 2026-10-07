@@ -36,6 +36,7 @@ import {
   type MovimientoCoste,
 } from "@/dominio/textil";
 import type { CompraResumen, DocumentoDePedido, DocumentoFiscal } from "@/dominio/fiscal";
+import { comprasQueCuentan } from "@/dominio/compras";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -459,6 +460,29 @@ export type DatosFiscal = {
 const CAMPOS_COMPRA = "id, estado, fecha, base, iva, total";
 /** Columnas de la migración 20261013100000_compras_generales. */
 const CAMPOS_COMPRA_GENERAL = "irpf, categoria, gasto_id";
+/** Columnas de la migración 20261014100000_compras_recibidas. */
+const CAMPOS_COMPRA_RECIBIDA = "cuota_iva, cuota_irpf, liquido, liquido_origen, borrada_en";
+/** De la más nueva a la más vieja: se queda con la primera que la base conoce. */
+const CAMPOS_COMPRA_POR_MIGRACION = [
+  `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}, ${CAMPOS_COMPRA_RECIBIDA}`,
+  `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`,
+  CAMPOS_COMPRA,
+];
+
+/** Lee compras con las columnas más nuevas que existan. */
+async function leerCompras(
+  consulta: (
+    campos: string,
+  ) => Promise<{ data: CompraResumen[]; error: { code?: string; message: string } | null }>,
+): Promise<{ data: CompraResumen[]; error: { code?: string; message: string } | null }> {
+  let r = await consulta(CAMPOS_COMPRA_POR_MIGRACION[0]);
+  for (const campos of CAMPOS_COMPRA_POR_MIGRACION.slice(1)) {
+    if (!faltaLaColumna(r.error)) break;
+    r = await consulta(campos);
+  }
+  // Sin las borradas, y con los importes que cuentan.
+  return r.error ? r : { data: comprasQueCuentan(r.data), error: null };
+}
 
 /**
  * Las facturas de compra registradas que no son de textil, de cualquier
@@ -470,13 +494,16 @@ export function useComprasGerencia() {
   return useQuery({
     queryKey: ["gerencia-compras"],
     queryFn: async (): Promise<CompraResumen[]> => {
-      const r = await leerTodas<CompraResumen>((a, b) =>
-        tabla(supabase, "textil_compras")
-          .select(`${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`)
-          .eq("estado", "registrada")
-          .neq("categoria", "textil")
-          .order("id")
-          .range(a, b),
+      // Sin la migración de compras generales (sin «categoria»), no hay ninguna.
+      const r = await leerCompras((campos) =>
+        leerTodas<CompraResumen>((a, b) =>
+          tabla(supabase, "textil_compras")
+            .select(campos)
+            .eq("estado", "registrada")
+            .neq("categoria", "textil")
+            .order("id")
+            .range(a, b),
+        ),
       );
       if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return [];
       if (r.error) throw new Error(r.error.message);
@@ -503,18 +530,22 @@ export function useFiscal(rango: RangoFechas) {
         );
       const camposTextil =
         "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva, rectifica_a_id";
-      const [f, t0, c0] = await Promise.all([
+      const [f, t0, c] = await Promise.all([
         enRango(
           "facturas",
           "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id",
         ),
         enRango("textil_facturas", `${camposTextil}, textil_pedido_id`),
-        enRango("textil_compras", `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`),
+        leerCompras(
+          (campos) =>
+            enRango("textil_compras", campos) as Promise<{
+              data: CompraResumen[];
+              error: { code?: string; message: string } | null;
+            }>,
+        ),
       ]);
       // Antes de la migración de tickets la factura textil no sabe su pedido.
       const t = faltaLaColumna(t0.error) ? await enRango("textil_facturas", camposTextil) : t0;
-      // Antes de la de compras generales todas son de textil, sin IRPF ni gasto.
-      const c = faltaLaColumna(c0.error) ? await enRango("textil_compras", CAMPOS_COMPRA) : c0;
       if (f.error) throw new Error(f.error.message);
       if (t.error) throw new Error(t.error.message);
       if (c.error && !faltaLaTabla(c.error)) throw new Error(c.error.message);
@@ -655,29 +686,21 @@ export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]
             .range(a, b),
         ),
         tabla(supabase, "textil_marcas").select("id, nombre"),
-        leerTodas<CompraResumen>((a, b) =>
-          tabla(supabase, "textil_compras")
-            .select("id, estado, base, iva, total, categoria")
-            .gte("fecha", desde)
-            .lte("fecha", hasta)
-            .order("id")
-            .range(a, b),
-        ),
-      ]);
-      // Solo las del textil; sin la migración de compras generales, todas lo son.
-      const comprasTextil = faltaLaColumna(compras.error)
-        ? await leerTodas<CompraResumen>((a, b) =>
+        leerCompras((campos) =>
+          leerTodas<CompraResumen>((a, b) =>
             tabla(supabase, "textil_compras")
-              .select("id, estado, base, iva, total")
+              .select(campos)
               .gte("fecha", desde)
               .lte("fecha", hasta)
               .order("id")
               .range(a, b),
-          )
-        : {
-            ...compras,
-            data: compras.data.filter((x) => (x.categoria ?? "textil") === "textil"),
-          };
+          ),
+        ),
+      ]);
+      // Solo las del textil; sin la migración de compras generales, todas lo son.
+      const comprasTextil = compras.error
+        ? compras
+        : { ...compras, data: compras.data.filter((x) => (x.categoria ?? "textil") === "textil") };
       if (stock.error && !faltaLaTabla(stock.error)) throw new Error(stock.error.message);
       if (marcas.error) throw new Error(marcas.error.message);
       if (comprasTextil.error && !faltaLaTabla(comprasTextil.error)) {

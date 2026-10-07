@@ -4,8 +4,14 @@ import { cargosDelRango, impuestosPorTrimestre } from "./impuestos";
 import { gastosFijosPorGrupo } from "./grupos";
 import type { CompraResumen } from "./fiscal";
 import {
+  calcularCompra,
   categoriaCompra,
   comparacionCompras,
+  comprasQueCuentan,
+  descuadreLiquido,
+  importesDeCompra,
+  tipoIrpfProbable,
+  tipoProbable,
   comprasParaComparar,
   gastosConCompras,
   mesesDeAmortizacion,
@@ -155,5 +161,70 @@ describe("compras que cuestan como un gasto", () => {
     });
     // IVA de las 6 registradas (21 cada una) y la retención del abogado al 111.
     expect(q1).toMatchObject({ ivaSoportado: 126, irpf111: 15 });
+  });
+});
+
+describe("importes de una factura recibida", () => {
+  it("los mismos redondeos que la base", () => {
+    expect(calcularCompra({ base: 33.33, tipo_iva: 0.21, tipo_irpf: 0 })).toEqual({
+      cuotaIva: 7,
+      cuotaIrpf: 0,
+      total: 40.33,
+      liquido: 40.33,
+    });
+    expect(calcularCompra({ base: 0.05, tipo_iva: 0.21, tipo_irpf: 0 }).cuotaIva).toBe(0.01);
+    expect(calcularCompra({ base: 12.5, tipo_iva: 0.21, tipo_irpf: 0.15 })).toEqual({
+      cuotaIva: 2.63,
+      cuotaIrpf: 1.88,
+      total: 15.13,
+      liquido: 13.25,
+    });
+    // El alquiler: se paga el líquido, no el total.
+    expect(calcularCompra({ base: 1000, tipo_iva: 0.21, tipo_irpf: 0.19 })).toEqual({
+      cuotaIva: 210,
+      cuotaIrpf: 190,
+      total: 1210,
+      liquido: 1020,
+    });
+  });
+
+  it("cualquier céntimo de descuadre se tiene que resolver", () => {
+    expect(descuadreLiquido(1020, 1020)).toBeNull();
+    expect(descuadreLiquido(1020, 1019.99)).toBe(-0.01);
+    expect(descuadreLiquido(40.33, 40.3)).toBe(-0.03);
+  });
+
+  it("el tipo que explica la cuota leída; si ninguno, lo elige la persona", () => {
+    expect(tipoProbable(100, 21)).toBe(0.21);
+    expect(tipoProbable(33.33, 7)).toBe(0.21);
+    expect(tipoProbable(100, 10)).toBe(0.1);
+    expect(tipoProbable(100, 15.5)).toBeNull(); // 21 % y 10 % mezclados
+    expect(tipoProbable(0, 0)).toBe(0);
+    expect(tipoIrpfProbable(1000, 190)).toBe(0.19);
+    expect(tipoIrpfProbable(200, 30)).toBe(0.15);
+  });
+
+  it("cuentan los importes de la base; los impresos si vale la factura; las borradas, nada", () => {
+    const fila = compra("x", {
+      base: 100,
+      iva: 20,
+      irpf: 0,
+      total: 120,
+      cuota_iva: 21,
+      cuota_irpf: 0,
+      liquido: 121,
+      liquido_origen: "calculado",
+    });
+    expect(importesDeCompra(fila)).toMatchObject({ iva: 21, total: 121 });
+    expect(importesDeCompra({ ...fila, liquido_origen: "factura", liquido: 120 })).toMatchObject({
+      iva: 20,
+      total: 120,
+    });
+    expect(importesDeCompra({ ...fila, borrada_en: "2026-10-07T10:00:00Z" })).toBeNull();
+    // Sin la migración, lo guardado.
+    expect(importesDeCompra(compra("y", { iva: 21 }))).toMatchObject({ iva: 21 });
+    expect(comprasQueCuentan([fila, { ...fila, id: "b", borrada_en: "2026-10-07" }])).toHaveLength(
+      1,
+    );
   });
 });

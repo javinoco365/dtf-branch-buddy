@@ -204,6 +204,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/C1_compras_generales.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
 
 echo
+echo "== Facturas recibidas: importes calculados en la base =="
+$PSQL -f "$RAIZ/supabase/pruebas/C2_compras_recibidas.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
+
+echo
 echo "== Bucket de los PDF de facturas =="
 $PSQL -f "$RAIZ/supabase/pruebas/B8_bucket_facturas.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
