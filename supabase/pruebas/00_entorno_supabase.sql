@@ -58,9 +58,10 @@ ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 -- Vault: la extensión real no está disponible fuera de Supabase.
 CREATE TABLE IF NOT EXISTS vault.secrets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  secret text, name text, description text
+  secret text, name text, description text, created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE OR REPLACE VIEW vault.decrypted_secrets AS SELECT id, secret AS decrypted_secret FROM vault.secrets;
+CREATE OR REPLACE VIEW vault.decrypted_secrets AS
+  SELECT id, secret AS decrypted_secret, name, created_at FROM vault.secrets;
 CREATE OR REPLACE FUNCTION vault.create_secret(text, text, text) RETURNS uuid
 LANGUAGE sql AS $$ INSERT INTO vault.secrets(secret, name, description) VALUES ($1,$2,$3) RETURNING id $$;
 CREATE OR REPLACE FUNCTION vault.update_secret(uuid, text) RETURNS void
