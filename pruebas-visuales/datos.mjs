@@ -291,6 +291,7 @@ export const FACTURAS = PEDIDOS.slice(0, 6).map((p, i) => ({
   base_imponible: p.subtotal + p.envio,
   iva_total: p.iva,
   total: p.total,
+  desglose_iva: [{ tipo: 21, base: p.subtotal + p.envio, cuota: p.iva }],
   estado: i % 2 === 0 ? "pagada" : "emitida",
   cliente_nombre: i % 2 === 0 ? null : p.cliente_nombre,
   cliente_nif: i % 2 === 0 ? null : "B00000001",
@@ -599,6 +600,7 @@ const TEXTIL_FACTURAS = [0, 1].map((i) => ({
   subtotal: 90,
   iva: 18.9,
   total: 108.9,
+  desglose_iva: [{ tipo: 21, base: 90, cuota: 18.9 }],
   notas: null,
   pdf_path: null,
   rectifica_a_id: null,
@@ -642,6 +644,21 @@ const ENLACES = PEDIDOS.filter((p) => ["enviado", "entregado"].includes(p.estado
   };
 });
 
+// Salida del almacén del pedido textil entregado: su coste para el margen.
+const MOVIMIENTOS_STOCK = [
+  {
+    id: id("5a", 1),
+    empresa_id: EMPRESA,
+    stock_id: STOCK[0].id,
+    motivo: "venta",
+    cantidad: -TEXTIL_PEDIDOS[2].items[0].cantidad,
+    coste_unitario: STOCK[0].coste_unitario,
+    textil_pedido_id: TEXTIL_PEDIDOS[2].id,
+    nota: null,
+    created_at: fechaDia(5),
+  },
+];
+
 // Gerencia › Ajustes: un gasto fijo vigente, otro dado de baja y un objetivo.
 const GASTOS_FIJOS = [
   {
@@ -669,6 +686,8 @@ const OBJETIVOS = [
 
 Object.assign(DATOS, {
   enlaces_seguimiento: ENLACES,
+  textil_pedido_items: TEXTIL_PEDIDOS.flatMap((p) => p.items),
+  textil_stock_movimientos: MOVIMIENTOS_STOCK,
   gerencia_ajustes: [{ empresa_id: EMPRESA, web_sin_pagar_cuenta: true }],
   gerencia_gastos_fijos: GASTOS_FIJOS,
   gerencia_objetivos: OBJETIVOS,
