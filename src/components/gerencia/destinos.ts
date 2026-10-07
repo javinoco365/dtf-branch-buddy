@@ -90,6 +90,39 @@ export function destinoCaja(sel: Seleccion): Destino {
   return { to: "/panel/caja", search: periodoEnDireccion(sel) };
 }
 
+/** La ficha del cliente, buscada por su nombre en su pantalla de clientes. */
+export function destinoCliente(c: { canal: string; nombre: string }): Destino {
+  return {
+    to: c.canal === "textil" ? "/panel/textil/clientes" : "/panel/clientes",
+    search: { q: c.nombre },
+  };
+}
+
+/** Los presupuestos enviados de una tienda o del textil, de cualquier fecha. */
+export function destinoPresupuestos(tiendaId: string): Destino {
+  return {
+    to:
+      tiendaId === TIENDA_TEXTIL.id
+        ? "/panel/textil/presupuestos"
+        : `/panel/tiendas/${tiendaId}/presupuestos`,
+    search: { estado: "enviado" },
+  };
+}
+
+/** Los pedidos en un estado, de cualquier fecha, con los filtros de tienda y canal. */
+export function destinoPedidosEstado(f: FiltroGerencia, estado: string): Destino {
+  if (esTextil(f)) return { to: "/panel/textil/pedidos", search: { estado } };
+  return {
+    to: "/panel/pedidos",
+    search: {
+      periodo: "todo",
+      estado,
+      ...(f.tienda !== "todas" ? { tienda: f.tienda } : {}),
+      ...(f.canal === "web" || f.canal === "manual" ? { origen: f.canal } : {}),
+    },
+  };
+}
+
 export const DESTINO_AJUSTES: Destino = { to: "/panel/gerencia", search: { pestana: "ajustes" } };
 
 export const DESTINO_CONCILIACION: Destino = { to: "/panel/conciliacion" };

@@ -22,6 +22,12 @@ const PEDIDOS_TIENDAS =
 const GERENCIA_PEDIDOS =
   "Pedidos de las tiendas (web y manuales) y del textil con fecha de pedido en el periodo, con los filtros de tienda y canal.";
 
+const GERENCIA_PEDIDOS_CLIENTES =
+  "Toda la historia de pedidos de tiendas y textil, sin cancelados y con lo devuelto restado, con los filtros de tienda y canal.";
+
+const GERENCIA_PRESUPUESTOS =
+  "Presupuestos de tiendas y textil con fecha en el periodo. Con el filtro de canal: «Manual» son los de tienda y «Textil» los del textil; la web no hace presupuestos.";
+
 export const DEFINICIONES = {
   vendido: {
     que: "Lo vendido en el periodo, con IVA y envío.",
@@ -178,6 +184,95 @@ export const DEFINICIONES = {
     calculo:
       "Entradas − salidas de los movimientos del periodo. «Sin casar» son entradas que todavía no se han emparejado con una factura.",
     fuente: "Extractos subidos en Conciliación bancaria. No se filtra por tienda ni por canal.",
+  },
+
+  // --- Gerencia › Clientes ----------------------------------------------------
+  g_clientes_activos: {
+    que: "Clientes distintos que han hecho algún pedido en el periodo.",
+    calculo:
+      "Se cuenta cada ficha de cliente una vez, haga uno o diez pedidos. Un cliente de tienda y uno del textil son fichas distintas aunque se llamen igual. Los pedidos sin cliente asociado no cuentan aquí.",
+    fuente: GERENCIA_PEDIDOS_CLIENTES,
+  },
+  g_clientes_nuevos: {
+    que: "Clientes cuyo primer pedido de toda su historia cae en el periodo.",
+    calculo:
+      "Se mira el primer pedido no cancelado de cada cliente desde el principio, no solo en el periodo. Con un filtro de tienda o canal, «nuevo» es nuevo en lo que estás mirando.",
+    fuente: GERENCIA_PEDIDOS_CLIENTES,
+  },
+  g_clientes_recurrentes: {
+    que: "Clientes que han pedido en el periodo y ya habían pedido antes.",
+    calculo: "Clientes activos del periodo cuyo primer pedido es anterior al periodo.",
+    fuente: GERENCIA_PEDIDOS_CLIENTES,
+  },
+  g_pareto: {
+    que: "Cuántos clientes hacen el 80 % de lo vendido a clientes en el periodo.",
+    calculo:
+      "Se ordenan los clientes de más a menos vendido y se suman hasta llegar al 80 %. Cuantos menos hagan falta, más depende el negocio de unos pocos.",
+    fuente: GERENCIA_PEDIDOS_CLIENTES,
+  },
+  g_dormidos: {
+    que: "Clientes que llevan más de 60 días sin hacer un pedido.",
+    calculo:
+      "Días desde su último pedido no cancelado hasta hoy. Ordenados por lo que han comprado en toda su historia: los primeros son los que más cuesta perder.",
+    fuente:
+      "Toda la historia de pedidos de tiendas y textil, con los filtros de tienda y canal. No depende del periodo elegido: es la foto de hoy.",
+  },
+
+  // --- Gerencia › Comercial ---------------------------------------------------
+  g_presupuestos_enviados: {
+    que: "Presupuestos del periodo que llegaron al cliente.",
+    calculo:
+      "Los que están enviados, aceptados, rechazados o facturados (textil). Los borradores no cuentan: no han salido.",
+    fuente: GERENCIA_PRESUPUESTOS,
+  },
+  g_presupuestos_aceptados: {
+    que: "Presupuestos del periodo que el cliente aceptó.",
+    calculo: "Los aceptados más los facturados del textil, que antes fueron aceptados.",
+    fuente: GERENCIA_PRESUPUESTOS,
+  },
+  g_conversion: {
+    que: "Qué parte de los presupuestos enviados se acepta.",
+    calculo:
+      "Aceptados ÷ enviados, en número. Debajo, lo mismo en importe. Los que siguen sin respuesta cuentan como no aceptados todavía, así que en un periodo reciente la tasa sube con los días.",
+    fuente: GERENCIA_PRESUPUESTOS,
+  },
+  g_dias_a_pedido: {
+    que: "Cuánto tarda de media un presupuesto en convertirse en pedido.",
+    calculo:
+      "Días desde la fecha del presupuesto hasta la del pedido creado desde él. Solo cuentan los presupuestos que se confirmaron como pedido en el CRM.",
+    fuente: GERENCIA_PRESUPUESTOS,
+  },
+  g_presupuestos_pendientes: {
+    que: "Lo que está en el aire: presupuestos enviados que siguen sin respuesta.",
+    calculo:
+      "En plazo: enviados cuya validez no ha pasado. Caducados: enviados con la validez ya pasada y sin aceptar ni rechazar.",
+    fuente:
+      "Presupuestos de tiendas y textil de cualquier fecha, con los filtros de tienda y canal. No depende del periodo: es la foto de hoy.",
+  },
+
+  // --- Gerencia › Producción --------------------------------------------------
+  g_taller: {
+    que: "Pedidos que todavía no han salido: pendientes, procesando, imprimiendo o listos.",
+    calculo: "Número de pedidos en esos estados, sea cual sea su fecha, y sus metros.",
+    fuente:
+      "Pedidos de tiendas y textil, con los filtros de tienda y canal. No depende del periodo: es la foto de hoy.",
+  },
+  g_espera: {
+    que: "El pedido abierto que más lleva esperando.",
+    calculo: "Días desde la fecha del pedido hasta hoy, del más antiguo de los que no han salido.",
+    fuente: "Los mismos pedidos que «En el taller».",
+  },
+  g_dias_envio: {
+    que: "Cuánto se tarda de media desde que entra un pedido hasta que se envía.",
+    calculo:
+      "Días naturales desde la fecha del pedido hasta que se le pone el primer enlace de seguimiento, de los pedidos enviados en el periodo. Debajo, la mediana: la mitad se envía en ese tiempo o menos.",
+    fuente:
+      "Pedidos de tiendas con seguimiento. No incluye los que se recogen sin envío ni el textil, que no guarda cuándo se envió.",
+  },
+  g_enviados: {
+    que: "Pedidos de tienda que salieron en el periodo.",
+    calculo: "Pedidos cuyo primer enlace de seguimiento se creó en el periodo.",
+    fuente: "Enlaces de seguimiento de los pedidos de tienda, con los filtros de tienda y canal.",
   },
 } as const satisfies Record<string, Definicion>;
 

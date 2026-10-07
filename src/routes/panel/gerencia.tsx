@@ -9,6 +9,9 @@ import { Resumen } from "@/components/gerencia/Resumen";
 import { Ventas } from "@/components/gerencia/Ventas";
 import { Tesoreria } from "@/components/gerencia/Tesoreria";
 import { Ajustes } from "@/components/gerencia/Ajustes";
+import { Clientes } from "@/components/gerencia/Clientes";
+import { Comercial } from "@/components/gerencia/Comercial";
+import { Produccion } from "@/components/gerencia/Produccion";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
@@ -174,6 +177,9 @@ function Gerencia() {
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="ventas">Ventas</TabsTrigger>
           <TabsTrigger value="tesoreria">Cobros y tesorería</TabsTrigger>
+          <TabsTrigger value="clientes">Clientes</TabsTrigger>
+          <TabsTrigger value="comercial">Comercial</TabsTrigger>
+          <TabsTrigger value="produccion">Producción</TabsTrigger>
           <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
         </TabsList>
 
@@ -197,6 +203,15 @@ function Gerencia() {
             </TabsContent>
             <TabsContent value="tesoreria" className="mt-4">
               <Tesoreria d={datos} />
+            </TabsContent>
+            <TabsContent value="clientes" className="mt-4">
+              <Clientes d={datos} />
+            </TabsContent>
+            <TabsContent value="comercial" className="mt-4">
+              <Comercial d={datos} />
+            </TabsContent>
+            <TabsContent value="produccion" className="mt-4">
+              <Produccion d={datos} />
             </TabsContent>
           </>
         )}

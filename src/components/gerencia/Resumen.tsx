@@ -52,7 +52,7 @@ import {
   textoAviso,
   type DatosGerencia,
 } from "./destinos";
-import { VerDetalle } from "./comun";
+import { Nota, VerDetalle } from "./comun";
 
 export function Resumen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -326,14 +326,6 @@ function BeneficioYObjetivos({
         />
       )}
     </div>
-  );
-}
-
-function Nota({ children }: { children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="py-4 text-sm text-muted-foreground">{children}</CardContent>
-    </Card>
   );
 }
 

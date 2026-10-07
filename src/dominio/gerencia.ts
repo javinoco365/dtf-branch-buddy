@@ -86,7 +86,10 @@ export type FiltroGerencia = {
 
 export const FILTRO_GERENCIA_TODO: FiltroGerencia = { tienda: "todas", canal: "todos" };
 
-export function filtrarVentas(ventas: readonly Venta[], f: FiltroGerencia): Venta[] {
+export function filtrarVentas<T extends Pick<Venta, "tienda_id" | "canal">>(
+  ventas: readonly T[],
+  f: FiltroGerencia,
+): T[] {
   return ventas.filter(
     (v) =>
       (f.tienda === "todas" || v.tienda_id === f.tienda) &&
@@ -560,7 +563,10 @@ export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): n
 }
 
 /** Si los pedidos web sin pagar no cuentan, se quitan de las ventas. */
-export function aplicarAjustesVentas(ventas: readonly Venta[], a: AjustesGerencia): Venta[] {
+export function aplicarAjustesVentas<T extends Pick<Venta, "canal" | "estado">>(
+  ventas: readonly T[],
+  a: AjustesGerencia,
+): T[] {
   if (a.web_sin_pagar_cuenta) return [...ventas];
   return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));
 }

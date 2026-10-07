@@ -11,7 +11,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaTabla, tabla } from "@/lib/rpc";
+import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
+import { leerTodas, trozos } from "@/lib/paginar";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
 import { listMovimientosBanco } from "@/lib/banco.functions";
@@ -24,6 +25,10 @@ import {
   type Venta,
 } from "@/dominio/gerencia";
 import type { PedidoPendiente } from "@/dominio/pendientes";
+import type { VentaCliente } from "@/dominio/clientela";
+import type { PresupuestoResumen } from "@/dominio/comercial";
+import { ESTADOS_ABIERTOS, type EnvioPedido, type PedidoTaller } from "@/dominio/produccion";
+import { TIENDA_TEXTIL } from "@/dominio/cobros";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -138,4 +143,259 @@ export function useCosteMetroActual(): number {
 export function useAjustesGerencia() {
   const leer = useServerFn(leerAjustesGerencia);
   return useQuery({ queryKey: ["gerencia-ajustes"], queryFn: () => leer() });
+}
+
+// ---------------------------------------------------------------------------
+// Clientes, Comercial y Producción. Cada pestaña lee lo suyo solo cuando se
+// abre: las pestañas cerradas no se montan.
+// ---------------------------------------------------------------------------
+
+const canalDeOrigen = (origen: string | null | undefined) =>
+  origen === "woocommerce" ? ("web" as const) : ("manual" as const);
+
+type FilaHistorialTienda = PedidoResumenFila & {
+  cliente_nombre: string | null;
+  devoluciones?: { importe: number | string }[] | null;
+};
+type PedidoResumenFila = Parameters<typeof ventaDeTienda>[0];
+
+/**
+ * Todos los pedidos de la historia, de tiendas y textil, con su cliente. Hace
+ * falta la historia entera para saber quién es nuevo y quién lleva tiempo
+ * sin pedir.
+ */
+export function useHistorialClientes() {
+  return useQuery({
+    queryKey: ["gerencia-historial-clientes"],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<VentaCliente[]> => {
+      const [t, x] = await Promise.all([
+        leerTodas<FilaHistorialTienda>((a, b) =>
+          tabla(supabase, "pedidos")
+            .select(
+              "id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id, cliente_nombre, devoluciones:pedido_devoluciones(importe)",
+            )
+            .order("id")
+            .range(a, b),
+        ),
+        leerTodas<PedidoTextilResumen & { cliente_nombre: string | null }>((a, b) =>
+          tabla(supabase, "textil_pedidos")
+            .select("id, fecha, estado, subtotal, iva, envio, total, cliente_id, cliente_nombre")
+            .order("id")
+            .range(a, b),
+        ),
+      ]);
+      if (t.error) throw new Error(t.error.message);
+      if (x.error) throw new Error(x.error.message);
+      return [
+        ...t.data.map(({ devoluciones, cliente_nombre, ...p }) => ({
+          ...ventaDeTienda({
+            ...p,
+            devuelto: (devoluciones ?? []).reduce((s, d) => s + (Number(d.importe) || 0), 0),
+          }),
+          cliente_nombre,
+        })),
+        ...x.data.map((p) => ({ ...ventaDeTextil(p), cliente_nombre: p.cliente_nombre })),
+      ];
+    },
+  });
+}
+
+export type DatosComercial = {
+  /** Falso si la migración de presupuestos de tienda no está aplicada. */
+  tiendasDisponible: boolean;
+  /** Los del periodo, por su fecha. */
+  periodo: PresupuestoResumen[];
+  /** Todos los enviados sin respuesta, sean del periodo que sean. */
+  enviados: PresupuestoResumen[];
+};
+
+type FilaPresupuesto = Omit<PresupuestoResumen, "tienda_id" | "fecha_pedido"> & {
+  tienda_id?: string;
+  pedido_id?: string | null;
+};
+
+/** Las fechas de los pedidos creados desde presupuestos, por su id. */
+async function fechasDePedidos(
+  nombre: "pedidos" | "textil_pedidos",
+  ids: string[],
+): Promise<Map<string, string>> {
+  const campo = nombre === "pedidos" ? "fecha_pedido" : "fecha";
+  const mapa = new Map<string, string>();
+  for (const trozo of trozos([...new Set(ids)])) {
+    const { data, error } = await tabla(supabase, nombre).select(`id, ${campo}`).in("id", trozo);
+    if (error) throw new Error(error.message);
+    for (const f of (data ?? []) as Record<string, string>[]) mapa.set(f.id, f[campo]);
+  }
+  return mapa;
+}
+
+/** Presupuestos de tiendas y textil: los del periodo y los que esperan respuesta. */
+export function useComercial(rango: RangoFechas) {
+  const desde = dia(rango.desde);
+  const hasta = dia(rango.hasta);
+  return useQuery({
+    queryKey: ["gerencia-comercial", desde, hasta],
+    queryFn: async (): Promise<DatosComercial> => {
+      const campos = "id, numero, fecha, estado, total, validez_dias, cliente_nombre";
+      const leer = (nombre: string, extra: string) =>
+        leerTodas<FilaPresupuesto>((a, b) =>
+          tabla(supabase, nombre)
+            .select(`${campos}${extra}`)
+            .or(`and(fecha.gte.${desde},fecha.lte.${hasta}),estado.eq.enviado`)
+            .order("id")
+            .range(a, b),
+        );
+
+      let tiendas = await leer("presupuestos", ", tienda_id, pedido_id");
+      const tiendasDisponible = !faltaLaTabla(tiendas.error);
+      if (!tiendasDisponible) tiendas = { data: [], error: null };
+      if (tiendas.error) throw new Error(tiendas.error.message);
+
+      // El enlace del presupuesto textil con su pedido llegó en una migración
+      // posterior: sin ella se leen igual, sin días hasta el pedido.
+      let textil = await leer("textil_presupuestos", ", pedido_id");
+      if (faltaLaColumna(textil.error)) textil = await leer("textil_presupuestos", "");
+      if (textil.error) throw new Error(textil.error.message);
+
+      const conPedido = (filas: FilaPresupuesto[]) =>
+        filas.filter((f) => f.pedido_id).map((f) => f.pedido_id as string);
+      const [fechasTienda, fechasTextil] = await Promise.all([
+        fechasDePedidos("pedidos", conPedido(tiendas.data)),
+        fechasDePedidos("textil_pedidos", conPedido(textil.data)),
+      ]);
+
+      const todos: PresupuestoResumen[] = [
+        ...tiendas.data.map(({ pedido_id, ...p }) => ({
+          ...p,
+          tienda_id: p.tienda_id ?? "",
+          fecha_pedido: pedido_id ? (fechasTienda.get(pedido_id) ?? null) : null,
+        })),
+        ...textil.data.map(({ pedido_id, ...p }) => ({
+          ...p,
+          tienda_id: TIENDA_TEXTIL.id,
+          fecha_pedido: pedido_id ? (fechasTextil.get(pedido_id) ?? null) : null,
+        })),
+      ];
+      return {
+        tiendasDisponible,
+        periodo: todos.filter((p) => p.fecha >= desde && p.fecha <= hasta),
+        enviados: todos.filter((p) => p.estado === "enviado"),
+      };
+    },
+  });
+}
+
+/** Los pedidos que todavía no han salido del taller, de cualquier fecha. */
+export function useTaller() {
+  return useQuery({
+    queryKey: ["gerencia-taller"],
+    queryFn: async (): Promise<PedidoTaller[]> => {
+      const [t, x] = await Promise.all([
+        leerTodas<{
+          fecha_pedido: string;
+          estado: string;
+          tienda_id: string;
+          origen: string | null;
+          metros_total: number | string | null;
+          total: number | string | null;
+        }>((a, b) =>
+          tabla(supabase, "pedidos")
+            .select("id, fecha_pedido, estado, tienda_id, origen, metros_total, total")
+            .in("estado", [...ESTADOS_ABIERTOS])
+            .order("id")
+            .range(a, b),
+        ),
+        leerTodas<{ fecha: string; estado: string; total: number | string | null }>((a, b) =>
+          tabla(supabase, "textil_pedidos")
+            .select("id, fecha, estado, total")
+            .in("estado", [...ESTADOS_ABIERTOS])
+            .order("id")
+            .range(a, b),
+        ),
+      ]);
+      if (t.error) throw new Error(t.error.message);
+      if (x.error) throw new Error(x.error.message);
+      return [
+        ...t.data.map((p) => ({
+          fecha_pedido: p.fecha_pedido,
+          estado: p.estado,
+          tienda_id: p.tienda_id,
+          canal: canalDeOrigen(p.origen),
+          metros_total: p.metros_total,
+          total: p.total,
+        })),
+        ...x.data.map((p) => ({
+          fecha_pedido: `${p.fecha.slice(0, 10)}T12:00:00`,
+          estado: p.estado,
+          tienda_id: TIENDA_TEXTIL.id,
+          canal: "textil" as const,
+          metros_total: 0,
+          total: p.total,
+        })),
+      ];
+    },
+  });
+}
+
+/**
+ * Los pedidos de tienda enviados en el rango: los que recibieron su primer
+ * enlace de seguimiento en esas fechas. El textil no guarda cuándo se envió.
+ */
+export function useEnvios(rango: RangoFechas) {
+  const desde = rango.desde.toISOString();
+  const hasta = rango.hasta.toISOString();
+  return useQuery({
+    queryKey: ["gerencia-envios", desde, hasta],
+    queryFn: async (): Promise<EnvioPedido[]> => {
+      const enlaces = await leerTodas<{ pedido_id: string; created_at: string }>((a, b) =>
+        tabla(supabase, "enlaces_seguimiento")
+          .select("id, pedido_id, created_at")
+          .gte("created_at", desde)
+          .lte("created_at", hasta)
+          .order("id")
+          .range(a, b),
+      );
+      if (enlaces.error) throw new Error(enlaces.error.message);
+
+      // El primero de cada pedido dentro del rango.
+      const primero = new Map<string, string>();
+      for (const e of enlaces.data) {
+        const antes = primero.get(e.pedido_id);
+        if (!antes || e.created_at < antes) primero.set(e.pedido_id, e.created_at);
+      }
+      const ids = [...primero.keys()];
+      type FilaPedido = {
+        id: string;
+        fecha_pedido: string;
+        tienda_id: string;
+        origen: string | null;
+      };
+      const pedidos = new Map<string, FilaPedido>();
+      for (const trozo of trozos(ids)) {
+        // Si el pedido ya tenía un seguimiento de antes, no se envió en el rango.
+        const [p, previos] = await Promise.all([
+          tabla(supabase, "pedidos").select("id, fecha_pedido, tienda_id, origen").in("id", trozo),
+          tabla(supabase, "enlaces_seguimiento")
+            .select("pedido_id")
+            .in("pedido_id", trozo)
+            .lt("created_at", desde),
+        ]);
+        if (p.error) throw new Error(p.error.message);
+        if (previos.error) throw new Error(previos.error.message);
+        const yaEnviados = new Set(
+          ((previos.data ?? []) as { pedido_id: string }[]).map((x) => x.pedido_id),
+        );
+        for (const f of (p.data ?? []) as FilaPedido[]) {
+          if (!yaEnviados.has(f.id)) pedidos.set(f.id, f);
+        }
+      }
+      return [...pedidos.entries()].map(([id, p]) => ({
+        fecha_pedido: p.fecha_pedido,
+        enviado_en: primero.get(id)!,
+        tienda_id: p.tienda_id,
+        canal: canalDeOrigen(p.origen),
+      }));
+    },
+  });
 }
