@@ -629,6 +629,33 @@ const COMPRAS = [0, 1].map((i) => ({
   lineas: [],
 }));
 // Facturas de compra de todo el negocio (no textil).
+// Lo que calcula la base en sus columnas generadas (20261014100000).
+const calculada = (c, pagada = null) => {
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const tipo_iva = c.base > 0 ? r2(c.iva / c.base) : 0.21;
+  const tipo_irpf = c.base > 0 ? r2(c.irpf / c.base) : 0;
+  const cuota_iva = r2(c.base * tipo_iva);
+  const cuota_irpf = r2(c.base * tipo_irpf);
+  return {
+    ...c,
+    tipo_iva,
+    tipo_irpf,
+    cuota_iva,
+    cuota_irpf,
+    total_calculado: r2(c.base + cuota_iva),
+    liquido_calculado: r2(c.base + cuota_iva - cuota_irpf),
+    liquido: r2(c.base + cuota_iva - cuota_irpf),
+    liquido_origen: "calculado",
+    nota_descuadre: null,
+    concepto: null,
+    forma_pago: pagada ? "transferencia" : null,
+    estado_pago: pagada ? "pagada" : "pendiente",
+    fecha_pago: pagada,
+    borrada_en: null,
+    ejercicio: Number(c.fecha.slice(0, 4)),
+    trimestre: Math.floor((Number(c.fecha.slice(5, 7)) - 1) / 3) + 1,
+  };
+};
 const compraGeneral = (n, proveedor, categoria, fecha, base, iva, irpf = 0, gasto_id = null) => ({
   id: id("k", 10 + n),
   empresa_id: EMPRESA,
@@ -649,6 +676,10 @@ const compraGeneral = (n, proveedor, categoria, fecha, base, iva, irpf = 0, gast
 });
 COMPRAS.push(
   compraGeneral(1, "Tintas DTF Pro", "consumibles", fechaDia(2).slice(0, 10), 90, 18.9),
+  {
+    ...compraGeneral(6, "Papelería Centro", "material", fechaDia(2).slice(0, 10), 40, 8.4),
+    borrada_en: `${fechaDia(3)}`,
+  },
   compraGeneral(2, "Impresoras Iberia", "maquinaria", "2026-06-15", 6000, 1260),
   compraGeneral(3, "Meta Platforms", "publicidad", fechaDia(3).slice(0, 10), 120, 25.2),
   compraGeneral(
@@ -663,6 +694,13 @@ COMPRAS.push(
   ),
   compraGeneral(5, "SEUR", "envios", fechaDia(4).slice(0, 10), 25, 5.25),
 );
+// Con los importes que calcula la base; la publicidad, ya pagada.
+COMPRAS.forEach((c, i) => {
+  COMPRAS[i] = {
+    ...calculada(c, c.categoria === "publicidad" ? fechaDia(5).slice(0, 10) : null),
+    borrada_en: c.borrada_en ?? null,
+  };
+});
 
 // Seguimiento de los pedidos enviados o entregados: sale de 0 a 3 días
 // después del pedido (Gerencia › Producción, días hasta el envío).

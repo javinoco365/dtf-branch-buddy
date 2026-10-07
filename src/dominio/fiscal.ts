@@ -132,6 +132,13 @@ export type CompraResumen = {
   categoria?: string | null;
   /** El gasto fijo del que es factura. */
   gasto_id?: string | null;
+  /** Calculados por la base (migración 20261014100000); ver compras.ts. */
+  cuota_iva?: Numerico;
+  cuota_irpf?: Numerico;
+  liquido?: Numerico;
+  liquido_origen?: string | null;
+  /** Borrado lógico: si tiene fecha, no cuenta. */
+  borrada_en?: string | null;
 };
 
 export type IvaSoportado = CuentaFiscal & {

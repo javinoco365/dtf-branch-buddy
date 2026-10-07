@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/table";
 import { AlertTriangle, FileUp, Loader2, PackageCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { eur } from "@/lib/format";
+import { eur, fechaCorta } from "@/lib/format";
 import { revisarCompra, type CompraLeida } from "@/dominio/factura-compra";
 import {
   borrarCompra,
@@ -49,12 +49,21 @@ import {
   hayLector,
   leerFacturaCompra,
   listCompras,
+  pagarCompra,
   registrarCompra,
 } from "@/lib/compras.functions";
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { CATEGORIAS_COMPRA, categoriaCompra } from "@/dominio/compras";
+import {
+  calcularCompra,
+  CATEGORIAS_COMPRA,
+  categoriaCompra,
+  descuadreLiquido,
+  FORMAS_PAGO,
+  tipoIrpfProbable,
+  tipoProbable,
+} from "@/dominio/compras";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -71,9 +80,23 @@ type Revision = {
   /** Vacía hasta que se elige: no se adivina qué es una factura. */
   categoria: string;
   gasto_id: string | null;
+  /** En tanto por uno. Nulo si la cuota leída no la explica ningún tipo: se elige. */
+  tipo_iva: number | null;
+  tipo_irpf: number;
+  /** Si el líquido no cuadra, cuál vale. Nulo hasta que se elige. */
+  origen: "calculado" | "factura" | null;
+  nota: string;
+  concepto: string;
+  forma_pago: string | null;
 };
 
 const SIN_GASTO = "ninguno";
+const SIN_FORMA = "sin_forma";
+const TIPOS_IVA = [0.21, 0.1, 0.04, 0];
+const TIPOS_IRPF = [0, 0.07, 0.15, 0.19];
+const porcentaje = (t: number) => `${Math.round(t * 100)} %`;
+/** Una compra borrada (borrado lógico) se enseña con ese estado. */
+const estadoDe = (c: any): string => (c.borrada_en ? "borrada" : String(c.estado));
 
 const COMPRA_VACIA: CompraLeida = {
   proveedor: null,
@@ -92,6 +115,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const ficheroRef = useRef<HTMLInputElement>(null);
   const [revisando, setRevisando] = useState<Revision | null>(null);
   const [borrando, setBorrando] = useState<any>(null);
+  const [pagando, setPagando] = useState<{ compra: any; fecha: string } | null>(null);
   const general = modo === "general";
 
   const listFn = useServerFn(listCompras);
@@ -102,6 +126,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const compras = useMemo(() => data?.compras ?? [], [data]);
   // Sin la migración de compras generales, solo se puede registrar textil.
   const sinGenerales = general && data?.generales === false;
+  // Con la migración de facturas recibidas, la base calcula los importes.
+  const recibidas = data?.recibidas === true;
   const ajustesFn = useServerFn(leerAjustesGerencia);
   const { data: ajustes } = useQuery({
     queryKey: ["gerencia-ajustes"],
@@ -115,6 +141,13 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     lectura,
     categoria: general ? "" : "textil",
     gasto_id: null,
+    // Una factura a mano empieza al 21 %; una leída, con el tipo que explica su IVA.
+    tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : 0.21,
+    tipo_irpf: (compra.base > 0 && tipoIrpfProbable(compra.base, compra.irpf)) || 0,
+    origen: null,
+    nota: "",
+    concepto: "",
+    forma_pago: null,
   });
   // Los filtros viven en la dirección.
   const {
@@ -134,7 +167,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     return (compras as any[]).filter(
       (c) =>
         enRango(c.fecha, periodo.rango) &&
-        (filtros.estado === "todos" || c.estado === filtros.estado) &&
+        // Las borradas solo se ven si se piden.
+        (filtros.estado === "todos" ? !c.borrada_en : estadoDe(c) === filtros.estado) &&
         (filtros.categoria === "todas" || (c.categoria ?? "textil") === filtros.categoria) &&
         (!q || normalizarTexto(c.proveedor).includes(q) || normalizarTexto(c.numero).includes(q)),
     );
@@ -170,12 +204,38 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     mutationFn: async () => {
       if (!revisando) throw new Error("Nada que registrar");
       const { irpf, ...compra } = revisando.compra;
+      const calculado = calcularCompra({
+        base: compra.base,
+        tipo_iva: revisando.tipo_iva ?? 0.21,
+        tipo_irpf: revisando.tipo_irpf,
+      });
+      const descuadre = descuadreLiquido(calculado.liquido, compra.total) !== null;
       const { id } = (await guardarFn({
         data: {
           ...compra,
           // Las columnas nuevas solo se mandan desde la pantalla general.
           ...(general
             ? { irpf, categoria: revisando.categoria, gasto_id: revisando.gasto_id }
+            : {}),
+          // Los tipos, con la migración de facturas recibidas: la base calcula
+          // los importes con ellos.
+          ...(recibidas
+            ? {
+                tipo_iva: revisando.tipo_iva ?? 0.21,
+                tipo_irpf: revisando.tipo_irpf,
+                ...(general
+                  ? {
+                      liquido_origen:
+                        descuadre && revisando.origen === "factura"
+                          ? ("factura" as const)
+                          : ("calculado" as const),
+                      nota_descuadre:
+                        descuadre && revisando.origen === "factura" ? revisando.nota : null,
+                      concepto: revisando.concepto || null,
+                      forma_pago: revisando.forma_pago,
+                    }
+                  : {}),
+              }
             : {}),
           lectura_ia: revisando.lectura,
           lineas: revisando.compra.lineas.map((l, i) => ({
@@ -205,12 +265,24 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const borrarFn = useServerFn(borrarCompra);
   const borrar = useMutation({
     mutationFn: (id: string) => borrarFn({ data: { id } }),
-    onSuccess: () => {
-      toast.success("Compra borrada");
+    onSuccess: (r: any) => {
+      toast.success(r?.logico ? "Factura marcada como borrada" : "Compra borrada");
       setBorrando(null);
       qc.invalidateQueries({ queryKey: ["compras"] });
+      qc.invalidateQueries({ queryKey: ["gerencia-compras"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo borrar"),
+  });
+
+  const pagarFn = useServerFn(pagarCompra);
+  const pagar = useMutation({
+    mutationFn: (v: { id: string; fecha_pago: string | null }) => pagarFn({ data: v }),
+    onSuccess: (_r, v) => {
+      toast.success(v.fecha_pago ? "Marcada como pagada" : "Vuelve a estar pendiente de pago");
+      setPagando(null);
+      qc.invalidateQueries({ queryKey: ["compras"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo cambiar el pago"),
   });
 
   return (
@@ -298,7 +370,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           alCambiar={(estado) => cambiar({ estado })}
           opciones={[
             { valor: "todos", etiqueta: "Todos los estados" },
-            ...[...new Set((compras as any[]).map((c) => String(c.estado)))]
+            ...[...new Set((compras as any[]).map(estadoDe))]
               .sort()
               .map((e) => ({ valor: e, etiqueta: e })),
           ]}
@@ -327,7 +399,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                 {general && <TableHead>Categoría</TableHead>}
                 <TableHead>Número</TableHead>
                 <TableHead className="text-right">Base</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">
+                  {general && recibidas ? "Líquido" : "Total"}
+                </TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
@@ -365,18 +439,60 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                   )}
                   <TableCell className="font-mono text-xs">{c.numero ?? "—"}</TableCell>
                   <TableCell className="text-right">{eur(Number(c.base))}</TableCell>
-                  <TableCell className="text-right font-medium">{eur(Number(c.total))}</TableCell>
+                  <TableCell className="text-right font-medium">
+                    {eur(Number(c.liquido ?? c.total))}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant={c.estado === "registrada" ? "default" : "outline"}>
-                      {c.estado}
+                    <Badge variant={estadoDe(c) === "registrada" ? "default" : "outline"}>
+                      {estadoDe(c)}
                     </Badge>
+                    {general && c.estado_pago === "pagada" && !c.borrada_en && (
+                      <span className="block text-xs text-muted-foreground">
+                        Pagada el {fechaCorta(c.fecha_pago)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {c.estado === "borrador" && (
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
+                    <div className="inline-flex items-center gap-1">
+                      {general &&
+                        recibidas &&
+                        c.estado === "registrada" &&
+                        !c.borrada_en &&
+                        (c.estado_pago === "pagada" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            disabled={pagar.isPending}
+                            onClick={() => pagar.mutate({ id: c.id, fecha_pago: null })}
+                          >
+                            Pendiente
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() =>
+                              setPagando({
+                                compra: c,
+                                fecha: new Date().toISOString().slice(0, 10),
+                              })
+                            }
+                          >
+                            Pagada
+                          </Button>
+                        ))}
+                      {(c.estado === "borrador" ||
+                        (general &&
+                          recibidas &&
+                          !c.borrada_en &&
+                          (c.categoria ?? "textil") !== "textil")) && (
+                        <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -389,15 +505,51 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         abierto={!!borrando}
         onCerrar={() => setBorrando(null)}
         que={`la compra ${borrando?.numero ?? ""}`}
-        consecuencias={["Es un borrador: no ha tocado el stock."]}
+        consecuencias={
+          borrando?.estado === "registrada"
+            ? [
+                "Queda marcada como borrada: deja de contar en Gerencia, en el IVA y en el banco.",
+                "No desaparece: se ve con el filtro «borrada».",
+              ]
+            : ["Es un borrador: no ha tocado el stock."]
+        }
         cargando={borrar.isPending}
         onConfirmar={() => borrando && borrar.mutate(borrando.id)}
       />
+
+      <Dialog open={!!pagando} onOpenChange={(o) => !o && setPagando(null)}>
+        {pagando && (
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Marcar como pagada</DialogTitle>
+              <DialogDescription>
+                {pagando.compra.proveedor ?? "Factura"} {pagando.compra.numero ?? ""} ·{" "}
+                {eur(Number(pagando.compra.liquido ?? pagando.compra.total))}
+              </DialogDescription>
+            </DialogHeader>
+            <Campo
+              etiqueta="Fecha de pago"
+              tipo="date"
+              valor={pagando.fecha}
+              onChange={(fecha) => setPagando({ ...pagando, fecha })}
+            />
+            <DialogFooter>
+              <Button
+                disabled={!pagando.fecha || pagar.isPending}
+                onClick={() => pagar.mutate({ id: pagando.compra.id, fecha_pago: pagando.fecha })}
+              >
+                Marcar pagada
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
 
       <Dialog open={!!revisando} onOpenChange={(o) => !o && setRevisando(null)}>
         {revisando && (
           <RevisarCompra
             modo={modo}
+            conTipos={recibidas}
             estado={revisando}
             gastos={gastos}
             stock={stock}
@@ -421,6 +573,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
  */
 function RevisarCompra({
   modo,
+  conTipos,
   estado,
   gastos,
   stock,
@@ -429,6 +582,8 @@ function RevisarCompra({
   registrando,
 }: {
   modo: Modo;
+  /** Con la migración de facturas recibidas: tipos, cálculo y descuadre. */
+  conTipos: boolean;
   estado: Revision;
   gastos: { id: string; concepto: string }[];
   stock: any[];
@@ -443,7 +598,21 @@ function RevisarCompra({
   const sinCasar = esTextil ? compra.lineas.filter((_, i) => !asignaciones[i]).length : 0;
   // Sin categoría no se sabe cómo cuenta: no se registra.
   const sinCategoria = !estado.categoria;
-  const bloqueada = esTextil ? compra.lineas.length === 0 || sinCasar > 0 : sinCategoria;
+  // Lo que calculará la base con estos tipos, para verlo antes de guardar.
+  const conCalculo = general && conTipos;
+  const calculado = calcularCompra({
+    base: compra.base,
+    tipo_iva: estado.tipo_iva ?? 0,
+    tipo_irpf: estado.tipo_irpf,
+  });
+  const descuadre = conCalculo ? descuadreLiquido(calculado.liquido, compra.total) : null;
+  // Un descuadre se resuelve eligiendo cuál vale; si vale la factura, diciendo por qué.
+  const descuadreSinResolver =
+    descuadre !== null &&
+    (estado.origen === null || (estado.origen === "factura" && !estado.nota.trim()));
+  const bloqueada = esTextil
+    ? compra.lineas.length === 0 || sinCasar > 0
+    : sinCategoria || (conCalculo && (estado.tipo_iva === null || descuadreSinResolver));
 
   const set = (cambios: Partial<CompraLeida>) =>
     onCambiar({ ...estado, compra: { ...compra, ...cambios } });
@@ -673,34 +842,171 @@ function RevisarCompra({
         Añadir línea
       </Button>
 
-      <div className={`grid gap-3 ${general ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
-        <Campo
-          etiqueta="Base"
-          tipo="number"
-          valor={String(compra.base)}
-          onChange={(v) => set({ base: Number(v) })}
-        />
-        <Campo
-          etiqueta="IVA"
-          tipo="number"
-          valor={String(compra.iva)}
-          onChange={(v) => set({ iva: Number(v) })}
-        />
-        {general && (
+      {conCalculo ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Campo
+              etiqueta="Base imponible"
+              tipo="number"
+              valor={String(compra.base)}
+              onChange={(v) => set({ base: Number(v) })}
+            />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de IVA</Label>
+              <Select
+                value={estado.tipo_iva === null ? "" : String(estado.tipo_iva)}
+                onValueChange={(v) => onCambiar({ ...estado, tipo_iva: Number(v) })}
+              >
+                <SelectTrigger className={estado.tipo_iva === null ? "border-amber-500" : ""}>
+                  <SelectValue placeholder="Elige el tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_IVA.map((t) => (
+                    <SelectItem key={t} value={String(t)}>
+                      {porcentaje(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de IRPF</Label>
+              <Select
+                value={String(estado.tipo_irpf)}
+                onValueChange={(v) => onCambiar({ ...estado, tipo_irpf: Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_IRPF.map((t) => (
+                    <SelectItem key={t} value={String(t)}>
+                      {porcentaje(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Campo
+              etiqueta="IVA según la factura"
+              tipo="number"
+              valor={String(compra.iva)}
+              onChange={(v) => set({ iva: Number(v) })}
+            />
+            <Campo
+              etiqueta="IRPF según la factura"
+              tipo="number"
+              valor={String(compra.irpf)}
+              onChange={(v) => set({ irpf: Number(v) })}
+            />
+            <Campo
+              etiqueta="A pagar según la factura"
+              tipo="number"
+              valor={String(compra.total)}
+              onChange={(v) => set({ total: Number(v) })}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            La base calculará: IVA {eur(calculado.cuotaIva)} · IRPF {eur(calculado.cuotaIrpf)} ·
+            total {eur(calculado.total)} ·{" "}
+            <span className="font-medium text-foreground">líquido {eur(calculado.liquido)}</span>
+          </p>
+          {descuadre !== null && (
+            <Card className="border-amber-500/50">
+              <CardContent className="space-y-3 py-4 text-sm">
+                <p className="flex gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  La factura dice {eur(compra.total)} a pagar y el cálculo da{" "}
+                  {eur(calculado.liquido)} ({descuadre > 0 ? "+" : ""}
+                  {eur(descuadre)}). ¿Cuál vale?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={estado.origen === "calculado" ? "default" : "outline"}
+                    onClick={() => onCambiar({ ...estado, origen: "calculado" })}
+                  >
+                    El calculado ({eur(calculado.liquido)})
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={estado.origen === "factura" ? "default" : "outline"}
+                    onClick={() => onCambiar({ ...estado, origen: "factura" })}
+                  >
+                    El de la factura ({eur(compra.total)})
+                  </Button>
+                </div>
+                {estado.origen === "factura" && (
+                  <Campo
+                    etiqueta="Por qué no cuadra (obligatorio)"
+                    valor={estado.nota}
+                    onChange={(nota) => onCambiar({ ...estado, nota })}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Campo
+              etiqueta="Concepto"
+              valor={estado.concepto}
+              onChange={(concepto) => onCambiar({ ...estado, concepto })}
+            />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Forma de pago</Label>
+              <Select
+                value={estado.forma_pago ?? SIN_FORMA}
+                onValueChange={(v) =>
+                  onCambiar({ ...estado, forma_pago: v === SIN_FORMA ? null : v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_FORMA}>Sin indicar</SelectItem>
+                  {FORMAS_PAGO.map((f) => (
+                    <SelectItem key={f.valor} value={f.valor}>
+                      {f.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={`grid gap-3 ${general ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
           <Campo
-            etiqueta="IRPF retenido"
+            etiqueta="Base"
             tipo="number"
-            valor={String(compra.irpf)}
-            onChange={(v) => set({ irpf: Number(v) })}
+            valor={String(compra.base)}
+            onChange={(v) => set({ base: Number(v) })}
           />
-        )}
-        <Campo
-          etiqueta="Total"
-          tipo="number"
-          valor={String(compra.total)}
-          onChange={(v) => set({ total: Number(v) })}
-        />
-      </div>
+          <Campo
+            etiqueta="IVA"
+            tipo="number"
+            valor={String(compra.iva)}
+            onChange={(v) => set({ iva: Number(v) })}
+          />
+          {general && (
+            <Campo
+              etiqueta="IRPF retenido"
+              tipo="number"
+              valor={String(compra.irpf)}
+              onChange={(v) => set({ irpf: Number(v) })}
+            />
+          )}
+          <Campo
+            etiqueta="Total"
+            tipo="number"
+            valor={String(compra.total)}
+            onChange={(v) => set({ total: Number(v) })}
+          />
+        </div>
+      )}
 
       <DialogFooter className="items-center gap-3">
         {sinCasar > 0 && (
@@ -711,6 +1017,14 @@ function RevisarCompra({
         {sinCategoria && (
           <span className="text-sm text-muted-foreground mr-auto">
             Elige qué es antes de registrarla.
+          </span>
+        )}
+        {!sinCategoria && conCalculo && estado.tipo_iva === null && (
+          <span className="text-sm text-muted-foreground mr-auto">Elige el tipo de IVA.</span>
+        )}
+        {!sinCategoria && descuadreSinResolver && (
+          <span className="text-sm text-muted-foreground mr-auto">
+            El líquido no cuadra: elige cuál vale.
           </span>
         )}
         <Button onClick={onRegistrar} disabled={registrando || bloqueada}>
