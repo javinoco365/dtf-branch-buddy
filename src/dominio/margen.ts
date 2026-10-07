@@ -24,8 +24,10 @@ export type FilaMargen = {
   porcentaje: number | null;
 };
 
-const porcentaje = (margen: number, bruta: number) =>
-  bruta > 0 ? redondear((margen / bruta) * 100, 1) : null;
+/** Margen ÷ bruta, en %, con un decimal. Nulo sin ventas. */
+export function porcentajeMargen(margen: number, bruta: number): number | null {
+  return bruta > 0 ? redondear((margen / bruta) * 100, 1) : null;
+}
 
 /** El margen agrupado por lo que diga `clave` (tienda, canal…), de más a menos margen. */
 export function margenPor(
@@ -49,7 +51,7 @@ export function margenPor(
         bruta: k.bruta,
         coste: k.coste,
         margen: k.margen,
-        porcentaje: porcentaje(k.margen, k.bruta),
+        porcentaje: porcentajeMargen(k.margen, k.bruta),
       };
     })
     .sort((a, b) => b.margen - a.margen);
@@ -67,8 +69,9 @@ export type TramoMargen = {
 };
 
 /**
- * El margen y el beneficio de cada tramo de la gráfica (día o mes). Los
- * gastos fijos del tramo se cuentan solo hasta hoy, como en el Resumen.
+ * El margen y el beneficio de cada tramo de la gráfica (día o mes), hasta
+ * hoy. Los gastos fijos del tramo se cuentan solo hasta hoy, como en el
+ * Resumen.
  */
 export function margenPorTramos(
   ventas: readonly Venta[],
@@ -78,22 +81,25 @@ export function margenPorTramos(
   hoy: Date,
 ): TramoMargen[] {
   const finHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59, 999);
-  return tramos.map((t) => {
-    const k = cifrasGerencia(
-      ventas.filter((v) => enRango(v.fecha_pedido, t)),
-      costeActual,
-    );
-    const hasta = t.hasta < finHoy ? t.hasta : finHoy;
-    const g = hasta < t.desde ? 0 : gastosFijosDelRango(gastos, { desde: t.desde, hasta });
-    return {
-      etiqueta: t.etiqueta,
-      bruta: k.bruta,
-      coste: k.coste,
-      margen: k.margen,
-      gastos: g,
-      beneficio: redondear(k.margen - g),
-    };
-  });
+  // Los tramos que aún no han empezado no tienen nada que contar.
+  return tramos
+    .filter((t) => t.desde <= finHoy)
+    .map((t) => {
+      const k = cifrasGerencia(
+        ventas.filter((v) => enRango(v.fecha_pedido, t)),
+        costeActual,
+      );
+      const hasta = t.hasta < finHoy ? t.hasta : finHoy;
+      const g = hasta < t.desde ? 0 : gastosFijosDelRango(gastos, { desde: t.desde, hasta });
+      return {
+        etiqueta: t.etiqueta,
+        bruta: k.bruta,
+        coste: k.coste,
+        margen: k.margen,
+        gastos: g,
+        beneficio: redondear(k.margen - g),
+      };
+    });
 }
 
 export type MargenMetro = {

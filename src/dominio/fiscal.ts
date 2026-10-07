@@ -172,3 +172,8 @@ export function vendidoSinDocumento(
   }
   return { pedidos, vendido: redondear(vendido) };
 }
+
+/** IVA repercutido − soportado: positivo, a ingresar; negativo, a compensar. */
+export function resultadoIva(repercutido: number, soportado: number): number {
+  return redondear(repercutido - soportado);
+}

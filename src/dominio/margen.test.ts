@@ -69,7 +69,7 @@ describe("margen por grupo, por tramo y por metro", () => {
     expect(f[1]).toMatchObject({ margen: 50, porcentaje: 25 });
   });
 
-  it("por tramos, con los gastos fijos solo hasta hoy", () => {
+  it("por tramos hasta hoy, con los gastos fijos solo hasta hoy", () => {
     const tramos = [
       { etiqueta: "1", desde: new Date(2026, 9, 1), hasta: new Date(2026, 9, 1, 23, 59, 59) },
       { etiqueta: "2", desde: new Date(2026, 9, 2), hasta: new Date(2026, 9, 2, 23, 59, 59) },
@@ -81,8 +81,8 @@ describe("margen por grupo, por tramo y por metro", () => {
     const t = margenPorTramos(ventas, tramos, 0, gastos, new Date(2026, 9, 5, 12));
     expect(t[0]).toMatchObject({ margen: 80, gastos: 10, beneficio: 70 });
     expect(t[1]).toMatchObject({ margen: 40, gastos: 10, beneficio: 30 });
-    // El día 9 todavía no ha llegado: sin gastos.
-    expect(t[2]).toMatchObject({ margen: 0, gastos: 0, beneficio: 0 });
+    // El día 9 todavía no ha llegado: no sale.
+    expect(t).toHaveLength(2);
   });
 
   it("precio, coste y margen del metro", () => {

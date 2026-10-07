@@ -121,9 +121,9 @@ export const DEFINICIONES = {
       "Todos los pedidos de tiendas y textil con algo por cobrar. No depende del periodo elegido: es la foto de hoy.",
   },
   g_margen: {
-    que: "Lo que queda de lo vendido en DTF después del coste de producción.",
+    que: "Lo que queda de lo vendido después de lo que cuesta producirlo.",
     calculo:
-      "Facturación bruta − metros × coste por metro congelado en cada pedido. El textil todavía no tiene coste en el CRM: su margen aquí es su bruta. No incluye gastos fijos: eso es el beneficio estimado.",
+      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_beneficio: {
@@ -273,6 +273,76 @@ export const DEFINICIONES = {
     que: "Pedidos de tienda que salieron en el periodo.",
     calculo: "Pedidos cuyo primer enlace de seguimiento se creó en el periodo.",
     fuente: "Enlaces de seguimiento de los pedidos de tienda, con los filtros de tienda y canal.",
+  },
+
+  // --- Gerencia › Margen ------------------------------------------------------
+  g_bruta: {
+    que: "Lo vendido sin IVA: lo que es de la empresa.",
+    calculo: "Suma de las bases imponibles de los pedidos no cancelados, menos lo devuelto.",
+    fuente: GERENCIA_PEDIDOS,
+  },
+  g_coste: {
+    que: "Lo que ha costado producir lo vendido.",
+    calculo:
+      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
+    fuente: "Pedidos del periodo y salidas del almacén textil. No incluye gastos fijos ni sueldos.",
+  },
+  g_margen_pct: {
+    que: "Qué parte de cada euro vendido (sin IVA) queda después del coste.",
+    calculo: "Margen ÷ facturación bruta.",
+    fuente: GERENCIA_PEDIDOS,
+  },
+  g_margen_metro: {
+    que: "Cuánto queda de cada metro de DTF.",
+    calculo:
+      "Precio medio del metro (base imponible ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
+    fuente: GERENCIA_PEDIDOS,
+  },
+
+  // --- Gerencia › Fiscal ------------------------------------------------------
+  g_iva_repercutido: {
+    que: "El IVA de las facturas y tickets emitidos en el periodo.",
+    calculo:
+      "Suma del IVA de facturas, tickets y rectificativas con fecha en el periodo; las rectificativas restan. Los borradores no cuentan.",
+    fuente:
+      "Facturas de las tiendas y del textil. Con el filtro de tienda, solo esa tienda; el filtro de canal no se aplica a las facturas.",
+  },
+  g_iva_soportado: {
+    que: "El IVA de las compras registradas en el CRM en el periodo.",
+    calculo:
+      "Suma del IVA de las facturas de compra registradas. Las que están en borrador no cuentan.",
+    fuente:
+      "Solo las compras del textil que se suben al CRM. Los gastos que no pasan por aquí (consumibles DTF, alquiler, servicios) no están, así que el IVA soportado real es mayor.",
+  },
+  g_iva_resultado: {
+    que: "Por dónde va el IVA del periodo con lo que sabe el CRM.",
+    calculo:
+      "IVA repercutido − IVA soportado registrado. Es orientativo: el modelo 303 lo presenta la gestoría con todos los gastos.",
+    fuente: "Facturas emitidas y compras registradas del periodo.",
+  },
+  g_sin_factura: {
+    que: "Pedidos del periodo sin factura ni ticket vigente.",
+    calculo:
+      "Pedidos no cancelados sin documento emitido, o con el suyo anulado por una rectificativa. Los borradores no cuentan como emitidos.",
+    fuente: GERENCIA_PEDIDOS,
+  },
+  g_huecos: {
+    que: "Números de factura que el contador dio y no tienen factura.",
+    calculo:
+      "Para cada serie y año, los números del 1 al último asignado que no aparecen en ninguna factura de las tiendas ni del textil. La numeración tiene que ser correlativa y sin huecos: si sale alguno, hay que revisarlo.",
+    fuente: "Todas las series y años, sin depender del periodo ni de los filtros.",
+  },
+
+  // --- Gerencia › Textil ------------------------------------------------------
+  g_stock_valor: {
+    que: "Lo que vale el almacén textil a precio de compra, hoy.",
+    calculo: "Unidades de cada artículo activo × su coste medio ponderado.",
+    fuente: "Almacén textil. No depende del periodo.",
+  },
+  g_compras_textil: {
+    que: "Lo comprado para el textil en el periodo, sin IVA.",
+    calculo: "Suma de la base de las facturas de compra registradas con fecha en el periodo.",
+    fuente: "Compras del textil subidas al CRM.",
   },
 } as const satisfies Record<string, Definicion>;
 
