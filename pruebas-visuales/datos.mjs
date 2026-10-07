@@ -700,7 +700,21 @@ const GASTOS_FIJOS = [
     iva_pct: 0,
     irpf_pct: 0,
   },
-];
+  {
+    id: id("9f", 4),
+    empresa_id: EMPRESA,
+    concepto: "Ayuda en el taller",
+    importe_mensual: 150,
+    desde: "2026-05-01",
+    hasta: null,
+    notas: null,
+    periodicidad: "mensual",
+    tipo: "otros",
+    iva_pct: 0,
+    irpf_pct: 0,
+    con_justificante: false,
+  },
+].map((g) => ({ con_justificante: true, ...g }));
 const OBJETIVOS = [
   { id: id("0b", 1), empresa_id: EMPRESA, desde: "2026-09-01", metros: 40, vendido: 1500 },
 ];

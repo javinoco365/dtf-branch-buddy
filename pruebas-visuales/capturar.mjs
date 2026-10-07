@@ -41,6 +41,8 @@ export const RUTAS = {
   "gerencia-fiscal": "/panel/gerencia?pestana=fiscal",
   "gerencia-textil": "/panel/gerencia?pestana=textil",
   "gerencia-ajustes": "/panel/gerencia?pestana=ajustes",
+  "gerencia-b": "/panel/gerencia?grupo=b",
+  "gerencia-resultados-b": "/panel/gerencia?pestana=resultados&grupo=b",
   pedidos: "/panel/pedidos",
   consolidada: "/panel/facturacion-global",
   cobros: "/panel/cobros",

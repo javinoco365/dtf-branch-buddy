@@ -50,6 +50,8 @@ export type DatosAjustesGerencia = {
   disponible: boolean;
   /** Falso si la migración 20261010100000_gastos_impuestos no está aplicada. */
   impuestosDisponibles: boolean;
+  /** Falso si la migración 20261012100000_gastos_justificante no está aplicada. */
+  justificanteDisponible: boolean;
   ajustes: AjustesGerencia;
   gastos: GastoFijo[];
   objetivos: Objetivo[];
@@ -64,26 +66,36 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
       tabla(context.supabase, "gerencia_ajustes")
         .select(`web_sin_pagar_cuenta${nuevas ? ", tipo_is, cuota_is_anterior, precio_metro" : ""}`)
         .limit(1);
-    const leerGastos = (nuevas: boolean) =>
+    // De la más nueva a la más vieja: se queda con la primera que la base conoce.
+    const COLUMNAS_GASTOS = [
+      ", periodicidad, tipo, iva_pct, irpf_pct, con_justificante",
+      ", periodicidad, tipo, iva_pct, irpf_pct",
+      "",
+    ];
+    const leerGastos = (extra: string) =>
       tabla(context.supabase, "gerencia_gastos_fijos")
-        .select(
-          `id, concepto, importe_mensual, desde, hasta, notas${nuevas ? ", periodicidad, tipo, iva_pct, irpf_pct" : ""}`,
-        )
+        .select(`id, concepto, importe_mensual, desde, hasta, notas${extra}`)
         .order("desde", { ascending: false });
     const [a0, g0, o] = await Promise.all([
       leerAjustes(true),
-      leerGastos(true),
+      leerGastos(COLUMNAS_GASTOS[0]),
       tabla(context.supabase, "gerencia_objetivos")
         .select("id, desde, metros, vendido")
         .order("desde", { ascending: false }),
     ]);
-    const conImpuestos = !faltaLaColumna(a0.error) && !faltaLaColumna(g0.error);
     const a = faltaLaColumna(a0.error) ? await leerAjustes(false) : a0;
-    const g = faltaLaColumna(g0.error) ? await leerGastos(false) : g0;
+    let g = g0;
+    let columnas = 0;
+    while (faltaLaColumna(g.error) && columnas < COLUMNAS_GASTOS.length - 1) {
+      columnas += 1;
+      g = await leerGastos(COLUMNAS_GASTOS[columnas]);
+    }
+    const conImpuestos = !faltaLaColumna(a0.error) && columnas <= 1;
     if (faltaLaTabla(a.error) || faltaLaTabla(g.error) || faltaLaTabla(o.error)) {
       return {
         disponible: false,
         impuestosDisponibles: false,
+        justificanteDisponible: false,
         ajustes: AJUSTES_POR_DEFECTO,
         gastos: [],
         objetivos: [],
@@ -95,6 +107,7 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
     return {
       disponible: true,
       impuestosDisponibles: conImpuestos,
+      justificanteDisponible: columnas === 0,
       ajustes: {
         web_sin_pagar_cuenta:
           typeof fila?.web_sin_pagar_cuenta === "boolean"
@@ -153,6 +166,7 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
         tipo: z.enum(TIPOS_GASTO.map((t) => t.valor) as [string, ...string[]]).optional(),
         iva_pct: z.number().min(0).max(100).optional(),
         irpf_pct: z.number().min(0).max(100).optional(),
+        con_justificante: z.boolean().optional(),
       })
       .parse(d),
   )
@@ -172,6 +186,13 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
             tipo: data.tipo ?? "otros",
             iva_pct: data.iva_pct ?? 0,
             irpf_pct: data.irpf_pct ?? 0,
+          }
+        : {}),
+      // Sin justificante no hay IVA ni retención: se guardan a 0.
+      ...(data.con_justificante !== undefined
+        ? {
+            con_justificante: data.con_justificante,
+            ...(data.con_justificante ? {} : { iva_pct: 0, irpf_pct: 0 }),
           }
         : {}),
     };
