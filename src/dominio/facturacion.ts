@@ -15,7 +15,7 @@
  */
 
 import { redondear } from "./importes";
-import { desglosarCobro, etiquetaMetodo, type MetodoCobro } from "./cobros";
+import { desglosarCobro, etiquetaMetodo, TIENDA_TEXTIL, type MetodoCobro } from "./cobros";
 
 export type CriterioFecha = "pedido" | "cobro";
 
@@ -180,6 +180,19 @@ export const TOTALES_VACIOS: TotalesCobros = {
   propina: 0,
   total: 0,
 };
+
+/**
+ * Los cobros de las tiendas, sin el textil: lo que se compara con las ventas
+ * del dashboard, que tampoco lo incluyen. Con `tiendaId`, los de esa tienda.
+ */
+export function cobrosDeTiendas(
+  cobros: readonly CobroConsolidado[],
+  tiendaId?: string,
+): CobroConsolidado[] {
+  return cobros.filter((c) =>
+    tiendaId ? c.tienda_id === tiendaId : c.tienda_id !== TIENDA_TEXTIL.id,
+  );
+}
 
 export function totalizar(cobros: readonly CobroConsolidado[]): TotalesCobros {
   const suma = (k: "base" | "iva" | "envio" | "metros" | "importe" | "propina") =>

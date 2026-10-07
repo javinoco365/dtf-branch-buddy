@@ -50,3 +50,12 @@ export function tabla(cliente: unknown, nombre: string) {
 export function faltaLaTabla(error: { code?: string } | null | undefined): boolean {
   return !!error && (error.code === "42P01" || error.code === "PGRST205");
 }
+
+/**
+ * Si el error es «esa columna no existe»: la migración que la crea todavía no
+ * está aplicada. Postgres responde 42703; PostgREST, PGRST204 si la columna
+ * no está en su caché del esquema.
+ */
+export function faltaLaColumna(error: { code?: string } | null | undefined): boolean {
+  return !!error && (error.code === "42703" || error.code === "PGRST204");
+}

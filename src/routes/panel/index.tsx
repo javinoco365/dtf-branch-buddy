@@ -12,8 +12,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
-import { usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
-import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import { useCobrosPeriodo, usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
+import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
+import {
+  agruparPorRangos,
+  calcularKpis,
+  costeProduccion,
+  topPorMetros,
+  variacion,
+} from "@/dominio/kpis";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
@@ -26,6 +33,8 @@ import {
   XCircle,
   Percent,
   Inbox,
+  Undo2,
+  Wallet,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -64,16 +73,27 @@ function DashboardGlobal() {
   const ant = comparacion?.previo ?? { desde: hasta, hasta: desde };
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta });
   const consultaLineas = useLineasPeriodo({ desde, hasta });
+  // Lo cobrado va por la fecha del cobro: el dinero que entró en el periodo,
+  // fuera de cuándo se hizo el pedido.
+  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
+  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
 
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const pedidosAnt = useMemo(() => consultaAnterior.data ?? [], [consultaAnterior.data]);
 
   const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
   const kPrev = useMemo(() => calcularKpis(pedidosAnt), [pedidosAnt]);
+  const cobrosDisponibles = consultaCobros.data?.disponible ?? false;
+  const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [])).cobrado;
+  const cobradoPrev = totalizar(cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [])).cobrado;
 
-  const costePer = costeMetro * k.metros;
+  // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
+  // con el de hoy.
+  const costePer = costeProduccion(pedidos, costeMetro);
   const margenPer = k.bruta - costePer;
-  const margenPrev = kPrev.bruta - costeMetro * kPrev.metros;
+  const margenPrev = kPrev.bruta - costeProduccion(pedidosAnt, costeMetro);
+  // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
+  const sinCostes = costeMetro === 0 && costePer === 0;
 
   const grafica = useMemo(() => {
     const { por, tramos } = tramosGrafica({ desde, hasta });
@@ -136,8 +156,8 @@ function DashboardGlobal() {
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}
         </div>
@@ -153,9 +173,10 @@ function DashboardGlobal() {
 
       {!cargando && !error && !sinDatos && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
-              titulo="Total periodo"
+              titulo="Vendido"
+              explicacion="vendido"
               valor={eur(k.total)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
@@ -163,13 +184,31 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Facturación bruta"
+              explicacion="bruta"
               valor={eur(k.bruta)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
             />
             <TarjetaKpi
+              titulo="Cobrado"
+              explicacion="cobrado"
+              valor={cobrosDisponibles ? eur(cobrado) : "—"}
+              frente={comparacion?.etiqueta}
+              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
+              icon={Wallet}
+            />
+            <TarjetaKpi
+              titulo={sinCostes ? "Margen" : "Margen estimado"}
+              explicacion="margen"
+              valor={sinCostes ? "—" : eur(margenPer)}
+              delta={sinCostes ? null : variacion(margenPer, margenPrev)}
+              frente={comparacion?.etiqueta}
+              icon={Percent}
+            />
+            <TarjetaKpi
               titulo="Ticket medio"
+              explicacion="ticket"
               valor={eur(k.ticket)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.ticket, kPrev.ticket)}
@@ -177,13 +216,24 @@ function DashboardGlobal() {
             />
             <TarjetaKpi
               titulo="Metros vendidos"
+              explicacion="metros"
               valor={metros(k.metros)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
               icon={Ruler}
             />
             <TarjetaKpi
+              titulo="Devoluciones"
+              explicacion="devoluciones"
+              valor={eur(k.devuelto)}
+              frente={comparacion?.etiqueta}
+              delta={variacion(k.devuelto, kPrev.devuelto)}
+              icon={Undo2}
+              deltaInverso
+            />
+            <TarjetaKpi
               titulo="Cancelados"
+              explicacion="cancelados"
               valor={String(k.cancelados)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.cancelados, kPrev.cancelados)}
@@ -191,16 +241,9 @@ function DashboardGlobal() {
               color="destructive"
               deltaInverso
             />
-            <TarjetaKpi
-              titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
-              valor={costeMetro === 0 ? "—" : eur(margenPer)}
-              delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
-              frente={comparacion?.etiqueta}
-              icon={Percent}
-            />
           </div>
 
-          {costeMetro === 0 && (
+          {sinCostes && (
             <p className="-mt-2 text-xs text-muted-foreground">
               Configura los costes por metro en Ajustes › Datos de la empresa para calcular el
               margen.

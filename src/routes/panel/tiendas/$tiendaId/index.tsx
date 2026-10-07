@@ -3,7 +3,13 @@ import { tabla } from "@/lib/rpc";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { eur, metros } from "@/lib/format";
+import { useMemo } from "react";
+import { eur, metros, numero } from "@/lib/format";
+import { usePedidosPeriodo } from "@/lib/periodo";
+import { calcularKpis, costeProduccion, variacion } from "@/dominio/kpis";
+import { compararCon, rangoDe } from "@/dominio/periodos";
+import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
+import { Explicacion } from "@/components/Explicacion";
 import {
   ShoppingCart,
   Euro,
@@ -53,59 +59,53 @@ function Dashboard() {
     .reduce((s, f) => s + Number(f.total), 0);
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
 
-  // Mes actual vs mes anterior
-  const now = new Date();
-  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
-  const inicioMesAnt = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const finMesAnt = inicioMes;
-
-  const pedidosValidos = pedidos.filter((p) => p.estado !== "cancelado" && p.fecha_pedido);
-  const inRange = (f: string, ini: Date, fin: Date) => {
-    const d = new Date(f);
-    return d >= ini && d < fin;
-  };
-  const pedidosMes = pedidosValidos.filter((p) =>
-    inRange(p.fecha_pedido!, inicioMes, new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+  // El mes en curso con las mismas cuentas que el dashboard (devoluciones
+  // restadas, coste congelado por pedido) y comparado con el mismo trozo del
+  // mes anterior: el día 5, contra del 1 al 5 del mes pasado.
+  const hoy = useMemo(() => new Date(), []);
+  const mes = useMemo(() => rangoDe({ tipo: "mes", ref: hoy })!, [hoy]);
+  const comparacion = useMemo(
+    () => compararCon({ tipo: "mes", ref: hoy }, "anterior", hoy)!,
+    [hoy],
   );
-  const pedidosMesAnt = pedidosValidos.filter((p) =>
-    inRange(p.fecha_pedido!, inicioMesAnt, finMesAnt),
-  );
+  const consultaMes = usePedidosPeriodo({ ...mes, tiendaId });
+  const consultaAnt = usePedidosPeriodo({ ...comparacion.previo, tiendaId });
+  const pedidosMes = useMemo(() => consultaMes.data ?? [], [consultaMes.data]);
+  const k = useMemo(() => calcularKpis(pedidosMes), [pedidosMes]);
+  const kAnt = useMemo(() => calcularKpis(consultaAnt.data ?? []), [consultaAnt.data]);
 
-  const facturadoMes = pedidosMes.reduce((s, p) => s + Number(p.total ?? 0), 0);
-  const facturadoMesAnt = pedidosMesAnt.reduce((s, p) => s + Number(p.total ?? 0), 0);
-  const variacion =
-    facturadoMesAnt > 0 ? ((facturadoMes - facturadoMesAnt) / facturadoMesAnt) * 100 : null;
-
-  const numPedidosMes = pedidosMes.length;
-  const ticketMedio = numPedidosMes > 0 ? facturadoMes / numPedidosMes : 0;
-  const metrosMes = pedidosMes.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
-  const costeMes = costeMetro * metrosMes;
-  const margenMes = facturadoMes - costeMes;
-  const margenPct = facturadoMes > 0 ? (margenMes / facturadoMes) * 100 : null;
+  const delta = variacion(k.total, kAnt.total);
+  const costeMes = costeProduccion(pedidosMes, costeMetro);
+  const margenMes = k.bruta - costeMes;
+  const margenPct = k.bruta > 0 ? (margenMes / k.bruta) * 100 : null;
+  const sinCostes = costeMetro === 0 && costeMes === 0;
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-3">
         <KPI
-          t="Facturación del mes"
-          v={eur(facturadoMes)}
+          t="Vendido este mes"
+          explicacion="vendido"
+          v={eur(k.total)}
           sub={
-            variacion === null
-              ? "Sin datos mes anterior"
-              : `${variacion >= 0 ? "+" : ""}${variacion.toFixed(1)}% vs mes anterior`
+            delta === null
+              ? `Sin datos en ${comparacion.etiqueta}`
+              : `${delta >= 0 ? "+" : "−"}${numero(Math.abs(delta), 1)} % frente a ${comparacion.etiqueta}`
           }
-          tone={variacion === null ? "neutral" : variacion >= 0 ? "up" : "down"}
-          Icon={variacion !== null && variacion < 0 ? TrendingDown : TrendingUp}
+          tone={delta === null ? "neutral" : delta >= 0 ? "up" : "down"}
+          Icon={delta !== null && delta < 0 ? TrendingDown : TrendingUp}
         />
         <KPI
           t="Pedidos del mes"
-          v={String(numPedidosMes)}
-          sub={`Ticket medio ${eur(ticketMedio)}`}
+          explicacion="pedidos"
+          v={String(k.pedidos)}
+          sub={`Ticket medio ${eur(k.ticket)}`}
           Icon={Receipt}
         />
         <KPI
           t="Metros del mes"
-          v={metros(metrosMes)}
+          explicacion="metros"
+          v={metros(k.metros)}
           sub="Producción mes en curso"
           Icon={Package}
         />
@@ -113,15 +113,16 @@ function Dashboard() {
       <div className="grid gap-4 md:grid-cols-1">
         <KPI
           t="Margen estimado del mes"
-          v={eur(margenMes)}
+          explicacion="margen"
+          v={sinCostes ? "—" : eur(margenMes)}
           sub={
-            costeMetro === 0
+            sinCostes
               ? "Configura los costes en Ajustes › Datos de la empresa"
-              : `Coste ${eur(costeMes)} (${costeMetro.toFixed(3)} €/m × ${metros(metrosMes)})${
-                  margenPct !== null ? ` · ${margenPct.toFixed(1)}% margen` : ""
+              : `Bruta ${eur(k.bruta)} − coste ${eur(costeMes)} (${metros(k.metros)})${
+                  margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
                 }`
           }
-          tone={costeMetro === 0 ? "neutral" : margenMes >= 0 ? "up" : "down"}
+          tone={sinCostes ? "neutral" : margenMes >= 0 ? "up" : "down"}
           Icon={Percent}
         />
       </div>
@@ -140,8 +141,10 @@ function KPI({
   sub,
   Icon,
   tone = "neutral",
+  explicacion,
 }: {
   t: string;
+  explicacion?: ClaveDefinicion;
   v: string;
   sub?: string;
   Icon: any;
@@ -156,7 +159,10 @@ function KPI({
           <Icon className="h-6 w-6" />
         </div>
         <div className="min-w-0">
-          <div className="text-sm text-muted-foreground">{t}</div>
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <span>{t}</span>
+            {explicacion && <Explicacion titulo={t} definicion={DEFINICIONES[explicacion]} />}
+          </div>
           <div className="text-2xl font-bold">{v}</div>
           {sub && <div className={`text-xs mt-0.5 ${toneClass}`}>{sub}</div>}
         </div>

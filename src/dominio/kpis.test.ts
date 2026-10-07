@@ -4,7 +4,9 @@ import {
   agruparPorRangos,
   agruparPorTienda,
   calcularKpis,
+  costeProduccion,
   KPIS_VACIOS,
+  parteVendida,
   topPorMetros,
   variacion,
   type PedidoResumen,
@@ -73,6 +75,44 @@ describe("calcularKpis", () => {
     const k = calcularKpis([pedido({ subtotal: null, iva: null, envio: null, total: null })]);
     expect(k.bruta).toBe(0);
     expect(k.total).toBe(0);
+  });
+});
+
+describe("devoluciones", () => {
+  it("una devolución parcial se resta del total y, en proporción, de base, IVA y envío", () => {
+    // 126 € con 25,20 € devueltos: queda el 80 %.
+    const k = calcularKpis([pedido({ devuelto: 25.2 })]);
+    expect(k.total).toBe(100.8);
+    expect(k.bruta).toBe(80);
+    expect(k.iva).toBe(16.8);
+    expect(k.envios).toBe(4);
+    expect(k.devuelto).toBe(25.2);
+    expect(k.ticket).toBe(100.8);
+  });
+
+  it("los metros no se tocan: lo impreso, impreso está", () => {
+    expect(calcularKpis([pedido({ devuelto: 63 })]).metros).toBe(10);
+  });
+
+  it("devolver más que el total deja el pedido a cero, no en negativo", () => {
+    expect(parteVendida({ total: 100, devuelto: 150 })).toBe(0);
+    expect(calcularKpis([pedido({ devuelto: 500 })]).total).toBe(0);
+  });
+
+  it("sin devoluciones, o con el importe como cadena, como siempre", () => {
+    expect(parteVendida({ total: 126 })).toBe(1);
+    expect(calcularKpis([pedido({ devuelto: "12.6" })]).total).toBe(113.4);
+  });
+
+  it("lo devuelto de un cancelado no cuenta: el cancelado ya no suma", () => {
+    expect(calcularKpis([pedido({ estado: "cancelado", devuelto: 126 })]).devuelto).toBe(0);
+  });
+
+  it("las gráficas por días y por rangos también restan lo devuelto", () => {
+    const p = pedido({ devuelto: 26 });
+    expect(agruparPorDia([p], [new Date("2026-09-02T12:00:00.000Z")])[0].total).toBe(100);
+    const r = { desde: new Date("2026-09-01"), hasta: new Date("2026-09-30") };
+    expect(agruparPorRangos([p], [r])[0].total).toBe(100);
   });
 });
 
@@ -238,5 +278,27 @@ describe("topPorMetros", () => {
       unidad: "m",
     }));
     expect(topPorMetros(lineas, 3)).toHaveLength(3);
+  });
+});
+
+describe("costeProduccion", () => {
+  it("cada pedido con su coste congelado; sin él, con el de hoy", () => {
+    const coste = costeProduccion(
+      [
+        pedido({ metros_total: 10, coste_metro_snapshot: 1.5 }),
+        pedido({ metros_total: 4, coste_metro_snapshot: null }),
+        pedido({ metros_total: 2, coste_metro_snapshot: "2" }),
+      ],
+      3,
+    );
+    expect(coste).toBe(10 * 1.5 + 4 * 3 + 2 * 2);
+  });
+
+  it("los cancelados no cuestan", () => {
+    expect(costeProduccion([pedido({ estado: "cancelado", metros_total: 50 })], 2)).toBe(0);
+  });
+
+  it("un coste congelado a cero es cero, no el de hoy", () => {
+    expect(costeProduccion([pedido({ metros_total: 10, coste_metro_snapshot: 0 })], 5)).toBe(0);
   });
 });

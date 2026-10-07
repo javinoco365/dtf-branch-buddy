@@ -12,7 +12,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaTabla, tabla } from "@/lib/rpc";
+import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
@@ -35,17 +35,30 @@ export function usePedidosPeriodo(filtro: Filtro) {
   return useQuery({
     queryKey: ["pedidos-periodo", ...claveRango(filtro)],
     queryFn: async (): Promise<PedidoResumen[]> => {
-      let consulta = supabase
-        .from("pedidos")
-        .select(CAMPOS_PEDIDO)
-        .gte("fecha_pedido", filtro.desde.toISOString())
-        .lte("fecha_pedido", filtro.hasta.toISOString());
+      // Con sus devoluciones, para restarlas de lo vendido, y con el coste
+      // por metro congelado al crear el pedido (ver kpis.ts).
+      const leer = (conCoste: boolean) => {
+        let consulta = supabase
+          .from("pedidos")
+          .select(
+            `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}, devoluciones:pedido_devoluciones(importe)`,
+          )
+          .gte("fecha_pedido", filtro.desde.toISOString())
+          .lte("fecha_pedido", filtro.hasta.toISOString());
+        if (filtro.tiendaId) consulta = consulta.eq("tienda_id", filtro.tiendaId);
+        return consulta;
+      };
 
-      if (filtro.tiendaId) consulta = consulta.eq("tienda_id", filtro.tiendaId);
-
-      const { data, error } = await consulta;
+      let { data, error } = await leer(true);
+      // Sin la migración 20261007100000_cifras_fiables la columna no existe:
+      // se lee sin ella y el margen usa el coste actual, como antes.
+      if (faltaLaColumna(error)) ({ data, error } = await leer(false));
       if (error) throw error;
-      return (data ?? []) as PedidoResumen[];
+      type Fila = PedidoResumen & { devoluciones?: { importe: number | string }[] | null };
+      return ((data ?? []) as unknown as Fila[]).map(({ devoluciones, ...p }) => ({
+        ...p,
+        devuelto: (devoluciones ?? []).reduce((s, d) => s + (Number(d.importe) || 0), 0),
+      }));
     },
   });
 }
