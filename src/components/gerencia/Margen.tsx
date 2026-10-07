@@ -142,7 +142,9 @@ export function Margen({ d }: { d: DatosGerencia }) {
             Sin IVA.
             {conGastos
               ? " Los gastos fijos, repartidos por días y solo hasta hoy."
-              : " Pon los gastos fijos en Ajustes para ver el beneficio."}
+              : d.grupo === "b"
+                ? " No hay gastos sin justificante."
+                : " Pon los gastos fijos en Ajustes para ver el beneficio."}
           </p>
         </CardHeader>
         <CardContent>

@@ -129,7 +129,7 @@ export const DEFINICIONES = {
   g_beneficio: {
     que: "Lo que queda del margen después de pagar los gastos fijos del periodo.",
     calculo:
-      "Margen estimado − gastos fijos. Cada gasto fijo, que se apunta al mes y sin IVA, se reparte por los días del periodo en que está vigente: medio mes de un alquiler de 800 € son 400 €. Si el periodo está en curso, solo cuentan los días hasta hoy, igual que las ventas.",
+      "Margen estimado − gastos fijos. Cada gasto fijo, que se apunta al mes y sin IVA, se reparte por los días del periodo en que está vigente: medio mes de un alquiler de 800 € son 400 €. Si el periodo está en curso, solo cuentan los días hasta hoy, igual que las ventas. En A cuentan los gastos con justificante; en B, los que no lo tienen; en el total, todos.",
     fuente:
       "Pedidos de tiendas y textil del periodo y los gastos fijos de Gerencia › Ajustes. Solo sin filtros de tienda ni canal: los gastos fijos son de toda la empresa. Sin impuestos sobre beneficios.",
   },
@@ -349,7 +349,7 @@ export const DEFINICIONES = {
   g_resultado: {
     que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
     calculo:
-      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto.",
+      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades.",
     fuente:
       "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
   },
@@ -364,7 +364,7 @@ export const DEFINICIONES = {
     calculo:
       "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
     fuente:
-      "Facturas emitidas, compras del textil y gastos de Ajustes, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente.",
+      "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
   },
 } as const satisfies Record<string, Definicion>;
 

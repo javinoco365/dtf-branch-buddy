@@ -56,7 +56,11 @@ export function Ajustes() {
       <AjusteWebSinPagar cuenta={data.ajustes.web_sin_pagar_cuenta} />
       <Objetivos objetivos={data.objetivos} />
       <DatosFiscales ajustes={data.ajustes} disponible={data.impuestosDisponibles} />
-      <GastosFijos gastos={data.gastos} conImpuestos={data.impuestosDisponibles} />
+      <GastosFijos
+        gastos={data.gastos}
+        conImpuestos={data.impuestosDisponibles}
+        conJustificante={data.justificanteDisponible}
+      />
     </div>
   );
 }

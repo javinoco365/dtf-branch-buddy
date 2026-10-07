@@ -172,8 +172,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
       </div>
 
-      {/* En B no hay costes fijos ni objetivos: son de la empresa documentada. */}
-      {d.grupo !== "b" && <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />}
+      <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
 
       <Card>
         <CardHeader className="pb-2">
@@ -256,11 +255,16 @@ function BeneficioYObjetivos({
   sinCostes: boolean;
 }) {
   const frente = d.comparacion?.etiqueta;
-  const objetivo = objetivoDelRango(d.objetivos, d.rango);
+  // Los objetivos son de toda la venta: en B (lo pendiente de documentar) no
+  // se comparan.
+  const objetivo =
+    d.grupo === "b" ? { vendido: null, metros: null } : objetivoDelRango(d.objetivos, d.rango);
   const hayGastos = d.gastosDelGrupo.length > 0;
   const hayObjetivo = objetivo.vendido !== null || objetivo.metros !== null;
   const sinFiltros = d.filtro.tienda === "todas" && d.filtro.canal === "todos";
 
+  // En B, sin gastos sin justificante no hay nada que enseñar ni que pedir.
+  if (d.grupo === "b" && !hayGastos) return null;
   if (!hayGastos && !hayObjetivo) {
     return (
       <Nota>

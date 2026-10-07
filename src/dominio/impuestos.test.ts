@@ -105,6 +105,12 @@ describe("impuestos de los gastos", () => {
     const i = impuestosDeCargos(cargosDelRango([alquiler, gestoria], q4));
     expect(i).toEqual({ base: 3300, ivaSoportado: 693, irpf111: 45, irpf115: 570, aPagar: 3378 });
   });
+
+  it("un gasto sin justificante no lleva IVA ni retención: se paga la base", () => {
+    const enMano: GastoFijo = { ...alquiler, id: "m", con_justificante: false };
+    const i = impuestosDeCargos(cargosDelRango([enMano], q4));
+    expect(i).toEqual({ base: 3000, ivaSoportado: 0, irpf111: 0, irpf115: 0, aPagar: 3000 });
+  });
 });
 
 describe("calendario fiscal", () => {

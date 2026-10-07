@@ -472,6 +472,11 @@ export type GastoFijo = {
   iva_pct?: Numerico;
   /** IRPF retenido al proveedor, en % de la base. */
   irpf_pct?: Numerico;
+  /**
+   * Con factura o justificante: grupo A, cuenta para los impuestos. Falso:
+   * grupo B, solo para los números internos. Sin migración, verdadero.
+   */
+  con_justificante?: boolean | null;
   /** `yyyy-MM-dd`, primer día en que se paga. */
   desde: string;
   /** `yyyy-MM-dd`, último día; nulo si se sigue pagando. */

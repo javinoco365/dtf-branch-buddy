@@ -8,6 +8,9 @@
  *       documentar: al emitir el ticket, el pedido pasa solo a A.
  *   Total negocio: A + B, sin contar nada dos veces.
  *
+ * Los gastos van a A si tienen factura o justificante y a B si no: un gasto
+ * sin justificante es coste del negocio, pero no rebaja ningún impuesto.
+ *
  * El grupo no se elige a mano: sale de si existe un documento vigente (el
  * mismo criterio con el que la base se niega a emitir un segundo documento
  * para un pedido). Así no se puede equivocar ni manipular.
@@ -19,7 +22,7 @@ import { redondear } from "./importes";
 import { ESTADO_CANCELADO, totalNeto } from "./kpis";
 import { documentoVigente } from "./tickets";
 import type { DocumentoDePedido, DocumentoFiscal } from "./fiscal";
-import { cifrasGerencia, type Venta } from "./gerencia";
+import { beneficioEstimado, cifrasGerencia, type GastoFijo, type Venta } from "./gerencia";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -60,6 +63,34 @@ export function ventasDelGrupo<T extends Pick<Venta, "id">>(
 ): T[] {
   if (grupo === "total") return [...ventas];
   return ventas.filter((v) => (v.id ? documentados.has(v.id) : false) === (grupo === "a"));
+}
+
+/** Un gasto sin la marca (antes de la migración) tiene justificante. */
+export function conJustificante(g: Pick<GastoFijo, "con_justificante">): boolean {
+  return g.con_justificante !== false;
+}
+
+/** Los gastos de un grupo: A, con justificante; B, sin él; total, todos. */
+export function gastosDelGrupo<T extends Pick<GastoFijo, "con_justificante">>(
+  gastos: readonly T[],
+  grupo: Grupo,
+): T[] {
+  if (grupo === "total") return [...gastos];
+  return gastos.filter((g) => conJustificante(g) === (grupo === "a"));
+}
+
+/**
+ * Los gastos fijos de un rango, sin IVA, de cada grupo. Con `hoy`, solo hasta
+ * hoy si el rango sigue en curso (como el beneficio estimado).
+ */
+export function gastosFijosPorGrupo(
+  gastos: readonly GastoFijo[],
+  r: { desde: Date; hasta: Date },
+  hoy?: Date,
+): Record<Grupo, number> & { hastaHoy: boolean } {
+  const a = beneficioEstimado(0, gastosDelGrupo(gastos, "a"), r, hoy);
+  const b = beneficioEstimado(0, gastosDelGrupo(gastos, "b"), r, hoy);
+  return { a: a.gastos, b: b.gastos, total: redondear(a.gastos + b.gastos), hastaHoy: a.hastaHoy };
 }
 
 export type PendienteDocumentar = {
@@ -134,11 +165,10 @@ export type ColumnaResultados = {
 /**
  * La cuenta de resultados en tres columnas: A, B y el total.
  *
- * - A: las ventas con documento y lo facturado sin pedido; los costes fijos
- *   (los gastos tienen justificante) y el Impuesto sobre Sociedades, que se
- *   calcula solo sobre A.
- * - B: las ventas sin documento y su coste variable. Sin costes fijos ni
- *   impuesto.
+ * - A: las ventas con documento y lo facturado sin pedido, los gastos con
+ *   justificante y el Impuesto sobre Sociedades, que se calcula solo sobre A.
+ * - B: las ventas sin documento, su coste variable y los gastos sin
+ *   justificante. Sin impuesto.
  * - Total: A + B. El impuesto es el de A.
  */
 export function resultadosPorGrupo(d: {
@@ -146,7 +176,8 @@ export function resultadosPorGrupo(d: {
   documentados: ReadonlySet<string>;
   costeActual: number;
   facturadoSinPedido: number;
-  costesFijos: number;
+  /** Los gastos fijos del periodo de cada grupo, sin IVA. */
+  costesFijos: { a: number; b: number };
   tipoIs: number;
 }): { a: ColumnaResultados; b: ColumnaResultados; total: ColumnaResultados } {
   const columna = (ventas: readonly Venta[], extra: number, fijos: number, conIs: boolean) => {
@@ -170,10 +201,10 @@ export function resultadosPorGrupo(d: {
   const a = columna(
     ventasDelGrupo(d.ventas, d.documentados, "a"),
     d.facturadoSinPedido,
-    d.costesFijos,
+    d.costesFijos.a,
     true,
   );
-  const b = columna(ventasDelGrupo(d.ventas, d.documentados, "b"), 0, 0, false);
+  const b = columna(ventasDelGrupo(d.ventas, d.documentados, "b"), 0, d.costesFijos.b, false);
   const suma = (k: keyof ColumnaResultados) => redondear(a[k] + b[k]);
   const total: ColumnaResultados = {
     ingresos: suma("ingresos"),

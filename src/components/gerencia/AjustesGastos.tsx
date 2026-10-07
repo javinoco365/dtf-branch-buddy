@@ -45,6 +45,7 @@ import {
   trimestreDe,
 } from "@/dominio/impuestos";
 import { rangoDe } from "@/dominio/periodos";
+import { conJustificante as conJustificanteGasto, gastosDelGrupo } from "@/dominio/grupos";
 import { Acciones, Campo } from "./comun";
 
 function useRefrescar() {
@@ -168,14 +169,24 @@ type Formulario = {
   desde: string;
   hasta: string;
   notas: string;
+  /** Con factura o justificante: grupo A. */
+  justificante: boolean;
 };
+
+const GRUPOS_GASTO = [
+  { valor: "a", etiqueta: "A · Con factura o justificante" },
+  { valor: "b", etiqueta: "B · Sin justificante" },
+];
 
 export function GastosFijos({
   gastos,
   conImpuestos,
+  conJustificante,
 }: {
   gastos: GastoFijo[];
   conImpuestos: boolean;
+  /** Falso sin la migración del justificante: todos los gastos son A. */
+  conJustificante: boolean;
 }) {
   const guardar = useServerFn(guardarGastoFijo);
   const borrar = useServerFn(borrarGastoFijo);
@@ -192,6 +203,7 @@ export function GastosFijos({
     desde: format(new Date(), "yyyy-MM-01"),
     hasta: "",
     notas: "",
+    justificante: true,
   };
   const [f, setF] = useState<Formulario>(vacio);
   const [borrando, setBorrando] = useState<GastoFijo | null>(null);
@@ -214,6 +226,7 @@ export function GastosFijos({
                 irpf_pct: aNumero(fila.irpf || "0"),
               }
             : {}),
+          ...(conJustificante ? { con_justificante: fila.justificante } : {}),
         },
       }),
     onSuccess: (_r, fila) => {
@@ -249,7 +262,11 @@ export function GastosFijos({
     desde: g.desde,
     hasta: g.hasta ?? "",
     notas: g.notas ?? "",
+    justificante: conJustificanteGasto(g),
   });
+  const costeMesB = gastosFijosDelRango(gastosDelGrupo(gastos, "b"), esteMes);
+  // Sin justificante no hay IVA ni retención que apuntar.
+  const conPorcentajes = conImpuestos && f.justificante;
   // Al elegir el tipo se proponen el IVA y el IRPF de costumbre.
   const elegirTipo = (tipo: string) => {
     const t = tipoGasto(tipo);
@@ -268,6 +285,8 @@ export function GastosFijos({
           tampoco: se lo descuentas al proveedor y lo ingresas en Hacienda en el 115 o el 111.
           Gerencia reparte cada gasto entre los meses que cubre y lo resta del margen. No apuntes
           aquí la tinta ni el film: ya van en el coste por metro.
+          {conJustificante &&
+            " Un gasto sin factura ni justificante va a B: cuenta en tus números, pero no rebaja Sociedades ni lleva IVA ni retención."}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -303,6 +322,25 @@ export function GastosFijos({
               </Select>
             </Campo>
           )}
+          {conJustificante && (
+            <Campo etiqueta="Grupo">
+              <Select
+                value={f.justificante ? "a" : "b"}
+                onValueChange={(v) => setF({ ...f, justificante: v === "a" })}
+              >
+                <SelectTrigger className="w-60 max-md:w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GRUPOS_GASTO.map((g) => (
+                    <SelectItem key={g.valor} value={g.valor}>
+                      {g.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Campo>
+          )}
           {conImpuestos && (
             <Campo etiqueta="Cada cuánto">
               <Select
@@ -332,7 +370,7 @@ export function GastosFijos({
               className="w-36"
             />
           </Campo>
-          {conImpuestos && (
+          {conPorcentajes && (
             <Campo etiqueta="IVA (%)">
               <Input
                 inputMode="decimal"
@@ -342,7 +380,7 @@ export function GastosFijos({
               />
             </Campo>
           )}
-          {conImpuestos && (
+          {conPorcentajes && (
             <Campo etiqueta="IRPF retenido (%)">
               <Input
                 inputMode="decimal"
@@ -410,6 +448,7 @@ export function GastosFijos({
                         {conImpuestos && (
                           <span className="block text-xs font-normal text-muted-foreground">
                             {tipoGasto(g.tipo).etiqueta}
+                            {conJustificanteGasto(g) ? "" : " · B, sin justificante"}
                           </span>
                         )}
                       </TableCell>
@@ -466,7 +505,8 @@ export function GastosFijos({
             </Table>
             <div className="space-y-1 text-sm">
               <p>
-                Este mes cuestan <span className="font-semibold">{eur(costeMes)}</span> sin IVA.
+                Este mes cuestan <span className="font-semibold">{eur(costeMes)}</span> sin IVA
+                {costeMesB > 0 ? `, ${eur(costeMesB)} de ellos sin justificante (B)` : ""}.
               </p>
               {conImpuestos && (
                 <p className="text-muted-foreground">

@@ -131,11 +131,14 @@ function sumarMeses(base: Date, n: number): Date {
 
 /** Lo que lleva cada pago de un gasto: base, IVA, IRPF retenido y lo que se paga. */
 export function importesCargo(
-  g: Pick<GastoFijo, "importe_mensual" | "iva_pct" | "irpf_pct">,
+  g: Pick<GastoFijo, "importe_mensual" | "iva_pct" | "irpf_pct" | "con_justificante">,
 ): Pick<Cargo, "base" | "iva" | "irpf" | "aPagar"> {
   const base = num(g.importe_mensual);
-  const iva = redondear((base * num(g.iva_pct)) / 100);
-  const irpf = redondear((base * num(g.irpf_pct)) / 100);
+  // Sin justificante no hay IVA que recuperar ni retención que ingresar: se
+  // paga el importe y ya.
+  const conImpuestos = g.con_justificante !== false;
+  const iva = conImpuestos ? redondear((base * num(g.iva_pct)) / 100) : 0;
+  const irpf = conImpuestos ? redondear((base * num(g.irpf_pct)) / 100) : 0;
   return { base, iva, irpf, aPagar: redondear(base + iva - irpf) };
 }
 

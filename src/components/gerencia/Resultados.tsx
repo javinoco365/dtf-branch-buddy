@@ -14,10 +14,10 @@ import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
 import { useFiscal } from "@/lib/gerencia";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import { beneficioEstimado } from "@/dominio/gerencia";
 import { enRango } from "@/dominio/periodos";
 import {
   facturadoSinPedido,
+  gastosFijosPorGrupo,
   GRUPOS,
   resultadosPorGrupo,
   type ColumnaResultados,
@@ -35,9 +35,10 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   );
   const fiscal = useFiscal(rangoTrimestres);
 
-  // Los gastos fijos del periodo, hasta hoy si está en curso.
+  // Los gastos fijos del periodo, hasta hoy si está en curso: con
+  // justificante van a A y sin él a B.
   const fijos = useMemo(
-    () => beneficioEstimado(0, d.gastos, d.rango, d.hoy),
+    () => gastosFijosPorGrupo(d.gastos, d.rango, d.hoy),
     [d.gastos, d.rango, d.hoy],
   );
   const cuentas = useMemo(
@@ -50,7 +51,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             facturadoSinPedido: facturadoSinPedido(
               fiscal.data.documentos.filter((x) => enRango(x.fecha, d.rango)),
             ),
-            costesFijos: fijos.gastos,
+            costesFijos: { a: fijos.a, b: fijos.b },
             tipoIs: d.ajustes.tipo_is,
           })
         : null,
@@ -60,7 +61,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
       d.ventasTodas,
       d.costeMetro,
       d.rango,
-      fijos.gastos,
+      fijos.a,
+      fijos.b,
       d.ajustes.tipo_is,
     ],
   );
@@ -145,10 +147,19 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Costes fijos"
           explicacion="g_beneficio"
-          valor={eur(fijos.gastos)}
+          valor={eur(fijos[d.grupo])}
           delta={null}
           icon={Landmark}
-          pie={<VerDetalle destino={DESTINO_AJUSTES} texto="Ver gastos" />}
+          pie={
+            <span className="flex flex-wrap items-center gap-x-2">
+              {d.grupo === "total" && fijos.b > 0 && (
+                <span className="text-muted-foreground">
+                  A {eur(fijos.a)} · B {eur(fijos.b)}
+                </span>
+              )}
+              <VerDetalle destino={DESTINO_AJUSTES} texto="Ver gastos" />
+            </span>
+          }
         />
         <TarjetaKpi
           titulo="A Hacienda este trimestre"
@@ -179,8 +190,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
               <Explicacion titulo="Cuenta de resultados" definicion={DEFINICIONES.g_resultado} />
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Del periodo, sin IVA. A: con factura o ticket, lo que cuenta para Hacienda. B: sin
-              documento. Los costes fijos y Sociedades van en A.
+              Del periodo, sin IVA. A: con factura, ticket o justificante, lo que cuenta para
+              Hacienda. B: sin documento. Sociedades sale solo de A.
             </p>
           </CardHeader>
           <CardContent>

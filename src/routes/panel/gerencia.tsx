@@ -32,6 +32,7 @@ import {
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import {
   esGrupo,
+  gastosDelGrupo,
   GRUPOS,
   pedidosDocumentados,
   pendienteDocumentar,
@@ -126,7 +127,7 @@ function Gerencia() {
       webSinPagar: webSinPagar(delPeriodo),
       ajustes: a,
       gastos: aj.gastos,
-      gastosDelGrupo: grupo === "b" ? [] : aj.gastos,
+      gastosDelGrupo: gastosDelGrupo(aj.gastos, grupo),
       objetivos: aj.objetivos,
       cobros: filtrarCobrosGerencia(cobros.data?.cobros ?? [], filtro),
       cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios.data?.cobros ?? [], filtro),
