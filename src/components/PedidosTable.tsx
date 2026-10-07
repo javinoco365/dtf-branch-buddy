@@ -1,16 +1,9 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
-import { escribirFecha, esPeriodo, leerFecha, type Periodo } from "@/dominio/filtros";
-import {
-  addMonths,
-  addWeeks,
-  endOfMonth,
-  endOfWeek,
-  format,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { PERIODOS_CUADRO } from "@/dominio/periodos";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -41,8 +34,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Download,
   Loader2,
@@ -137,12 +128,6 @@ export type PedidoFila = {
   cobros: Cobro[];
 };
 
-function rango(ref: Date, p: Periodo) {
-  return p === "mes"
-    ? { desde: startOfMonth(ref), hasta: endOfMonth(ref) }
-    : { desde: startOfWeek(ref, { weekStartsOn: 1 }), hasta: endOfWeek(ref, { weekStartsOn: 1 }) };
-}
-
 const ESTADO_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
   en_produccion: "Procesando",
@@ -156,9 +141,6 @@ const ESTADO_LABEL: Record<string, string> = {
 const ESTADOS = Object.keys(ESTADO_LABEL);
 
 const FILTROS_PEDIDOS = {
-  periodo: "mes",
-  /** Día de referencia del periodo, yyyy-MM-dd. Vacío: hoy. */
-  fecha: "",
   q: "",
   estado: "todos",
   cobro: "todos",
@@ -177,10 +159,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const queryClient = useQueryClient();
   // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
   const { valores: f, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS);
-  const periodo: Periodo = esPeriodo(f.periodo) ? f.periodo : "mes";
-  const ref = leerFecha(f.fecha);
-  const setPeriodo = (p: Periodo) => cambiar({ periodo: p, fecha: escribirFecha(ref, p) });
-  const setRef = (d: Date) => cambiar({ fecha: escribirFecha(d, periodo) });
+  // Sin «todo»: una tienda con años de pedidos no se carga de una vez.
+  const periodo = usePeriodoUrl("mes");
   const [busqueda, setBusqueda] = useTextoDiferido(f.q, (q) => cambiar({ q }));
   const estadoFiltro = f.estado;
   // En la vista global se puede elegir tienda, y se pide solo esa al servidor.
@@ -195,7 +175,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const [facturar, setFacturar] = useState<PedidoFila | null>(null);
   const [cobrando, setCobrando] = useState<PedidoFila | null>(null);
 
-  const { desde, hasta } = rango(ref, periodo);
+  const { desde, hasta } = periodo.rango!;
   const list = useServerFn(listPedidos);
   const sincronizarFn = useServerFn(sincronizarWoo);
   const sincronizar = useMutation({
@@ -288,11 +268,6 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       }));
   }, [filtrados]);
 
-  const tituloPeriodo =
-    periodo === "mes"
-      ? format(ref, "MMMM yyyy", { locale: es })
-      : `Semana ${format(desde, "d MMM", { locale: es })} – ${format(hasta, "d MMM yyyy", { locale: es })}`;
-
   function exportar() {
     const filas: (string | number)[][] = [
       [
@@ -331,46 +306,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-md border bg-card overflow-hidden">
-          <Button
-            variant={periodo === "mes" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none"
-            onClick={() => setPeriodo("mes")}
-          >
-            Mes
-          </Button>
-          <Button
-            variant={periodo === "semana" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none"
-            onClick={() => setPeriodo("semana")}
-          >
-            Semana
-          </Button>
-        </div>
-        <div className="inline-flex items-center gap-1 max-md:w-full">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setRef(periodo === "mes" ? addMonths(ref, -1) : addWeeks(ref, -1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-[180px] text-center text-sm font-medium capitalize max-md:min-w-0 max-md:flex-1">
-            {tituloPeriodo}
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setRef(periodo === "mes" ? addMonths(ref, 1) : addWeeks(ref, 1))}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setRef(new Date())}>
-            Hoy
-          </Button>
-        </div>
+        <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} className="max-md:w-full" />
         <div className="ml-auto flex gap-2 max-md:ml-0 max-md:flex-wrap">
           {/* Solo con una tienda delante: sincronizar «todas» no significa
               nada, cada una tiene sus credenciales y su web. */}
@@ -462,8 +398,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               <SelectItem value="manual">Solo manuales</SelectItem>
             </SelectContent>
           </Select>
-          {hay(["periodo", "fecha"]) && (
-            <Button variant="ghost" size="sm" onClick={() => quitar(["periodo", "fecha"])}>
+          {hay() && (
+            <Button variant="ghost" size="sm" onClick={() => quitar()}>
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}

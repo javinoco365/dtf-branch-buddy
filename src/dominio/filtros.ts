@@ -11,8 +11,6 @@
  * router) y devuelve valores del mismo tipo que los por defecto.
  */
 
-import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from "date-fns";
-
 export type ValorFiltro = string | number | boolean;
 export type Filtros = Record<string, ValorFiltro>;
 
@@ -83,14 +81,8 @@ export function hayFiltros(valores: Filtros, porDefecto: Filtros, ignorar: strin
 }
 
 // ---------------------------------------------------------------------------
-// Periodos (mes o semana) con su día de referencia
+// Fechas en la dirección (los periodos están en periodos.ts)
 // ---------------------------------------------------------------------------
-
-export type Periodo = "mes" | "semana";
-
-export function esPeriodo(v: unknown): v is Periodo {
-  return v === "mes" || v === "semana";
-}
 
 /**
  * El día de referencia que guarda la dirección, `yyyy-MM-dd`. Vacío o mal
@@ -101,21 +93,4 @@ export function leerFecha(texto: string | null | undefined, hoy: Date = new Date
   if (!m) return hoy;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return Number.isNaN(d.getTime()) || d.getMonth() !== Number(m[2]) - 1 ? hoy : d;
-}
-
-/** Para la dirección: el día, o vacío si cae en el mismo periodo que hoy. */
-export function escribirFecha(fecha: Date, periodo: Periodo, hoy: Date = new Date()): string {
-  const a = rangoPeriodo(fecha, periodo);
-  const b = rangoPeriodo(hoy, periodo);
-  if (a.desde.getTime() === b.desde.getTime()) return "";
-  return format(fecha, "yyyy-MM-dd");
-}
-
-/** El mes natural, o la semana de lunes a domingo, que contiene la fecha. */
-export function rangoPeriodo(ref: Date, periodo: Periodo): { desde: Date; hasta: Date } {
-  if (periodo === "mes") return { desde: startOfMonth(ref), hasta: endOfMonth(ref) };
-  return {
-    desde: startOfWeek(ref, { weekStartsOn: 1 }),
-    hasta: endOfWeek(ref, { weekStartsOn: 1 }),
-  };
 }

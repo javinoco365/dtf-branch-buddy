@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import {
   BarraFiltros,
   CampoBusqueda,
@@ -50,17 +52,20 @@ function FacturasPage() {
   const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (data as any[]).filter(
       (f) =>
+        enRango(f.fecha, periodo.rango) &&
         (filtros.estado === "todos" || f.estado === filtros.estado) &&
         (!q ||
           normalizarTexto(f.numero).includes(q) ||
           normalizarTexto(f.cliente_nombre).includes(q) ||
           normalizarTexto(f.marca?.nombre).includes(q)),
     );
-  }, [data, filtros.q, filtros.estado]);
+  }, [data, filtros.q, filtros.estado, periodo.rango]);
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
@@ -173,6 +178,7 @@ function FacturasPage() {
               .map((e) => ({ valor: e, etiqueta: e })),
           ]}
         />
+        <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
       <Card>

@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  escribirFecha,
-  escribirFiltros,
-  hayFiltros,
-  leerFecha,
-  leerFiltros,
-  quitarFiltros,
-  rangoPeriodo,
-} from "./filtros";
+import { escribirFiltros, hayFiltros, leerFecha, leerFiltros, quitarFiltros } from "./filtros";
 
 const porDefecto = { q: "", estado: "todos", parciales: false, pagina: 1 };
 
@@ -83,19 +75,5 @@ describe("fechas de referencia", () => {
     expect(leerFecha("", hoy)).toBe(hoy);
     expect(leerFecha("2026-02-31", hoy)).toBe(hoy);
     expect(leerFecha("ayer", hoy)).toBe(hoy);
-  });
-
-  it("no escribe la fecha si cae en el periodo actual", () => {
-    expect(escribirFecha(new Date(2026, 8, 3), "mes", hoy)).toBe("");
-    expect(escribirFecha(new Date(2026, 7, 3), "mes", hoy)).toBe("2026-08-03");
-    expect(escribirFecha(new Date(2026, 8, 30), "semana", hoy)).toBe("");
-    expect(escribirFecha(new Date(2026, 8, 22), "semana", hoy)).toBe("2026-09-22");
-  });
-
-  it("mes natural y semana de lunes a domingo", () => {
-    expect(rangoPeriodo(hoy, "mes").desde).toEqual(new Date(2026, 8, 1));
-    const s = rangoPeriodo(hoy, "semana");
-    expect(s.desde).toEqual(new Date(2026, 8, 28));
-    expect(s.hasta.getDate()).toBe(4);
   });
 });

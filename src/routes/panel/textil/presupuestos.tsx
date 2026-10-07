@@ -56,7 +56,9 @@ import {
   QuitarFiltros,
   SelectFiltro,
 } from "@/components/filtros/Filtros";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import { normalizarTexto } from "@/dominio/clientes";
 import {
   AlertDialog,
@@ -99,17 +101,20 @@ function PresupuestosPage() {
 
   const { data = [] } = useQuery({ queryKey: ["textil-presupuestos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (data as any[]).filter(
       (p) =>
+        enRango(p.fecha, periodo.rango) &&
         (filtros.estado === "todos" || p.estado === filtros.estado) &&
         (!q ||
           normalizarTexto(p.numero).includes(q) ||
           normalizarTexto(p.cliente_nombre).includes(q) ||
           normalizarTexto(p.pedido?.numero).includes(q)),
     );
-  }, [data, filtros.q, filtros.estado]);
+  }, [data, filtros.q, filtros.estado, periodo.rango]);
   const { data: marcas = [] } = useQuery({
     queryKey: ["textil-marcas"],
     queryFn: () => marcasFn(),
@@ -197,6 +202,7 @@ function PresupuestosPage() {
             ...[...ESTADOS, "facturado"].map((e) => ({ valor: e, etiqueta: e })),
           ]}
         />
+        <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
         <div className="text-xs text-muted-foreground ml-auto">
           {filtrados.length} presupuesto{filtrados.length === 1 ? "" : "s"}

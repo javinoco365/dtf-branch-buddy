@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useFiltrosUrl } from "@/lib/filtros-url";
+import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { enRango } from "@/dominio/periodos";
 import {
   BarraFiltros,
   CampoBusqueda,
@@ -86,14 +88,17 @@ function ComprasPage() {
   });
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
+  // Por defecto, todo: la lista se abre como siempre.
+  const periodo = usePeriodoUrl("todo");
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (compras as any[]).filter(
       (c) =>
+        enRango(c.fecha, periodo.rango) &&
         (filtros.estado === "todos" || c.estado === filtros.estado) &&
         (!q || normalizarTexto(c.proveedor).includes(q) || normalizarTexto(c.numero).includes(q)),
     );
-  }, [compras, filtros.q, filtros.estado]);
+  }, [compras, filtros.q, filtros.estado, periodo.rango]);
 
   const stockFn = useServerFn(listStock);
   const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
@@ -239,6 +244,7 @@ function ComprasPage() {
               .map((e) => ({ valor: e, etiqueta: e })),
           ]}
         />
+        <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
       <Card>
