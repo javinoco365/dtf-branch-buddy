@@ -12,7 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
-import { usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
+import { useCobrosPeriodo, usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
+import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -26,6 +27,8 @@ import {
   XCircle,
   Percent,
   Inbox,
+  Undo2,
+  Wallet,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -64,12 +67,19 @@ function DashboardGlobal() {
   const ant = comparacion?.previo ?? { desde: hasta, hasta: desde };
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta });
   const consultaLineas = useLineasPeriodo({ desde, hasta });
+  // Lo cobrado va por la fecha del cobro: el dinero que entró en el periodo,
+  // fuera de cuándo se hizo el pedido.
+  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
+  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
 
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const pedidosAnt = useMemo(() => consultaAnterior.data ?? [], [consultaAnterior.data]);
 
   const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
   const kPrev = useMemo(() => calcularKpis(pedidosAnt), [pedidosAnt]);
+  const cobrosDisponibles = consultaCobros.data?.disponible ?? false;
+  const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [])).cobrado;
+  const cobradoPrev = totalizar(cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [])).cobrado;
 
   const costePer = costeMetro * k.metros;
   const margenPer = k.bruta - costePer;
@@ -136,8 +146,8 @@ function DashboardGlobal() {
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}
         </div>
@@ -153,9 +163,9 @@ function DashboardGlobal() {
 
       {!cargando && !error && !sinDatos && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
-              titulo="Total periodo"
+              titulo="Vendido"
               valor={eur(k.total)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
@@ -167,6 +177,20 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
+            />
+            <TarjetaKpi
+              titulo="Cobrado"
+              valor={cobrosDisponibles ? eur(cobrado) : "—"}
+              frente={comparacion?.etiqueta}
+              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
+              icon={Wallet}
+            />
+            <TarjetaKpi
+              titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
+              valor={costeMetro === 0 ? "—" : eur(margenPer)}
+              delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
+              frente={comparacion?.etiqueta}
+              icon={Percent}
             />
             <TarjetaKpi
               titulo="Ticket medio"
@@ -183,6 +207,14 @@ function DashboardGlobal() {
               icon={Ruler}
             />
             <TarjetaKpi
+              titulo="Devoluciones"
+              valor={eur(k.devuelto)}
+              frente={comparacion?.etiqueta}
+              delta={variacion(k.devuelto, kPrev.devuelto)}
+              icon={Undo2}
+              deltaInverso
+            />
+            <TarjetaKpi
               titulo="Cancelados"
               valor={String(k.cancelados)}
               frente={comparacion?.etiqueta}
@@ -190,13 +222,6 @@ function DashboardGlobal() {
               icon={XCircle}
               color="destructive"
               deltaInverso
-            />
-            <TarjetaKpi
-              titulo={costeMetro === 0 ? "Margen" : "Margen estimado"}
-              valor={costeMetro === 0 ? "—" : eur(margenPer)}
-              delta={costeMetro === 0 ? null : variacion(margenPer, margenPrev)}
-              frente={comparacion?.etiqueta}
-              icon={Percent}
             />
           </div>
 

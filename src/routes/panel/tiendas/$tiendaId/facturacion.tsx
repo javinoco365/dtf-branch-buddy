@@ -11,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
-import { useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
+import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
+import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -27,6 +28,8 @@ import {
   Ruler,
   ShoppingCart,
   XCircle,
+  ClipboardList,
+  Undo2,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -61,10 +64,18 @@ function FacturacionTienda() {
   const consultaPedidos = usePedidosPeriodo({ desde, hasta, tiendaId });
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta, tiendaId });
   const consultaLineas = useLineasPeriodo({ desde, hasta, tiendaId });
+  // Lo cobrado, por la fecha del cobro: el dinero que entró en el periodo.
+  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
+  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
 
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
   const kPrev = useMemo(() => calcularKpis(consultaAnterior.data ?? []), [consultaAnterior.data]);
+  const cobrosDisponibles = consultaCobros.data?.disponible ?? false;
+  const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [], tiendaId)).cobrado;
+  const cobradoPrev = totalizar(
+    cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [], tiendaId),
+  ).cobrado;
 
   const grafica = useMemo(() => {
     const { por, tramos } = tramosGrafica({ desde, hasta });
@@ -133,8 +144,8 @@ function FacturacionTienda() {
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}
         </div>
@@ -150,9 +161,9 @@ function FacturacionTienda() {
 
       {!cargando && !error && !sinDatos && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
-              titulo="Total periodo"
+              titulo="Vendido"
               valor={eur(k.total)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
@@ -164,6 +175,20 @@ function FacturacionTienda() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
+            />
+            <TarjetaKpi
+              titulo="Cobrado"
+              valor={cobrosDisponibles ? eur(cobrado) : "—"}
+              frente={comparacion?.etiqueta}
+              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
+              icon={Wallet}
+            />
+            <TarjetaKpi
+              titulo="Pedidos"
+              valor={String(k.pedidos)}
+              frente={comparacion?.etiqueta}
+              delta={variacion(k.pedidos, kPrev.pedidos)}
+              icon={ClipboardList}
             />
             <TarjetaKpi
               titulo="Ticket medio"
@@ -178,6 +203,14 @@ function FacturacionTienda() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
               icon={Ruler}
+            />
+            <TarjetaKpi
+              titulo="Devoluciones"
+              valor={eur(k.devuelto)}
+              frente={comparacion?.etiqueta}
+              delta={variacion(k.devuelto, kPrev.devuelto)}
+              icon={Undo2}
+              deltaInverso
             />
             <TarjetaKpi
               titulo="Cancelados"

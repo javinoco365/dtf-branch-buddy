@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FILTRO_TODO,
+  cobrosDeTiendas,
   consolidarCobro,
   desglosePorMetodo,
   desglosePorTienda,
@@ -8,6 +9,7 @@ import {
   origenDelCobro,
   totalPorRangos,
   totalizar,
+  type CobroConsolidado,
   type CobroLeido,
 } from "./facturacion";
 import { TIENDA_TEXTIL } from "./cobros";
@@ -194,5 +196,15 @@ describe("totalPorRangos", () => {
     ]);
     expect(anterior.total).toBe(0);
     expect(actual.total).toBe(122);
+  });
+});
+
+describe("cobrosDeTiendas", () => {
+  const c = (tienda_id: string) => ({ tienda_id }) as CobroConsolidado;
+
+  it("sin tienda, todas menos el textil; con tienda, solo esa", () => {
+    const cobros = [c("t1"), c("t2"), c(TIENDA_TEXTIL.id)];
+    expect(cobrosDeTiendas(cobros).map((x) => x.tienda_id)).toEqual(["t1", "t2"]);
+    expect(cobrosDeTiendas(cobros, "t2").map((x) => x.tienda_id)).toEqual(["t2"]);
   });
 });
