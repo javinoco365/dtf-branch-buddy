@@ -229,6 +229,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/C6_clave_lector.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
 
 echo
+echo "== Borrar la última factura de la serie =="
+$PSQL -f "$RAIZ/supabase/pruebas/C7_borrar_ultima_factura.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
+
+echo
 echo "== Bucket de los PDF de facturas =="
 $PSQL -f "$RAIZ/supabase/pruebas/B8_bucket_facturas.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'

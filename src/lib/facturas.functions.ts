@@ -819,6 +819,51 @@ export const anularFactura = createServerFn({ method: "POST" })
     });
   });
 
+/** Por dónde va cada serie: para saber qué factura es la última y se puede borrar. */
+export const contadoresDeSerie = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await tabla(context.supabase, "series_facturacion").select(
+      "serie, ejercicio, ultimo_numero",
+    );
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((c: any) => ({
+      serie: String(c.serie ?? ""),
+      ejercicio: Number(c.ejercicio),
+      ultimo_numero: Number(c.ultimo_numero),
+    }));
+  });
+
+/**
+ * Borra del todo la última factura o ticket de su serie (o un borrador), con
+ * sus líneas y su PDF, y su número lo coge la siguiente. La base comprueba
+ * que es la última, que no la rectifica ni sustituye otra y que no está
+ * conciliada; si no, lo dice. Queda en la auditoría.
+ */
+export const borrarUltimaFactura = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ tipo: z.enum(["tienda", "textil"]), factura_id: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const r = await llamarRpc<{
+      referencia: string | null;
+      tienda_id: string | null;
+      siguiente?: string;
+    }>(context.supabase, "factura_borrar_ultima", { _tipo: data.tipo, _id: data.factura_id });
+
+    // El PDF, después: el almacenamiento no se toca desde SQL. Si falla, la
+    // factura ya no existe y el fichero queda huérfano, pero no se ve.
+    const carpeta = data.tipo === "tienda" ? r.tienda_id : "textil";
+    if (carpeta) {
+      const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+      await adminComoUsuario(context.userId)
+        .storage.from("facturas")
+        .remove([`${carpeta}/${data.factura_id}.pdf`, `${carpeta}/${data.factura_id}-80mm.pdf`]);
+    }
+    return r;
+  });
+
 /** Cambia el estado de cobro. No toca nada del documento fiscal. */
 export const cambiarEstadoCobro = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

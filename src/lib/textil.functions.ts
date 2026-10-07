@@ -716,33 +716,25 @@ export const listTextilFacturas = createServerFn({ method: "GET" })
   });
 
 /**
- * Borra una factura textil.
- *
- * Solo funciona con borradores. Antes borraba cualquier factura sin mirar el
- * estado, y sus líneas caían en cascada: era un botón de papelera que destruía
- * documentos fiscales. La base lo impide ahora por trigger; esto lo dice antes
- * y con un mensaje que se entiende.
+ * Borra una factura textil: un borrador, o la última emitida de su serie
+ * (su número lo coge la siguiente). Cualquier otra se corrige con una
+ * rectificativa. La base lo comprueba en factura_borrar_ultima y lo dice con
+ * un mensaje que se entiende; aquí, después, se quita su PDF.
  */
 export const deleteTextilFactura = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: factura } = await context.supabase
-      .from("textil_facturas")
-      .select("estado, numero")
-      .eq("id", data.id)
-      .maybeSingle();
-
-    if (!factura) throw new Error("La factura no existe");
-    if (factura.estado !== "borrador") {
-      throw new Error(
-        `La factura ${factura.numero} está emitida y no se borra. Emite una rectificativa.`,
-      );
-    }
-
-    const { error } = await context.supabase.from("textil_facturas").delete().eq("id", data.id);
-    if (error) throw error;
-    return { ok: true };
+    const r = await llamarRpc<{ referencia: string | null }>(
+      context.supabase,
+      "factura_borrar_ultima",
+      { _tipo: "textil", _id: data.id },
+    );
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    await adminComoUsuario(context.userId)
+      .storage.from("facturas")
+      .remove([`textil/${data.id}.pdf`, `textil/${data.id}-80mm.pdf`]);
+    return { ok: true, referencia: r.referencia };
   });
 
 // ============ PEDIDOS ============

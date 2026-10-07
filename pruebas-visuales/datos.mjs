@@ -954,6 +954,11 @@ Object.assign(DATOS, {
   cobros: [...COBROS, ...TEXTIL_COBROS],
   pedidos_pendientes_cobro: PENDIENTES,
   facturas: FACTURAS,
+  // Contadores de cada serie: la última de cada una se puede borrar.
+  series_facturacion: [
+    { empresa_id: EMPRESA, serie: "", ejercicio: 2026, ultimo_numero: 6, numero_inicial: 1 },
+    { empresa_id: EMPRESA, serie: "T", ejercicio: 2026, ultimo_numero: 7, numero_inicial: 1 },
+  ],
   productos: PRODUCTOS,
   presupuestos: PRESUPUESTOS,
   caja_socios: SOCIOS,
