@@ -50,6 +50,12 @@ DTI S.L. está sujeta a Verifactu desde el **1 de enero de 2027**. No son negoci
 - **Una factura emitida no se edita ni se borra. Nunca.** Ni con `UPDATE`, ni desde la
   aplicación, ni «solo para corregir una errata». Solo rectificativa o anulación, ambas como
   registros nuevos.
+  **Única excepción** (decisión de Javier, 7-10-2026): la **última** factura o ticket de cada
+  serie y ejercicio se puede borrar del todo, y su número lo reutiliza la siguiente. Solo por
+  `factura_borrar_ultima()`, que comprueba que es la última y que no la rectifica, sustituye
+  ni concilia nada. Así la numeración sigue sin huecos. Ninguna otra se borra.
+  A partir del 1 de enero de 2027 (Verifactu) hay que revisar esta excepción: una factura
+  enviada a la AEAT no se puede borrar.
 - **La numeración es correlativa por serie y sin huecos.** Se asigna dentro de una transacción
   con bloqueo (`SELECT ... FOR UPDATE`). Nunca en el cliente, nunca en paralelo.
 - La factura congela _snapshots_ de emisor, receptor y líneas en JSON.

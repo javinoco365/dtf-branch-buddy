@@ -38,6 +38,8 @@ import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { contadoresDeSerie } from "@/lib/facturas.functions";
+import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -50,6 +52,25 @@ function FacturasPage() {
   const [borrando, setBorrando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
   const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
+  // Por dónde va cada serie: solo la última se puede borrar.
+  const contadoresFn = useServerFn(contadoresDeSerie);
+  const { data: contadores = [] } = useQuery({
+    queryKey: ["series-contadores"],
+    queryFn: () => contadoresFn(),
+  });
+  const ultimos = useMemo(() => contadoresPorSerie(contadores), [contadores]);
+  const impedimentoBorrando = borrando
+    ? impedimentoBorrado(
+        {
+          estado: borrando.estado,
+          serie: borrando.serie,
+          ejercicio: borrando.ejercicio,
+          numero: borrando.numero_serie,
+        },
+        ultimos,
+        borrando.numero,
+      )
+    : null;
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
   // Por defecto, todo: la lista se abre como siempre.
@@ -70,7 +91,8 @@ function FacturasPage() {
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
-      toast.success("Eliminada");
+      qc.invalidateQueries({ queryKey: ["series-contadores"] });
+      toast.success("Borrada. Su número lo cogerá la siguiente.");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -341,12 +363,16 @@ function FacturasPage() {
         onCerrar={() => setBorrando(null)}
         que={`la factura ${borrando?.numero ?? ""}`}
         cargando={del.isPending}
-        impedimento={
-          borrando && borrando.estado !== "borrador"
-            ? "Está emitida. Una factura emitida no se borra ni se edita: para " +
-              "corregirla hay que emitir una rectificativa."
-            : null
+        consecuencias={
+          borrando && borrando.estado !== "borrador" && !impedimentoBorrando
+            ? [
+                "Se borra del todo, con sus líneas y su PDF.",
+                "Su número lo cogerá la siguiente factura de la serie.",
+                "Queda constancia en el registro de auditoría.",
+              ]
+            : undefined
         }
+        impedimento={impedimentoBorrando}
         onConfirmar={() => {
           del.mutate(borrando.id);
           setBorrando(null);

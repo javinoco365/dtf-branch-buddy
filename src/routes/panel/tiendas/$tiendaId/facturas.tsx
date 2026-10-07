@@ -46,7 +46,9 @@ import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import {
   anularFactura,
+  borrarUltimaFactura,
   cambiarEstadoCobro,
+  contadoresDeSerie,
   canjearTicket,
   emitirFactura,
   generarTicket80,
@@ -57,6 +59,8 @@ import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
 import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
 import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
 import {
   Download,
   FileText,
@@ -155,6 +159,29 @@ function Facturas() {
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => toast.error(e.message),
+  });
+
+  // Solo la última de cada serie se puede borrar; su número lo coge la siguiente.
+  const contadoresFn = useServerFn(contadoresDeSerie);
+  const { data: contadores = [] } = useQuery({
+    queryKey: ["series-contadores"],
+    queryFn: () => contadoresFn(),
+  });
+  const ultimos = useMemo(() => contadoresPorSerie(contadores), [contadores]);
+  const sePuedeBorrar = (f: any) =>
+    impedimentoBorrado(f, ultimos, referenciaFactura(f.serie, f.ejercicio, f.numero)) === null;
+  const [borrando, setBorrando] = useState<any>(null);
+  const borrarFn = useServerFn(borrarUltimaFactura);
+  const borrar = useMutation({
+    mutationFn: (id: string) => borrarFn({ data: { tipo: "tienda", factura_id: id } }),
+    onSuccess: (r: any) => {
+      toast.success(
+        r.referencia ? `Borrada la ${r.referencia}. La siguiente cogerá su número.` : "Borrada",
+      );
+      qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+      qc.invalidateQueries({ queryKey: ["series-contadores"] });
+    },
+    onError: (e: any) => toast.error(e.message ?? "No se pudo borrar"),
   });
 
   // Anular no borra ni modifica la original: emite una rectificativa con las
@@ -390,6 +417,18 @@ function Facturas() {
                             <Undo2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
+                      {sePuedeBorrar(f) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Borrar (es la última de su serie)"
+                          aria-label="Borrar"
+                          disabled={borrar.isPending}
+                          onClick={() => setBorrando(f)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -406,6 +445,26 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarBorrado
+        abierto={!!borrando}
+        onCerrar={() => setBorrando(null)}
+        que={
+          borrando
+            ? `${borrando.tipo === "simplificada" ? "el ticket" : "la factura"} ${referenciaFactura(borrando.serie, borrando.ejercicio, borrando.numero)}`
+            : ""
+        }
+        consecuencias={[
+          "Se borra del todo, con sus líneas y su PDF.",
+          "Su número lo cogerá la siguiente de la serie.",
+          "Queda constancia en el registro de auditoría.",
+        ]}
+        cargando={borrar.isPending}
+        onConfirmar={() => {
+          borrar.mutate(borrando.id);
+          setBorrando(null);
+        }}
+      />
 
       {canjeando && (
         <CanjearTicketDialog
