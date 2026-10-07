@@ -624,6 +624,24 @@ const COMPRAS = [0, 1].map((i) => ({
   lineas: [],
 }));
 
+// Seguimiento de los pedidos enviados o entregados: sale de 0 a 3 días
+// después del pedido (Gerencia › Producción, días hasta el envío).
+const ENLACES = PEDIDOS.filter((p) => ["enviado", "entregado"].includes(p.estado)).map((p, i) => {
+  const enviado = new Date(p.fecha_pedido);
+  enviado.setUTCDate(enviado.getUTCDate() + (i % 4));
+  enviado.setUTCHours(16);
+  return {
+    id: id("e5", i + 1),
+    pedido_id: p.id,
+    transportista: "GLS",
+    codigo_seguimiento: `GLS${1000 + i}`,
+    url: null,
+    estado: null,
+    created_at: enviado.toISOString(),
+    updated_at: enviado.toISOString(),
+  };
+});
+
 // Gerencia › Ajustes: un gasto fijo vigente, otro dado de baja y un objetivo.
 const GASTOS_FIJOS = [
   {
@@ -650,6 +668,7 @@ const OBJETIVOS = [
 ];
 
 Object.assign(DATOS, {
+  enlaces_seguimiento: ENLACES,
   gerencia_ajustes: [{ empresa_id: EMPRESA, web_sin_pagar_cuenta: true }],
   gerencia_gastos_fijos: GASTOS_FIJOS,
   gerencia_objetivos: OBJETIVOS,
