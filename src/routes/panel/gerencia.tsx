@@ -16,18 +16,28 @@ import { Margen } from "@/components/gerencia/Margen";
 import { Resultados } from "@/components/gerencia/Resultados";
 import { Fiscal } from "@/components/gerencia/Fiscal";
 import { Textil } from "@/components/gerencia/Textil";
+import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import {
   useAjustesGerencia,
   useBancoPeriodo,
+  useDocumentosDePedidos,
   useCajaPeriodo,
   useCosteMetroActual,
   usePendientesCobro,
   useVentasGerencia,
 } from "@/lib/gerencia";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
+import {
+  esGrupo,
+  GRUPOS,
+  pedidosDocumentados,
+  pendienteDocumentar,
+  ventasDelGrupo,
+  type Grupo,
+} from "@/dominio/grupos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
   AJUSTES_POR_DEFECTO,
@@ -46,7 +56,7 @@ export const Route = createFileRoute("/panel/gerencia")({
   component: Gerencia,
 });
 
-const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos" };
+const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos", grupo: "total" };
 
 const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
 
@@ -61,6 +71,7 @@ function Gerencia() {
     () => ({ tienda: f.tienda, canal: esCanal(f.canal) ? f.canal : "todos" }),
     [f.tienda, f.canal],
   );
+  const grupo: Grupo = esGrupo(f.grupo) ? f.grupo : "total";
 
   // Sin «todo» en la lista, siempre hay rango. Sin comparación, un rango
   // vacío: las consultas no pueden ser condicionales.
@@ -76,6 +87,9 @@ function Gerencia() {
   const banco = useBancoPeriodo(rango);
   const costeMetro = useCosteMetroActual();
   const ajustes = useAjustesGerencia();
+  // Qué pedidos tienen factura o ticket: de ahí salen los grupos A y B.
+  const docs = useDocumentosDePedidos(ventas.data ?? []);
+  const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? []);
   const { data: tiendas = [] } = useTiendas();
   const hoy = useMemo(() => new Date(), []);
 
@@ -83,20 +97,36 @@ function Gerencia() {
     // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
     const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
     if (!ventas.data || !aj) return null;
+    // Para separar A y B hacen falta los documentos; sin ellos, todavía no.
+    if (grupo !== "total" && (!docs.data || (periodo.comparacion && !docsPrevios.data))) {
+      return null;
+    }
     const a = aj.ajustes;
     const delPeriodo = filtrarVentas(ventas.data, filtro);
+    const todas = aplicarAjustesVentas(delPeriodo, a);
+    const documentados = pedidosDocumentados(docs.data ?? []);
+    const documentadosPrevios = pedidosDocumentados(docsPrevios.data ?? []);
     return {
+      grupo,
+      ventasTodas: todas,
+      documentados: docs.data ? documentados : null,
+      pendiente: docs.data ? pendienteDocumentar(todas, documentados) : null,
       filtro,
       seleccion: periodo.seleccion,
       rango,
       comparacion: periodo.comparacion,
       costeMetro,
       tiendas,
-      ventas: aplicarAjustesVentas(delPeriodo, a),
-      ventasPrevias: aplicarAjustesVentas(filtrarVentas(ventasPrevias.data ?? [], filtro), a),
+      ventas: ventasDelGrupo(todas, documentados, grupo),
+      ventasPrevias: ventasDelGrupo(
+        aplicarAjustesVentas(filtrarVentas(ventasPrevias.data ?? [], filtro), a),
+        documentadosPrevios,
+        grupo,
+      ),
       webSinPagar: webSinPagar(delPeriodo),
       ajustes: a,
       gastos: aj.gastos,
+      gastosDelGrupo: grupo === "b" ? [] : aj.gastos,
       objetivos: aj.objetivos,
       cobros: filtrarCobrosGerencia(cobros.data?.cobros ?? [], filtro),
       cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios.data?.cobros ?? [], filtro),
@@ -110,6 +140,9 @@ function Gerencia() {
   }, [
     ventas.data,
     ventasPrevias.data,
+    docs.data,
+    docsPrevios.data,
+    grupo,
     ajustes.data,
     ajustes.isError,
     cobros.data,
@@ -140,12 +173,15 @@ function Gerencia() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Gerencia</h1>
-        <p className="text-muted-foreground">
-          Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
-          (con el ratón encima, o tocándolo en el móvil).
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Gerencia</h1>
+          <p className="text-muted-foreground">
+            Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
+            (con el ratón encima, o tocándolo en el móvil).
+          </p>
+        </div>
+        <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
       </div>
 
       <Card className={enAjustes ? "hidden" : undefined}>
@@ -164,6 +200,13 @@ function Gerencia() {
             alCambiar={(canal) => cambiar({ canal })}
             opciones={opcionesCanal}
             ancho="w-[170px] max-md:w-[calc(50%-0.25rem)]"
+          />
+          <SelectFiltro
+            etiqueta="Números"
+            valor={grupo}
+            alCambiar={(g) => cambiar({ grupo: g })}
+            opciones={GRUPOS.map((g) => ({ valor: g.valor, etiqueta: g.etiqueta }))}
+            ancho="w-[190px] max-md:w-full"
           />
         </CardContent>
       </Card>

@@ -24,7 +24,7 @@ import {
   DESTINO_CONCILIACION,
   type DatosGerencia,
 } from "./destinos";
-import { VerDetalle } from "./comun";
+import { NotaGrupo, VerDetalle } from "./comun";
 
 export function Tesoreria({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -40,6 +40,10 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
+      <NotaGrupo
+        grupo={d.grupo}
+        texto="La tesorería es el dinero que entra y sale: no se separa en A y B."
+      />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Cobrado"

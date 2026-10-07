@@ -5,6 +5,7 @@ import {
   facturadoSinPedido,
   pedidosDocumentados,
   pendienteDocumentar,
+  resultadosPorGrupo,
   ventasDelGrupo,
 } from "./grupos";
 
@@ -105,5 +106,35 @@ describe("facturado sin pedido", () => {
         f("m2", 30),
       ]),
     ).toBe(30);
+  });
+});
+
+describe("cuenta de resultados en tres columnas", () => {
+  it("costes fijos y Sociedades solo en A; el total suma A y B", () => {
+    const ventas = [pedido("a", 1000), pedido("b", 200)];
+    const r = resultadosPorGrupo({
+      ventas,
+      documentados: new Set(["a"]),
+      costeActual: 0,
+      facturadoSinPedido: 100,
+      costesFijos: 300,
+      tipoIs: 15,
+    });
+    // A: 1000 + 100 sin pedido − 300 fijos = 800; Sociedades 120.
+    expect(r.a).toMatchObject({
+      ingresos: 1100,
+      costesFijos: 300,
+      bai: 800,
+      sociedades: 120,
+      neto: 680,
+    });
+    expect(r.b).toMatchObject({
+      ingresos: 200,
+      costesFijos: 0,
+      bai: 200,
+      sociedades: 0,
+      neto: 200,
+    });
+    expect(r.total).toMatchObject({ ingresos: 1300, bai: 1000, sociedades: 120, neto: 880 });
   });
 });

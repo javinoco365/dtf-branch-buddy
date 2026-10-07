@@ -23,7 +23,7 @@ import {
   type PresupuestoResumen,
 } from "@/dominio/comercial";
 import { destinoPresupuestos, type DatosGerencia } from "./destinos";
-import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
+import { CargandoPestana, ErrorPestana, Nota, NotaGrupo, VerDetalle } from "./comun";
 
 const FILAS = 10;
 
@@ -81,6 +81,10 @@ export function Comercial({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
+      <NotaGrupo
+        grupo={d.grupo}
+        texto="Los presupuestos no llevan factura: esta pestaña no se separa en A y B."
+      />
       {!actual.data.tiendasDisponible && (
         <Nota>
           Los presupuestos de las tiendas todavía no están en la base de datos: falta aplicar su

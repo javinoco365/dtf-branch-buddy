@@ -19,7 +19,7 @@ import { DEFINICIONES } from "@/dominio/definiciones";
 import { aplicarAjustesVentas, etiquetaCanal, filtrarVentas } from "@/dominio/gerencia";
 import { clientesDormidos, DIAS_DORMIDO, PARTE_PARETO, resumenClientes } from "@/dominio/clientela";
 import { destinoCliente, type DatosGerencia } from "./destinos";
-import { CargandoPestana, ErrorPestana, VerDetalle } from "./comun";
+import { CargandoPestana, ErrorPestana, NotaGrupo, VerDetalle } from "./comun";
 
 /** Cuántas filas enseña cada lista. */
 const FILAS = 15;
@@ -45,6 +45,10 @@ export function Clientes({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
+      <NotaGrupo
+        grupo={d.grupo}
+        texto="Clientes no se separa en A y B: enseña todos los pedidos."
+      />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Clientes activos"

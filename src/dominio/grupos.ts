@@ -19,7 +19,7 @@ import { redondear } from "./importes";
 import { ESTADO_CANCELADO, totalNeto } from "./kpis";
 import { documentoVigente } from "./tickets";
 import type { DocumentoDePedido, DocumentoFiscal } from "./fiscal";
-import type { Venta } from "./gerencia";
+import { cifrasGerencia, type Venta } from "./gerencia";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -116,4 +116,75 @@ export function facturadoSinPedido(docs: readonly DocumentoFiscal[]): number {
     if (!d.pedido_id) base += num(d.base);
   }
   return redondear(base);
+}
+
+export type ColumnaResultados = {
+  /** Sin IVA. */
+  ingresos: number;
+  produccion: number;
+  envios: number;
+  ropa: number;
+  margen: number;
+  costesFijos: number;
+  bai: number;
+  sociedades: number;
+  neto: number;
+};
+
+/**
+ * La cuenta de resultados en tres columnas: A, B y el total.
+ *
+ * - A: las ventas con documento y lo facturado sin pedido; los costes fijos
+ *   (los gastos tienen justificante) y el Impuesto sobre Sociedades, que se
+ *   calcula solo sobre A.
+ * - B: las ventas sin documento y su coste variable. Sin costes fijos ni
+ *   impuesto.
+ * - Total: A + B. El impuesto es el de A.
+ */
+export function resultadosPorGrupo(d: {
+  ventas: readonly Venta[];
+  documentados: ReadonlySet<string>;
+  costeActual: number;
+  facturadoSinPedido: number;
+  costesFijos: number;
+  tipoIs: number;
+}): { a: ColumnaResultados; b: ColumnaResultados; total: ColumnaResultados } {
+  const columna = (ventas: readonly Venta[], extra: number, fijos: number, conIs: boolean) => {
+    const c = cifrasGerencia(ventas, d.costeActual);
+    const ingresos = redondear(c.bruta + extra);
+    const margen = redondear(ingresos - c.coste);
+    const bai = redondear(margen - fijos);
+    const sociedades = conIs && bai > 0 ? redondear((bai * d.tipoIs) / 100) : 0;
+    return {
+      ingresos,
+      produccion: c.costeDtf,
+      envios: c.costeEnvios,
+      ropa: c.costeTextil,
+      margen,
+      costesFijos: redondear(fijos),
+      bai,
+      sociedades,
+      neto: redondear(bai - sociedades),
+    };
+  };
+  const a = columna(
+    ventasDelGrupo(d.ventas, d.documentados, "a"),
+    d.facturadoSinPedido,
+    d.costesFijos,
+    true,
+  );
+  const b = columna(ventasDelGrupo(d.ventas, d.documentados, "b"), 0, 0, false);
+  const suma = (k: keyof ColumnaResultados) => redondear(a[k] + b[k]);
+  const total: ColumnaResultados = {
+    ingresos: suma("ingresos"),
+    produccion: suma("produccion"),
+    envios: suma("envios"),
+    ropa: suma("ropa"),
+    margen: suma("margen"),
+    costesFijos: suma("costesFijos"),
+    bai: suma("bai"),
+    sociedades: a.sociedades,
+    neto: redondear(suma("bai") - a.sociedades),
+  };
+  return { a, b, total };
 }

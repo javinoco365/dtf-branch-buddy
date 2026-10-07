@@ -14,13 +14,15 @@ import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
 import { useFiscal } from "@/lib/gerencia";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import { beneficioEstimado, cifrasGerencia } from "@/dominio/gerencia";
+import { beneficioEstimado } from "@/dominio/gerencia";
+import { enRango } from "@/dominio/periodos";
 import {
-  cuentaResultados,
-  impuestosPorTrimestre,
-  trimestreDe,
-  trimestresDelRango,
-} from "@/dominio/impuestos";
+  facturadoSinPedido,
+  GRUPOS,
+  resultadosPorGrupo,
+  type ColumnaResultados,
+} from "@/dominio/grupos";
+import { impuestosPorTrimestre, trimestreDe, trimestresDelRango } from "@/dominio/impuestos";
 import { DESTINO_AJUSTES, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
 
@@ -33,20 +35,34 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   );
   const fiscal = useFiscal(rangoTrimestres);
 
-  const c = useMemo(() => cifrasGerencia(d.ventas, d.costeMetro), [d.ventas, d.costeMetro]);
+  // Los gastos fijos del periodo, hasta hoy si está en curso.
   const fijos = useMemo(
-    () => beneficioEstimado(c.margen, d.gastos, d.rango, d.hoy),
-    [c.margen, d.gastos, d.rango, d.hoy],
+    () => beneficioEstimado(0, d.gastos, d.rango, d.hoy),
+    [d.gastos, d.rango, d.hoy],
   );
-  const cuenta = useMemo(
+  const cuentas = useMemo(
     () =>
-      cuentaResultados({
-        ingresos: c.bruta,
-        costesVariables: c.coste,
-        costesFijos: fijos.gastos,
-        tipoIs: d.ajustes.tipo_is,
-      }),
-    [c.bruta, c.coste, fijos.gastos, d.ajustes.tipo_is],
+      fiscal.data && d.documentados
+        ? resultadosPorGrupo({
+            ventas: d.ventasTodas,
+            documentados: d.documentados,
+            costeActual: d.costeMetro,
+            facturadoSinPedido: facturadoSinPedido(
+              fiscal.data.documentos.filter((x) => enRango(x.fecha, d.rango)),
+            ),
+            costesFijos: fijos.gastos,
+            tipoIs: d.ajustes.tipo_is,
+          })
+        : null,
+    [
+      fiscal.data,
+      d.documentados,
+      d.ventasTodas,
+      d.costeMetro,
+      d.rango,
+      fijos.gastos,
+      d.ajustes.tipo_is,
+    ],
   );
   const impuestos = useMemo(
     () =>
@@ -71,23 +87,30 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     );
   }
   if (fiscal.error) return <ErrorPestana que="las facturas" error={fiscal.error} />;
-  if (!impuestos) return <CargandoPestana />;
+  if (!impuestos || !cuentas) return <CargandoPestana />;
 
   const actual = trimestreDe(d.hoy);
   const esteTrimestre = impuestos.find(
     (t) => t.trimestre.anio === actual.anio && t.trimestre.numero === actual.numero,
   );
-  const filas: [string, number, "suma" | "resta" | "total"][] = [
-    ["Ingresos (sin IVA)", cuenta.ingresos, "suma"],
-    ["Producción DTF", c.costeDtf, "resta"],
-    ["Envíos", c.costeEnvios, "resta"],
-    ["Coste de la ropa", c.costeTextil, "resta"],
-    ["Margen", cuenta.margen, "total"],
-    ["Costes fijos", cuenta.costesFijos, "resta"],
-    ["Beneficio antes de impuestos", cuenta.bai, "total"],
-    [`Sociedades (${numero(d.ajustes.tipo_is, 0)} %)`, cuenta.impuestoSociedades, "resta"],
-    ["Beneficio neto", cuenta.beneficioNeto, "total"],
+  // La cifra de las tarjetas es la del grupo elegido arriba.
+  const elegida = cuentas[d.grupo];
+  const filas: [string, keyof ColumnaResultados, "suma" | "resta" | "total"][] = [
+    ["Ingresos (sin IVA)", "ingresos", "suma"],
+    ["Producción DTF", "produccion", "resta"],
+    ["Envíos", "envios", "resta"],
+    ["Coste de la ropa", "ropa", "resta"],
+    ["Margen", "margen", "total"],
+    ["Costes fijos", "costesFijos", "resta"],
+    ["Beneficio antes de impuestos", "bai", "total"],
+    [`Sociedades (${numero(d.ajustes.tipo_is, 0)} %)`, "sociedades", "resta"],
+    ["Beneficio neto", "neto", "total"],
   ];
+  const columnas = [
+    { clave: "a", titulo: "A · Documentado" },
+    { clave: "b", titulo: "B · Sin documento" },
+    { clave: "total", titulo: "Total" },
+  ] as const;
 
   return (
     <div className="space-y-4">
@@ -95,13 +118,14 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Beneficio neto"
           explicacion="g_resultado"
-          valor={eur(cuenta.beneficioNeto)}
-          color={cuenta.beneficioNeto < 0 ? "destructive" : "primary"}
+          valor={eur(elegida.neto)}
+          color={elegida.neto < 0 ? "destructive" : "primary"}
           delta={null}
           icon={PiggyBank}
           pie={
             <span className="text-muted-foreground">
-              Antes de impuestos {eur(cuenta.bai)}
+              {GRUPOS.find((g) => g.valor === d.grupo)?.corta} · antes de impuestos{" "}
+              {eur(elegida.bai)}
               {fijos.hastaHoy ? " · hasta hoy" : ""}
             </span>
           }
@@ -109,19 +133,19 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Sociedades estimado"
           explicacion="g_sociedades"
-          valor={eur(cuenta.impuestoSociedades)}
+          valor={eur(cuentas.a.sociedades)}
           delta={null}
           icon={Building2}
           pie={
             <span className="text-muted-foreground">
-              Al {numero(d.ajustes.tipo_is, 0)} % del beneficio
+              Al {numero(d.ajustes.tipo_is, 0)} % del beneficio documentado (A)
             </span>
           }
         />
         <TarjetaKpi
           titulo="Costes fijos"
           explicacion="g_beneficio"
-          valor={eur(cuenta.costesFijos)}
+          valor={eur(fijos.gastos)}
           delta={null}
           icon={Landmark}
           pie={<VerDetalle destino={DESTINO_AJUSTES} texto="Ver gastos" />}
@@ -147,7 +171,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         </Nota>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-1.5 text-base">
@@ -155,28 +179,49 @@ export function Resultados({ d }: { d: DatosGerencia }) {
               <Explicacion titulo="Cuenta de resultados" definicion={DEFINICIONES.g_resultado} />
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Del periodo, sin IVA. Vendido con IVA: {eur(c.total)}.
+              Del periodo, sin IVA. A: con factura o ticket, lo que cuenta para Hacienda. B: sin
+              documento. Los costes fijos y Sociedades van en A.
             </p>
           </CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            {filas.map(([etiqueta, valor, clase]) => (
-              <div
-                key={etiqueta}
-                className={`flex justify-between gap-4 ${
-                  clase === "total" ? "border-t pt-1.5 font-semibold" : ""
-                }`}
-              >
-                <span className={clase === "total" ? "" : "text-muted-foreground"}>
-                  {clase === "resta" ? "− " : ""}
-                  {etiqueta}
-                </span>
-                <span
-                  className={`tabular-nums ${clase === "total" && valor < 0 ? "text-status-cancelado" : ""}`}
-                >
-                  {eur(valor)}
-                </span>
-              </div>
-            ))}
+          <CardContent>
+            <Table movil="tarjetas">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Concepto</TableHead>
+                  {columnas.map((c) => (
+                    <TableHead
+                      key={c.clave}
+                      className={`text-right ${d.grupo === c.clave ? "text-foreground" : ""}`}
+                    >
+                      {c.titulo}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filas.map(([etiqueta, campo, clase]) => (
+                  <TableRow key={campo} className={clase === "total" ? "font-semibold" : ""}>
+                    <TableCell className={clase === "total" ? "" : "text-muted-foreground"}>
+                      {clase === "resta" ? "− " : ""}
+                      {etiqueta}
+                    </TableCell>
+                    {columnas.map((c) => {
+                      const valor = cuentas[c.clave][campo];
+                      return (
+                        <TableCell
+                          key={c.clave}
+                          className={`text-right tabular-nums ${
+                            clase === "total" && valor < 0 ? "text-status-cancelado" : ""
+                          }`}
+                        >
+                          {eur(valor)}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 

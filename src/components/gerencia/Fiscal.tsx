@@ -12,13 +12,13 @@ import {
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, numero } from "@/lib/format";
-import { useDocumentosDePedidos, useFiscal } from "@/lib/gerencia";
+import { useFiscal } from "@/lib/gerencia";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import { ivaSoportado, resultadoIva, resumenIva, vendidoSinDocumento } from "@/dominio/fiscal";
+import { ivaSoportado, resultadoIva, resumenIva } from "@/dominio/fiscal";
 import type { DatosGerencia } from "./destinos";
-import { CargandoPestana, ErrorPestana, Nota } from "./comun";
+import { CargandoPestana, ErrorPestana, Nota, NotaGrupo } from "./comun";
 
 /** Las facturas son de una tienda o del textil; el canal no se les aplica. */
 function deLaTienda<T extends { tienda_id: string }>(lista: readonly T[], tienda: string) {
@@ -28,7 +28,6 @@ function deLaTienda<T extends { tienda_id: string }>(lista: readonly T[], tienda
 export function Fiscal({ d }: { d: DatosGerencia }) {
   const fiscal = useFiscal(d.rango);
   const previo = useFiscal(d.comparacion?.previo ?? d.rango);
-  const docsPedidos = useDocumentosDePedidos(d.ventas);
 
   // Las compras que hay en el CRM son todas del textil.
   const conCompras = d.filtro.tienda === "todas" || d.filtro.tienda === TIENDA_TEXTIL.id;
@@ -48,10 +47,8 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
     () => (fiscal.data?.compras && conCompras ? ivaSoportado(fiscal.data.compras) : null),
     [fiscal.data, conCompras],
   );
-  const sinFactura = useMemo(
-    () => (docsPedidos.data ? vendidoSinDocumento(d.ventas, docsPedidos.data) : null),
-    [docsPedidos.data, d.ventas],
-  );
+  // Lo mismo que el botón de la esquina: los pedidos del periodo sin documento.
+  const sinFactura = d.pendiente;
 
   if (fiscal.error) return <ErrorPestana que="las facturas" error={fiscal.error} />;
   if (!fiscal.data) return <CargandoPestana />;
@@ -62,6 +59,10 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
+      <NotaGrupo
+        grupo={d.grupo}
+        texto="Fiscal es siempre lo documentado (A): las facturas y tickets emitidos."
+      />
       {d.filtro.canal !== "todos" && (
         <Nota>
           Las facturas no se separan por canal: aquí salen todas las de{" "}
@@ -123,8 +124,6 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                 {sinFactura.pedidos === 1 ? "Pedido" : "Pedidos"} del periodo por{" "}
                 {eur(sinFactura.vendido)}
               </span>
-            ) : docsPedidos.error ? (
-              <span className="text-destructive">{docsPedidos.error.message}</span>
             ) : (
               <span className="text-muted-foreground">Cargando…</span>
             )
