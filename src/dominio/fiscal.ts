@@ -10,8 +10,8 @@
  */
 
 import { redondear } from "./importes";
-import { ESTADO_CANCELADO, totalNeto } from "./kpis";
-import { documentoVigente, type DocumentoPedido } from "./tickets";
+import type { DocumentoPedido } from "./tickets";
+import { pedidosDocumentados, pendienteDocumentar } from "./grupos";
 import type { Venta } from "./gerencia";
 
 type Numerico = number | string | null | undefined;
@@ -22,6 +22,10 @@ export type TipoDocumento = "ordinaria" | "rectificativa" | "simplificada";
 /** Una factura, ticket o rectificativa, de tienda o del textil, en una sola forma. */
 export type DocumentoFiscal = {
   id: string;
+  /** El pedido del que sale, si sale de uno. */
+  pedido_id?: string | null;
+  /** Solo rectificativas: el documento que corrigen. */
+  rectifica_a_id?: string | null;
   tipo: TipoDocumento;
   estado: string | null;
   /** `yyyy-MM-dd`. */
@@ -162,22 +166,8 @@ export function vendidoSinDocumento(
   ventas: readonly Venta[],
   docs: readonly DocumentoDePedido[],
 ): SinFactura {
-  const porPedido = new Map<string, DocumentoDePedido[]>();
-  const rectificados = new Set<string>();
-  for (const d of docs) {
-    if (d.rectifica_a_id) rectificados.add(d.rectifica_a_id);
-    if (!d.pedido_id) continue;
-    porPedido.set(d.pedido_id, [...(porPedido.get(d.pedido_id) ?? []), d]);
-  }
-  let pedidos = 0;
-  let vendido = 0;
-  for (const v of ventas) {
-    if (v.estado === ESTADO_CANCELADO || !v.id) continue;
-    if (documentoVigente(porPedido.get(v.id) ?? [], rectificados)) continue;
-    pedidos += 1;
-    vendido += totalNeto(v);
-  }
-  return { pedidos, vendido: redondear(vendido) };
+  const p = pendienteDocumentar(ventas, pedidosDocumentados(docs));
+  return { pedidos: p.pedidos, vendido: p.vendido };
 }
 
 /** IVA repercutido − soportado: positivo, a ingresar; negativo, a compensar. */

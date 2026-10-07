@@ -18,7 +18,7 @@ import { DEFINICIONES } from "@/dominio/definiciones";
 import { aplicarAjustesVentas, filtrarVentas } from "@/dominio/gerencia";
 import { pedidosPorEstado, tiemposEnvio, trabajoAbierto } from "@/dominio/produccion";
 import { destinoPedidosEstado, type DatosGerencia } from "./destinos";
-import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
+import { CargandoPestana, ErrorPestana, Nota, NotaGrupo, VerDetalle } from "./comun";
 
 export function Produccion({ d }: { d: DatosGerencia }) {
   const taller = useTaller();
@@ -61,6 +61,10 @@ export function Produccion({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
+      <NotaGrupo
+        grupo={d.grupo}
+        texto="El taller y los envíos son de todos los pedidos; «Pedidos del periodo por estado» sí sigue el grupo elegido."
+      />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TarjetaKpi
           titulo="En el taller"

@@ -13,22 +13,37 @@ import type {
   Venta,
 } from "@/dominio/gerencia";
 import type { MovimientoCaja } from "@/lib/caja.functions";
+import type { Grupo, PendienteDocumentar } from "@/dominio/grupos";
 
 /** Todo lo que leen las pestañas, ya filtrado por tienda y canal. */
 export type DatosGerencia = {
+  /** Qué números se miran: total, documentados (A) o sin documento (B). */
+  grupo: Grupo;
+  /** Todas las ventas del periodo con los filtros y ajustes, de los dos grupos. */
+  ventasTodas: Venta[];
+  /** Los pedidos con factura o ticket vigente; nulo mientras se leen. */
+  documentados: ReadonlySet<string> | null;
+  /** Lo que falta por documentar en el periodo; nulo mientras se lee. */
+  pendiente: PendienteDocumentar | null;
   filtro: FiltroGerencia;
   seleccion: Seleccion;
   rango: { desde: Date; hasta: Date };
   comparacion: Comparacion | null;
   costeMetro: number;
   tiendas: readonly { id: string; nombre: string }[];
-  /** Ya sin los pedidos web sin pagar si en Ajustes se ha dicho que no cuentan. */
+  /**
+   * Las del grupo elegido, ya sin los pedidos web sin pagar si en Ajustes se
+   * ha dicho que no cuentan.
+   */
   ventas: Venta[];
   ventasPrevias: Venta[];
   /** Los pedidos web sin pagar del periodo, cuenten o no. */
   webSinPagar: { pedidos: number; importe: number };
   ajustes: AjustesGerencia;
+  /** Todos los gastos de Ajustes. Para el Impuesto y la columna A, siempre todos. */
   gastos: GastoFijo[];
+  /** Los que tocan al grupo elegido: en B no hay costes fijos, van en A. */
+  gastosDelGrupo: GastoFijo[];
   objetivos: Objetivo[];
   cobros: CobroConsolidado[];
   cobrosPrevios: CobroConsolidado[];

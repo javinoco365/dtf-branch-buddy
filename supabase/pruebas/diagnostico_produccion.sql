@@ -6,7 +6,8 @@
 -- La lista sale de aplicar TODAS las migraciones de supabase/migrations/ en
 -- una base vacía (probar-migraciones.sh) y anotar lo que queda en el esquema
 -- public. Cada fila del resultado es algo que el código espera y la base no
--- tiene: una migración sin aplicar. Sin filas, la base está al día.
+-- tiene: una migración sin aplicar. Sin filas, la base está al día. También
+-- mira los buckets de Storage.
 --
 -- No mira columnas: si falta una columna, el error de la pantalla dice cuál.
 -- Al añadir migraciones con funciones o tablas nuevas, añádelas aquí.
@@ -146,4 +147,9 @@ SELECT tipo, nombre AS falta
   FROM esperado
  WHERE (tipo = 'función' AND to_regprocedure('public.' || nombre) IS NULL)
     OR (tipo = 'tabla' AND to_regclass('public.' || nombre) IS NULL)
- ORDER BY tipo, nombre;
+UNION ALL
+-- Los buckets de Storage donde se guardan PDF, logos y facturas de compra.
+SELECT 'bucket', b.id
+  FROM (VALUES ('facturas'), ('logos'), ('compras')) AS b(id)
+ WHERE NOT EXISTS (SELECT 1 FROM storage.buckets s WHERE s.id = b.id)
+ ORDER BY 1, 2;

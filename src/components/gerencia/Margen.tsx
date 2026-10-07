@@ -56,14 +56,14 @@ export function Margen({ d }: { d: DatosGerencia }) {
   );
   const tramos = useMemo(() => {
     const { por, tramos } = tramosGrafica(d.rango);
-    return { por, filas: margenPorTramos(d.ventas, tramos, d.costeMetro, d.gastos, d.hoy) };
-  }, [d.rango, d.ventas, d.costeMetro, d.gastos, d.hoy]);
+    return { por, filas: margenPorTramos(d.ventas, tramos, d.costeMetro, d.gastosDelGrupo, d.hoy) };
+  }, [d.rango, d.ventas, d.costeMetro, d.gastosDelGrupo, d.hoy]);
   const metro = useMemo(() => margenPorMetro(d.ventas, d.costeMetro), [d.ventas, d.costeMetro]);
 
   const sinCosteMetro = d.costeMetro === 0 && c.costeDtf === 0 && c.metros > 0;
   const porcentaje = porcentajeMargen(c.margen, c.bruta);
   const porcentajePrevio = porcentajeMargen(p.margen, p.bruta);
-  const conGastos = d.gastos.length > 0;
+  const conGastos = d.gastosDelGrupo.length > 0;
 
   return (
     <div className="space-y-4">

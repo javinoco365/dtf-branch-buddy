@@ -172,7 +172,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
       </div>
 
-      <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
+      {/* En B no hay costes fijos ni objetivos: son de la empresa documentada. */}
+      {d.grupo !== "b" && <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />}
 
       <Card>
         <CardHeader className="pb-2">
@@ -256,7 +257,7 @@ function BeneficioYObjetivos({
 }) {
   const frente = d.comparacion?.etiqueta;
   const objetivo = objetivoDelRango(d.objetivos, d.rango);
-  const hayGastos = d.gastos.length > 0;
+  const hayGastos = d.gastosDelGrupo.length > 0;
   const hayObjetivo = objetivo.vendido !== null || objetivo.metros !== null;
   const sinFiltros = d.filtro.tienda === "todas" && d.filtro.canal === "todos";
 
@@ -278,8 +279,10 @@ function BeneficioYObjetivos({
   }
 
   const transcurrido = parteTranscurrida(d.rango, d.hoy);
-  const actual = beneficioEstimado(c.margen, d.gastos, d.rango, d.hoy);
-  const previo = d.comparacion ? beneficioEstimado(p.margen, d.gastos, d.comparacion.previo) : null;
+  const actual = beneficioEstimado(c.margen, d.gastosDelGrupo, d.rango, d.hoy);
+  const previo = d.comparacion
+    ? beneficioEstimado(p.margen, d.gastosDelGrupo, d.comparacion.previo)
+    : null;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

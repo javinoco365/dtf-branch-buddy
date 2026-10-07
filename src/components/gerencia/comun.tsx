@@ -93,3 +93,13 @@ export function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorra
     </span>
   );
 }
+
+/**
+ * Una línea discreta en las pestañas que no se separan en A y B, para que
+ * con «Documentado» o «Sin documento» elegido nadie lea sus cifras como si lo
+ * estuvieran.
+ */
+export function NotaGrupo({ grupo, texto }: { grupo: string; texto: string }) {
+  if (grupo === "total") return null;
+  return <p className="text-xs text-muted-foreground">{texto}</p>;
+}
