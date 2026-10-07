@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numeroPedidoWoo } from "./pedido-woo";
+import { importesPedidoWoo, numeroPedidoWoo } from "./pedido-woo";
 
 describe("numeroPedidoWoo", () => {
   it("coge el número del plugin tal cual lo ve el cliente", () => {
@@ -98,5 +98,24 @@ describe("numeroPedidoWoo", () => {
     expect(numeroPedidoWoo(undefined)).toBe("");
     expect(numeroPedidoWoo({})).toBe("");
     expect(numeroPedidoWoo({ id: 1, meta_data: null })).toBe("1");
+  });
+});
+
+describe("importes del pedido de WooCommerce", () => {
+  it("guarda el envío aparte, sin IVA, y la base con el envío dentro", () => {
+    // 20 m a 7 € + 5 € de envío, todo al 21 %: 145 € de base, 30,45 de IVA.
+    expect(
+      importesPedidoWoo({ total: "175.45", total_tax: "30.45", shipping_total: "5.00" }),
+    ).toEqual({ subtotal: 145, iva: 30.45, envio: 5, total: 175.45 });
+  });
+
+  it("sin envío o con datos raros, cero y no NaN", () => {
+    expect(importesPedidoWoo({ total: "12.10", total_tax: "2.10" }).envio).toBe(0);
+    expect(importesPedidoWoo({ total: null, total_tax: "x", shipping_total: "-3" })).toEqual({
+      subtotal: 0,
+      iva: 0,
+      envio: 0,
+      total: 0,
+    });
   });
 });

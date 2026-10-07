@@ -37,6 +37,7 @@ export const RUTAS = {
   "gerencia-comercial": "/panel/gerencia?pestana=comercial",
   "gerencia-produccion": "/panel/gerencia?pestana=produccion",
   "gerencia-margen": "/panel/gerencia?pestana=margen",
+  "gerencia-resultados": "/panel/gerencia?pestana=resultados",
   "gerencia-fiscal": "/panel/gerencia?pestana=fiscal",
   "gerencia-textil": "/panel/gerencia?pestana=textil",
   "gerencia-ajustes": "/panel/gerencia?pestana=ajustes",

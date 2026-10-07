@@ -17,7 +17,7 @@ import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import {
   agruparPorRangos,
   calcularKpis,
-  costeProduccion,
+  costeVariable,
   topPorMetros,
   variacion,
 } from "@/dominio/kpis";
@@ -89,11 +89,12 @@ function DashboardGlobal() {
 
   // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
   // con el de hoy.
-  const costePer = costeProduccion(pedidos, costeMetro);
-  const margenPer = k.bruta - costePer;
-  const margenPrev = kPrev.bruta - costeProduccion(pedidosAnt, costeMetro);
+  // El envío también: se cobra al cliente y se paga a la agencia.
+  const costePer = costeVariable(pedidos, costeMetro);
+  const margenPer = k.bruta - costePer.total;
+  const margenPrev = kPrev.bruta - costeVariable(pedidosAnt, costeMetro).total;
   // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
-  const sinCostes = costeMetro === 0 && costePer === 0;
+  const sinCostes = costeMetro === 0 && costePer.produccion === 0;
 
   const grafica = useMemo(() => {
     const { por, tramos } = tramosGrafica({ desde, hasta });

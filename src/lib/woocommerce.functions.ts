@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { tabla } from "./rpc";
-import { numeroPedidoWoo } from "@/dominio/pedido-woo";
+import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
 import {
   clientesInvitadosNuevos,
   estadoPagoPorDevolucion,
@@ -305,9 +305,8 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
             // guardar nada: la pantalla lo enseñaría como una dirección.
             direccion_envio: envio ?? facturacion,
             metros_total,
-            subtotal: Number(o.total || 0) - Number(o.total_tax || 0),
-            iva: Number(o.total_tax || 0),
-            total: Number(o.total || 0),
+            // Base con el envío dentro y el envío aparte (ver importesPedidoWoo).
+            ...importesPedidoWoo(o),
             fecha_pedido: o.date_created,
             notas: o.customer_note || null,
           };

@@ -116,7 +116,7 @@ export function margenPorMetro(ventas: readonly Venta[], costeActual: number): M
   const conMetros = ventas.filter((v) => Number(v.metros_total ?? 0) > 0);
   const k = cifrasGerencia(conMetros, costeActual);
   if (k.metros <= 0) return null;
-  const precio = redondear(k.bruta / k.metros);
+  const precio = k.euroMetro;
   const coste = redondear(k.costeDtf / k.metros);
   return { precio, coste, margen: redondear(precio - coste) };
 }

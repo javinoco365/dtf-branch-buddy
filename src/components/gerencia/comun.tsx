@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Destino } from "./destinos";
@@ -51,5 +53,43 @@ export function ErrorPestana({ que, error }: { que: string; error: Error }) {
         No se han podido cargar {que}: {error.message}
       </CardContent>
     </Card>
+  );
+}
+
+/** Un campo de formulario con su etiqueta encima. */
+export function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1 max-md:w-full">
+      <Label className="text-xs">{etiqueta}</Label>
+      {children}
+    </div>
+  );
+}
+
+/** Editar y borrar, para la última columna de una tabla. */
+export function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorrar: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        title="Editar"
+        onClick={onEditar}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive"
+        title="Borrar"
+        onClick={onBorrar}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </span>
   );
 }

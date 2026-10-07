@@ -478,7 +478,7 @@ export function useFiscal(rango: RangoFechas) {
           "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva",
         ),
         enRango("textil_facturas", "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva"),
-        enRango("textil_compras", "id, estado, base, iva, total"),
+        enRango("textil_compras", "id, estado, fecha, base, iva, total"),
       ]);
       if (f.error) throw new Error(f.error.message);
       if (t.error) throw new Error(t.error.message);

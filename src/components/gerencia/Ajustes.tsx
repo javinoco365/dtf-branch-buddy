@@ -3,12 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -19,17 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { eur, fechaCorta, metros } from "@/lib/format";
+import { DatosFiscales, GastosFijos } from "./AjustesGastos";
+import { Acciones, Campo } from "./comun";
+import { eur, metros } from "@/lib/format";
 import { useAjustesGerencia } from "@/lib/gerencia";
-import {
-  borrarGastoFijo,
-  borrarObjetivo,
-  guardarAjustesGerencia,
-  guardarGastoFijo,
-  guardarObjetivo,
-} from "@/lib/gerencia.functions";
-import { gastosFijosDelRango, type GastoFijo, type Objetivo } from "@/dominio/gerencia";
-import { rangoDe } from "@/dominio/periodos";
+import { borrarObjetivo, guardarAjustesGerencia, guardarObjetivo } from "@/lib/gerencia.functions";
+import type { Objetivo } from "@/dominio/gerencia";
 
 /**
  * Gerencia › Ajustes: lo que Gerencia necesita saber y solo sabe la empresa.
@@ -61,7 +55,8 @@ export function Ajustes() {
     <div className="space-y-4">
       <AjusteWebSinPagar cuenta={data.ajustes.web_sin_pagar_cuenta} />
       <Objetivos objetivos={data.objetivos} />
-      <GastosFijos gastos={data.gastos} />
+      <DatosFiscales ajustes={data.ajustes} disponible={data.impuestosDisponibles} />
+      <GastosFijos gastos={data.gastos} conImpuestos={data.impuestosDisponibles} />
     </div>
   );
 }
@@ -273,231 +268,4 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
 
 // ---------------------------------------------------------------------------
 
-function GastosFijos({ gastos }: { gastos: GastoFijo[] }) {
-  const guardar = useServerFn(guardarGastoFijo);
-  const borrar = useServerFn(borrarGastoFijo);
-  const refrescar = useRefrescar();
-  const hoy = format(new Date(), "yyyy-MM-dd");
-  const vacio = {
-    id: undefined as string | undefined,
-    concepto: "",
-    importe: "",
-    desde: format(new Date(), "yyyy-MM-01"),
-    hasta: "",
-    notas: "",
-  };
-  const [f, setF] = useState(vacio);
-  const [borrando, setBorrando] = useState<GastoFijo | null>(null);
-
-  const mutGuardar = useMutation({
-    mutationFn: (fila: typeof f) =>
-      guardar({
-        data: {
-          id: fila.id,
-          concepto: fila.concepto,
-          importe_mensual: Number(fila.importe.replace(",", ".")),
-          desde: fila.desde,
-          hasta: fila.hasta || null,
-          notas: fila.notas || null,
-        },
-      }),
-    onSuccess: (_r, fila) => {
-      toast.success(fila.id ? "Gasto cambiado" : "Gasto añadido");
-      setF(vacio);
-      refrescar();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const mutBorrar = useMutation({
-    mutationFn: (id: string) => borrar({ data: { id } }),
-    onSuccess: () => {
-      toast.success("Gasto borrado");
-      setBorrando(null);
-      refrescar();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  // Lo que se paga al mes, contando solo los gastos vigentes este mes entero.
-  const esteMes = rangoDe({ tipo: "mes", ref: new Date() })!;
-  const alMes = gastosFijosDelRango(gastos, esteMes);
-  const vigente = (g: GastoFijo) => g.desde <= hoy && (!g.hasta || g.hasta >= hoy);
-  const filaDe = (g: GastoFijo) => ({
-    id: g.id,
-    concepto: g.concepto,
-    importe: String(g.importe_mensual),
-    desde: g.desde,
-    hasta: g.hasta ?? "",
-    notas: g.notas ?? "",
-  });
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Gastos fijos</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Alquiler, sueldos, cuota de autónomos, gestoría… Importe al mes y sin IVA. Gerencia los
-          reparte por días y los resta del margen para enseñar el beneficio. Si dejas de pagar uno,
-          dale de baja: se queda en los meses que sí se pagó.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            mutGuardar.mutate(f);
-          }}
-        >
-          <Campo etiqueta="Concepto">
-            <Input
-              required
-              placeholder="Ej. Alquiler nave"
-              value={f.concepto}
-              onChange={(e) => setF({ ...f, concepto: e.target.value })}
-              className="w-52 max-md:w-full"
-            />
-          </Campo>
-          <Campo etiqueta="Al mes (€, sin IVA)">
-            <Input
-              required
-              inputMode="decimal"
-              placeholder="Ej. 800"
-              value={f.importe}
-              onChange={(e) => setF({ ...f, importe: e.target.value })}
-              className="w-36"
-            />
-          </Campo>
-          <Campo etiqueta="Desde">
-            <Input
-              type="date"
-              required
-              value={f.desde}
-              onChange={(e) => setF({ ...f, desde: e.target.value })}
-              className="w-40"
-            />
-          </Campo>
-          <Campo etiqueta="Hasta (vacío: sigue)">
-            <Input
-              type="date"
-              value={f.hasta}
-              onChange={(e) => setF({ ...f, hasta: e.target.value })}
-              className="w-40"
-            />
-          </Campo>
-          <Button type="submit" size="sm" disabled={mutGuardar.isPending}>
-            {f.id ? <Pencil className="mr-1 h-4 w-4" /> : <Plus className="mr-1 h-4 w-4" />}
-            {f.id ? "Guardar cambio" : "Añadir gasto"}
-          </Button>
-          {f.id && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => setF(vacio)}>
-              <X className="mr-1 h-4 w-4" /> Cancelar
-            </Button>
-          )}
-        </form>
-
-        {gastos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Todavía no hay gastos fijos.</p>
-        ) : (
-          <>
-            <Table movil="tarjetas">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Concepto</TableHead>
-                  <TableHead className="text-right">Al mes</TableHead>
-                  <TableHead>Desde</TableHead>
-                  <TableHead>Hasta</TableHead>
-                  <TableHead className="w-40" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {gastos.map((g) => (
-                  <TableRow key={g.id} className={vigente(g) ? "" : "text-muted-foreground"}>
-                    <TableCell className="font-medium">{g.concepto}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {eur(Number(g.importe_mensual))}
-                    </TableCell>
-                    <TableCell>{fechaCorta(g.desde)}</TableCell>
-                    <TableCell>{g.hasta ? fechaCorta(g.hasta) : "Sigue"}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex items-center gap-1">
-                        {!g.hasta && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2"
-                            title="Dejar de pagarlo desde hoy"
-                            disabled={mutGuardar.isPending}
-                            onClick={() => mutGuardar.mutate({ ...filaDe(g), hasta: hoy })}
-                          >
-                            Dar de baja
-                          </Button>
-                        )}
-                        <Acciones
-                          onEditar={() => setF(filaDe(g))}
-                          onBorrar={() => setBorrando(g)}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <p className="text-sm">
-              Este mes suman <span className="font-semibold">{eur(alMes)}</span> sin IVA.
-            </p>
-          </>
-        )}
-      </CardContent>
-      <ConfirmarBorrado
-        que={borrando ? `el gasto «${borrando.concepto}»` : ""}
-        consecuencias={[
-          "Desaparece también de los meses en que se pagó. Si solo has dejado de pagarlo, usa «Dar de baja».",
-        ]}
-        abierto={!!borrando}
-        onCerrar={() => setBorrando(null)}
-        onConfirmar={() => borrando && mutBorrar.mutate(borrando.id)}
-        cargando={mutBorrar.isPending}
-      />
-    </Card>
-  );
-}
-
 // ---------------------------------------------------------------------------
-
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1 max-md:w-full">
-      <Label className="text-xs">{etiqueta}</Label>
-      {children}
-    </div>
-  );
-}
-
-function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorrar: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        title="Editar"
-        onClick={onEditar}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-destructive"
-        title="Borrar"
-        onClick={onBorrar}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </span>
-  );
-}

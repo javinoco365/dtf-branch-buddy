@@ -13,7 +13,7 @@
 import { redondear } from "./importes";
 import {
   calcularKpis,
-  costeProduccion,
+  costeVariable,
   ESTADO_CANCELADO,
   type KpisPeriodo,
   type PedidoResumen,
@@ -159,8 +159,10 @@ export function filtrarPendientesGerencia(
 // ---------------------------------------------------------------------------
 
 export type CifrasGerencia = KpisPeriodo & {
-  /** Coste DTF más coste textil. */
+  /** Coste DTF, envíos y coste textil. */
   coste: number;
+  /** Lo que se paga a la agencia: lo mismo que el envío cobrado al cliente. */
+  costeEnvios: number;
   /** Coste de producción DTF: metros × coste por metro congelado. */
   costeDtf: number;
   /** Coste de la ropa que salió del almacén para los pedidos textil. */
@@ -169,25 +171,29 @@ export type CifrasGerencia = KpisPeriodo & {
   textilSinCoste: number;
   /** Facturación bruta − coste. */
   margen: number;
-  /** Base imponible por metro, solo de los pedidos que llevan metros. */
+  /** Base imponible por metro, sin el envío, solo de los pedidos que llevan metros. */
   euroMetro: number;
 };
 
 export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): CifrasGerencia {
   const k = calcularKpis(ventas);
-  const costeDtf = costeProduccion(ventas, costeActual);
+  const variable = costeVariable(ventas, costeActual);
+  const costeDtf = variable.produccion;
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
-  const coste = redondear(costeDtf + costeTextil);
+  const coste = redondear(variable.total + costeTextil);
   const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
+  // El precio del metro sin el envío: lo que se cobra por imprimir.
+  const brutaMetros = conMetros.bruta - conMetros.envios;
   return {
     ...k,
     coste,
+    costeEnvios: variable.envios,
     costeDtf,
     costeTextil,
     textilSinCoste: textil.filter((v) => v.coste_textil == null).length,
     margen: redondear(k.bruta - coste),
-    euroMetro: conMetros.metros > 0 ? redondear(conMetros.bruta / conMetros.metros) : 0,
+    euroMetro: conMetros.metros > 0 ? redondear(brutaMetros / conMetros.metros) : 0,
   };
 }
 
@@ -451,11 +457,21 @@ export function cobradoPorTramos(
 // Ajustes: gastos fijos, objetivos y web sin pagar
 // ---------------------------------------------------------------------------
 
+export type Periodicidad = "mensual" | "trimestral" | "anual" | "puntual";
+
 export type GastoFijo = {
   id: string;
   concepto: string;
-  /** Al mes, sin IVA. */
+  /** Base de cada cargo, sin IVA (con periodicidad mensual, al mes). */
   importe_mensual: Numerico;
+  /** Sin migración de impuestos, mensual. */
+  periodicidad?: Periodicidad | null;
+  /** Qué es el gasto (ver impuestos.ts): decide el modelo de su IRPF. */
+  tipo?: string | null;
+  /** IVA soportado, en % de la base. */
+  iva_pct?: Numerico;
+  /** IRPF retenido al proveedor, en % de la base. */
+  irpf_pct?: Numerico;
   /** `yyyy-MM-dd`, primer día en que se paga. */
   desde: string;
   /** `yyyy-MM-dd`, último día; nulo si se sigue pagando. */
@@ -474,9 +490,20 @@ export type Objetivo = {
 
 export type AjustesGerencia = {
   web_sin_pagar_cuenta: boolean;
+  /** Tipo del Impuesto sobre Sociedades, en %. 15 para nueva creación. */
+  tipo_is: number;
+  /** Cuota íntegra del último modelo 200: base de los pagos fraccionados. */
+  cuota_is_anterior: number | null;
+  /** Precio del metro DTF sin IVA. */
+  precio_metro: number;
 };
 
-export const AJUSTES_POR_DEFECTO: AjustesGerencia = { web_sin_pagar_cuenta: true };
+export const AJUSTES_POR_DEFECTO: AjustesGerencia = {
+  web_sin_pagar_cuenta: true,
+  tipo_is: 15,
+  cuota_is_anterior: null,
+  precio_metro: 7,
+};
 
 /** Un día `yyyy-MM-dd` como fecha local a mediodía, sin líos de huso. */
 function diaLocalDe(texto: string): Date {
@@ -521,25 +548,44 @@ function mesesDelRango(r: { desde: Date; hasta: Date }): {
 }
 
 /**
- * Cuánto suman los gastos fijos en un rango de fechas. Cada gasto se reparte
- * por días dentro de cada mes: un alquiler de 800 € al mes son 400 € en la
- * primera quincena de un mes de 30 días, y 25,81 € por día en uno de 31. Solo
- * cuentan los días en que el gasto está vigente.
+ * Cuánto cuestan los gastos fijos en un rango de fechas, sin IVA: el coste
+ * que le toca al periodo, no lo que se paga en él. Cada gasto se reparte por
+ * días dentro de cada mes: un alquiler de 800 € al mes son 400 € en la
+ * primera quincena de un mes de 30 días. Uno trimestral se reparte entre sus
+ * tres meses y uno anual entre doce; uno puntual cuenta entero en su día.
+ * Solo cuentan los días en que el gasto está vigente.
  */
+/** Cuántos meses cubre cada cargo: el gasto se reparte por igual entre ellos. */
+const MESES_POR_CARGO: Record<Exclude<Periodicidad, "puntual">, number> = {
+  mensual: 1,
+  trimestral: 3,
+  anual: 12,
+};
+
 export function gastosFijosDelRango(
   gastos: readonly GastoFijo[],
   r: { desde: Date; hasta: Date },
 ): number {
   let total = 0;
+  // Un gasto puntual cuenta entero el día en que se paga.
+  for (const g of gastos) {
+    if (g.periodicidad !== "puntual") continue;
+    const dia = diaLocalDe(g.desde);
+    if (soloDia(dia) >= soloDia(r.desde) && soloDia(dia) <= soloDia(r.hasta)) {
+      total += num(g.importe_mensual);
+    }
+  }
   for (const mes of mesesDelRango(r)) {
     for (const g of gastos) {
+      if (g.periodicidad === "puntual") continue;
+      const meses = MESES_POR_CARGO[g.periodicidad ?? "mensual"] ?? 1;
       const ini = soloDia(diaLocalDe(g.desde));
       const fin = g.hasta ? soloDia(diaLocalDe(g.hasta)) : null;
       const primero = ini > mes.primero ? ini : mes.primero;
       const ultimo = fin && fin < mes.ultimo ? fin : mes.ultimo;
       if (ultimo < primero) continue;
       const dias = Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1;
-      total += (num(g.importe_mensual) * dias) / mes.diasDelMes;
+      total += (num(g.importe_mensual) / meses) * (dias / mes.diasDelMes);
     }
   }
   return redondear(total);
@@ -602,7 +648,7 @@ export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): n
 /** Si los pedidos web sin pagar no cuentan, se quitan de las ventas. */
 export function aplicarAjustesVentas<T extends Pick<Venta, "canal" | "estado">>(
   ventas: readonly T[],
-  a: AjustesGerencia,
+  a: Pick<AjustesGerencia, "web_sin_pagar_cuenta">,
 ): T[] {
   if (a.web_sin_pagar_cuenta) return [...ventas];
   return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));

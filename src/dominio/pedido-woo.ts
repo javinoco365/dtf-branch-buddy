@@ -80,3 +80,40 @@ export function numeroPedidoWoo(pedido: PedidoWoo | null | undefined): string {
 
   return numero || id;
 }
+
+/** Los importes de un pedido de la API de WooCommerce, tal como llegan. */
+export type ImportesWoo = {
+  total?: number | string | null;
+  total_tax?: number | string | null;
+  shipping_total?: number | string | null;
+};
+
+const importe = (v: unknown) => {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Los importes del pedido como los guarda el CRM.
+ *
+ * - `subtotal`: la base imponible entera, envío incluido, igual que en un
+ *   pedido manual (el envío tributa con lo que acompaña: artículo 78 LIVA).
+ * - `envio`: la base del envío. WooCommerce la da sin IVA en `shipping_total`.
+ *   Antes no se guardaba: el envío se quedaba a cero aunque el cliente lo
+ *   hubiera pagado, y se colaba como si fuera venta de metros.
+ */
+export function importesPedidoWoo(o: ImportesWoo): {
+  subtotal: number;
+  iva: number;
+  envio: number;
+  total: number;
+} {
+  const total = importe(o.total);
+  const iva = importe(o.total_tax);
+  return {
+    subtotal: Math.round((total - iva) * 100) / 100,
+    iva,
+    envio: Math.max(0, importe(o.shipping_total)),
+    total,
+  };
+}
