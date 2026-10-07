@@ -24,7 +24,7 @@ const TIPOS_ACEPTADOS = new Set([
   "image/webp",
 ]);
 
-const INSTRUCCIONES = `Eres un lector de facturas de compra de una empresa española de textil.
+const INSTRUCCIONES = `Eres un lector de facturas de compra de una empresa española de impresión DTF y textil.
 
 Devuelve SOLO un objeto JSON, sin explicación y sin bloque de código, con esta forma:
 
@@ -35,6 +35,7 @@ Devuelve SOLO un objeto JSON, sin explicación y sin bloque de código, con esta
   "fecha": "fecha de emisión",
   "base": "base imponible total",
   "iva": "cuota de IVA total",
+  "irpf": "retención de IRPF en euros, si la factura la lleva",
   "total": "total de la factura",
   "lineas": [
     {

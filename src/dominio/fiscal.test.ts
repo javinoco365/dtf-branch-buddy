@@ -64,7 +64,7 @@ describe("IVA soportado", () => {
         { estado: "registrada", base: 100, iva: 21, total: 121 },
         { estado: "borrador", base: 50, iva: 10.5, total: 60.5 },
       ]),
-    ).toEqual({ documentos: 1, base: 100, iva: 21, total: 121, sinRegistrar: 1 });
+    ).toEqual({ documentos: 1, base: 100, iva: 21, total: 121, irpf: 0, sinRegistrar: 1 });
   });
 });
 

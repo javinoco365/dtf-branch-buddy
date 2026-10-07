@@ -456,6 +456,35 @@ export type DatosFiscal = {
   huecos: HuecoSerie[];
 };
 
+const CAMPOS_COMPRA = "id, estado, fecha, base, iva, total";
+/** Columnas de la migración 20261013100000_compras_generales. */
+const CAMPOS_COMPRA_GENERAL = "irpf, categoria, gasto_id";
+
+/**
+ * Las facturas de compra registradas que no son de textil, de cualquier
+ * fecha: una máquina comprada hace dos años se sigue amortizando hoy, y el
+ * recibo de un gasto fijo cuenta en su mes. Sin la migración de compras
+ * generales no hay ninguna.
+ */
+export function useComprasGerencia() {
+  return useQuery({
+    queryKey: ["gerencia-compras"],
+    queryFn: async (): Promise<CompraResumen[]> => {
+      const r = await leerTodas<CompraResumen>((a, b) =>
+        tabla(supabase, "textil_compras")
+          .select(`${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`)
+          .eq("estado", "registrada")
+          .neq("categoria", "textil")
+          .order("id")
+          .range(a, b),
+      );
+      if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return [];
+      if (r.error) throw new Error(r.error.message);
+      return r.data;
+    },
+  });
+}
+
 /** Facturas, tickets y rectificativas emitidos en el rango, compras del rango y huecos de numeración. */
 export function useFiscal(rango: RangoFechas) {
   const desde = dia(rango.desde);
@@ -474,16 +503,18 @@ export function useFiscal(rango: RangoFechas) {
         );
       const camposTextil =
         "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva, rectifica_a_id";
-      const [f, t0, c] = await Promise.all([
+      const [f, t0, c0] = await Promise.all([
         enRango(
           "facturas",
           "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id",
         ),
         enRango("textil_facturas", `${camposTextil}, textil_pedido_id`),
-        enRango("textil_compras", "id, estado, fecha, base, iva, total"),
+        enRango("textil_compras", `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`),
       ]);
       // Antes de la migración de tickets la factura textil no sabe su pedido.
       const t = faltaLaColumna(t0.error) ? await enRango("textil_facturas", camposTextil) : t0;
+      // Antes de la de compras generales todas son de textil, sin IRPF ni gasto.
+      const c = faltaLaColumna(c0.error) ? await enRango("textil_compras", CAMPOS_COMPRA) : c0;
       if (f.error) throw new Error(f.error.message);
       if (t.error) throw new Error(t.error.message);
       if (c.error && !faltaLaTabla(c.error)) throw new Error(c.error.message);
@@ -626,21 +657,37 @@ export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]
         tabla(supabase, "textil_marcas").select("id, nombre"),
         leerTodas<CompraResumen>((a, b) =>
           tabla(supabase, "textil_compras")
-            .select("id, estado, base, iva, total")
+            .select("id, estado, base, iva, total, categoria")
             .gte("fecha", desde)
             .lte("fecha", hasta)
             .order("id")
             .range(a, b),
         ),
       ]);
+      // Solo las del textil; sin la migración de compras generales, todas lo son.
+      const comprasTextil = faltaLaColumna(compras.error)
+        ? await leerTodas<CompraResumen>((a, b) =>
+            tabla(supabase, "textil_compras")
+              .select("id, estado, base, iva, total")
+              .gte("fecha", desde)
+              .lte("fecha", hasta)
+              .order("id")
+              .range(a, b),
+          )
+        : {
+            ...compras,
+            data: compras.data.filter((x) => (x.categoria ?? "textil") === "textil"),
+          };
       if (stock.error && !faltaLaTabla(stock.error)) throw new Error(stock.error.message);
       if (marcas.error) throw new Error(marcas.error.message);
-      if (compras.error && !faltaLaTabla(compras.error)) throw new Error(compras.error.message);
+      if (comprasTextil.error && !faltaLaTabla(comprasTextil.error)) {
+        throw new Error(comprasTextil.error.message);
+      }
       return {
         lineas,
         stock: stock.error ? null : stock.data,
         marcas: (marcas.data ?? []) as { id: string; nombre: string }[],
-        compras: compras.error ? null : compras.data,
+        compras: comprasTextil.error ? null : comprasTextil.data,
       };
     },
   });

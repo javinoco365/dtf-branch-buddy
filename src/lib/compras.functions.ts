@@ -1,8 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { llamarRpc, tabla } from "./rpc";
+import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
+import { CATEGORIAS_COMPRA } from "@/dominio/compras";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -78,6 +79,10 @@ const compraSchema = z.object({
   base: z.number(),
   iva: z.number(),
   total: z.number(),
+  // Solo desde la pantalla general (con la migración 20261013100000).
+  irpf: z.number().min(0).optional(),
+  categoria: z.enum(CATEGORIAS_COMPRA.map((c) => c.valor) as [string, ...string[]]).optional(),
+  gasto_id: z.string().uuid().nullable().optional(),
   notas: z.string().optional().nullable(),
   lectura_ia: z.string().optional().nullable(),
   lineas: z.array(lineaSchema),
@@ -130,15 +135,26 @@ export const registrarCompra = createServerFn({ method: "POST" })
     return { movidas };
   });
 
+/**
+ * Las compras, con sus líneas. `soloTextil`: solo las de textil (todas, sin
+ * la migración de compras generales, que lo son). `generales` dice si la
+ * migración está aplicada.
+ */
 export const listCompras = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await tabla(context.supabase, "textil_compras")
-      .select("*, lineas:textil_compra_lineas(*)")
+  .inputValidator((d: unknown) => z.object({ soloTextil: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const prueba = await tabla(context.supabase, "textil_compras").select("categoria").limit(1);
+    const generales = !faltaLaColumna(prueba.error);
+    let consulta = tabla(context.supabase, "textil_compras").select(
+      "*, lineas:textil_compra_lineas(*)",
+    );
+    if (generales && data.soloTextil) consulta = consulta.eq("categoria", "textil");
+    const { data: compras, error } = await consulta
       .order("fecha", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return { compras: (compras ?? []) as any[], generales };
   });
 
 export const borrarCompra = createServerFn({ method: "POST" })

@@ -459,6 +459,17 @@ export function cobradoPorTramos(
 
 export type Periodicidad = "mensual" | "trimestral" | "anual" | "puntual";
 
+/** Una factura de compra enlazada a un gasto fijo: sustituye a su estimación. */
+export type FacturaDeGasto = {
+  /** El id de la compra. */
+  id: string;
+  /** `yyyy-MM-dd`: decide a qué cargo del gasto corresponde. */
+  fecha: string;
+  base: Numerico;
+  iva: Numerico;
+  irpf: Numerico;
+};
+
 export type GastoFijo = {
   id: string;
   concepto: string;
@@ -477,6 +488,16 @@ export type GastoFijo = {
    * grupo B, solo para los números internos. Sin migración, verdadero.
    */
   con_justificante?: boolean | null;
+  /**
+   * Las facturas reales del gasto. El cargo del periodo en que cae cada una
+   * cuenta lo que dice la factura en vez del importe estimado.
+   */
+  facturas?: readonly FacturaDeGasto[];
+  /**
+   * De dónde sale: un gasto de Ajustes, o una factura de compra que Gerencia
+   * trata como gasto (una compra del día o la amortización de una máquina).
+   */
+  origen?: "gasto" | "compra" | "amortizacion";
   /** `yyyy-MM-dd`, primer día en que se paga. */
   desde: string;
   /** `yyyy-MM-dd`, último día; nulo si se sigue pagando. */
@@ -552,32 +573,94 @@ function mesesDelRango(r: { desde: Date; hasta: Date }): {
   return meses;
 }
 
+/** Cuántos meses cubre cada cargo: el gasto se reparte por igual entre ellos. */
+export const MESES_POR_CARGO: Record<Exclude<Periodicidad, "puntual">, number> = {
+  mensual: 1,
+  trimestral: 3,
+  anual: 12,
+};
+
+/** El mismo día del mes `n` meses después, o el último del mes si no existe (31 → 30). */
+export function sumarMeses(base: Date, n: number): Date {
+  const ultimo = new Date(base.getFullYear(), base.getMonth() + n + 1, 0).getDate();
+  return new Date(base.getFullYear(), base.getMonth() + n, Math.min(base.getDate(), ultimo));
+}
+
+const mesesEntre = (a: Date, b: Date) =>
+  (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth();
+
+/**
+ * A qué cargo de un gasto corresponde una factura con esa fecha: 0 el
+ * primero, 1 el segundo… Cuenta el mes natural: la factura del alquiler de
+ * marzo es la de marzo; la de la gestoría de un trimestre, la de cualquiera
+ * de sus tres meses. Nulo si en esa fecha el gasto no tiene cargo (antes de
+ * empezar o después de terminar).
+ */
+export function cargoDeFactura(
+  g: Pick<GastoFijo, "desde" | "hasta" | "periodicidad">,
+  fecha: string,
+): number | null {
+  const ini = soloDia(diaLocalDe(g.desde));
+  if (g.periodicidad === "puntual") return 0;
+  const meses = MESES_POR_CARGO[g.periodicidad ?? "mensual"] ?? 1;
+  const n = mesesEntre(ini, diaLocalDe(fecha));
+  if (n < 0) return null;
+  const k = Math.floor(n / meses);
+  if (g.hasta && soloDia(sumarMeses(ini, k * meses)) > soloDia(diaLocalDe(g.hasta))) return null;
+  return k;
+}
+
+/** Lo que suman las facturas de cada cargo de un gasto. */
+export function facturasPorCargo(
+  g: GastoFijo,
+): Map<number, { base: number; iva: number; irpf: number }> {
+  const porCargo = new Map<number, { base: number; iva: number; irpf: number }>();
+  for (const f of g.facturas ?? []) {
+    const k = cargoDeFactura(g, f.fecha);
+    if (k === null) continue;
+    const a = porCargo.get(k) ?? { base: 0, iva: 0, irpf: 0 };
+    a.base += num(f.base);
+    a.iva += num(f.iva);
+    a.irpf += num(f.irpf);
+    porCargo.set(k, a);
+  }
+  return porCargo;
+}
+
+/**
+ * Las compras que ya cuentan dentro de un gasto fijo (su factura sustituye a
+ * un cargo): no se cuentan otra vez como compra.
+ */
+export function comprasAbsorbidas(gastos: readonly GastoFijo[]): Set<string> {
+  const ids = new Set<string>();
+  for (const g of gastos) {
+    for (const f of g.facturas ?? []) if (cargoDeFactura(g, f.fecha) !== null) ids.add(f.id);
+  }
+  return ids;
+}
+
 /**
  * Cuánto cuestan los gastos fijos en un rango de fechas, sin IVA: el coste
  * que le toca al periodo, no lo que se paga en él. Cada gasto se reparte por
  * días dentro de cada mes: un alquiler de 800 € al mes son 400 € en la
  * primera quincena de un mes de 30 días. Uno trimestral se reparte entre sus
  * tres meses y uno anual entre doce; uno puntual cuenta entero en su día.
- * Solo cuentan los días en que el gasto está vigente.
+ * Solo cuentan los días en que el gasto está vigente. Si un cargo tiene su
+ * factura enlazada, cuenta la base de la factura.
  */
-/** Cuántos meses cubre cada cargo: el gasto se reparte por igual entre ellos. */
-const MESES_POR_CARGO: Record<Exclude<Periodicidad, "puntual">, number> = {
-  mensual: 1,
-  trimestral: 3,
-  anual: 12,
-};
-
 export function gastosFijosDelRango(
   gastos: readonly GastoFijo[],
   r: { desde: Date; hasta: Date },
 ): number {
   let total = 0;
+  // Con factura, cada cargo cuenta lo que dice la factura.
+  const facturas = new Map(gastos.map((g) => [g, facturasPorCargo(g)]));
   // Un gasto puntual cuenta entero el día en que se paga.
   for (const g of gastos) {
     if (g.periodicidad !== "puntual") continue;
     const dia = diaLocalDe(g.desde);
     if (soloDia(dia) >= soloDia(r.desde) && soloDia(dia) <= soloDia(r.hasta)) {
-      total += num(g.importe_mensual);
+      total += facturas.get(g)?.get(0)?.base ?? num(g.importe_mensual);
     }
   }
   for (const mes of mesesDelRango(r)) {
@@ -590,7 +673,9 @@ export function gastosFijosDelRango(
       const ultimo = fin && fin < mes.ultimo ? fin : mes.ultimo;
       if (ultimo < primero) continue;
       const dias = Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1;
-      total += (num(g.importe_mensual) / meses) * (dias / mes.diasDelMes);
+      const k = Math.floor(mesesEntre(ini, mes.inicio) / meses);
+      const importe = facturas.get(g)?.get(k)?.base ?? num(g.importe_mensual);
+      total += (importe / meses) * (dias / mes.diasDelMes);
     }
   }
   return redondear(total);

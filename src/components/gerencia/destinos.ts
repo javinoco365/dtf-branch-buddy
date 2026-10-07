@@ -40,7 +40,10 @@ export type DatosGerencia = {
   /** Los pedidos web sin pagar del periodo, cuenten o no. */
   webSinPagar: { pedidos: number; importe: number };
   ajustes: AjustesGerencia;
-  /** Todos los gastos de Ajustes, con y sin justificante. */
+  /**
+   * Todos los gastos de Ajustes, con y sin justificante, con sus facturas; y
+   * las compras que cuestan como un gasto (origen «compra» y «amortizacion»).
+   */
   gastos: GastoFijo[];
   /** Los del grupo elegido: A, con justificante; B, sin él; total, todos. */
   gastosDelGrupo: GastoFijo[];

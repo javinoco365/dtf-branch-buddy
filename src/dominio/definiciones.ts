@@ -312,7 +312,7 @@ export const DEFINICIONES = {
     calculo:
       "Suma del IVA de las facturas de compra registradas. Las que están en borrador no cuentan.",
     fuente:
-      "Solo las compras del textil que se suben al CRM. Los gastos que no pasan por aquí (consumibles DTF, alquiler, servicios) no están, así que el IVA soportado real es mayor.",
+      "Las facturas de compra subidas al CRM (Facturas de compra y Textil › Compras). Con el textil elegido, solo las de textil. Lo que no se suba no está, así que el IVA soportado real puede ser mayor.",
   },
   g_iva_resultado: {
     que: "Por dónde va el IVA del periodo con lo que sabe el CRM.",
@@ -349,7 +349,7 @@ export const DEFINICIONES = {
   g_resultado: {
     que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
     calculo:
-      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades.",
+      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
     fuente:
       "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
   },
@@ -359,10 +359,16 @@ export const DEFINICIONES = {
       "Beneficio antes de impuestos × el tipo de Ajustes (15 % para empresas de nueva creación), solo si hay beneficio. Es una estimación: el impuesto se calcula sobre el año entero y la gestoría hace los ajustes. Se paga en julio del año siguiente (modelo 200) y, desde el segundo año, con pagos fraccionados (202).",
     fuente: "Cuenta de resultados del periodo y Gerencia › Ajustes.",
   },
+  g_compras_comparadas: {
+    que: "Lo que dicen las facturas de tinta, film, polvo y mensajería frente a lo que Gerencia les cuenta a los pedidos.",
+    calculo:
+      "Base de las facturas de compra de consumibles DTF y de mensajería con fecha en el periodo, frente a la producción DTF (metros × coste por metro) y los envíos de los pedidos. No es exacto mes a mes (se compra por adelantado), pero si a lo largo de varios meses lo comprado es bastante más que lo estimado, el coste por metro está bajo.",
+    fuente: "Facturas de compra registradas y pedidos del periodo.",
+  },
   g_impuestos_trimestre: {
     que: "Lo que se presenta a Hacienda por cada trimestre del periodo.",
     calculo:
-      "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
+      "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
     fuente:
       "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
   },
