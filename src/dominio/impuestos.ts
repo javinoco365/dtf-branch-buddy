@@ -23,7 +23,13 @@
  */
 
 import { redondear } from "./importes";
-import type { GastoFijo, Periodicidad } from "./gerencia";
+import {
+  comprasAbsorbidas,
+  facturasPorCargo,
+  sumarMeses,
+  type GastoFijo,
+  type Periodicidad,
+} from "./gerencia";
 import { ivaSoportado, resumenIva, type CompraResumen, type DocumentoFiscal } from "./fiscal";
 
 type Numerico = number | string | null | undefined;
@@ -123,12 +129,6 @@ function texto(d: Date): string {
   return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
 }
 
-/** El mismo día del mes `n` meses después, o el último del mes si no existe (31 → 30). */
-function sumarMeses(base: Date, n: number): Date {
-  const ultimo = new Date(base.getFullYear(), base.getMonth() + n + 1, 0).getDate();
-  return new Date(base.getFullYear(), base.getMonth() + n, Math.min(base.getDate(), ultimo));
-}
-
 /** Lo que lleva cada pago de un gasto: base, IVA, IRPF retenido y lo que se paga. */
 export function importesCargo(
   g: Pick<GastoFijo, "importe_mensual" | "iva_pct" | "irpf_pct" | "con_justificante">,
@@ -145,7 +145,8 @@ export function importesCargo(
 /**
  * Los pagos de los gastos que caen en un rango: el primero el día «desde» y
  * los siguientes cada mes, trimestre o año ese mismo día, mientras el gasto
- * esté vigente.
+ * esté vigente. Un cargo con su factura enlazada lleva los importes de la
+ * factura.
  */
 export function cargosDelRango(
   gastos: readonly GastoFijo[],
@@ -158,23 +159,34 @@ export function cargosDelRango(
     const inicio = dia(g.desde);
     const fin = g.hasta ? dia(g.hasta) : null;
     const importes = importesCargo(g);
-    const cargo = (f: Date): Cargo => ({
-      gasto_id: g.id,
-      concepto: g.concepto,
-      tipo: g.tipo ?? "otros",
-      fecha: texto(f),
-      ...importes,
-    });
+    const facturas = facturasPorCargo(g);
+    const cargo = (f: Date, k: number): Cargo => {
+      const factura = facturas.get(k);
+      return {
+        gasto_id: g.id,
+        concepto: g.concepto,
+        tipo: g.tipo ?? "otros",
+        fecha: texto(f),
+        ...(factura
+          ? {
+              base: redondear(factura.base),
+              iva: redondear(factura.iva),
+              irpf: redondear(factura.irpf),
+              aPagar: redondear(factura.base + factura.iva - factura.irpf),
+            }
+          : importes),
+      };
+    };
     const periodicidad = g.periodicidad ?? "mensual";
     if (periodicidad === "puntual") {
-      if (inicio >= desde && inicio <= hasta) cargos.push(cargo(inicio));
+      if (inicio >= desde && inicio <= hasta) cargos.push(cargo(inicio, 0));
       continue;
     }
     const paso = MESES[periodicidad];
     for (let i = 0; ; i += paso) {
       const f = sumarMeses(inicio, i);
       if (f > hasta || (fin && f > fin)) break;
-      if (f >= desde) cargos.push(cargo(f));
+      if (f >= desde) cargos.push(cargo(f, i / paso));
     }
   }
   return cargos.sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -398,17 +410,24 @@ export function impuestosPorTrimestre(d: {
   gastos: readonly GastoFijo[];
   cuotaIsAnterior: number | null | undefined;
 }): ImpuestosTrimestre[] {
+  const absorbidas = comprasAbsorbidas(d.gastos);
   return trimestresDelRango(d.rango).map((t) => {
     const repercutido = resumenIva(d.documentos.filter((x) => enTrimestre(x.fecha, t))).repercutido
       .iva;
-    const compras = ivaSoportado(d.compras.filter((x) => enTrimestre(x.fecha, t))).iva;
+    // Las compras que son la factura de un gasto fijo ya van en su cargo.
+    const comprasDelTrimestre = d.compras.filter(
+      (x) => enTrimestre(x.fecha, t) && !(x.id && absorbidas.has(x.id)),
+    );
+    const compras = ivaSoportado(comprasDelTrimestre);
     const gastos = impuestosDeCargos(cargosDelRango(d.gastos, t));
-    const soportado = redondear(compras + gastos.ivaSoportado);
+    const soportado = redondear(compras.iva + gastos.ivaSoportado);
+    // La retención de una factura de compra suelta es de un profesional: 111.
+    const irpf111 = redondear(gastos.irpf111 + compras.irpf);
     const lineas = calendarioTrimestre({
       trimestre: t,
       ivaRepercutido: repercutido,
       ivaSoportado: soportado,
-      irpf111: gastos.irpf111,
+      irpf111,
       irpf115: gastos.irpf115,
       cuotaIsAnterior: d.cuotaIsAnterior,
     });
@@ -416,7 +435,7 @@ export function impuestosPorTrimestre(d: {
       trimestre: t,
       ivaRepercutido: repercutido,
       ivaSoportado: soportado,
-      irpf111: gastos.irpf111,
+      irpf111,
       irpf115: gastos.irpf115,
       lineas,
       aPagar: redondear(lineas.reduce((s, l) => s + Math.max(0, l.importe), 0)),

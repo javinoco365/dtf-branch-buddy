@@ -47,6 +47,7 @@ import {
   FileSpreadsheet,
   FilePen,
   Package,
+  ReceiptText,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
@@ -125,6 +126,14 @@ export function AppSidebar() {
                   <Link to="/panel/facturacion-global">
                     <Receipt />
                     <span>Facturación Consolidada</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/compras"}>
+                  <Link to="/panel/compras">
+                    <ReceiptText />
+                    <span>Facturas de compra</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

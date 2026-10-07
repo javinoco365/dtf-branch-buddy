@@ -23,6 +23,7 @@ import {
   type ColumnaResultados,
 } from "@/dominio/grupos";
 import { impuestosPorTrimestre, trimestreDe, trimestresDelRango } from "@/dominio/impuestos";
+import { comparacionCompras, comprasParaComparar } from "@/dominio/compras";
 import { DESTINO_AJUSTES, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
 
@@ -52,6 +53,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
               fiscal.data.documentos.filter((x) => enRango(x.fecha, d.rango)),
             ),
             costesFijos: { a: fijos.a, b: fijos.b },
+            compras: fijos.compras,
+            amortizacion: fijos.amortizacion,
             tipoIs: d.ajustes.tipo_is,
           })
         : null,
@@ -63,8 +66,15 @@ export function Resultados({ d }: { d: DatosGerencia }) {
       d.rango,
       fijos.a,
       fijos.b,
+      fijos.compras,
+      fijos.amortizacion,
       d.ajustes.tipo_is,
     ],
+  );
+  // Tinta, film y mensajería: ya cuestan en cada pedido; aquí solo se comparan.
+  const comparadas = useMemo(
+    () => (fiscal.data?.compras ? comprasParaComparar(fiscal.data.compras, d.rango) : null),
+    [fiscal.data, d.rango],
   );
   const impuestos = useMemo(
     () =>
@@ -104,6 +114,12 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     ["Coste de la ropa", "ropa", "resta"],
     ["Margen", "margen", "total"],
     ["Costes fijos", "costesFijos", "resta"],
+    ...(cuentas.total.compras !== 0
+      ? [["Otras compras", "compras", "resta"] as (typeof filas)[number]]
+      : []),
+    ...(cuentas.total.amortizacion !== 0
+      ? [["Amortizaciones", "amortizacion", "resta"] as (typeof filas)[number]]
+      : []),
     ["Beneficio antes de impuestos", "bai", "total"],
     [`Sociedades (${numero(d.ajustes.tipo_is, 0)} %)`, "sociedades", "resta"],
     ["Beneficio neto", "neto", "total"],
@@ -175,7 +191,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         />
       </div>
 
-      {d.gastos.length === 0 && (
+      {!d.gastos.some((g) => (g.origen ?? "gasto") === "gasto") && (
         <Nota>
           Sin gastos apuntados, el beneficio no descuenta alquiler, sueldos ni cuotas.{" "}
           <VerDetalle destino={DESTINO_AJUSTES} texto="Apuntar gastos" />
@@ -235,6 +251,49 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             </Table>
           </CardContent>
         </Card>
+
+        {comparadas && (comparadas.consumibles > 0 || comparadas.envios > 0) && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                Compras frente a lo estimado
+                <Explicacion
+                  titulo="Compras frente a lo estimado"
+                  definicion={DEFINICIONES.g_compras_comparadas}
+                />
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Sin IVA. Lo facturado por tus proveedores frente a lo que Gerencia cuenta en los
+                pedidos. Si lo comprado sale siempre por encima, sube el coste por metro.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table movil="tarjetas">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Facturas de compra</TableHead>
+                    <TableHead className="text-right">Estimado en pedidos</TableHead>
+                    <TableHead className="text-right">Diferencia</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comparacionCompras(comparadas, cuentas.total).map((f) => (
+                    <TableRow key={f.concepto}>
+                      <TableCell className="font-medium">{f.concepto}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(f.comprado)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(f.estimado)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {f.diferencia > 0 ? "+" : ""}
+                        {eur(f.diferencia)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-2">

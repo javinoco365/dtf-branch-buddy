@@ -29,8 +29,9 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
   const fiscal = useFiscal(d.rango);
   const previo = useFiscal(d.comparacion?.previo ?? d.rango);
 
-  // Las compras que hay en el CRM son todas del textil.
-  const conCompras = d.filtro.tienda === "todas" || d.filtro.tienda === TIENDA_TEXTIL.id;
+  // Las compras son de la empresa; con el textil elegido, solo las de textil.
+  const soloTextil = d.filtro.tienda === TIENDA_TEXTIL.id;
+  const conCompras = d.filtro.tienda === "todas" || soloTextil;
 
   const iva = useMemo(
     () => resumenIva(deLaTienda(fiscal.data?.documentos ?? [], d.filtro.tienda)),
@@ -44,8 +45,15 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
     [d.comparacion, previo.data, d.filtro.tienda],
   );
   const soportado = useMemo(
-    () => (fiscal.data?.compras && conCompras ? ivaSoportado(fiscal.data.compras) : null),
-    [fiscal.data, conCompras],
+    () =>
+      fiscal.data?.compras && conCompras
+        ? ivaSoportado(
+            soloTextil
+              ? fiscal.data.compras.filter((c) => (c.categoria ?? "textil") === "textil")
+              : fiscal.data.compras,
+          )
+        : null,
+    [fiscal.data, conCompras, soloTextil],
   );
   // Lo mismo que el botón de la esquina: los pedidos del periodo sin documento.
   const sinFactura = d.pendiente;
@@ -94,7 +102,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
           pie={
             <span className="text-muted-foreground">
               {soportado
-                ? `${soportado.documentos} ${soportado.documentos === 1 ? "compra registrada" : "compras registradas"} del textil`
+                ? `${soportado.documentos} ${soportado.documentos === 1 ? "factura de compra registrada" : "facturas de compra registradas"}${soloTextil ? " del textil" : ""}`
                 : "Sin compras en el CRM para esta tienda"}
             </span>
           }

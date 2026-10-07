@@ -191,6 +191,8 @@ describe("gastos por grupo", () => {
       a: 800,
       b: 200,
       total: 1000,
+      compras: 0,
+      amortizacion: 0,
       hastaHoy: false,
     });
   });

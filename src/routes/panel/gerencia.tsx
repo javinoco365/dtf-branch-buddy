@@ -23,6 +23,7 @@ import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import {
   useAjustesGerencia,
   useBancoPeriodo,
+  useComprasGerencia,
   useDocumentosDePedidos,
   useCajaPeriodo,
   useCosteMetroActual,
@@ -40,6 +41,7 @@ import {
   type Grupo,
 } from "@/dominio/grupos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
+import { gastosConCompras } from "@/dominio/compras";
 import {
   AJUSTES_POR_DEFECTO,
   aplicarAjustesVentas,
@@ -88,6 +90,8 @@ function Gerencia() {
   const banco = useBancoPeriodo(rango);
   const costeMetro = useCosteMetroActual();
   const ajustes = useAjustesGerencia();
+  // Las facturas de compra que cuestan como un gasto (y los recibos de los gastos fijos).
+  const compras = useComprasGerencia();
   // Qué pedidos tienen factura o ticket: de ahí salen los grupos A y B.
   const docs = useDocumentosDePedidos(ventas.data ?? []);
   const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? []);
@@ -98,6 +102,9 @@ function Gerencia() {
     // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
     const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
     if (!ventas.data || !aj) return null;
+    // Sin las compras, el beneficio saldría mejor de lo que es: se espera.
+    if (!compras.data && !compras.isError) return null;
+    const gastos = gastosConCompras(aj.gastos, compras.data ?? []);
     // Para separar A y B hacen falta los documentos; sin ellos, todavía no.
     if (grupo !== "total" && (!docs.data || (periodo.comparacion && !docsPrevios.data))) {
       return null;
@@ -126,8 +133,8 @@ function Gerencia() {
       ),
       webSinPagar: webSinPagar(delPeriodo),
       ajustes: a,
-      gastos: aj.gastos,
-      gastosDelGrupo: gastosDelGrupo(aj.gastos, grupo),
+      gastos,
+      gastosDelGrupo: gastosDelGrupo(gastos, grupo),
       objetivos: aj.objetivos,
       cobros: filtrarCobrosGerencia(cobros.data?.cobros ?? [], filtro),
       cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios.data?.cobros ?? [], filtro),
@@ -146,6 +153,8 @@ function Gerencia() {
     grupo,
     ajustes.data,
     ajustes.isError,
+    compras.data,
+    compras.isError,
     cobros.data,
     cobrosPrevios.data,
     pendientes.data,

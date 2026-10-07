@@ -12,7 +12,7 @@
  *
  *   - cantidad × precio unitario tiene que dar el importe de la línea;
  *   - la suma de los importes tiene que dar la base;
- *   - base + IVA tiene que dar el total.
+ *   - base + IVA − retención de IRPF tiene que dar el total.
  *
  * Tres cuentas que el papel ya trae hechas. Si la lectura no las cuadra, algún
  * número está mal leído, y se dice cuál en vez de dar la compra por buena.
@@ -42,6 +42,8 @@ export type CompraLeida = {
   fecha: string | null;
   base: number;
   iva: number;
+  /** Retención de IRPF, en euros (alquiler, profesionales). 0 si no lleva. */
+  irpf: number;
   total: number;
   lineas: LineaLeida[];
 };
@@ -155,6 +157,7 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
 
   const base = aNumero(o.base);
   const iva = aNumero(o.iva);
+  const irpf = aNumero(o.irpf);
   const total = aNumero(o.total);
   const sumaLineas = redondear(lineas.reduce((a, l) => a + l.importe, 0));
 
@@ -166,7 +169,9 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
     // Si el papel no trae base pero sí líneas, la base es lo que suman.
     base: base ?? sumaLineas,
     iva: iva ?? 0,
-    total: total ?? redondear((base ?? sumaLineas) + (iva ?? 0)),
+    // La retención se resta; si el papel la trae en negativo, es la misma.
+    irpf: Math.abs(irpf ?? 0),
+    total: total ?? redondear((base ?? sumaLineas) + (iva ?? 0) - Math.abs(irpf ?? 0)),
     lineas,
   };
 }
@@ -215,11 +220,14 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
     });
   }
 
-  const totalEsperado = redondear(c.base + c.iva);
+  const irpf = c.irpf ?? 0;
+  const totalEsperado = redondear(c.base + c.iva - irpf);
   if (Math.abs(totalEsperado - c.total) > TOLERANCIA) {
     avisos.push({
       linea: null,
-      mensaje: `Base ${c.base} más IVA ${c.iva} son ${totalEsperado}, no ${c.total}.`,
+      mensaje: irpf
+        ? `Base ${c.base} más IVA ${c.iva} menos IRPF ${irpf} son ${totalEsperado}, no ${c.total}.`
+        : `Base ${c.base} más IVA ${c.iva} son ${totalEsperado}, no ${c.total}.`,
     });
   }
 

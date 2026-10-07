@@ -1,0 +1,159 @@
+import { describe, expect, it } from "vitest";
+import { cargoDeFactura, comprasAbsorbidas, gastosFijosDelRango, type GastoFijo } from "./gerencia";
+import { cargosDelRango, impuestosPorTrimestre } from "./impuestos";
+import { gastosFijosPorGrupo } from "./grupos";
+import type { CompraResumen } from "./fiscal";
+import {
+  categoriaCompra,
+  comparacionCompras,
+  comprasParaComparar,
+  gastosConCompras,
+  mesesDeAmortizacion,
+} from "./compras";
+
+const d = (a: number, m: number, dia: number) => new Date(a, m - 1, dia);
+const fin = (a: number, m: number, dia: number) => new Date(a, m - 1, dia, 23, 59, 59);
+
+const alquiler: GastoFijo = {
+  id: "alq",
+  concepto: "Alquiler",
+  importe_mensual: 1000,
+  desde: "2026-01-01",
+  hasta: null,
+  periodicidad: "mensual",
+  tipo: "alquiler",
+  iva_pct: 21,
+  irpf_pct: 19,
+};
+
+const compra = (id: string, extra: Partial<CompraResumen>): CompraResumen => ({
+  id,
+  estado: "registrada",
+  fecha: "2026-03-10",
+  base: 100,
+  iva: 21,
+  irpf: 0,
+  total: 121,
+  categoria: "otros",
+  gasto_id: null,
+  ...extra,
+});
+
+describe("categorías", () => {
+  it("sin categoría es textil; desconocida, textil", () => {
+    expect(categoriaCompra(null).trato).toBe("stock");
+    expect(categoriaCompra("consumibles").trato).toBe("comparar");
+    expect(categoriaCompra("maquinaria").amortizacion).toBe(12);
+  });
+  it("12 % al año son 100 meses; 25 %, 48", () => {
+    expect(mesesDeAmortizacion(12)).toBe(100);
+    expect(mesesDeAmortizacion(25)).toBe(48);
+  });
+});
+
+describe("factura enlazada a un gasto fijo", () => {
+  it("cada factura cae en el cargo de su mes", () => {
+    expect(cargoDeFactura(alquiler, "2026-01-31")).toBe(0);
+    expect(cargoDeFactura(alquiler, "2026-03-01")).toBe(2);
+    expect(cargoDeFactura(alquiler, "2025-12-31")).toBeNull();
+    const trimestral = { ...alquiler, periodicidad: "trimestral" as const };
+    expect(cargoDeFactura(trimestral, "2026-03-31")).toBe(0);
+    expect(cargoDeFactura(trimestral, "2026-04-02")).toBe(1);
+    expect(cargoDeFactura({ ...alquiler, hasta: "2026-02-28" }, "2026-03-05")).toBeNull();
+  });
+
+  it("marzo cuesta lo de la factura; los demás meses, la estimación", () => {
+    const [g] = gastosConCompras(
+      [alquiler],
+      [compra("f", { base: 1100, iva: 231, irpf: 209, total: 1122, gasto_id: "alq" })],
+    );
+    expect(gastosFijosDelRango([g], { desde: d(2026, 3, 1), hasta: fin(2026, 3, 31) })).toBe(1100);
+    expect(gastosFijosDelRango([g], { desde: d(2026, 4, 1), hasta: fin(2026, 4, 30) })).toBe(1000);
+    // Y sus impuestos son los de la factura.
+    const [c] = cargosDelRango([g], { desde: d(2026, 3, 1), hasta: d(2026, 3, 31) });
+    expect(c).toMatchObject({ base: 1100, iva: 231, irpf: 209, aPagar: 1122 });
+  });
+
+  it("su IVA no se cuenta dos veces en el 303", () => {
+    const compras = [compra("f", { base: 1000, iva: 210, irpf: 190, gasto_id: "alq" })];
+    const gastos = gastosConCompras([alquiler], compras);
+    expect(comprasAbsorbidas(gastos)).toEqual(new Set(["f"]));
+    const [q1] = impuestosPorTrimestre({
+      rango: { desde: d(2026, 1, 1), hasta: fin(2026, 3, 31) },
+      documentos: [],
+      compras,
+      gastos,
+      cuotaIsAnterior: null,
+    });
+    // Tres alquileres de 210 de IVA y 190 de retención: la factura es uno de ellos.
+    expect(q1).toMatchObject({ ivaSoportado: 630, irpf115: 570, irpf111: 0 });
+  });
+
+  it("una factura fuera de las fechas del gasto cuenta como compra suelta", () => {
+    const gastos = gastosConCompras(
+      [{ ...alquiler, desde: "2026-06-01" }],
+      [compra("f", { fecha: "2026-03-10", gasto_id: "alq" })],
+    );
+    expect(gastos.map((g) => g.id)).toEqual(["alq", "compra:f"]);
+  });
+});
+
+describe("compras que cuestan como un gasto", () => {
+  const compras = [
+    compra("pub", { categoria: "publicidad", base: 300 }),
+    compra("tinta", { categoria: "consumibles", base: 500 }),
+    compra("ropa", { categoria: "textil", base: 800 }),
+    compra("seur", { categoria: "envios", base: 40 }),
+    compra("maq", { categoria: "maquinaria", base: 12000, fecha: "2026-01-01" }),
+    compra("b", { categoria: "publicidad", estado: "borrador", base: 999 }),
+  ];
+  const gastos = gastosConCompras([], compras);
+
+  it("la publicidad cuesta el día de la factura; la tinta, la ropa y la mensajería no", () => {
+    const marzo = gastosFijosPorGrupo(gastos, { desde: d(2026, 3, 1), hasta: fin(2026, 3, 31) });
+    expect(marzo.compras).toBe(300);
+    expect(marzo.a).toBe(0);
+  });
+
+  it("una máquina de 12.000 € al 12 % son 120 € al mes durante 100 meses", () => {
+    const marzo = gastosFijosPorGrupo(gastos, { desde: d(2026, 3, 1), hasta: fin(2026, 3, 31) });
+    expect(marzo.amortizacion).toBe(120);
+    const anio = gastosFijosPorGrupo(gastos, { desde: d(2026, 1, 1), hasta: fin(2026, 12, 31) });
+    expect(anio.amortizacion).toBe(1440);
+    // Al final queda amortizada entera, ni un euro más.
+    const todo = gastosFijosPorGrupo(gastos, { desde: d(2026, 1, 1), hasta: fin(2036, 12, 31) });
+    expect(todo.amortizacion).toBe(12000);
+  });
+
+  it("lo comprado de tinta y mensajería, para comparar con lo de los pedidos", () => {
+    expect(comprasParaComparar(compras, { desde: d(2026, 3, 1), hasta: fin(2026, 3, 31) })).toEqual(
+      { consumibles: 500, envios: 40 },
+    );
+  });
+
+  it("la comparación dice cuánto se compra de más", () => {
+    const [tinta, envios] = comparacionCompras(
+      { consumibles: 500, envios: 40 },
+      { produccion: 420, envios: 55.5 },
+    );
+    expect(tinta).toEqual({
+      concepto: "Consumibles DTF",
+      comprado: 500,
+      estimado: 420,
+      diferencia: 80,
+    });
+    expect(envios.diferencia).toBe(-15.5);
+  });
+
+  it("las compras no llevan IVA ni retención como gasto: van con la compra", () => {
+    const [q1] = impuestosPorTrimestre({
+      rango: { desde: d(2026, 1, 1), hasta: fin(2026, 3, 31) },
+      documentos: [],
+      compras: [...compras, compra("abog", { categoria: "servicios", irpf: 15 })],
+      gastos,
+      cuotaIsAnterior: null,
+    });
+    // IVA de las 6 registradas (21 cada una) y la retención del abogado al 111.
+    expect(q1).toMatchObject({ ivaSoportado: 126, irpf111: 15 });
+  });
+});

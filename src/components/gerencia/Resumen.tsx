@@ -307,7 +307,7 @@ function BeneficioYObjetivos({
             <span className="text-muted-foreground">
               {sinCostes
                 ? "Falta el coste por metro para calcular el margen."
-                : `Margen ${eur(c.margen)} − gastos fijos ${eur(actual.gastos)}${actual.hastaHoy ? " hasta hoy" : ""}`}
+                : `Margen ${eur(c.margen)} − gastos ${eur(actual.gastos)}${actual.hastaHoy ? " hasta hoy" : ""}`}
             </span>
           }
         />

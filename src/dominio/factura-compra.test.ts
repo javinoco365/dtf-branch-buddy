@@ -90,12 +90,18 @@ describe("revisarCompra", () => {
     fecha: "2026-09-01",
     base: 250,
     iva: 52.5,
+    irpf: 0,
     total: 302.5,
     lineas: [
       { descripcion: "Camiseta negra M", cantidad: 50, precio_unitario: 3, importe: 150 },
       { descripcion: "Camiseta negra L", cantidad: 25, precio_unitario: 4, importe: 100 },
     ],
   };
+
+  it("la retención se resta del total", () => {
+    expect(revisarCompra({ ...buena, irpf: 37.5, total: 265 })).toEqual([]);
+    expect(revisarCompra({ ...buena, irpf: 37.5 })[0].mensaje).toContain("menos IRPF 37.5");
+  });
 
   it("una factura que cuadra no da avisos", () => {
     expect(revisarCompra(buena)).toEqual([]);

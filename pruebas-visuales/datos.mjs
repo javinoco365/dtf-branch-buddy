@@ -623,8 +623,46 @@ const COMPRAS = [0, 1].map((i) => ({
   estado: i === 0 ? "registrada" : "borrador",
   notas: null,
   created_at: fechaDia(1 + i, 9),
+  categoria: "textil",
+  irpf: 0,
+  gasto_id: null,
   lineas: [],
 }));
+// Facturas de compra de todo el negocio (no textil).
+const compraGeneral = (n, proveedor, categoria, fecha, base, iva, irpf = 0, gasto_id = null) => ({
+  id: id("k", 10 + n),
+  empresa_id: EMPRESA,
+  proveedor,
+  nif_proveedor: `B1000000${n}`,
+  numero: `C-${200 + n}`,
+  fecha,
+  base,
+  iva,
+  irpf,
+  total: Math.round((base + iva - irpf) * 100) / 100,
+  estado: "registrada",
+  notas: null,
+  created_at: `${fecha}T10:00:00Z`,
+  categoria,
+  gasto_id,
+  lineas: [],
+});
+COMPRAS.push(
+  compraGeneral(1, "Tintas DTF Pro", "consumibles", fechaDia(2).slice(0, 10), 90, 18.9),
+  compraGeneral(2, "Impresoras Iberia", "maquinaria", "2026-06-15", 6000, 1260),
+  compraGeneral(3, "Meta Platforms", "publicidad", fechaDia(3).slice(0, 10), 120, 25.2),
+  compraGeneral(
+    4,
+    "Inmobiliaria Nave",
+    "servicios",
+    fechaDia(1).slice(0, 10),
+    300,
+    63,
+    57,
+    id("9f", 1),
+  ),
+  compraGeneral(5, "SEUR", "envios", fechaDia(4).slice(0, 10), 25, 5.25),
+);
 
 // Seguimiento de los pedidos enviados o entregados: sale de 0 a 3 días
 // después del pedido (Gerencia › Producción, días hasta el envío).

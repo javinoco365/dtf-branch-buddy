@@ -16,6 +16,7 @@ import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelCajaRouteImport } from './routes/panel/caja'
 import { Route as PanelClientesRouteImport } from './routes/panel/clientes'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
+import { Route as PanelComprasRouteImport } from './routes/panel/compras'
 import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
 import { Route as PanelConfiguracionCajaRouteImport } from './routes/panel/configuracion-caja'
@@ -80,6 +81,11 @@ const PanelClientesRoute = PanelClientesRouteImport.update({
 const PanelCobrosRoute = PanelCobrosRouteImport.update({
   id: '/cobros',
   path: '/cobros',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelComprasRoute = PanelComprasRouteImport.update({
+  id: '/compras',
+  path: '/compras',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelConciliacionRoute = PanelConciliacionRouteImport.update({
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
@@ -328,6 +336,7 @@ export interface FileRoutesById {
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
+  '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
@@ -369,6 +378,7 @@ export interface FileRouteTypes {
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
+    | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-caja'
@@ -406,6 +416,7 @@ export interface FileRouteTypes {
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
+    | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-caja'
@@ -444,6 +455,7 @@ export interface FileRouteTypes {
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
+    | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
     | '/panel/configuracion-caja'
@@ -531,6 +543,13 @@ declare module '@tanstack/react-router' {
       path: '/cobros'
       fullPath: '/panel/cobros'
       preLoaderRoute: typeof PanelCobrosRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/compras': {
+      id: '/panel/compras'
+      path: '/compras'
+      fullPath: '/panel/compras'
+      preLoaderRoute: typeof PanelComprasRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/conciliacion': {
@@ -807,6 +826,7 @@ interface PanelRouteRouteChildren {
   PanelCajaRoute: typeof PanelCajaRoute
   PanelClientesRoute: typeof PanelClientesRoute
   PanelCobrosRoute: typeof PanelCobrosRoute
+  PanelComprasRoute: typeof PanelComprasRoute
   PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
   PanelConfiguracionCajaRoute: typeof PanelConfiguracionCajaRoute
@@ -827,6 +847,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelCajaRoute: PanelCajaRoute,
   PanelClientesRoute: PanelClientesRoute,
   PanelCobrosRoute: PanelCobrosRoute,
+  PanelComprasRoute: PanelComprasRoute,
   PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
   PanelConfiguracionCajaRoute: PanelConfiguracionCajaRoute,

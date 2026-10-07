@@ -119,15 +119,24 @@ export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
 
 /** Una factura de compra con lo justo para el IVA. */
 export type CompraResumen = {
+  id?: string;
   estado: string;
   base: Numerico;
   iva: Numerico;
+  /** Retención de IRPF de la factura, en euros. */
+  irpf?: Numerico;
   total: Numerico;
   /** `yyyy-MM-dd`; para repartir por trimestres. */
   fecha?: string;
+  /** Sin migración de compras generales, todas son de textil. */
+  categoria?: string | null;
+  /** El gasto fijo del que es factura. */
+  gasto_id?: string | null;
 };
 
 export type IvaSoportado = CuentaFiscal & {
+  /** IRPF retenido en esas facturas. */
+  irpf: number;
   /** Compras subidas que aún no se han registrado: no cuentan. */
   sinRegistrar: number;
 };
@@ -135,6 +144,7 @@ export type IvaSoportado = CuentaFiscal & {
 /** El IVA de las compras registradas del periodo. */
 export function ivaSoportado(compras: readonly CompraResumen[]): IvaSoportado {
   const c = vacia();
+  let irpf = 0;
   let sinRegistrar = 0;
   for (const x of compras) {
     if (x.estado !== "registrada") {
@@ -145,8 +155,9 @@ export function ivaSoportado(compras: readonly CompraResumen[]): IvaSoportado {
     c.base += num(x.base);
     c.iva += num(x.iva);
     c.total += num(x.total);
+    irpf += num(x.irpf);
   }
-  return { ...cerrar(c), sinRegistrar };
+  return { ...cerrar(c), irpf: redondear(irpf), sinRegistrar };
 }
 
 /** Un documento con el pedido al que pertenece, para saber qué pedidos tienen el suyo. */
