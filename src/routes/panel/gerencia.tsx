@@ -8,7 +8,7 @@ import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { Resumen } from "@/components/gerencia/Resumen";
 import { Ventas } from "@/components/gerencia/Ventas";
 import { Tesoreria } from "@/components/gerencia/Tesoreria";
-import type { DatosGerencia } from "@/components/gerencia/comun";
+import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import {

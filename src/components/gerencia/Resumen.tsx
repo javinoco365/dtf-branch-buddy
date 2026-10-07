@@ -41,9 +41,9 @@ import {
   destinoPedidos,
   destinoPendientes,
   textoAviso,
-  VerDetalle,
   type DatosGerencia,
-} from "./comun";
+} from "./destinos";
+import { VerDetalle } from "./comun";
 
 export function Resumen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;

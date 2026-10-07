@@ -14,7 +14,7 @@ import { useLineasPeriodo } from "@/lib/periodo";
 import { topPorMetros } from "@/dominio/kpis";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { CANALES, desglose, porDiaSemana, type FilaDesglose } from "@/dominio/gerencia";
-import type { DatosGerencia } from "./comun";
+import type { DatosGerencia } from "./destinos";
 
 const estiloTooltip = {
   background: "var(--color-card)",

@@ -22,9 +22,9 @@ import {
   destinoCobros,
   destinoPendientes,
   DESTINO_CONCILIACION,
-  VerDetalle,
   type DatosGerencia,
-} from "./comun";
+} from "./destinos";
+import { VerDetalle } from "./comun";
 
 export function Tesoreria({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
