@@ -148,6 +148,22 @@ export function costeProduccion(pedidos: readonly PedidoResumen[], costeActual: 
 }
 
 /**
+ * Lo que cuesta servir los pedidos no cancelados: la producción más el envío.
+ *
+ * El envío lo paga el cliente y la empresa se lo paga a la agencia por el
+ * mismo importe: entra como venta y sale como coste, así que no deja margen.
+ * Contarlo solo como venta inflaba el margen y el precio del metro.
+ */
+export function costeVariable(
+  pedidos: readonly PedidoResumen[],
+  costeActual: number,
+): { produccion: number; envios: number; total: number } {
+  const produccion = costeProduccion(pedidos, costeActual);
+  const envios = calcularKpis(pedidos).envios;
+  return { produccion, envios, total: redondear(produccion + envios) };
+}
+
+/**
  * Variación porcentual respecto al periodo anterior.
  *
  * Devuelve `null` cuando no hay comparación posible, es decir, cuando el

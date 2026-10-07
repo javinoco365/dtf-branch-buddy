@@ -49,7 +49,7 @@ export const DEFINICIONES = {
   margen: {
     que: "Lo que queda de la facturación bruta después del coste de producción.",
     calculo:
-      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad). Cada pedido usa el coste que había en Ajustes › Datos de la empresa al crearse, así que cambiar el coste no altera el margen de meses pasados. Es una estimación: no incluye gastos fijos.",
+      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad) − envíos. El envío lo paga el cliente y se le paga a la agencia por lo mismo: es venta y coste a la vez. Cada pedido usa el coste por metro que había en Ajustes › Datos de la empresa al crearse, así que cambiarlo no altera el margen de meses pasados. Es una estimación: no incluye gastos fijos.",
     fuente: PEDIDOS_TIENDAS,
   },
   ticket: {
@@ -123,7 +123,7 @@ export const DEFINICIONES = {
   g_margen: {
     que: "Lo que queda de lo vendido después de lo que cuesta producirlo.",
     calculo:
-      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
+      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido, más el envío, que se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_beneficio: {
@@ -165,7 +165,7 @@ export const DEFINICIONES = {
   g_euro_metro: {
     que: "A cuánto se vende de media el metro, sin IVA.",
     calculo:
-      "Facturación bruta de los pedidos que llevan metros ÷ sus metros. Incluye lo que vaya en esos pedidos además del metro (diseño, envío).",
+      "(Facturación bruta − envíos) de los pedidos que llevan metros ÷ sus metros. Incluye lo que vaya en esos pedidos además del metro (diseño); el envío no.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_dias_cobro: {
@@ -284,7 +284,7 @@ export const DEFINICIONES = {
   g_coste: {
     que: "Lo que ha costado producir lo vendido.",
     calculo:
-      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
+      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Envíos: lo mismo que se cobra al cliente, que es lo que se paga a la agencia. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
     fuente: "Pedidos del periodo y salidas del almacén textil. No incluye gastos fijos ni sueldos.",
   },
   g_margen_pct: {
@@ -295,7 +295,7 @@ export const DEFINICIONES = {
   g_margen_metro: {
     que: "Cuánto queda de cada metro de DTF.",
     calculo:
-      "Precio medio del metro (base imponible ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
+      "Precio medio del metro ((base imponible − envío) ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
     fuente: GERENCIA_PEDIDOS,
   },
 

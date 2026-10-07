@@ -302,3 +302,25 @@ describe("costeProduccion", () => {
     expect(costeProduccion([pedido({ metros_total: 10, coste_metro_snapshot: 0 })], 5)).toBe(0);
   });
 });
+
+describe("coste variable: producción y envío", () => {
+  it("el envío cuesta lo que se cobra; los cancelados no cuentan", async () => {
+    const { costeVariable } = await import("./kpis");
+    const p = (envio: number, estado = "entregado") => ({
+      fecha_pedido: "2026-10-01T10:00:00Z",
+      tienda_id: "t",
+      estado,
+      subtotal: 100 + envio,
+      iva: 0,
+      envio,
+      total: 100 + envio,
+      metros_total: 10,
+      coste_metro_snapshot: 2,
+    });
+    expect(costeVariable([p(5), p(0), p(9, "cancelado")], 0)).toEqual({
+      produccion: 40,
+      envios: 5,
+      total: 45,
+    });
+  });
+});

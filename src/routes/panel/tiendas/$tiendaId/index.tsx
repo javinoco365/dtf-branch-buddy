@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useMemo } from "react";
 import { eur, metros, numero } from "@/lib/format";
 import { usePedidosPeriodo } from "@/lib/periodo";
-import { calcularKpis, costeProduccion, variacion } from "@/dominio/kpis";
+import { calcularKpis, costeVariable, variacion } from "@/dominio/kpis";
 import { compararCon, rangoDe } from "@/dominio/periodos";
 import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
 import { Explicacion } from "@/components/Explicacion";
@@ -75,10 +75,11 @@ function Dashboard() {
   const kAnt = useMemo(() => calcularKpis(consultaAnt.data ?? []), [consultaAnt.data]);
 
   const delta = variacion(k.total, kAnt.total);
-  const costeMes = costeProduccion(pedidosMes, costeMetro);
-  const margenMes = k.bruta - costeMes;
+  // El envío también: se cobra al cliente y se paga a la agencia.
+  const costeMes = costeVariable(pedidosMes, costeMetro);
+  const margenMes = k.bruta - costeMes.total;
   const margenPct = k.bruta > 0 ? (margenMes / k.bruta) * 100 : null;
-  const sinCostes = costeMetro === 0 && costeMes === 0;
+  const sinCostes = costeMetro === 0 && costeMes.produccion === 0;
 
   return (
     <div className="space-y-4">
@@ -118,7 +119,7 @@ function Dashboard() {
           sub={
             sinCostes
               ? "Configura los costes en Ajustes › Datos de la empresa"
-              : `Bruta ${eur(k.bruta)} − coste ${eur(costeMes)} (${metros(k.metros)})${
+              : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)} (${metros(k.metros)})${costeMes.envios > 0 ? ` − envíos ${eur(costeMes.envios)}` : ""}${
                   margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
                 }`
           }

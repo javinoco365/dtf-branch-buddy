@@ -13,7 +13,7 @@
 import { redondear } from "./importes";
 import {
   calcularKpis,
-  costeProduccion,
+  costeVariable,
   ESTADO_CANCELADO,
   type KpisPeriodo,
   type PedidoResumen,
@@ -159,8 +159,10 @@ export function filtrarPendientesGerencia(
 // ---------------------------------------------------------------------------
 
 export type CifrasGerencia = KpisPeriodo & {
-  /** Coste DTF más coste textil. */
+  /** Coste DTF, envíos y coste textil. */
   coste: number;
+  /** Lo que se paga a la agencia: lo mismo que el envío cobrado al cliente. */
+  costeEnvios: number;
   /** Coste de producción DTF: metros × coste por metro congelado. */
   costeDtf: number;
   /** Coste de la ropa que salió del almacén para los pedidos textil. */
@@ -169,25 +171,29 @@ export type CifrasGerencia = KpisPeriodo & {
   textilSinCoste: number;
   /** Facturación bruta − coste. */
   margen: number;
-  /** Base imponible por metro, solo de los pedidos que llevan metros. */
+  /** Base imponible por metro, sin el envío, solo de los pedidos que llevan metros. */
   euroMetro: number;
 };
 
 export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): CifrasGerencia {
   const k = calcularKpis(ventas);
-  const costeDtf = costeProduccion(ventas, costeActual);
+  const variable = costeVariable(ventas, costeActual);
+  const costeDtf = variable.produccion;
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
-  const coste = redondear(costeDtf + costeTextil);
+  const coste = redondear(variable.total + costeTextil);
   const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
+  // El precio del metro sin el envío: lo que se cobra por imprimir.
+  const brutaMetros = conMetros.bruta - conMetros.envios;
   return {
     ...k,
     coste,
+    costeEnvios: variable.envios,
     costeDtf,
     costeTextil,
     textilSinCoste: textil.filter((v) => v.coste_textil == null).length,
     margen: redondear(k.bruta - coste),
-    euroMetro: conMetros.metros > 0 ? redondear(conMetros.bruta / conMetros.metros) : 0,
+    euroMetro: conMetros.metros > 0 ? redondear(brutaMetros / conMetros.metros) : 0,
   };
 }
 

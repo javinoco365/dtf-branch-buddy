@@ -86,7 +86,7 @@ export function Margen({ d }: { d: DatosGerencia }) {
           icon={Wrench}
           pie={
             <span className="text-muted-foreground">
-              DTF {eur(c.costeDtf)} · Textil {eur(c.costeTextil)}
+              DTF {eur(c.costeDtf)} · Envíos {eur(c.costeEnvios)} · Textil {eur(c.costeTextil)}
             </span>
           }
         />
