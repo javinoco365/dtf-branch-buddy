@@ -29,7 +29,9 @@ import {
   sincronizarWoo,
   sincronizarClientesWoo,
   diagnosticoNumeroWoo,
+  diagnosticoLineasWoo,
 } from "@/lib/woocommerce.functions";
+import { eur, metros as fmtMetros } from "@/lib/format";
 import {
   RefreshCw,
   KeyRound,
@@ -243,6 +245,8 @@ function Ajustes() {
           </Card>
 
           <DiagnosticoNumero tiendaId={tiendaId} />
+
+          <DiagnosticoLineas tiendaId={tiendaId} />
 
           <CredencialesCard
             tieneCreds={!!creds?.tiene}
@@ -1056,6 +1060,121 @@ function DiagnosticoNumero({ tiendaId }: { tiendaId: string }) {
             Si el número que esperas no aparece en ninguna de esas claves, el plugin no lo expone
             por la API y hay que mirar su configuración.
           </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const ORIGEN_METROS: Record<string, string> = {
+  montador: "leídos del montador",
+  precio_linea: "estimados con el precio por metro de la línea",
+  precio_ajustes: "estimados con el precio por metro de Ajustes",
+};
+
+/**
+ * Qué trae WooCommerce de verdad en las líneas de un pedido y cuántos metros
+ * sacaría el CRM. El panel de WordPress enseña también lo que el montador
+ * pinta con su propio HTML, que no llega por la API: esto enseña lo que sí
+ * llega. Los valores solo se ven si son medidas o precios.
+ */
+function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
+  const [numero, setNumero] = useState("");
+  const diagnosticar = useServerFn(diagnosticoLineasWoo);
+  const mut = useMutation({
+    mutationFn: () => diagnosticar({ data: { tienda_id: tiendaId, numero } }),
+    onError: (e: Error) => toast.error(e.message || "No se ha podido consultar"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Qué trae WooCommerce en las líneas de un pedido</CardTitle>
+        <CardDescription>
+          Para comprobar de dónde salen los metros de un pedido del montador. Escribe su número
+          (como DCUL-64-2026) y se consulta a WooCommerce solo esas líneas.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (numero.trim()) mut.mutate();
+          }}
+        >
+          <Input
+            className="max-w-xs"
+            placeholder="Número del pedido"
+            value={numero}
+            onChange={(e) => setNumero(e.target.value)}
+          />
+          <Button type="submit" variant="outline" disabled={mut.isPending || !numero.trim()}>
+            {mut.isPending ? "Consultando…" : "Consultar"}
+          </Button>
+          {mut.data && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(JSON.stringify(mut.data, null, 2))
+                  .then(() => toast.success("Copiado"));
+              }}
+            >
+              Copiar resultado
+            </Button>
+          )}
+        </form>
+
+        {mut.data?.lineas.map((l, i) => (
+          <div key={i} className="rounded-md border p-3 text-sm space-y-2">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span className="font-medium">{l.nombre}</span>
+              <span>
+                <span className="text-muted-foreground">cantidad:</span> {l.cantidad}
+              </span>
+              <span>
+                <span className="text-muted-foreground">subtotal:</span> {eur(l.subtotal)}
+              </span>
+              <span>
+                <span className="text-muted-foreground">el CRM guardaría:</span>{" "}
+                {l.calculo
+                  ? `${fmtMetros(l.calculo.metros)}, ${ORIGEN_METROS[l.calculo.origen]}`
+                  : "en unidades (no es de metros)"}
+              </span>
+            </div>
+            {l.metas.length === 0 ? (
+              <div className="text-xs text-muted-foreground">La línea no trae ningún dato.</div>
+            ) : (
+              <ul className="text-xs space-y-0.5">
+                {l.metas.map((m, j) => (
+                  <li key={j} className="break-all">
+                    <span className="font-mono">{m.clave}</span>
+                    {m.etiqueta && <span> («{m.etiqueta}»)</span>}
+                    <span className="text-muted-foreground"> · {m.tipo}</span>
+                    {m.valor !== null && <span> = {m.valor}</span>}
+                    {m.valor === null && m.numero !== null && (
+                      <span className="text-muted-foreground"> · número {m.numero}</span>
+                    )}
+                    {m.propiedades.length > 0 && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · propiedades: {m.propiedades.join(", ")}
+                      </span>
+                    )}
+                    {m.reconocido && (
+                      <span className="text-emerald-700"> · el CRM lo lee como {m.reconocido}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+
+        {mut.data && mut.data.lineas.length === 0 && (
+          <p className="text-sm text-muted-foreground">El pedido no tiene líneas.</p>
         )}
       </CardContent>
     </Card>

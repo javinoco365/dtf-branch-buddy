@@ -2,9 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
-import { tabla } from "./rpc";
+import { faltaLaColumna, tabla } from "./rpc";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
-import { lineaPedidoWoo, metrosPedidoWoo } from "@/dominio/metros-woo";
+import { lineaPedidoWoo, medirLineaWoo, metrosPedidoWoo, type MetaWoo } from "@/dominio/metros-woo";
+import { describirMetaWoo } from "@/dominio/diagnostico-lineas-woo";
+import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 import {
   clientesInvitadosNuevos,
   estadoPagoPorDevolucion,
@@ -24,6 +26,19 @@ async function empresaDeTienda(supabaseAdmin: unknown, tiendaId: string): Promis
     .maybeSingle();
   if (!data?.empresa_id) throw new Error("La tienda no tiene empresa asignada");
   return data.empresa_id as string;
+}
+
+/**
+ * El precio por metro (sin IVA) de Ajustes de Gerencia. Sin la tabla o sin la
+ * columna, el de por defecto: no se para una sincronización por esto.
+ */
+async function precioMetroDeEmpresa(supabaseAdmin: unknown, empresaId: string): Promise<number> {
+  const { data, error } = await tabla(supabaseAdmin, "gerencia_ajustes")
+    .select("precio_metro")
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+  const precio = !error && data?.precio_metro != null ? Number(data.precio_metro) : NaN;
+  return precio > 0 ? precio : AJUSTES_POR_DEFECTO.precio_metro;
 }
 
 /**
@@ -126,6 +141,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     // Aquí y no dentro de los try de abajo: esos solo apuntan el error en la
     // consola, y un fallo al leer la empresa se saltaría los pedidos sin avisar.
     const empresaId = await empresaDeTienda(supabaseAdmin, data.tienda_id);
+    // El precio por metro de Ajustes de Gerencia: con él se estiman los metros
+    // de una línea del montador que no trae su longitud (ver metros-woo.ts).
+    const precioMetro = await precioMetroDeEmpresa(supabaseAdmin, empresaId);
 
     const base = tienda.woo_url.replace(/\/$/, "");
     const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
@@ -272,7 +290,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
         const filasPedidos = orders.map((o) => {
           // Los metros que mide el trabajo (montador), no la cantidad: ver
           // src/dominio/metros-woo.ts.
-          const metros_total = metrosPedidoWoo(o.line_items);
+          const metros_total = metrosPedidoWoo(o.line_items, precioMetro);
           // Las direcciones del PEDIDO, no las de la ficha del cliente. Un
           // pedido de invitado no trae customer_id y se quedaba sin nombre ni
           // correo: es el «—» de la columna Cliente. Estos datos sí vienen
@@ -340,8 +358,10 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
             return (o.line_items || []).map((li: any) => {
               const sub = Number(li.subtotal || 0);
               const ivaLi = Number(li.subtotal_tax || 0);
-              // En metros si es un trabajo del montador; en unidades si no.
-              const { cantidad, unidad, precio_unitario } = lineaPedidoWoo(li);
+              // En metros si es un trabajo del montador (leídos o estimados);
+              // en unidades si no.
+              const { cantidad, unidad, precio_unitario, metros_origen, precio_metro_usado } =
+                lineaPedidoWoo(li, precioMetro);
               return {
                 pedido_id,
                 descripcion: li.name,
@@ -352,11 +372,24 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
                 subtotal: sub,
                 iva: ivaLi,
                 total: sub + ivaLi,
+                metros_origen,
+                precio_metro_usado,
               };
             });
           });
           if (todasLasLineas.length) {
-            await supabaseAdmin.from("pedido_items").insert(todasLasLineas);
+            const r = await tabla(supabaseAdmin, "pedido_items").insert(todasLasLineas);
+            // Sin la migración 20261020100000 no existen las columnas del
+            // origen: se guardan las líneas sin ellas.
+            if (faltaLaColumna(r.error)) {
+              const sinOrigen = todasLasLineas.map((linea) => {
+                const copia: Record<string, unknown> = { ...linea };
+                delete copia.metros_origen;
+                delete copia.precio_metro_usado;
+                return copia;
+              });
+              await tabla(supabaseAdmin, "pedido_items").insert(sinOrigen);
+            }
           }
 
           // --- Devoluciones ---------------------------------------------
@@ -632,6 +665,94 @@ export const diagnosticoNumeroWoo = createServerFn({ method: "POST" })
             const mostrar = pareceNumero.test(clave) && legible !== null;
             return { clave, valor: mostrar ? legible.slice(0, 80) : null };
           }),
+        };
+      }),
+    };
+  });
+
+/**
+ * Qué trae WooCommerce de verdad en las líneas de un pedido, y cuántos metros
+ * sacaría el CRM de ellas.
+ *
+ * Existe porque el panel de WordPress enseña también lo que el montador de DTF
+ * pinta con su propio HTML, y eso no llega por la API. Para saber dónde guarda
+ * la longitud del trabajo hay que mirar la respuesta real.
+ *
+ * Solo pide a WooCommerce las líneas (`_fields`): ni nombres, ni direcciones,
+ * ni notas del cliente. Y de cada dato de la línea devuelve su descripción
+ * (ver describirMetaWoo), no su valor, salvo que sea una medida o un precio.
+ */
+export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid(),
+        numero: z.string().trim().min(1, "Escribe el número del pedido"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    // La misma comprobación que la sincronización: de la tienda o administrador.
+    const { data: miembro } = await supabaseAdmin
+      .from("tienda_usuarios")
+      .select("tienda_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("Esta tienda no tiene URL de WooCommerce");
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Esta tienda no tiene credenciales de WooCommerce guardadas");
+
+    const { data: pedido } = await tabla(supabaseAdmin, "pedidos")
+      .select("id, woo_order_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("numero", data.numero)
+      .maybeSingle();
+    if (!pedido?.woo_order_id) {
+      throw new Error(`No hay ningún pedido ${data.numero} de WooCommerce en esta tienda`);
+    }
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const r = await fetch(
+      `${base}/wp-json/wc/v3/orders/${pedido.woo_order_id}?_fields=id,number,line_items`,
+      { headers: { Authorization: autorizacionWoo(creds), Accept: "application/json" } },
+    );
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+    const o = (await r.json()) as { number?: unknown; line_items?: any[] };
+
+    const precioMetro = await precioMetroDeEmpresa(
+      supabaseAdmin,
+      await empresaDeTienda(supabaseAdmin, data.tienda_id),
+    );
+    return {
+      numero: String(o.number ?? data.numero),
+      precio_metro: precioMetro,
+      lineas: (o.line_items ?? []).map((li) => {
+        const metas: MetaWoo[] = Array.isArray(li.meta_data) ? li.meta_data : [];
+        return {
+          nombre: String(li.name ?? ""),
+          cantidad: Number(li.quantity ?? 0),
+          subtotal: Number(li.subtotal ?? 0),
+          metas: metas.map(describirMetaWoo),
+          // Lo que guardaría hoy la sincronización.
+          calculo: medirLineaWoo(li, precioMetro),
         };
       }),
     };

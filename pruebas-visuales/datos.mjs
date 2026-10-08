@@ -222,6 +222,9 @@ export const PEDIDO_ITEMS = PEDIDOS.flatMap((p, i) => [
     subtotal: p.subtotal,
     iva: p.iva,
     total: p.total,
+    // El primero, estimado (importe ÷ precio por metro): se ve «≈ … estimado».
+    metros_origen: i === 0 ? "precio_ajustes" : "montador",
+    precio_metro_usado: i === 0 ? 7 : null,
     created_at: p.created_at,
     pedidos: { fecha_pedido: p.fecha_pedido, tienda_id: p.tienda_id, estado: p.estado },
   },
