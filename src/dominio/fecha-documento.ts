@@ -65,13 +65,17 @@ export function esRechazoPorFecha(mensaje: string | null | undefined): boolean {
  * cuando no coincide con la de expedición (RD 1619/2012, art. 6.1.f).
  *
  * Fechas 'yyyy-mm-dd'. `ultimaDeLaSerie`: la del último documento de la serie
- * en el año de `deseada`, o null si no hay ninguno.
+ * en el año de `deseada`, o null si no hay ninguno. `hoy`: el día de hoy en
+ * España; si el último es posterior a hoy, no se ajusta.
  */
 export function fechaEmision(
   deseada: string,
   ultimaDeLaSerie: string | null | undefined,
+  hoy: string,
 ): { fecha: string; fechaOperacion: string | null } {
-  if (ultimaDeLaSerie && deseada < ultimaDeLaSerie) {
+  // Un documento con fecha futura (una errata) no arrastra a los demás a esa
+  // fecha: sin ajuste, la base rechaza y dice cuál es la fecha que estorba.
+  if (ultimaDeLaSerie && deseada < ultimaDeLaSerie && ultimaDeLaSerie <= hoy) {
     return { fecha: ultimaDeLaSerie, fechaOperacion: deseada };
   }
   return { fecha: deseada, fechaOperacion: null };

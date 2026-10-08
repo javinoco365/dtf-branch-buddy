@@ -1314,9 +1314,12 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       notas: (pedido.notas as string | null) ?? null,
       // El documento sale, por defecto, con la fecha del pedido.
       fecha_pedido: fechaPedido,
-      // Si la serie ya tiene un documento posterior, el diálogo lo avisa.
+      // Si la serie ya tiene un documento posterior, el diálogo lo avisa. Con
+      // el cliente de servicio, como la base: la RLS del usuario solo le deja
+      // ver las facturas de sus tiendas, y la serie es de toda la empresa. Ya
+      // se sabe que es de la empresa: ha podido leer el pedido.
       ultimas_fechas: await ultimasFechasSeries(
-        context.supabase,
+        (await import("@/integrations/supabase/client.server")).adminComoUsuario(context.userId),
         empresaId,
         Number(fechaPedido.slice(0, 4)),
       ),
@@ -1377,7 +1380,8 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
     // Si la serie ya tiene un documento posterior, sale con la fecha de ese y
     // la pedida va escrita en él como fecha de la operación.
     const emision = await fechaParaEmitir(
-      context.supabase,
+      // Con el cliente de servicio, como la base (ver prepararDocumentoTextil).
+      (await import("@/integrations/supabase/client.server")).adminComoUsuario(context.userId),
       empresaId,
       data.documento,
       data.fecha,

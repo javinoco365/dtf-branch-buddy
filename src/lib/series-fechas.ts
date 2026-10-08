@@ -8,7 +8,7 @@
  */
 
 import { tabla } from "./rpc";
-import { fechaEmision, notasConFechaOperacion } from "@/dominio/fecha-documento";
+import { diaEnEspana, fechaEmision, notasConFechaOperacion } from "@/dominio/fecha-documento";
 
 type Sb = any;
 
@@ -97,7 +97,7 @@ export async function fechaParaEmitir(
   const ultima = empresaId
     ? await ultimaFechaSerie(sb, empresaId, documento, Number(deseada.slice(0, 4)))
     : null;
-  const { fecha, fechaOperacion } = fechaEmision(deseada, ultima);
+  const { fecha, fechaOperacion } = fechaEmision(deseada, ultima, diaEnEspana(new Date()));
   return {
     fecha,
     fecha_operacion: fechaOperacion,

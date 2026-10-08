@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -127,16 +127,22 @@ export function DocumentoPedidoDialog({
     enabled: open,
   });
 
+  // El formulario se rellena una vez por apertura: si los datos se vuelven a
+  // leer (al volver a la pestaña, o tras un rechazo por fecha), no se pisa lo
+  // que alguien ya haya escrito.
+  const rellenado = useRef(false);
   useEffect(() => {
     if (!open) return;
+    rellenado.current = false;
     setFecha(diaEnEspana(new Date()));
     setTipoElegido(null);
   }, [open]);
 
   useEffect(() => {
-    if (!data || data.ya_facturado) return;
-    // Por defecto, la fecha del pedido. Se puede cambiar: si la serie ya tiene
-    // una factura posterior, la base no deja emitir hacia atrás y lo dice.
+    if (!data || data.ya_facturado || rellenado.current) return;
+    rellenado.current = true;
+    // Por defecto, la fecha del pedido. Si la serie ya tiene un documento
+    // posterior, sale con la de ese y esta va como fecha de la operación.
     if (data.fecha_pedido) setFecha(data.fecha_pedido);
     setNotas(data.notas ?? "");
     setNombre(data.receptor.nombre ?? "");
@@ -165,9 +171,12 @@ export function DocumentoPedidoDialog({
   // documento de su serie, el servidor emite con la de ese y deja esta como
   // fecha de la operación. Se avisa antes, para que nadie se lleve sorpresas.
   const ultimas = preparado?.ultimas_fechas ?? null;
+  const hoy = diaEnEspana(new Date());
   const ajustesFecha = (["ticket", "factura"] as const).flatMap((doc) => {
     const ultima = ultimas && fecha.slice(0, 4) === String(ultimas.ejercicio) ? ultimas[doc] : null;
-    return ultima && fecha < ultima ? [{ doc, ultima }] : [];
+    // Si el último es de una fecha futura (una errata), no se ajusta: la base
+    // rechazará la emisión hasta que se corrija.
+    return ultima && fecha < ultima ? [{ doc, ultima, futura: ultima > hoy }] : [];
   });
 
   const puedeTicket = !!preparado && cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
@@ -348,17 +357,18 @@ export function DocumentoPedidoDialog({
                   <div className="flex gap-1.5 text-xs text-status-pendiente">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <div className="space-y-0.5">
-                      {ajustesFecha.map(({ doc, ultima }) => (
-                        <p key={doc}>
-                          {doc === "ticket"
-                            ? `La serie de tickets ya tiene uno del ${diaLegible(ultima)}: el ticket saldrá con esa fecha.`
-                            : `La serie de facturas ya tiene una del ${diaLegible(ultima)}: la factura saldrá con esa fecha.`}
+                      {ajustesFecha.map(({ doc, ultima, futura }) => (
+                        <p key={doc} className={futura ? "text-destructive" : undefined}>
+                          {futura
+                            ? doc === "ticket"
+                              ? `La serie de tickets tiene uno con fecha futura (${diaLegible(ultima)}): el ticket no se puede emitir con una fecha anterior hasta corregirlo.`
+                              : `La serie de facturas tiene una con fecha futura (${diaLegible(ultima)}): la factura no se puede emitir con una fecha anterior hasta corregirlo.`
+                            : doc === "ticket"
+                              ? `La serie de tickets ya tiene uno del ${diaLegible(ultima)}: el ticket saldrá con esa fecha y la de aquí (${diaLegible(fecha)}) irá escrita en él como fecha de la operación.`
+                              : `La serie de facturas ya tiene una del ${diaLegible(ultima)}: la factura saldrá con esa fecha y la de aquí (${diaLegible(fecha)}) irá escrita en ella como fecha de la operación.`}
                         </p>
                       ))}
-                      <p>
-                        La de aquí ({diaLegible(fecha)}) irá escrita en el documento como fecha de
-                        la operación. La numeración no puede ir hacia atrás.
-                      </p>
+                      <p>La numeración no puede ir hacia atrás.</p>
                     </div>
                   </div>
                 )}

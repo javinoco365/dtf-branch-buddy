@@ -118,7 +118,19 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
     margin: { left: 15, right: 15 },
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY + 6;
+  // Los totales y las notas (donde va, por ejemplo, la fecha de la operación)
+  // tienen que caber enteros: si la tabla acaba al pie de la página, pasan a
+  // una nueva en vez de salirse por abajo.
+  const alto = doc.internal.pageSize.getHeight();
+  doc.setFontSize(9);
+  const notasLines: string[] = d.notas ? doc.splitTextToSize(d.notas, 180) : [];
+  const necesario = 12 + (notasLines.length ? 17 + notasLines.length * 4 : 0);
+  let finalY = (doc as any).lastAutoTable.finalY + 6;
+  if (finalY + necesario > alto - 10) {
+    doc.addPage();
+    finalY = 20;
+  }
+  doc.setFontSize(10);
   const xR = W - 15;
   doc.setFont("helvetica", "normal");
   doc.text("Base imponible:", xR - 50, finalY);
@@ -129,10 +141,9 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
   doc.text("TOTAL:", xR - 50, finalY + 11);
   doc.text(eur(d.total), xR, finalY + 11, { align: "right" });
 
-  if (d.notas) {
+  if (notasLines.length) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    const notasLines = doc.splitTextToSize(d.notas, 180);
     doc.text("Notas:", 15, finalY + 22);
     doc.text(notasLines, 15, finalY + 27);
   }

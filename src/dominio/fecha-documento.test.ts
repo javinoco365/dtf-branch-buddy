@@ -54,19 +54,29 @@ describe("fecha del documento de un pedido", () => {
 
 describe("fecha de emisión cuando la serie ya tiene un documento posterior", () => {
   it("si el pedido es anterior al último de la serie, sale con la del último y la del pedido como fecha de la operación", () => {
-    expect(fechaEmision("2026-09-19", "2026-10-07")).toEqual({
+    expect(fechaEmision("2026-09-19", "2026-10-07", "2026-10-08")).toEqual({
       fecha: "2026-10-07",
       fechaOperacion: "2026-09-19",
     });
   });
 
   it("el mismo día o después, la del pedido tal cual", () => {
-    expect(fechaEmision("2026-10-07", "2026-10-07")).toEqual({
+    expect(fechaEmision("2026-10-07", "2026-10-07", "2026-10-08")).toEqual({
       fecha: "2026-10-07",
       fechaOperacion: null,
     });
-    expect(fechaEmision("2026-10-08", "2026-10-07").fechaOperacion).toBeNull();
-    expect(fechaEmision("2026-09-19", null)).toEqual({ fecha: "2026-09-19", fechaOperacion: null });
+    expect(fechaEmision("2026-10-08", "2026-10-07", "2026-10-08").fechaOperacion).toBeNull();
+    expect(fechaEmision("2026-09-19", null, "2026-10-08")).toEqual({
+      fecha: "2026-09-19",
+      fechaOperacion: null,
+    });
+  });
+
+  it("si el último de la serie tiene fecha futura (una errata), no arrastra a los demás", () => {
+    expect(fechaEmision("2026-10-08", "2026-11-08", "2026-10-08")).toEqual({
+      fecha: "2026-10-08",
+      fechaOperacion: null,
+    });
   });
 
   it("la fecha de la operación va en las notas, al final y una sola vez", () => {
