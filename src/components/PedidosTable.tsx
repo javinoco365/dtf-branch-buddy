@@ -22,6 +22,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -65,6 +66,8 @@ import {
 import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
+import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
+import { describirPedidos } from "@/dominio/sumatorios-pedidos";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
@@ -322,9 +325,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       .map(([fecha, lista]) => ({
         fecha,
         lista,
-        total: lista.reduce((s, p) => s + Number(p.total), 0),
+        // Lo mismo en la cabecera del día que en su pie: sin los cancelados.
+        totales: totalesPedidos(lista),
       }));
   }, [filtrados]);
+
+  // La barra de filtros y el total del periodo, de la misma lista y con la
+  // misma función que cada día, para que las cifras no se contradigan.
+  const totalesPeriodo = useMemo(() => totalesPedidos(filtrados), [filtrados]);
 
   function exportar() {
     const filas: (string | number)[][] = [
@@ -512,10 +520,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </Button>
           )}
           <div className="text-xs text-muted-foreground ml-auto">
-            {filtrados.length} pedidos ·{" "}
-            <span className="font-semibold text-foreground">
-              {eur(filtrados.reduce((s, p) => s + Number(p.total), 0))}
-            </span>
+            {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
+            <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
           </div>
         </CardContent>
       </Card>
@@ -551,10 +557,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 {format(new Date(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="font-semibold">{eur(g.total)}</span>
+                <span className="font-semibold">{eur(g.totales.total)}</span>
                 <Badge variant="outline" className="whitespace-nowrap">
-                  {g.lista.length} {g.lista.length === 1 ? "pedido" : "pedidos"}
+                  {describirPedidos(g.totales.pedidos)}
                 </Badge>
+                {/* El importe no los suma: se dicen aparte para que el
+                    número de pedidos cuadre con las filas que se ven. */}
+                {g.totales.cancelados > 0 && (
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                    + {g.totales.cancelados}{" "}
+                    {g.totales.cancelados === 1 ? "cancelado" : "cancelados"}
+                  </span>
+                )}
               </div>
             </div>
             {/* En el móvil, una tarjeta por pedido: una tabla de once columnas
@@ -601,6 +615,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   cabecera se montaba encima de la de Tienda. Por eso la tienda
                   va debajo del número y el método de pago debajo del total.
                   Si se añade una columna, que le quite el sitio a otra.
+
+                  Estos anchos se repiten en ColumnasPedidos, para la tabla
+                  del total del periodo: si cambian aquí, cambian allí.
                 */}
                 <Table className="table-fixed min-w-[1080px]">
                   <TableHeader>
@@ -639,11 +656,60 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                       );
                     })}
                   </TableBody>
+                  <TableFooter>
+                    <FilaTotales
+                      titulo="Total del día"
+                      totales={g.totales}
+                      conCobros={cobrosDisponibles}
+                    />
+                  </TableFooter>
                 </Table>
               </CardContent>
             </Card>
           </div>
         ))}
+        {!isLoading && grupos.length > 0 && (
+          // El total de todos los días, en el ordenador y en el móvil (allí
+          // los días son tarjetas sin pie: lo de cada día ya va en su cabecera).
+          <Card>
+            <CardContent className="p-0">
+              {/*
+                Una tabla con solo el pie, con las mismas columnas que la de
+                cada día para que las cifras caigan debajo de las suyas. Con
+                table-fixed los anchos los manda la primera fila, que aquí es
+                el pie (con celdas juntas): por eso van en un <colgroup>.
+
+                La cabecera está escondida: solo sirve para que, en el móvil,
+                la tarjeta del pie diga «Total», «Cobrado» y «Pendiente»
+                delante de cada cifra (las etiquetas salen de la cabecera).
+              */}
+              <Table movil="tarjetas" className="table-fixed min-w-[1080px]">
+                <ColumnasPedidos />
+                <TableHeader className="hidden">
+                  <TableRow>
+                    <TableHead />
+                    <TableHead>Nº Pedido</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Origen</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Cobrado</TableHead>
+                    <TableHead>Pendiente</TableHead>
+                    <TableHead>Env.</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableFooter className="border-t-0">
+                  <FilaTotales
+                    titulo="Total del periodo"
+                    totales={totalesPeriodo}
+                    conCobros={cobrosDisponibles}
+                  />
+                </TableFooter>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Suspense fallback={null}>
@@ -739,6 +805,62 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * Los anchos de las diez columnas de la tabla de cada día (su cabecera, más
+ * arriba), para la tabla del total del periodo, que no tiene cabecera
+ * visible. Si cambian allí, tienen que cambiar aquí.
+ */
+function ColumnasPedidos() {
+  return (
+    <colgroup>
+      <col className="w-10" />
+      <col className="w-40" />
+      <col />
+      <col className="w-32" />
+      <col className="w-36" />
+      <col className="w-28" />
+      <col className="w-28" />
+      <col className="w-28" />
+      <col className="w-14" />
+      <col className="w-12" />
+    </colgroup>
+  );
+}
+
+/**
+ * La fila de total de una lista de pedidos. Diez celdas, como la cabecera:
+ * las cinco primeras juntas para el texto, Total, Cobrado y Pendiente en las
+ * suyas, y dos vacías (envío y acciones). Con table-fixed, una de más o de
+ * menos descuadra la tabla.
+ */
+function FilaTotales({
+  titulo,
+  totales,
+  conCobros,
+}: {
+  titulo: string;
+  totales: TotalesPedidos;
+  /** Sin la migración de cobros, como en las filas: «—». */
+  conCobros: boolean;
+}) {
+  return (
+    <TableRow>
+      <TableCell colSpan={5} className="font-semibold">
+        {titulo} · {describirPedidos(totales.pedidos, totales.cancelados)}
+      </TableCell>
+      <TableCell className="text-right font-bold tabular-nums">{eur(totales.total)}</TableCell>
+      <TableCell className="text-right font-bold tabular-nums">
+        {conCobros ? eur(totales.cobrado) : "—"}
+      </TableCell>
+      <TableCell className="text-right font-bold tabular-nums">
+        {conCobros ? eur(totales.pendiente) : "—"}
+      </TableCell>
+      <TableCell />
+      <TableCell />
+    </TableRow>
   );
 }
 

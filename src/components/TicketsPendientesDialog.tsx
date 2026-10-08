@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { eur, fechaCorta } from "@/lib/format";
 import { explicarDecision } from "@/dominio/tickets";
+import { sumarImportes } from "@/dominio/sumatorios";
+import { describirPedidos } from "@/dominio/sumatorios-pedidos";
 import {
   emitirTicketsPedidos,
   pedidosSinDocumento,
@@ -239,6 +241,18 @@ function Bloque({
           {conMotivo && <span className="w-full text-xs">{explicarDecision(p.decision)}</span>}
         </div>
       ))}
+      {/* El total de cada bloque, no uno de los tres: solo el primero se
+          emite. Pegado abajo mientras se ve su bloque, porque la lista se
+          desplaza dentro del diálogo. Aquí no hay cancelados: el servidor
+          ya los deja fuera. */}
+      {pedidos.length > 0 && (
+        <div className="sticky bottom-0 flex items-baseline gap-x-3 border-t bg-background pt-1 font-medium">
+          <span>Total · {describirPedidos(pedidos.length)}</span>
+          <span className="ml-auto font-bold tabular-nums">
+            {eur(sumarImportes(pedidos, (p) => p.total))}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

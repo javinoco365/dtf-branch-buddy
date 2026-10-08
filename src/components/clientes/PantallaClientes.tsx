@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -52,10 +53,14 @@ import { eur, fechaCorta } from "@/lib/format";
 import {
   etiquetaOrigen,
   filtrarClientes,
-  totalDePedidos,
   type FiltroOrigen,
   type OrigenCliente,
 } from "@/dominio/clientes";
+import {
+  describirDocumentos,
+  describirPedidos,
+  totalesCliente,
+} from "@/dominio/sumatorios-pedidos";
 
 type Cliente = {
   id: string;
@@ -605,19 +610,31 @@ function ClienteDetalle({
   const { data: facturas = [] } = useQuery({
     queryKey: ["cliente-facturas", clienteId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("facturas")
-        .select("id, serie, numero, fecha, estado, total")
+      // sustituye_a_id, para que el total no cuente dos veces un ticket
+      // canjeado por factura. tabla(): types.ts todavía no conoce la columna.
+      const { data, error } = await tabla(supabase, "facturas")
+        .select("id, serie, numero, fecha, estado, total, sustituye_a_id")
         .eq("cliente_id", clienteId)
         .order("fecha", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as {
+        id: string;
+        serie: string;
+        numero: number;
+        fecha: string;
+        estado: string;
+        total: number;
+        sustituye_a_id: string | null;
+      }[];
     },
   });
 
   if (!cliente) return null;
 
-  const totalPedidos = totalDePedidos(pedidos, pedidosTextil);
+  // Los pies de las tres tablas y la tarjeta «Total pedidos», con las mismas
+  // reglas: los cancelados no suman, y de las facturas, los borradores y los
+  // tickets canjeados tampoco.
+  const totales = totalesCliente({ pedidos, pedidosTextil, facturas });
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -670,13 +687,17 @@ function ClienteDetalle({
           <Resumen titulo="Pedidos tiendas" valor={String(pedidos.length)} />
           <Resumen titulo="Pedidos textil" valor={String(pedidosTextil.length)} />
           <Resumen titulo="Facturas" valor={String(facturas.length)} />
-          <Resumen titulo="Total pedidos" valor={eur(totalPedidos)} />
+          <Resumen titulo="Total pedidos" valor={eur(totales.totalPedidos)} />
         </div>
 
         <Historial
           titulo="Pedidos de las tiendas"
           icono={<ShoppingCart className="h-4 w-4" />}
           vacio="Sin pedidos en las tiendas"
+          pie={{
+            texto: describirPedidos(totales.tienda.pedidos, totales.tienda.cancelados),
+            total: totales.tienda.total,
+          }}
           filas={pedidos.map((p) => ({
             id: p.id,
             ref: p.numero,
@@ -689,6 +710,10 @@ function ClienteDetalle({
           titulo="Pedidos del textil"
           icono={<Shirt className="h-4 w-4" />}
           vacio="Sin pedidos del textil"
+          pie={{
+            texto: describirPedidos(totales.textil.pedidos, totales.textil.cancelados),
+            total: totales.textil.total,
+          }}
           filas={pedidosTextil.map((p) => ({
             id: p.id,
             ref: p.numero,
@@ -701,6 +726,10 @@ function ClienteDetalle({
           titulo="Facturas"
           icono={<Receipt className="h-4 w-4" />}
           vacio="Sin facturas"
+          pie={{
+            texto: describirDocumentos(totales.facturas),
+            total: totales.facturas.total,
+          }}
           filas={facturas.map((f) => ({
             id: f.id,
             ref: `${f.serie}-${String(f.numero).padStart(4, "0")}`,
@@ -736,11 +765,18 @@ function Historial({
   titulo,
   icono,
   vacio,
+  pie,
   filas,
 }: {
   titulo: string;
   icono: React.ReactNode;
   vacio: string;
+  /**
+   * El total de la tabla, ya calculado con las reglas de cada lista: no es la
+   * suma de las filas a secas (los cancelados y los borradores se ven pero no
+   * suman).
+   */
+  pie: { texto: string; total: number };
   filas: { id: string; ref: string; fecha: string; estado: string; total: number }[];
 }) {
   return (
@@ -778,6 +814,18 @@ function Historial({
                 </TableRow>
               )}
             </TableBody>
+            {filas.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={3} className="font-semibold">
+                    Total · {pie.texto}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(pie.total)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
