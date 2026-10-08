@@ -26,6 +26,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -60,6 +61,7 @@ import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { enRango } from "@/dominio/periodos";
 import { normalizarTexto } from "@/dominio/clientes";
+import { totalesPresupuestos } from "@/dominio/sumatorios-textil";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -115,6 +117,8 @@ function PresupuestosPage() {
           normalizarTexto(p.pedido?.numero).includes(q)),
     );
   }, [data, filtros.q, filtros.estado, periodo.rango]);
+  // El pie suma lo filtrado, sin los rechazados: el cliente dijo que no.
+  const totales = useMemo(() => totalesPresupuestos(filtrados as any[]), [filtrados]);
   const { data: marcas = [] } = useQuery({
     queryKey: ["textil-marcas"],
     queryFn: () => marcasFn(),
@@ -308,6 +312,22 @@ function PresupuestosPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    Total · {totales.presupuestos} presupuesto
+                    {totales.presupuestos === 1 ? "" : "s"}
+                    {totales.rechazados > 0 &&
+                      ` · sin ${totales.rechazados} rechazado${totales.rechazados === 1 ? "" : "s"}`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.total)}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
