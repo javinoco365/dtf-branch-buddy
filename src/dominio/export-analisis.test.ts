@@ -4,6 +4,7 @@ import {
   construirExportAnalisis,
   serializarExportAnalisis,
   type CobroExport,
+  type DocumentoExport,
   type LineaExport,
   type PedidoExport,
 } from "./export-analisis";
@@ -30,19 +31,19 @@ const base = {
   alcance: "Tienda Uno",
   tiendas: [{ id: T1, nombre: "Tienda Uno" }],
   costesMetro: { consumibles: 1, packaging: 0.5, electricidad: 0.5 },
-  precioMetroAjustes: 7,
+  ajustes: { precio_metro: 7, web_sin_pagar_cuenta: true, de_fabrica: false },
 };
 
 const exportar = (
   pedidos: PedidoExport[],
-  extra: { lineas?: LineaExport[]; cobros?: CobroExport[] } = {},
+  extra: { lineas?: LineaExport[]; cobros?: CobroExport[]; documentos?: DocumentoExport[] } = {},
 ) =>
   construirExportAnalisis({
     ...base,
     pedidos,
     lineas: extra.lineas ?? [],
     cobros: extra.cobros ?? [],
-    documentos: [],
+    documentos: extra.documentos ?? [],
   });
 
 describe("exportación para análisis", () => {
@@ -95,7 +96,7 @@ describe("exportación para análisis", () => {
     expect(e.leeme.definiciones.bruta).toMatch(/sin IVA y sin envío/);
     expect(e.leeme.diferencias_con_las_pantallas.length).toBeGreaterThan(0);
     expect(e.empresa.coste_metro_hoy.total).toBe(2);
-    expect(e.empresa.precio_metro_ajustes).toBe(7);
+    expect(e.empresa.ajustes.precio_metro).toBe(7);
   });
 
   it("cada pedido con su bruta sin envío, sea el modelo que sea", () => {
@@ -352,5 +353,121 @@ describe("el resumen cuadra al céntimo con los pedidos", () => {
     const raro = exportar([pedido({ id: "z", subtotal: 100, iva: 21, envio: 0, total: 125 })]);
     expect(raro.pedidos[0].importes.descuadre).toBe(4);
     expect(raro.avisos.join(" ")).toMatch(/1 pedido/);
+  });
+});
+
+describe("lo que el analista necesita separar", () => {
+  it("el precio medido deja fuera los metros estimados y los pedidos manuales", () => {
+    const e = exportar(
+      [
+        // Web, medido por el montador: 10 m a 12 €.
+        pedido({ id: "w1", subtotal: 120, iva: 25.2, envio: 0, total: 145.2, metros_total: 10 }),
+        // Web, estimado con el precio de Ajustes: 10 m a 7 €.
+        pedido({ id: "w2", subtotal: 70, iva: 14.7, envio: 0, total: 84.7, metros_total: 10 }),
+        // Manual: 20 camisetas + 3 m, todo en 'ud' y sumado como metros.
+        pedido({
+          id: "m1",
+          origen: "manual",
+          subtotal: 196,
+          iva: 41.16,
+          envio: 0,
+          total: 237.16,
+          metros_total: 23,
+        }),
+      ],
+      {
+        lineas: [
+          {
+            pedido_id: "w1",
+            cantidad: 10,
+            unidad: "m",
+            subtotal: 120,
+            iva: 25.2,
+            metros_origen: "montador",
+          },
+          {
+            pedido_id: "w2",
+            cantidad: 10,
+            unidad: "m",
+            subtotal: 70,
+            metros_origen: "precio_ajustes",
+            precio_metro_usado: 7,
+          },
+          { pedido_id: "m1", descripcion: "Camiseta", cantidad: 20, unidad: "ud", subtotal: 160 },
+          { pedido_id: "m1", descripcion: "Metro DTF", cantidad: 3, unidad: "ud", subtotal: 36 },
+        ],
+      },
+    );
+    expect(e.totales).toMatchObject({
+      eur_metro_medido: 12,
+      metros_de_lineas_estimadas: 10,
+      pedidos_con_metros_estimados: 1,
+      pedidos_manuales: 1,
+      metros_manuales: 23,
+    });
+    // El global mezcla los tres: (120 + 70 + 196) ÷ 43.
+    expect(e.totales.eur_metro).toBe(redondear(386 / 43));
+    const w2 = e.pedidos.find((p) => p.id === "w2")!;
+    expect(w2.metros_de_lineas_estimadas).toBe(10);
+    expect(e.pedidos.find((p) => p.id === "w1")!.lineas[0]).toMatchObject({
+      iva: 25.2,
+      iva_pct: 0,
+    });
+  });
+
+  it("los pedidos web sin pagar cuentan, pero aparte", () => {
+    const e = exportar([
+      pedido({ id: "p", estado: "pendiente", subtotal: 100, iva: 21, envio: 0, total: 121 }),
+      pedido({
+        id: "q",
+        estado: "pendiente",
+        origen: "manual",
+        subtotal: 100,
+        iva: 21,
+        envio: 0,
+        total: 121,
+      }),
+    ]);
+    expect(e.pedidos.find((p) => p.id === "p")!.web_sin_pagar).toBe(true);
+    expect(e.pedidos.find((p) => p.id === "q")!.web_sin_pagar).toBe(false);
+    expect(e.totales).toMatchObject({
+      pedidos: 2,
+      total_neto: 242,
+      pedidos_web_sin_pagar: 1,
+      total_neto_web_sin_pagar: 121,
+    });
+  });
+
+  it("el documento vigente: la factura del canje, nada si se anuló", () => {
+    const doc = (
+      d: Partial<DocumentoExport> & { id: string; pedido_id: string },
+    ): DocumentoExport => ({
+      referencia: d.id,
+      tipo: "simplificada",
+      estado: "emitida",
+      total: 133.1,
+      ...d,
+    });
+    const e = exportar([pedido({ id: "c" }), pedido({ id: "a" }), pedido({ id: "s" })], {
+      documentos: [
+        // Canje: el ticket T1 lo sustituye la factura F1.
+        doc({ id: "T1", pedido_id: "c" }),
+        doc({ id: "F1", pedido_id: "c", tipo: "ordinaria", sustituye_a_id: "T1" }),
+        // Anulada con su rectificativa en negativo.
+        doc({ id: "F2", pedido_id: "a", tipo: "ordinaria" }),
+        doc({
+          id: "R1",
+          pedido_id: "a",
+          tipo: "rectificativa",
+          total: -133.1,
+          rectifica_a_id: "F2",
+        }),
+      ],
+    });
+    const de = (id: string) => e.pedidos.find((p) => p.id === id)!;
+    expect(de("c").documento_vigente).toBe("F1");
+    expect(de("a").documento_vigente).toBeNull();
+    expect(de("s").documento_vigente).toBeNull();
+    expect(e.totales).toMatchObject({ pedidos_sin_documento: 2, total_neto_sin_documento: 266.2 });
   });
 });

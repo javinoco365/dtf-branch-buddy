@@ -8,30 +8,34 @@
 
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaTabla, tabla } from "@/lib/rpc";
+import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
 import { referenciaFactura } from "@/lib/format";
 import { descargarBlob } from "@/lib/csv";
 import {
   construirExportAnalisis,
   serializarExportAnalisis,
+  type AjustesExport,
   type CobroExport,
   type DocumentoExport,
   type LineaExport,
   type PedidoExport,
 } from "@/dominio/export-analisis";
 import { sanearNombre } from "@/dominio/archivo";
+import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 
 type Fila = Record<string, any>;
 
-/** Lee y descarga. `tiendaId` vacío: todas las tiendas que el usuario puede ver. */
+/**
+ * Lee y descarga. `tiendaId` vacío: todas las tiendas que el usuario puede ver.
+ * Devuelve el alcance con el nombre de la tienda tal como se leyó, para que el
+ * aviso diga lo mismo que el fichero.
+ */
 export async function exportarPedidosParaAnalisis({
   tiendaId,
-  alcance,
 }: {
   tiendaId?: string | null;
-  alcance: string;
-}): Promise<{ pedidos: number; avisos: string[] }> {
+}): Promise<{ pedidos: number; avisos: string[]; alcance: string }> {
   const avisos: string[] = [];
   const deTienda = <Q extends { eq: (c: string, v: string) => Q }>(q: Q, columna: string) =>
     tiendaId ? q.eq(columna, tiendaId) : q;
@@ -45,6 +49,7 @@ export async function exportarPedidosParaAnalisis({
         .order("id")
         .range(a, b),
     ),
+    // Con "*": metros_origen y precio_metro_usado pueden no existir todavía.
     leerTodas<Fila>((a, b) =>
       deTienda(
         tabla(supabase, "pedido_items").select("*, pedido:pedidos!inner(tienda_id)"),
@@ -67,9 +72,10 @@ export async function exportarPedidosParaAnalisis({
       deTienda(
         tabla(supabase, "facturas")
           .select(
-            "id, pedido_id, tipo, serie, ejercicio, numero, fecha, estado, total, rectifica_a_id, sustituye_a_id",
+            "id, pedido_id, tipo, serie, ejercicio, numero, fecha, estado, base_imponible, iva_total, total, fecha_vencimiento, rectifica_a_id, sustituye_a_id",
           )
-          .not("pedido_id", "is", null),
+          .not("pedido_id", "is", null)
+          .neq("estado", "borrador"),
         "tienda_id",
       )
         .order("id")
@@ -83,20 +89,51 @@ export async function exportarPedidosParaAnalisis({
       .limit(1)
       .maybeSingle(),
   ]);
-  if (pedidos.error) throw new Error(pedidos.error.message);
-  if (lineas.error) throw new Error(lineas.error.message);
-  if (documentos.error) throw new Error(documentos.error.message);
+  // supabase-js no lanza: un fallo de red también llega como `error`.
+  for (const r of [pedidos, lineas, documentos, tiendas, empresa]) {
+    if (r.error) throw new Error(r.error.message);
+  }
   if (cobros.error && !faltaLaTabla(cobros.error)) throw new Error(cobros.error.message);
   if (cobros.error) avisos.push("Sin la tabla de cobros: los cobros salen vacíos.");
+  if (!empresa.data) avisos.push("Sin empresa activa: el coste por metro de hoy sale 0.");
+  // Sin la migración 20261020100000 las líneas no dicen de dónde salen sus
+  // metros, y PostgREST no avisa: select("*") simplemente no trae la columna.
+  if (lineas.data.length > 0 && !lineas.data.some((l) => "metros_origen" in l)) {
+    avisos.push(
+      "Sin la migración 20261020100000 no se sabe qué metros son estimados: metros_estimados sale false en todos.",
+    );
+  }
 
-  let precioMetro: number | null = null;
+  // Como la sincronización: sin ajustes guardados, los de fábrica.
+  const ajustes: AjustesExport = {
+    precio_metro: AJUSTES_POR_DEFECTO.precio_metro,
+    web_sin_pagar_cuenta: AJUSTES_POR_DEFECTO.web_sin_pagar_cuenta,
+    de_fabrica: true,
+  };
   if (empresa.data?.id) {
-    const { data: ajustes } = await tabla(supabase, "gerencia_ajustes")
-      .select("precio_metro")
+    const r = await tabla(supabase, "gerencia_ajustes")
+      .select("precio_metro, web_sin_pagar_cuenta")
       .eq("empresa_id", empresa.data.id)
       .maybeSingle();
-    if (ajustes?.precio_metro != null) precioMetro = Number(ajustes.precio_metro);
+    if (r.error) {
+      avisos.push(
+        faltaLaTabla(r.error) || faltaLaColumna(r.error)
+          ? "Sin la migración de Ajustes de Gerencia: van los ajustes de fábrica."
+          : "No se pudieron leer los Ajustes de Gerencia: van los de fábrica.",
+      );
+    } else if (r.data) {
+      ajustes.de_fabrica = false;
+      if (Number(r.data.precio_metro) > 0) ajustes.precio_metro = Number(r.data.precio_metro);
+      if (typeof r.data.web_sin_pagar_cuenta === "boolean") {
+        ajustes.web_sin_pagar_cuenta = r.data.web_sin_pagar_cuenta;
+      }
+    }
   }
+
+  const listaTiendas = ((tiendas.data ?? []) as Fila[]).filter(
+    (t) => !tiendaId || t.id === tiendaId,
+  );
+  const alcance = tiendaId ? (listaTiendas[0]?.nombre ?? "Tienda") : "Todas las tiendas";
 
   const filasPedidos = pedidos.data.map((p): PedidoExport => ({
     id: p.id,
@@ -108,6 +145,8 @@ export async function exportarPedidosParaAnalisis({
     estado_pago: p.estado_pago,
     estado_produccion: p.estado_produccion,
     estado_envio: p.estado_envio,
+    cancelado_en: p.cancelado_en ?? null,
+    motivo_cancelacion: p.motivo_cancelacion ?? null,
     cliente_id: p.cliente_id,
     cliente_nombre: p.cliente_nombre,
     metodo_pago: p.metodo_pago,
@@ -126,9 +165,7 @@ export async function exportarPedidosParaAnalisis({
   const e = construirExportAnalisis({
     generado: new Date(),
     alcance,
-    tiendas: ((tiendas.data ?? []) as Fila[])
-      .filter((t) => !tiendaId || t.id === tiendaId)
-      .map((t) => ({ id: t.id, nombre: t.nombre })),
+    tiendas: listaTiendas.map((t) => ({ id: t.id, nombre: t.nombre })),
     pedidos: filasPedidos,
     lineas: lineas.data as LineaExport[],
     cobros: (cobros.error ? [] : cobros.data) as CobroExport[],
@@ -139,7 +176,10 @@ export async function exportarPedidosParaAnalisis({
       referencia: referenciaFactura(f.serie, f.ejercicio, f.numero),
       fecha: f.fecha,
       estado: f.estado,
+      base_imponible: f.base_imponible,
+      iva_total: f.iva_total,
       total: f.total,
+      fecha_vencimiento: f.fecha_vencimiento ?? null,
       rectifica_a_id: f.rectifica_a_id ?? null,
       sustituye_a_id: f.sustituye_a_id ?? null,
     })),
@@ -148,7 +188,7 @@ export async function exportarPedidosParaAnalisis({
       packaging: Number(empresa.data?.coste_packaging_metro ?? 0),
       electricidad: Number(empresa.data?.coste_electricidad_metro ?? 0),
     },
-    precioMetroAjustes: precioMetro,
+    ajustes,
     avisos,
   });
 
@@ -157,5 +197,5 @@ export async function exportarPedidosParaAnalisis({
     nombre,
     new Blob([serializarExportAnalisis(e)], { type: "application/json;charset=utf-8" }),
   );
-  return { pedidos: e.pedidos.length, avisos };
+  return { pedidos: e.pedidos.length, avisos: e.avisos, alcance };
 }

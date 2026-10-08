@@ -198,20 +198,20 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   });
 
   // Todos los pedidos de la tienda (o de todas), no solo los del periodo: es
-  // para analizarlos fuera del CRM.
-  const nombreTiendaConsulta = tiendaConsulta
-    ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "Tienda")
-    : "Todas las tiendas";
+  // para analizarlos fuera del CRM. La tienda va con el clic, y el nombre lo
+  // devuelve la exportación: si el filtro cambia mientras tanto, el aviso
+  // sigue hablando de lo que se exportó.
   const exportarAnalisis = useMutation({
-    mutationFn: () =>
-      exportarPedidosParaAnalisis({ tiendaId: tiendaConsulta, alcance: nombreTiendaConsulta }),
+    mutationFn: (tienda: string | undefined) => exportarPedidosParaAnalisis({ tiendaId: tienda }),
     onSuccess: (r) => {
-      toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${nombreTiendaConsulta}`, {
+      toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${r.alcance}`, {
         description: r.avisos.join(" ") || undefined,
       });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo exportar"),
   });
+  // Exportar mientras se sincroniza leería pedidos a medio reescribir.
+  const ocupado = sincronizar.isPending || exportarAnalisis.isPending;
 
   const setEstadoFn = useServerFn(updatePedidoEstado);
   const delFn = useServerFn(deletePedido);
@@ -337,7 +337,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               variant="outline"
               size="sm"
               onClick={() => sincronizar.mutate()}
-              disabled={sincronizar.isPending}
+              disabled={ocupado}
             >
               {sincronizar.isPending ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -347,23 +347,49 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               {sincronizar.isPending ? "Sincronizando…" : "Sincronizar ahora"}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={exportar}>
-            <Download className="h-4 w-4 mr-2" /> Exportar CSV
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportarAnalisis.mutate()}
-            disabled={exportarAnalisis.isPending}
-            title={`Todos los pedidos de ${nombreTiendaConsulta}, de todas las fechas, con sus líneas, cobros y documentos, en un JSON que se explica solo`}
-          >
-            {exportarAnalisis.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileJson className="h-4 w-4 mr-2" />
-            )}
-            {exportarAnalisis.isPending ? "Exportando…" : "Exportar para análisis"}
-          </Button>
+          {/* Un solo botón para las dos exportaciones: con uno más, la barra
+              no cabía en una fila en un portátil y se salía en una tableta. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={exportarAnalisis.isPending}>
+                {exportarAnalisis.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {exportarAnalisis.isPending ? "Exportando…" : "Exportar"}
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem onClick={exportar}>
+                <Download />
+                <div>
+                  <div>CSV</div>
+                  <div className="text-xs text-muted-foreground">
+                    Los pedidos que se ven, para abrir en Excel
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => exportarAnalisis.mutate(tiendaConsulta)}
+                disabled={ocupado}
+              >
+                <FileJson />
+                <div>
+                  <div>Para análisis</div>
+                  <div className="text-xs text-muted-foreground">
+                    Todos los pedidos de{" "}
+                    {tiendaConsulta
+                      ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "la tienda")
+                      : "todas las tiendas"}
+                    , de todas las fechas, con líneas, cobros y documentos, en un JSON que se
+                    explica solo (para Claude)
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {tiendaId && (
             <Button size="sm" onClick={() => setNuevoOpen(true)}>
               <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
