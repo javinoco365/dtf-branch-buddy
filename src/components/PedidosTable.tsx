@@ -37,9 +37,11 @@ import {
   ChevronUp,
   Download,
   FileJson,
+  FileText,
   Loader2,
   MoreVertical,
   Plus,
+  Receipt,
   RefreshCw,
   Search,
   Truck,
@@ -54,7 +56,13 @@ import {
   mismaDireccion as sonLaMismaDireccion,
   type Direccion,
 } from "@/dominio/direcciones";
-import { deletePedido, listPedidos, updatePedidoEstado } from "@/lib/pedidos.functions";
+import {
+  deletePedido,
+  listPedidos,
+  updatePedidoEstado,
+  type DocumentoDeLista,
+} from "@/lib/pedidos.functions";
+import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
@@ -68,6 +76,11 @@ const PedidoTrackingDialog = lazy(() =>
 );
 const FacturarPedidoDialog = lazy(() =>
   import("@/components/FacturarPedidoDialog").then((m) => ({ default: m.FacturarPedidoDialog })),
+);
+const FacturarPedidosDialog = lazy(() =>
+  import("@/components/documentos/FacturarPedidosDialog").then((m) => ({
+    default: m.FacturarPedidosDialog,
+  })),
 );
 const CobrosPedidoDialog = lazy(() =>
   import("@/components/cobros/CobrosPedidoDialog").then((m) => ({
@@ -132,6 +145,8 @@ export type PedidoFila = {
   } | null;
   /** Vacío también si la migración de cobros no está aplicada. */
   cobros: Cobro[];
+  /** El ticket o la factura que cuenta para el pedido, si lo tiene. */
+  documento?: DocumentoDeLista | null;
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -183,6 +198,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const [borrar, setBorrar] = useState<PedidoFila | null>(null);
   const [facturar, setFacturar] = useState<PedidoFila | null>(null);
   const [cobrando, setCobrando] = useState<PedidoFila | null>(null);
+  const [facturandoVarios, setFacturandoVarios] = useState(false);
 
   const { desde, hasta } = periodo.rango!;
   const list = useServerFn(listPedidos);
@@ -283,6 +299,16 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
 
   // Agrupar por día
+  // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
+  // más antiguo al más nuevo. Como mucho 500 de una vez.
+  const sinDocumento = useMemo(
+    () =>
+      filtrados
+        .filter((p) => p.estado !== "cancelado" && !p.documento)
+        .sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido)),
+    [filtrados],
+  );
+
   const grupos = useMemo(() => {
     const map = new Map<string, PedidoFila[]>();
     for (const p of filtrados) {
@@ -339,7 +365,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} className="max-md:w-full" />
-        <div className="ml-auto flex gap-2 max-md:ml-0 max-md:flex-wrap">
+        {/* Se parte en dos filas si no cabe, a cualquier ancho: en una tableta
+            con la barra lateral, una sola fila se salía de la pantalla. */}
+        <div className="ml-auto flex flex-wrap justify-end gap-2 max-md:ml-0 max-md:justify-start">
           {/* Solo con una tienda delante: sincronizar «todas» no significa
               nada, cada una tiene sus credenciales y su web. */}
           {tiendaId && (
@@ -354,7 +382,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar ahora"}
+              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar"}
             </Button>
           )}
           {/* Un solo botón para las dos exportaciones: con uno más, la barra
@@ -400,6 +428,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFacturandoVarios(true)}
+            title="Emitir tickets o facturas de varios pedidos, del más antiguo al más nuevo"
+          >
+            <Receipt className="h-4 w-4 mr-2" /> Facturar
+          </Button>
           {tiendaId && (
             <Button size="sm" onClick={() => setNuevoOpen(true)}>
               <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
@@ -654,6 +690,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             }}
           />
         )}
+        {facturandoVarios && (
+          <FacturarPedidosDialog
+            open={facturandoVarios}
+            onOpenChange={setFacturandoVarios}
+            pedidoIds={sinDocumento.slice(0, 500).map((p) => p.id)}
+            recortados={Math.max(0, sinDocumento.length - 500)}
+            nombreTienda={
+              tiendaId ? undefined : (id) => tiendasLista.find((t) => t.id === id)?.nombre ?? null
+            }
+          />
+        )}
         {cobrando && (
           <CobrosPedidoDialog
             open={!!cobrando}
@@ -722,6 +769,55 @@ function numeroVisible(pedido: PedidoFila) {
   return pedido.numero?.trim() || (pedido.woo_order_id ? `#${pedido.woo_order_id}` : "—");
 }
 
+/**
+ * El ticket o la factura del pedido, en verde, con su número: abre el PDF.
+ * Es el mismo PDF que se descarga desde Facturas (si no estaba guardado, el
+ * servidor lo genera y lo guarda antes).
+ */
+function BotonDocumento({ documento }: { documento: DocumentoDeLista }) {
+  const abrirFn = useServerFn(generarYSubirFacturaPDF);
+  const [abriendo, setAbriendo] = useState(false);
+  const esTicket = documento.tipo === "simplificada";
+  const que = `${esTicket ? "el ticket" : "la factura"} ${documento.referencia}`;
+  const Icono = esTicket ? Receipt : FileText;
+
+  async function abrir() {
+    // La pestaña se abre ya, con el clic: al volver de la red el navegador
+    // no deja abrir ventanas.
+    const ventana = window.open("", "_blank");
+    setAbriendo(true);
+    try {
+      const r = await abrirFn({ data: { factura_id: documento.id } });
+      if (!r?.url) throw new Error("No se pudo abrir el PDF");
+      if (ventana) ventana.location.href = r.url;
+      else window.location.href = r.url;
+    } catch (e: any) {
+      ventana?.close();
+      toast.error(e?.message ?? "No se pudo abrir el PDF");
+    } finally {
+      setAbriendo(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={abrir}
+      disabled={abriendo}
+      title={`Abrir ${que}`}
+      aria-label={`Abrir ${que}`}
+      className="mt-1 inline-flex max-w-full items-center gap-1 rounded-md border border-status-completado/30 bg-status-completado/15 px-1.5 py-0.5 text-xs font-medium text-status-completado transition-colors hover:bg-status-completado/25 disabled:opacity-60 max-md:mt-0"
+    >
+      {abriendo ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      ) : (
+        <Icono className="h-3 w-3 shrink-0" />
+      )}
+      <span className="truncate font-mono">{documento.referencia}</span>
+    </button>
+  );
+}
+
 function FilaPedido({
   pedido,
   abierta,
@@ -755,6 +851,7 @@ function FilaPedido({
               {pedido.tienda_nombre ?? "—"}
             </div>
           )}
+          {pedido.documento && <BotonDocumento documento={pedido.documento} />}
         </TableCell>
         <TableCell>
           {/* Con table-fixed la celda ya no se estira: un correo largo se
@@ -901,6 +998,7 @@ function TarjetaPedido({
           <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
             {pedido.origen === "woocommerce" ? "WooCommerce" : "Manual"}
           </Badge>
+          {pedido.documento && <BotonDocumento documento={pedido.documento} />}
           {onCobros && !cancelado && (
             <button
               type="button"

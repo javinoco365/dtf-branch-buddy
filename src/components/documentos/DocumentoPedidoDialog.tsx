@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -23,7 +23,7 @@ import {
 import { AlertTriangle, FileText, Receipt } from "lucide-react";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
-import { diaEnEspana } from "@/dominio/fecha-documento";
+import { diaEnEspana, diaLegible, esRechazoPorFecha } from "@/dominio/fecha-documento";
 import {
   cabeEnTicket,
   decidirDocumento,
@@ -52,6 +52,8 @@ export type DocumentoPreparado =
       tipo_fiscal: TipoFiscal | null;
       /** El día del pedido ('yyyy-mm-dd'): la fecha que se propone para el documento. */
       fecha_pedido?: string | null;
+      /** La fecha del último ticket y de la última factura de la serie en ese año. */
+      ultimas_fechas?: { ejercicio: number; ticket: string | null; factura: string | null };
       limites: LimitesTicket;
       notas: string | null;
     };
@@ -92,7 +94,16 @@ export function DocumentoPedidoDialog({
   numeroPedido: string;
   claveQuery: readonly unknown[];
   preparar: () => Promise<DocumentoPreparado>;
-  emitir: (p: PeticionDocumento) => Promise<{ id: string; referencia: string }>;
+  /**
+   * Si la serie ya tenía un documento posterior a la fecha pedida, el servidor
+   * emite con la de ese y devuelve la pedida como `fecha_operacion`.
+   */
+  emitir: (p: PeticionDocumento) => Promise<{
+    id: string;
+    referencia: string;
+    fecha?: string;
+    fecha_operacion?: string | null;
+  }>;
   /**
    * Genera el PDF y devuelve una URL para abrirlo, si la hay. Un ticket sale en
    * 80 mm, para la impresora de tickets; una factura, en A4.
@@ -116,16 +127,22 @@ export function DocumentoPedidoDialog({
     enabled: open,
   });
 
+  // El formulario se rellena una vez por apertura: si los datos se vuelven a
+  // leer (al volver a la pestaña, o tras un rechazo por fecha), no se pisa lo
+  // que alguien ya haya escrito.
+  const rellenado = useRef(false);
   useEffect(() => {
     if (!open) return;
+    rellenado.current = false;
     setFecha(diaEnEspana(new Date()));
     setTipoElegido(null);
   }, [open]);
 
   useEffect(() => {
-    if (!data || data.ya_facturado) return;
-    // Por defecto, la fecha del pedido. Se puede cambiar: si la serie ya tiene
-    // una factura posterior, la base no deja emitir hacia atrás y lo dice.
+    if (!data || data.ya_facturado || rellenado.current) return;
+    rellenado.current = true;
+    // Por defecto, la fecha del pedido. Si la serie ya tiene un documento
+    // posterior, sale con la de ese y esta va como fecha de la operación.
     if (data.fecha_pedido) setFecha(data.fecha_pedido);
     setNotas(data.notas ?? "");
     setNombre(data.receptor.nombre ?? "");
@@ -149,6 +166,18 @@ export function DocumentoPedidoDialog({
         : null,
     [preparado, nombre, nif, tipoFiscal],
   );
+
+  // La numeración no va hacia atrás: si la fecha es anterior al último
+  // documento de su serie, el servidor emite con la de ese y deja esta como
+  // fecha de la operación. Se avisa antes, para que nadie se lleve sorpresas.
+  const ultimas = preparado?.ultimas_fechas ?? null;
+  const hoy = diaEnEspana(new Date());
+  const ajustesFecha = (["ticket", "factura"] as const).flatMap((doc) => {
+    const ultima = ultimas && fecha.slice(0, 4) === String(ultimas.ejercicio) ? ultimas[doc] : null;
+    // Si el último es de una fecha futura (una errata), no se ajusta: la base
+    // rechazará la emisión hasta que se corrija.
+    return ultima && fecha < ultima ? [{ doc, ultima, futura: ultima > hoy }] : [];
+  });
 
   const puedeTicket = !!preparado && cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
   const puedeFactura = nombre.trim() !== "";
@@ -174,9 +203,12 @@ export function DocumentoPedidoDialog({
         notas: notas.trim() || null,
       });
       const emitido =
-        documento === "ticket"
+        (documento === "ticket"
           ? `Ticket ${r.referencia} emitido`
-          : `Factura ${r.referencia} emitida`;
+          : `Factura ${r.referencia} emitida`) +
+        (r.fecha && r.fecha_operacion
+          ? ` con fecha ${diaLegible(r.fecha)}; la de ${diaLegible(r.fecha_operacion)} va en el documento como fecha de la operación`
+          : "");
       try {
         const url = await abrirPdf(r.id, documento);
         if (url && ventana) ventana.location.href = url;
@@ -192,6 +224,8 @@ export function DocumentoPedidoDialog({
       alEmitir();
     } catch (e: any) {
       ventana?.close();
+      // Otro documento de la serie salió entre tanto: se vuelve a leer la serie.
+      if (esRechazoPorFecha(e?.message)) qc.invalidateQueries({ queryKey: claveQuery });
       toast.error(
         e?.message ??
           (documento === "ticket" ? "No se pudo emitir el ticket" : "No se pudo emitir la factura"),
@@ -318,9 +352,26 @@ export function DocumentoPedidoDialog({
               <div className="space-y-1.5">
                 <Label>Fecha de emisión</Label>
                 <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-                <p className="text-xs text-muted-foreground">
-                  Por defecto, la del pedido. No puede ser anterior al último documento de su serie.
-                </p>
+                <p className="text-xs text-muted-foreground">Por defecto, la del pedido.</p>
+                {ajustesFecha.length > 0 && (
+                  <div className="flex gap-1.5 text-xs text-status-pendiente">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      {ajustesFecha.map(({ doc, ultima, futura }) => (
+                        <p key={doc} className={futura ? "text-destructive" : undefined}>
+                          {futura
+                            ? doc === "ticket"
+                              ? `La serie de tickets tiene uno con fecha futura (${diaLegible(ultima)}): el ticket no se puede emitir con una fecha anterior hasta corregirlo.`
+                              : `La serie de facturas tiene una con fecha futura (${diaLegible(ultima)}): la factura no se puede emitir con una fecha anterior hasta corregirlo.`
+                            : doc === "ticket"
+                              ? `La serie de tickets ya tiene uno del ${diaLegible(ultima)}: el ticket saldrá con esa fecha y la de aquí (${diaLegible(fecha)}) irá escrita en él como fecha de la operación.`
+                              : `La serie de facturas ya tiene una del ${diaLegible(ultima)}: la factura saldrá con esa fecha y la de aquí (${diaLegible(fecha)}) irá escrita en ella como fecha de la operación.`}
+                        </p>
+                      ))}
+                      <p>La numeración no puede ir hacia atrás.</p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Notas</Label>

@@ -3,6 +3,7 @@ import {
   cabeEnTicket,
   clasificarParaTickets,
   decidirDocumento,
+  documentoDelPedido,
   documentoVigente,
   esTipoFiscal,
   estaCobrado,
@@ -207,5 +208,58 @@ describe("situacionTicket", () => {
     });
     expect(situacionTicket("t1", [doc("r1", { rectifica_a_id: "t1" })]).rectificado_por).toBe("R1");
     expect(situacionTicket("t1", [doc("r1", { rectifica_a_id: "t1" })]).admite_cambios).toBe(false);
+  });
+});
+
+describe("documentoDelPedido", () => {
+  const doc = (
+    id: string,
+    tipo: "ordinaria" | "rectificativa" | "simplificada",
+    extra: Partial<{ estado: string; rectifica_a_id: string; sustituye_a_id: string }> = {},
+  ) => ({
+    id,
+    tipo,
+    estado: extra.estado ?? "emitida",
+    rectifica_a_id: extra.rectifica_a_id ?? null,
+    sustituye_a_id: extra.sustituye_a_id ?? null,
+  });
+
+  it("el ticket o la factura del pedido", () => {
+    expect(documentoDelPedido([doc("t1", "simplificada")])?.id).toBe("t1");
+    expect(documentoDelPedido([])).toBeNull();
+  });
+
+  it("en un canje, la factura, venga antes o después del ticket", () => {
+    const t = doc("t1", "simplificada");
+    const f = doc("f1", "ordinaria", { sustituye_a_id: "t1" });
+    expect(documentoDelPedido([t, f])?.id).toBe("f1");
+    expect(documentoDelPedido([f, t])?.id).toBe("f1");
+  });
+
+  it("si se anula la factura del canje, vuelve a contar el ticket", () => {
+    const docs = [
+      doc("t1", "simplificada"),
+      doc("f1", "ordinaria", { sustituye_a_id: "t1", estado: "anulada" }),
+      doc("r1", "rectificativa", { rectifica_a_id: "f1" }),
+    ];
+    expect(documentoDelPedido(docs)?.id).toBe("t1");
+    // Rectificada sin cambiarle el estado: igual.
+    expect(
+      documentoDelPedido([
+        doc("t1", "simplificada"),
+        doc("f1", "ordinaria", { sustituye_a_id: "t1" }),
+        doc("r1", "rectificativa", { rectifica_a_id: "f1" }),
+      ])?.id,
+    ).toBe("t1");
+  });
+
+  it("anulado del todo, ninguno", () => {
+    expect(
+      documentoDelPedido([
+        doc("t1", "simplificada", { estado: "anulada" }),
+        doc("r1", "rectificativa", { rectifica_a_id: "t1" }),
+      ]),
+    ).toBeNull();
+    expect(documentoDelPedido([doc("t1", "simplificada")], ["t1"])).toBeNull();
   });
 });

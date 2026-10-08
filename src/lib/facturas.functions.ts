@@ -14,7 +14,15 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
-import { diaEnEspana, esRechazoPorFecha, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import {
+  diaEnEspana,
+  diaLegible,
+  esRechazoPorFecha,
+  fechaDocumentoDePedido,
+  fechaEmision,
+  notasConFechaOperacion,
+} from "@/dominio/fecha-documento";
+import { fechaParaEmitir, ultimaFechaSerie, ultimasFechasSeries } from "./series-fechas";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -23,6 +31,7 @@ import {
   documentoVigente,
   esTipoFiscal,
   estaCobrado,
+  explicarDecision,
 } from "@/dominio/tickets";
 
 // El cliente de servicio, sin tipar de más: types.ts no conoce varias de estas tablas.
@@ -432,6 +441,12 @@ const receptorSchema = z.object({
   email: z.string().nullable().optional(),
 });
 
+/** La empresa de una tienda: la serie es de la empresa, no de la tienda. */
+async function empresaDeTienda(sb: Sb, tiendaId: string): Promise<string | null> {
+  const { data } = await tabla(sb, "tiendas").select("empresa_id").eq("id", tiendaId).maybeSingle();
+  return (data?.empresa_id as string | null) ?? null;
+}
+
 type ResultadoEmision = {
   id: string;
   serie: string;
@@ -461,25 +476,47 @@ export const emitirFactura = createServerFn({ method: "POST" })
         cliente_id: z.string().uuid().nullable().optional(),
         pedido_id: z.string().uuid().nullable().optional(),
         notas: z.string().nullable().optional(),
+        // El documento de un pedido: si la serie ya tiene uno posterior a la
+        // fecha pedida, sale con la de ese y la pedida va como fecha de la
+        // operación. Sin esto, la base rechaza la fecha y lo dice.
+        ajustar_fecha: z.boolean().optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const deseada = data.fecha ?? diaEnEspana(new Date());
+    // Antes de leer nada con el cliente de servicio, que el usuario sea de la tienda.
+    if (data.ajustar_fecha)
+      await comprobarAccesoTienda(supabaseAdmin, data.tienda_id, context.userId);
+    const emision = data.ajustar_fecha
+      ? await fechaParaEmitir(
+          supabaseAdmin,
+          await empresaDeTienda(supabaseAdmin, data.tienda_id),
+          "factura",
+          deseada,
+          data.notas,
+        )
+      : { fecha: deseada, fecha_operacion: null, notas: data.notas ?? null };
     const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: data.receptor,
       _lineas: data.lineas,
-      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _fecha: emision.fecha,
       _fecha_vencimiento: data.fecha_vencimiento ?? null,
       _cliente_id: data.cliente_id ?? null,
       _pedido_id: data.pedido_id ?? null,
-      _notas: data.notas ?? null,
+      _notas: emision.notas,
       _rectifica_a_id: null,
       _motivo_rectificacion: null,
     });
-    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
+    return {
+      ...r,
+      fecha: emision.fecha,
+      fecha_operacion: emision.fecha_operacion,
+      pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id),
+    };
   });
 
 /* ==========================================================================
@@ -630,6 +667,9 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
 
     const limites = await leerLimitesTicket(supabaseAdmin, pedido.empresa_id ?? null);
     const total = calcularTotales(lineas).total;
+    const fechaPedido = fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
+      horaDeLaWeb: pedido.origen === "woocommerce",
+    });
 
     return {
       ya_facturado: false as const,
@@ -640,9 +680,13 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       sin_nif: !receptor.nif,
       notas: (pedido.notas as string | null) ?? null,
       // El documento sale, por defecto, con la fecha del pedido.
-      fecha_pedido: fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
-        horaDeLaWeb: pedido.origen === "woocommerce",
-      }),
+      fecha_pedido: fechaPedido,
+      // Si la serie ya tiene un documento posterior, el diálogo lo avisa.
+      ultimas_fechas: await ultimasFechasSeries(
+        supabaseAdmin,
+        (pedido.empresa_id as string | null) ?? null,
+        Number(fechaPedido.slice(0, 4)),
+      ),
       total,
       tipo_fiscal: tipoFiscal,
       limites,
@@ -676,6 +720,9 @@ export const emitirTicket = createServerFn({ method: "POST" })
         nombre: z.string().nullable().optional(),
         tipo_fiscal: tipoFiscalSchema,
         notas: z.string().nullable().optional(),
+        // Como en emitirFactura: la fecha que admita la serie, y la pedida
+        // como fecha de la operación.
+        ajustar_fecha: z.boolean().optional(),
       })
       .parse(d),
   )
@@ -684,18 +731,36 @@ export const emitirTicket = createServerFn({ method: "POST" })
     const receptor: Record<string, string> = {};
     if (data.nombre?.trim()) receptor.nombre = data.nombre.trim();
     if (data.tipo_fiscal) receptor.tipo_fiscal = data.tipo_fiscal;
+    const deseada = data.fecha ?? diaEnEspana(new Date());
+    // Antes de leer nada con el cliente de servicio, que el usuario sea de la tienda.
+    if (data.ajustar_fecha)
+      await comprobarAccesoTienda(supabaseAdmin, data.tienda_id, context.userId);
+    const emision = data.ajustar_fecha
+      ? await fechaParaEmitir(
+          supabaseAdmin,
+          await empresaDeTienda(supabaseAdmin, data.tienda_id),
+          "ticket",
+          deseada,
+          data.notas,
+        )
+      : { fecha: deseada, fecha_operacion: null, notas: data.notas ?? null };
     const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: receptor,
       _lineas: data.lineas,
-      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _fecha: emision.fecha,
       _cliente_id: data.cliente_id ?? null,
       _pedido_id: data.pedido_id ?? null,
-      _notas: data.notas ?? null,
+      _notas: emision.notas,
       _simplificada: true,
     });
-    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
+    return {
+      ...r,
+      fecha: emision.fecha,
+      fecha_operacion: emision.fecha_operacion,
+      pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id),
+    };
   });
 
 /** Un pedido cobrado y sin documento, con lo que toca emitirle. */
@@ -827,6 +892,118 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
     };
   });
 
+/** Un pedido en el diálogo «Facturar»: qué se le puede emitir y, si no, por qué. */
+export type PedidoParaFacturar = {
+  id: string;
+  numero: string;
+  tienda_id: string;
+  /** El día con que saldría el documento ('yyyy-mm-dd'). */
+  fecha: string;
+  total: number;
+  cobrado: number;
+  cliente_nombre: string | null;
+  nif: string | null;
+  /** null si se puede; si no, por qué. */
+  ticket: string | null;
+  factura: string | null;
+};
+
+/**
+ * Lo que el diálogo «Facturar» de Pedidos enseña de los pedidos que se
+ * pueden marcar: si cada uno puede ir en ticket o en factura y, si no, por
+ * qué. Solo lee; al emitir se vuelve a comprobar todo en el servidor.
+ */
+export const pedidosParaFacturar = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        pedido_ids: z.array(z.string().uuid()).min(1).max(500),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }): Promise<PedidoParaFacturar[]> => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+
+    const { data: filas, error } = await tabla(sb, "pedidos")
+      .select(
+        "id, numero, empresa_id, tienda_id, fecha_pedido, origen, total, cancelado_en, cliente_id, cliente_nombre, cliente_email, direccion_facturacion",
+      )
+      .in("id", data.pedido_ids);
+    if (error) throw new Error(error.message);
+    const pedidos = (filas ?? []) as Record<string, any>[];
+    for (const tiendaId of new Set(pedidos.map((p) => p.tienda_id as string))) {
+      await comprobarAccesoTienda(sb, tiendaId, context.userId);
+    }
+    if (pedidos.length === 0) return [];
+
+    const ids = pedidos.map((p) => p.id as string);
+    const clienteIds = [...new Set(pedidos.map((p) => p.cliente_id).filter(Boolean))] as string[];
+    const [{ data: cobros }, documentos, { data: clientes }, limites] = await Promise.all([
+      tabla(sb, "cobros").select("pedido_id, importe").in("pedido_id", ids),
+      leerDocumentosDePedidos(sb, ids),
+      clienteIds.length
+        ? tabla(sb, "clientes")
+            .select(
+              "id, nombre, nif, direccion, codigo_postal, ciudad, provincia, pais, email, tipo_fiscal",
+            )
+            .in("id", clienteIds)
+        : Promise.resolve({ data: [] }),
+      leerLimitesTicket(sb, (pedidos[0]?.empresa_id as string | null) ?? null),
+    ]);
+
+    const cobrado = new Map<string, number>();
+    for (const c of (cobros ?? []) as { pedido_id: string; importe: number }[]) {
+      cobrado.set(c.pedido_id, (cobrado.get(c.pedido_id) ?? 0) + Number(c.importe));
+    }
+    const docsPorPedido = new Map<string, DocumentoLeido[]>();
+    for (const d of documentos.docs) {
+      if (!d.pedido_id) continue;
+      docsPorPedido.set(d.pedido_id, [...(docsPorPedido.get(d.pedido_id) ?? []), d]);
+    }
+    const fichas = new Map(((clientes ?? []) as Record<string, any>[]).map((c) => [c.id, c]));
+
+    return pedidos
+      .map((p): PedidoParaFacturar => {
+        const ficha = p.cliente_id ? fichas.get(p.cliente_id) : null;
+        const receptor = receptorDesdePedido(
+          (ficha ?? null) as Parameters<typeof receptorDesdePedido>[0],
+          p.direccion_facturacion,
+          p.cliente_nombre,
+          p.cliente_email,
+        );
+        const tipoFiscal = esTipoFiscal(ficha?.tipo_fiscal) ? ficha.tipo_fiscal : null;
+        const total = Number(p.total) || 0;
+        const vigente = documentoVigente(docsPorPedido.get(p.id) ?? [], documentos.rectificados);
+        const bloqueo = p.cancelado_en
+          ? "está cancelado"
+          : vigente
+            ? `ya tiene ${referenciaFactura(vigente.serie, vigente.ejercicio, vigente.numero)}`
+            : null;
+        const decision = decidirDocumento(
+          total,
+          { nombre: receptor.nombre, nif: receptor.nif, tipo_fiscal: tipoFiscal },
+          limites,
+        );
+        return {
+          id: p.id,
+          numero: p.numero ?? p.id,
+          tienda_id: p.tienda_id,
+          fecha: fechaDocumentoDePedido(p.fecha_pedido, {
+            horaDeLaWeb: p.origen === "woocommerce",
+          }),
+          total,
+          cobrado: cobrado.get(p.id) ?? 0,
+          cliente_nombre: receptor.nombre || null,
+          nif: receptor.nif || null,
+          ticket: bloqueo ?? (decision.documento === "ticket" ? null : explicarDecision(decision)),
+          factura: bloqueo ?? (receptor.nombre?.trim() ? null : "falta el nombre del cliente"),
+        };
+      })
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.numero.localeCompare(b.numero));
+  });
+
 /**
  * Emite los tickets de varios pedidos, uno detrás de otro.
  *
@@ -845,57 +1022,85 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => {
-    const { adminComoUsuario, supabaseAdmin } =
-      await import("@/integrations/supabase/client.server");
-    const sb = adminComoUsuario(context.userId);
+  .handler(({ data, context }) => emitirEnBloque(context.userId, data.pedido_ids, "ticket"));
 
-    // Cada ticket, con la fecha de su pedido, y en orden de fecha: la base no
-    // deja numerar hacia atrás, así que el más antiguo va primero.
-    const { data: fechas } = await tabla(sb, "pedidos")
-      .select("id, fecha_pedido, origen")
-      .in("id", data.pedido_ids);
-    const fechaDe = new Map<string, string>(
-      ((fechas ?? []) as { id: string; fecha_pedido: string | null; origen: string | null }[]).map(
-        (p) => [
-          p.id,
-          fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" }),
-        ],
-      ),
-    );
-    const hoy = diaEnEspana(new Date());
-    const enOrden = [...data.pedido_ids].sort((a, b) =>
-      (fechaDe.get(a) ?? "").localeCompare(fechaDe.get(b) ?? ""),
-    );
+/**
+ * Emite las facturas de varios pedidos, del más antiguo al más reciente. Lo
+ * mismo que emitirTicketsPedidos, con factura completa: el receptor sale del
+ * pedido y de la ficha del cliente, y sin nombre no se emite.
+ */
+export const emitirFacturasPedidos = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        pedido_ids: z.array(z.string().uuid()).min(1).max(200),
+      })
+      .parse(d),
+  )
+  .handler(({ data, context }) => emitirEnBloque(context.userId, data.pedido_ids, "factura"));
 
-    // Sin PDF aquí: son hasta 200. La pantalla los guarda después, por tandas
-    // (rellenarPdfsTienda con estos ids).
-    const emitidos: {
-      pedido: string;
-      referencia: string;
-      id: string;
-      /** Si no pudo llevar la fecha de su pedido, por qué. */
-      nota?: string;
-    }[] = [];
-    const omitidos: { pedido: string; motivo: string }[] = [];
+/**
+ * Los tickets o las facturas de varios pedidos, uno detrás de otro y en
+ * orden de fecha: la base no deja numerar hacia atrás, así que el más
+ * antiguo va primero. Cada pedido se vuelve a leer y a comprobar aquí.
+ */
+async function emitirEnBloque(
+  userId: string,
+  pedidoIds: string[],
+  documento: "ticket" | "factura",
+) {
+  const { adminComoUsuario, supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const sb = adminComoUsuario(userId);
 
-    for (const id of enOrden) {
-      let numero = id;
-      try {
-        const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
-          sb,
-          id,
-          context.userId,
-        );
-        numero = pedido.numero ?? id;
-        if (vigente) {
-          omitidos.push({ pedido: numero, motivo: "ya tiene documento" });
-          continue;
-        }
-        if (lineas.length === 0) {
-          omitidos.push({ pedido: numero, motivo: "no tiene líneas" });
-          continue;
-        }
+  const { data: fechas } = await tabla(sb, "pedidos")
+    .select("id, fecha_pedido, origen")
+    .in("id", pedidoIds);
+  const fechaDe = new Map<string, string>(
+    ((fechas ?? []) as { id: string; fecha_pedido: string | null; origen: string | null }[]).map(
+      (p) => [
+        p.id,
+        fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" }),
+      ],
+    ),
+  );
+  const hoy = diaEnEspana(new Date());
+  const enOrden = [...pedidoIds].sort((a, b) =>
+    (fechaDe.get(a) ?? "").localeCompare(fechaDe.get(b) ?? ""),
+  );
+
+  // Sin PDF aquí: son hasta 200. La pantalla los guarda después, por tandas
+  // (rellenarPdfsTienda con estos ids).
+  const emitidos: {
+    pedido: string;
+    referencia: string;
+    id: string;
+    /** Si no pudo llevar la fecha de su pedido, por qué. */
+    nota?: string;
+  }[] = [];
+  const omitidos: { pedido: string; motivo: string }[] = [];
+  // La fecha del último documento de la serie, por empresa y año, según se
+  // van emitiendo.
+  const ultimas = new Map<string, string | null>();
+
+  for (const id of enOrden) {
+    let numero = id;
+    try {
+      const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
+        sb,
+        id,
+        userId,
+      );
+      numero = pedido.numero ?? id;
+      if (vigente) {
+        omitidos.push({ pedido: numero, motivo: "ya tiene documento" });
+        continue;
+      }
+      if (lineas.length === 0) {
+        omitidos.push({ pedido: numero, motivo: "no tiene líneas" });
+        continue;
+      }
+      if (documento === "ticket") {
         const limites = await leerLimitesTicket(sb, pedido.empresa_id ?? null);
         const decision = decidirDocumento(
           calcularTotales(lineas).total,
@@ -906,40 +1111,84 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
           omitidos.push({ pedido: numero, motivo: "no va en ticket: revísalo en el pedido" });
           continue;
         }
-        const emitir = (fecha: string) =>
-          llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
-            _usuario_id: context.userId,
-            _tienda_id: pedido.tienda_id,
-            _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
-            _lineas: lineas,
-            _fecha: fecha,
-            _cliente_id: pedido.cliente_id ?? null,
-            _pedido_id: id,
-            _simplificada: true,
-          });
-        const fechaPedido = fechaDe.get(id) ?? hoy;
-        try {
-          const r = await emitir(fechaPedido);
-          emitidos.push({ pedido: numero, referencia: r.referencia, id: r.id });
-        } catch (e) {
-          // La serie de tickets es una para toda la empresa: si ya tiene uno
-          // posterior, el del pedido no puede ir hacia atrás. Sale con la de hoy.
-          if (!esRechazoPorFecha((e as Error).message) || fechaPedido === hoy) throw e;
-          const r = await emitir(hoy);
-          emitidos.push({
-            pedido: numero,
-            referencia: r.referencia,
-            id: r.id,
-            nota: "con fecha de hoy: la serie ya tenía un ticket posterior a su pedido",
-          });
-        }
-      } catch (e) {
-        omitidos.push({ pedido: numero, motivo: (e as Error).message || "error al emitir" });
+      } else if (!receptor.nombre?.trim()) {
+        omitidos.push({ pedido: numero, motivo: "falta el nombre del cliente" });
+        continue;
       }
+      // Si la serie ya tiene un documento posterior al pedido, sale con la
+      // fecha de ese y la del pedido va en él como fecha de la operación.
+      const fechaPedido = fechaDe.get(id) ?? hoy;
+      const empresa = (pedido.empresa_id as string | null) ?? null;
+      const clave = `${empresa}|${fechaPedido.slice(0, 4)}`;
+      const ultima = async (releer = false) => {
+        if (!empresa) return null;
+        if (releer || !ultimas.has(clave)) {
+          ultimas.set(
+            clave,
+            await ultimaFechaSerie(sb, empresa, documento, Number(fechaPedido.slice(0, 4))),
+          );
+        }
+        return ultimas.get(clave) ?? null;
+      };
+      const emitir = async (releer = false) => {
+        const { fecha, fechaOperacion } = fechaEmision(fechaPedido, await ultima(releer), hoy);
+        const comun = {
+          _usuario_id: userId,
+          _tienda_id: pedido.tienda_id,
+          _lineas: lineas,
+          _fecha: fecha,
+          _cliente_id: pedido.cliente_id ?? null,
+          _pedido_id: id,
+          _notas: notasConFechaOperacion(null, fechaOperacion),
+        };
+        const r = await llamarRpc<ResultadoEmision>(
+          supabaseAdmin,
+          "emitir_factura",
+          documento === "ticket"
+            ? {
+                ...comun,
+                _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
+                _simplificada: true,
+              }
+            : {
+                ...comun,
+                _receptor: receptor,
+                _fecha_vencimiento: null,
+                _rectifica_a_id: null,
+                _motivo_rectificacion: null,
+              },
+        );
+        // Lo que acaba de salir es ahora lo último de la serie.
+        if (empresa) ultimas.set(clave, fecha);
+        return { r, fecha, fechaOperacion };
+      };
+      let emitido;
+      try {
+        emitido = await emitir();
+      } catch (e) {
+        // Si entretanto salió otro documento posterior (otra pestaña, otra
+        // persona), se vuelve a mirar la serie una vez.
+        if (!esRechazoPorFecha((e as Error).message)) throw e;
+        emitido = await emitir(true);
+      }
+      const posterior = documento === "ticket" ? "un ticket posterior" : "una factura posterior";
+      emitidos.push({
+        pedido: numero,
+        referencia: emitido.r.referencia,
+        id: emitido.r.id,
+        ...(emitido.fechaOperacion
+          ? {
+              nota: `con fecha ${diaLegible(emitido.fecha)}: la serie ya tenía ${posterior}; la del pedido (${diaLegible(emitido.fechaOperacion)}) va en el documento como fecha de la operación`,
+            }
+          : {}),
+      });
+    } catch (e) {
+      omitidos.push({ pedido: numero, motivo: (e as Error).message || "error al emitir" });
     }
+  }
 
-    return { emitidos, omitidos };
-  });
+  return { emitidos, omitidos };
+}
 
 /**
  * Anula una factura emitida.

@@ -6,6 +6,8 @@ import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { normalizarDireccion } from "@/dominio/direcciones";
+import { documentoDelPedido, type DocumentoPedido } from "@/dominio/tickets";
+import { referenciaFactura } from "@/lib/format";
 import type { Cobro } from "./cobros.functions";
 
 const ESTADO_VALUES = [
@@ -60,6 +62,59 @@ async function getWooCreds(supabaseAdmin: any, tiendaId: string) {
   return { base: tienda.woo_url.replace(/\/$/, ""), auth: autorizacionWoo(creds) };
 }
 
+/** El ticket o la factura que cuenta para el pedido, para enseñarlo en la lista. */
+export type DocumentoDeLista = {
+  id: string;
+  tipo: "ordinaria" | "simplificada";
+  referencia: string;
+};
+
+type DocumentoLeido = DocumentoPedido & {
+  pedido_id: string;
+  serie: string;
+  ejercicio: number;
+  numero: number;
+  sustituye_a_id: string | null;
+};
+
+/**
+ * El documento de cada pedido. Si no se puede leer, la lista sale igual, sin
+ * documentos: no merece la pena dejar a nadie sin ver sus pedidos por esto.
+ */
+async function documentosDePedidos(
+  supabase: unknown,
+  ids: string[],
+): Promise<Map<string, DocumentoDeLista>> {
+  const resultado = new Map<string, DocumentoDeLista>();
+  const { data: docs, error } = await tabla(supabase, "facturas")
+    .select("id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id")
+    .in("pedido_id", ids)
+    .neq("estado", "borrador");
+  if (error || !docs?.length) return resultado;
+  const lista = docs as DocumentoLeido[];
+  // Una rectificativa puede no llevar el pedido: se buscan por lo que corrigen.
+  const { data: rect } = await tabla(supabase, "facturas")
+    .select("rectifica_a_id")
+    .in(
+      "rectifica_a_id",
+      lista.map((d) => d.id),
+    );
+  const rectificados = ((rect ?? []) as { rectifica_a_id: string }[]).map((r) => r.rectifica_a_id);
+  const porPedido = new Map<string, DocumentoLeido[]>();
+  for (const d of lista) porPedido.set(d.pedido_id, [...(porPedido.get(d.pedido_id) ?? []), d]);
+  for (const [pedidoId, suyos] of porPedido) {
+    const d = documentoDelPedido(suyos, rectificados);
+    if (d && d.tipo !== "rectificativa") {
+      resultado.set(pedidoId, {
+        id: d.id,
+        tipo: d.tipo,
+        referencia: referenciaFactura(d.serie, d.ejercicio, d.numero),
+      });
+    }
+  }
+  return resultado;
+}
+
 export const listPedidos = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
@@ -100,6 +155,7 @@ export const listPedidos = createServerFn({ method: "POST" })
       { data: clientes },
       { data: tracking },
       { data: cobros, error: errCobros },
+      documentos,
     ] = await Promise.all([
       supabase
         .from("pedido_items")
@@ -125,6 +181,7 @@ export const listPedidos = createServerFn({ method: "POST" })
         .in("pedido_id", ids)
         .order("fecha", { ascending: true })
         .order("created_at", { ascending: true }),
+      documentosDePedidos(supabase, ids),
     ]);
 
     // Sin la migración de cobros, la lista sigue saliendo; solo sin cobros.
@@ -143,6 +200,7 @@ export const listPedidos = createServerFn({ method: "POST" })
           items: (items ?? []).filter((it: any) => it.pedido_id === p.id),
           tracking: (tracking ?? []).find((t: any) => t.pedido_id === p.id) ?? null,
           cobros: ((cobros ?? []) as Cobro[]).filter((c) => c.pedido_id === p.id),
+          documento: documentos.get(p.id) ?? null,
         };
       }),
       cobrosDisponibles,
