@@ -60,6 +60,9 @@ import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
 import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
 import { PdfsPendientes } from "@/components/documentos/PdfsPendientes";
+import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
+import { deFacturaTienda, nombreZip } from "@/dominio/archivo";
+import { leerTodas } from "@/lib/paginar";
 import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
@@ -110,14 +113,19 @@ function Facturas() {
 
   const { data: facturas = [], isLoading } = useQuery({
     queryKey: ["facturas", tiendaId],
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     queryFn: async () =>
       (
-        await supabase
-          .from("facturas")
-          .select("*")
-          .eq("tienda_id", tiendaId)
-          .order("fecha", { ascending: false })
-      ).data ?? [],
+        await leerTodas<any>((a, b) =>
+          supabase
+            .from("facturas")
+            .select("*")
+            .eq("tienda_id", tiendaId)
+            .order("fecha", { ascending: false })
+            .order("id")
+            .range(a, b),
+        )
+      ).data,
   });
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
@@ -149,6 +157,19 @@ function Facturas() {
           normalizarTexto(f.cliente_nombre).includes(q)),
     );
   }, [facturas, filtros.q, filtros.estado, periodo.rango]);
+
+  // Los que se están viendo, para descargarlos en un ZIP.
+  const docsFiltrados = useMemo(
+    () =>
+      filtrados.map((f: any) =>
+        deFacturaTienda(
+          f,
+          referenciaFactura(f.serie, f.ejercicio, f.numero),
+          tienda?.nombre ?? null,
+        ),
+      ),
+    [filtrados, tienda?.nombre],
+  );
 
   // El navegador ya no puede escribir en facturas: perdió el permiso cuando la
   // factura pasó a ser inmutable. El estado de cobro no es parte del documento
@@ -242,6 +263,14 @@ function Facturas() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <DescargarPdfs
+            docs={docsFiltrados}
+            nombreZip={nombreZip(
+              periodo.seleccion,
+              periodo.rango,
+              `Facturas_${tienda?.nombre ?? "tienda"}`,
+            )}
+          />
           <TicketsPendientesDialog tiendaId={tiendaId} />
           <Dialog open={abierto} onOpenChange={setAbierto}>
             <DialogTrigger asChild>

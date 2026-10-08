@@ -96,6 +96,64 @@ function leerTabla(tabla, query) {
   return filas;
 }
 
+// --- Almacenamiento ---------------------------------------------------------
+// Los ficheros que se suben durante la prueba, en memoria: «bucket/ruta» → bytes.
+const FICHEROS = new Map();
+
+function leerCuerpo(req) {
+  return new Promise((ok) => {
+    const trozos = [];
+    req.on("data", (t) => trozos.push(t));
+    req.on("end", () => ok(Buffer.concat(trozos)));
+  });
+}
+
+async function almacenamiento(req, res, ruta) {
+  const resto = decodeURIComponent(ruta.slice("/storage/v1/object/".length));
+  // Firmar varias: POST sign/<bucket> con { paths }.
+  const varias = resto.match(/^sign\/([^/]+)$/);
+  if (varias && req.method === "POST") {
+    const { paths = [] } = JSON.parse((await leerCuerpo(req)).toString() || "{}");
+    return responder(
+      res,
+      200,
+      paths.map((p) =>
+        FICHEROS.has(`${varias[1]}/${p}`)
+          ? { path: p, signedURL: `/object/sign/${varias[1]}/${p}?token=prueba`, error: null }
+          : { path: p, signedURL: null, error: "Object not found" },
+      ),
+    );
+  }
+  const firmado = resto.match(/^sign\/(.+)$/);
+  if (firmado) {
+    const clave = firmado[1];
+    if (!FICHEROS.has(clave)) return responder(res, 404, { message: "Object not found" });
+    // Firmar uno: POST sign/<bucket>/<ruta>.
+    if (req.method === "POST") {
+      req.resume();
+      return responder(res, 200, { signedURL: `/object/sign/${clave}?token=prueba` });
+    }
+    // Descargar con la URL firmada.
+    res.writeHead(200, { "content-type": "application/octet-stream", ...CORS });
+    return res.end(FICHEROS.get(clave));
+  }
+  // Subir: POST <bucket>/<ruta>. Sin upsert, si ya está, 409 como el de verdad.
+  if (req.method === "POST" || req.method === "PUT") {
+    const cuerpo = await leerCuerpo(req);
+    const upsert = req.headers["x-upsert"] === "true";
+    if (FICHEROS.has(resto) && !upsert) {
+      return responder(res, 409, {
+        statusCode: "409",
+        error: "Duplicate",
+        message: "The resource already exists",
+      });
+    }
+    FICHEROS.set(resto, cuerpo);
+    return responder(res, 200, { Key: resto });
+  }
+  return responder(res, 404, { message: "Object not found" });
+}
+
 // --- El servidor ------------------------------------------------------------
 const CORS = {
   "access-control-allow-origin": "*",
@@ -154,7 +212,10 @@ const servidor = http.createServer((req, res) => {
     return responder(res, 200, filas, rango);
   }
 
-  // Almacenamiento y lo demás: no hay nada.
+  // Almacenamiento: en memoria, lo justo para subir, firmar y descargar.
+  if (ruta.startsWith("/storage/v1/object/")) return almacenamiento(req, res, ruta);
+
+  // Lo demás: no hay nada.
   return responder(res, 404, { message: "No existe en el Supabase de prueba" });
 });
 

@@ -44,6 +44,7 @@ export const RUTAS = {
   "gerencia-b": "/panel/gerencia?grupo=b",
   "gerencia-resultados-b": "/panel/gerencia?pestana=resultados&grupo=b",
   compras: "/panel/compras",
+  archivo: "/panel/archivo?periodo=todo",
   pedidos: "/panel/pedidos",
   consolidada: "/panel/facturacion-global",
   cobros: "/panel/cobros",

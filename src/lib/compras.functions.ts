@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
+import { leerTodas } from "./paginar";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
 import { CATEGORIAS_COMPRA, FORMAS_PAGO } from "@/dominio/compras";
 import { avisoDuplicado, type CompraComparable } from "@/dominio/cola-compras";
@@ -194,13 +195,18 @@ export const listCompras = createServerFn({ method: "GET" })
     const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
     // Con la migración 20261015100000 hay cola de revisión y subida de varias.
     const cola = !faltaLaColumna(prueba3.error);
-    let consulta = tabla(context.supabase, "textil_compras").select(
-      "*, lineas:textil_compra_lineas(*)",
-    );
-    if (generales && data.soloTextil) consulta = consulta.eq("categoria", "textil");
-    const { data: compras, error } = await consulta
-      .order("fecha", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false });
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data: compras, error } = await leerTodas<any>((a, b) => {
+      let consulta = tabla(context.supabase, "textil_compras").select(
+        "*, lineas:textil_compra_lineas(*)",
+      );
+      if (generales && data.soloTextil) consulta = consulta.eq("categoria", "textil");
+      return consulta
+        .order("fecha", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(a, b);
+    });
     if (error) throw new Error(error.message);
     return { compras: (compras ?? []) as any[], generales, recibidas, cola };
   });
