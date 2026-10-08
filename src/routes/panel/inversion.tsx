@@ -17,6 +17,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -77,6 +78,9 @@ function InversionPage() {
   }, [movimientos, filtros.q, filtros.socio, filtros.tipo]);
   const totales = useMemo(() => totalesInversion(movimientos), [movimientos]);
   const socios = useMemo(() => porSocioInversion(movimientos), [movimientos]);
+  // El pie de los apuntes suma lo que se ve, con los filtros puestos; `totales`
+  // es de todos los apuntes y con un filtro no cuadraría con las filas.
+  const totalesFiltrados = useMemo(() => totalesInversion(filtrados), [filtrados]);
 
   const mutBorrar = useMutation({
     mutationFn: (id: string) => borrar({ data: { id } }),
@@ -191,6 +195,37 @@ function InversionPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {socios.length > 0 && (
+              <TableFooter>
+                {/* `totales` sale de los mismos apuntes que las filas: cuadra con ellas y con las tarjetas. */}
+                <TableRow>
+                  <TableCell className="font-semibold">
+                    Total · {socios.length} {socios.length === 1 ? "socio" : "socios"}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.aportado)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {totales.recuperado > 0 ? eur(totales.recuperado) : "—"}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-bold tabular-nums ${
+                      totales.pendiente < 0 ? "text-status-cancelado" : ""
+                    }`}
+                  >
+                    {eur(totales.pendiente)}
+                  </TableCell>
+                  {/*
+                    Los porcentajes no se suman: cada uno va redondeado y la suma
+                    podría dar 99,9. Entre todos son el capital entero, por
+                    definición, si alguien ha aportado algo.
+                  */}
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {totales.aportado > 0 ? `${numero(100, 1)} %` : ""}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -302,6 +337,46 @@ function InversionPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {!isLoading && !error && filtrados.length > 0 && (
+              <TableFooter>
+                {/* Aportado y retirado por separado solo si hay de los dos. */}
+                {totalesFiltrados.aportado > 0 && totalesFiltrados.recuperado > 0 && (
+                  <>
+                    <TableRow>
+                      <TableCell colSpan={3}>Aportado</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums text-status-completado">
+                        +{eur(totalesFiltrados.aportado)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={3}>Retirado</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums text-status-pendiente">
+                        −{eur(totalesFiltrados.recuperado)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
+                  </>
+                )}
+                <TableRow>
+                  <TableCell colSpan={3} className="font-semibold">
+                    Total · {filtrados.length} {filtrados.length === 1 ? "apunte" : "apuntes"}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-bold tabular-nums ${
+                      totalesFiltrados.pendiente < 0
+                        ? "text-status-pendiente"
+                        : "text-status-completado"
+                    }`}
+                  >
+                    {/* El signo como en las filas: «−» delante del importe en positivo. */}
+                    {totalesFiltrados.pendiente < 0 ? "−" : "+"}
+                    {eur(Math.abs(totalesFiltrados.pendiente))}
+                  </TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
