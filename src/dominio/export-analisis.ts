@@ -4,9 +4,11 @@
  * las cuentas sin abrir el CRM.
  *
  * Lleva, además de los pedidos con sus líneas, qué significa cada campo, cómo
- * se calcula y un resumen por mes y tienda hecho con las mismas funciones que
- * las pantallas (calcularKpis, costeProduccion…): si el resumen y la pantalla
- * no coinciden, el fallo es de los datos, no de dos maneras de contar.
+ * se calcula y un resumen por mes y tienda. Cada pedido se calcula con las
+ * reglas de las pantallas (baseConEnvio, parteVendida, costeProduccion,
+ * resumenCobros) y se redondea al céntimo; el resumen es la suma de los
+ * pedidos, así que cuadra con ellos al céntimo. Con las pantallas coincide
+ * salvo céntimos y lo que dice `diferencias_con_las_pantallas` del LEEME.
  *
  * Lógica pura: recibe las filas ya leídas.
  */
@@ -14,7 +16,6 @@
 import {
   ESTADO_CANCELADO,
   baseConEnvio,
-  calcularKpis,
   costeProduccion,
   parteVendida,
   type PedidoResumen,
@@ -79,52 +80,75 @@ export type CostesMetro = { consumibles: number; packaging: number; electricidad
 /** Lo que el fichero explica de sí mismo. Se lee antes que los datos. */
 export const LEEME_ANALISIS = {
   proposito:
-    "Pedidos de DTF por metros de las tiendas de DTI S.L. (RONOCA DESARROLLOS S.L.), exportados del CRM para comprobaciones económicas: precio real del metro, márgenes, envíos, devoluciones, cobros y documentos fiscales.",
-  moneda: "EUR. Importes con 2 decimales; metros con 3.",
+    "Pedidos de DTF por metros de las tiendas de DTI S.L. (RONOCA DESARROLLOS S.L.), exportados del CRM para comprobaciones económicas: precio real del metro, márgenes, envíos, devoluciones, cobros y documentos fiscales. Todos los pedidos de todas las fechas del alcance indicado; no lleva el textil ni las facturas de compra.",
+  moneda: "EUR. Importes redondeados al céntimo; metros con 3 decimales.",
   fechas:
-    "`fecha` es el día del pedido en hora de España (la de la web en los de WooCommerce). `mes` es yyyy-mm de esa fecha.",
+    "`fecha` es el día del pedido: en los de WooCommerce, el de la hora de la web; en los manuales, el de la hora de España. Es el día que llevan su ticket o su factura. `mes` (yyyy-mm) sale de esa fecha.",
   definiciones: {
-    base: "Base imponible del pedido, con el envío dentro. base + iva = total.",
+    base: "Base imponible del pedido, con el envío dentro. base + iva = total (si no, ver `descuadre`).",
     envio: "Envío cobrado al cliente, sin IVA. Va dentro de la base, no de la bruta.",
     bruta:
-      "Facturación bruta: lo vendido sin IVA y sin envío (base − envío). Es la cifra de «Facturación bruta» de las pantallas.",
+      "Lo vendido sin IVA y sin envío (base − envío), sin descontar devoluciones. Incluye lo que no va en metros (camisetas, diseños…) si el pedido lo lleva.",
     iva: "IVA repercutido del pedido.",
     total: "Lo que paga el cliente: base + IVA (envío incluido).",
-    devuelto: "Reembolsos de WooCommerce, con IVA.",
+    descuadre:
+      "total − base − iva. Cero en un pedido sano; si no, el pedido se guardó con importes que no cuadran y conviene revisarlo.",
+    devuelto:
+      "Reembolsos de WooCommerce, con IVA, tal como los da la web. Un reembolso total convierte el pedido en cancelado.",
     parte_vendida:
-      "Qué parte del pedido sigue vendida después de devoluciones (1 = nada devuelto). Las cifras netas multiplican por ella: WooCommerce no dice qué líneas se devolvieron.",
-    bruta_neta: "bruta × parte_vendida. Es lo que suman los resúmenes.",
-    metros: "Metros lineales impresos del pedido (suma de las líneas en metros).",
+      "Qué parte del pedido sigue vendida después de devoluciones: (total − devuelto) ÷ total, entre 0 y 1. WooCommerce no dice qué líneas se devolvieron, así que se reparte en proporción.",
+    netos:
+      "base_neta, envio_neto, iva_neto y total_neto son los importes × parte_vendida, redondeados por pedido; bruta_neta = base_neta − envio_neto. En los cancelados son 0: no cuentan como venta. base_neta + iva_neto puede diferir de total_neto en 0,01 por el redondeo.",
+    metros:
+      "Metros lineales impresos (pedidos.metros_total). Los cancelados también lo traen, pero no suman en el resumen. Ver `metros_de`.",
+    metros_de:
+      "'lineas_medidas' (WooCommerce: suma de las líneas en metros, unidad 'm') o 'suma_de_cantidades' (pedidos manuales: el CRM suma las cantidades de TODAS las líneas, sean metros o no; si el pedido lleva algo que no es metros, sus metros están inflados).",
     metros_estimados:
-      "Líneas cuyos metros no vinieron medidos del montador de DTFBuild sino estimados como importe ÷ precio por metro (metros_origen 'precio_ajustes' o 'precio_linea').",
-    coste_metro:
-      "Coste de producción por metro (consumibles + embalaje + electricidad) congelado al crear el pedido. Si el pedido es anterior a congelarlo, el de hoy (coste_metro_es_actual = true).",
-    coste_produccion:
-      "metros × coste_metro. No incluye el envío (lo que se cobra se paga a la agencia).",
-    margen_estimado:
-      "bruta_neta − coste_produccion. Estimación: no incluye gastos fijos, sueldos ni el coste de lo que no va en metros.",
+      "true si alguna línea no trae la longitud del montador de DTFBuild y sus metros se estimaron como importe ÷ precio por metro (metros_origen 'precio_ajustes' o 'precio_linea'). Esos metros pueden no ser los impresos.",
+    venta_metros:
+      "La parte de la bruta que corresponde a las líneas en metros (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos sin líneas en metros, la bruta entera.",
     eur_metro:
-      "bruta ÷ metros de los pedidos con metros: precio medio real del metro sin IVA ni envío.",
+      "Precio de venta del metro del pedido: venta_metros ÷ metros, sin IVA, sin envío y sin descontar devoluciones. null en los cancelados y en los que no tienen metros.",
+    coste_metro:
+      "Coste de producción por metro (consumibles + embalaje + electricidad) que se guardó con el pedido. Ojo: los pedidos que ya estaban en el CRM antes del 7-10-2026 llevan el coste del día en que se aplicó esa migración, no el de su fecha. Si no hay ninguno guardado, el de hoy (coste_metro_es_actual = true).",
+    coste_produccion:
+      "metros × coste_metro; 0 en los cancelados. No incluye el envío (lo que se cobra se paga a la agencia) ni el coste de lo que no va en metros.",
+    margen_estimado:
+      "bruta_neta − coste_produccion. Estimación: no incluye gastos fijos, sueldos, comisiones de cobro ni el coste de lo que no va en metros.",
     cobros:
-      "Dinero recibido por el pedido. `pendiente` = total − cobrado (puede ser negativo si se cobró de más). Las propinas van aparte y no cuentan como cobro del pedido.",
+      "Dinero recibido por el pedido (tabla de cobros; los de la web, ya netos de reembolsos). pendiente = total_neto − cobrado; negativo si se cobró de más. Las propinas van aparte y no cuentan como cobro del pedido. En los cancelados el estado es 'cancelado' y el pendiente 0, aunque tengan cobros (dinero de un pedido que no se vendió).",
     documentos:
-      "Tickets (simplificada), facturas (ordinaria) y rectificativas emitidas para el pedido. Una rectificativa anula o corrige a la que señala rectifica_a_id; un canje sustituye un ticket (sustituye_a_id).",
+      "Tickets (simplificada), facturas (ordinaria) y rectificativas emitidas para el pedido. Una rectificativa anula o corrige a la que señala rectifica_a; un canje sustituye un ticket (sustituye_a). Los ids son los de esos documentos.",
+    resumen_mensual:
+      "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_neto` = bruta_neta ÷ metros de los pedidos con metros, la cifra «€/metro» de Gerencia.",
+    totales: "Lo mismo que una fila del resumen, para todo el fichero.",
   },
   reglas: [
-    "Los pedidos cancelados no cuentan en ventas, metros ni costes: se cuentan aparte.",
-    "Los importes y costes de cada pedido son los congelados al crearlo; no se recalculan con los precios de hoy.",
-    "Las líneas de metros 'estimados' pueden no coincidir con lo que se imprimió de verdad: conviene revisarlas.",
+    "Los pedidos cancelados no cuentan en ventas, metros, costes ni pendiente: van aparte (cancelados, importe_cancelados, devuelto_cancelados, cobrado_cancelados).",
+    "Los importes y costes de cada pedido son los que se guardaron con él; no se recalculan con los precios de hoy.",
+    "En las líneas de WooCommerce, `subtotal` es el de la web antes de cupones; el del pedido ya los descuenta.",
     "No hay datos de contacto de los clientes (ni email, ni teléfono, ni dirección): solo su id y su nombre.",
   ],
+  diferencias_con_las_pantallas: [
+    "Las cifras usan las reglas de las pantallas (Dashboard, Facturación, Gerencia) y coinciden con ellas salvo céntimos: aquí se redondea cada pedido y se suma; allí se suma y se redondea.",
+    "Mes: las pantallas cortan los meses a medianoche de España sobre la hora guardada, y los pedidos de WooCommerce se guardan con la hora de la web como si fuera UTC. Un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) aquí cuenta en su mes y allí en el siguiente. El de aquí es el del ticket o la factura.",
+    "«Cobrado» de las pantallas va por la fecha del cobro: es `cobrado_por_fecha_de_cobro`, no `cobrado`.",
+  ],
   comprobaciones_sugeridas: [
-    "Que en cada mes base = bruta + envíos y base + iva = total (vendido).",
+    "Que en cada fila base_neta = bruta_neta + envios_netos, y que la suma de los pedidos de cada mes dé su fila.",
     "Precio real del metro (eur_metro) por mes y tienda frente al precio de Ajustes (empresa.precio_metro_ajustes).",
-    "Pedidos con el precio por metro muy por encima o por debajo de la media (posibles errores de metros).",
-    "Peso de los envíos y de las devoluciones sobre la venta.",
+    "Pedidos con eur_metro muy por encima o por debajo de la media (metros mal leídos, metros estimados, o pedidos manuales con líneas que no son metros).",
+    "Peso de los envíos y de las devoluciones (también las de los cancelados) sobre la venta.",
     "Margen estimado por mes, por tienda y por metro; pedidos con margen negativo.",
-    "Pedidos cobrados sin ticket ni factura, y pedidos con cobro pendiente antiguo.",
+    "Pedidos cobrados sin ticket ni factura; pedidos con cobro pendiente antiguo; pedidos con descuadre distinto de 0.",
   ],
 };
+
+const esEstimada = (l: LineaExport) =>
+  l.metros_origen === "precio_ajustes" || l.metros_origen === "precio_linea";
+
+const sumar = <T>(filas: readonly T[], valor: (f: T) => number) =>
+  redondear(filas.reduce((s, f) => s + valor(f), 0));
 
 export type ExportAnalisis = ReturnType<typeof construirExportAnalisis>;
 
@@ -148,9 +172,14 @@ export function construirExportAnalisis(d: {
     4,
   );
   const nombreTienda = new Map(d.tiendas.map((t) => [t.id, t.nombre]));
+  const tiendaDe = (id: string) => nombreTienda.get(id) ?? id;
   const agrupar = <T extends { pedido_id: string }>(filas: readonly T[]) => {
     const m = new Map<string, T[]>();
-    for (const f of filas) m.set(f.pedido_id, [...(m.get(f.pedido_id) ?? []), f]);
+    for (const f of filas) {
+      const lista = m.get(f.pedido_id);
+      if (lista) lista.push(f);
+      else m.set(f.pedido_id, [f]);
+    }
     return m;
   };
   const lineasDe = agrupar(d.lineas);
@@ -161,19 +190,25 @@ export function construirExportAnalisis(d: {
     fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" });
 
   const pedidos = [...d.pedidos]
-    .sort((a, b) => fechaDe(a).localeCompare(fechaDe(b)) || a.id.localeCompare(b.id))
-    .map((p) => {
+    .map((p) => ({ p, fecha: fechaDe(p) }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.p.id.localeCompare(b.p.id))
+    .map(({ p, fecha }) => {
       const cancelado = p.estado === ESTADO_CANCELADO;
       const parte = parteVendida(p);
+      // Lo que sigue vendido: nada en los cancelados.
+      const queda = cancelado ? 0 : parte;
       const base = redondear(baseConEnvio(p));
       const envio = redondear(num(p.envio));
       const bruta = redondear(base - envio);
-      const metros = redondear(num(p.metros_total), 3);
-      const congelado = p.coste_metro_snapshot;
-      const costeMetro =
-        congelado == null || congelado === "" ? costeHoy : redondear(num(congelado), 4);
-      const coste = cancelado ? 0 : redondear(costeProduccion([p], costeHoy));
-      const lineas = (lineasDe.get(p.id) ?? []).map((l) => ({
+      const iva = redondear(num(p.iva));
+      const total = redondear(num(p.total));
+      const base_neta = redondear(base * queda);
+      const envio_neto = redondear(envio * queda);
+      const bruta_neta = redondear(base_neta - envio_neto);
+      const total_neto = redondear(total * queda);
+
+      const filas = lineasDe.get(p.id) ?? [];
+      const lineas = filas.map((l) => ({
         descripcion: l.descripcion ?? "",
         cantidad: redondear(num(l.cantidad), 3),
         unidad: l.unidad ?? "",
@@ -184,13 +219,32 @@ export function construirExportAnalisis(d: {
         precio_metro_usado: l.precio_metro_usado == null ? null : num(l.precio_metro_usado),
         coste_unit: l.coste_unit_snapshot == null ? null : redondear(num(l.coste_unit_snapshot), 4),
       }));
+
+      // La parte de la bruta que es de metros: en proporción a los subtotales
+      // de las líneas, que en WooCommerce van antes de cupones.
+      const metros = redondear(num(p.metros_total), 3);
+      const subLineas = filas.reduce((s, l) => s + num(l.subtotal), 0);
+      const subMetros = filas
+        .filter((l) => l.unidad === "m")
+        .reduce((s, l) => s + num(l.subtotal), 0);
+      const venta_metros =
+        metros <= 0
+          ? 0
+          : subMetros > 0 && subLineas > 0
+            ? redondear((bruta * subMetros) / subLineas)
+            : bruta;
+
+      const congelado = p.coste_metro_snapshot;
+      const sinCongelar = congelado == null || congelado === "";
+      const coste = cancelado ? 0 : redondear(costeProduccion([p], costeHoy));
+
       const cobros = cobrosDe.get(p.id) ?? [];
-      const rc = resumenCobros(p.total, cobros);
+      const rc = resumenCobros(total_neto, cobros);
       return {
         id: p.id,
         numero: p.numero ?? "",
-        tienda: nombreTienda.get(p.tienda_id) ?? p.tienda_id,
-        fecha: fechaDe(p),
+        tienda: tiendaDe(p.tienda_id),
+        fecha,
         origen: p.origen ?? "",
         estado: p.estado,
         estado_pago: p.estado_pago ?? null,
@@ -203,26 +257,31 @@ export function construirExportAnalisis(d: {
           base,
           envio,
           bruta,
-          iva: redondear(num(p.iva)),
-          total: redondear(num(p.total)),
+          iva,
+          total,
+          descuadre: redondear(total - base - iva),
           devuelto: redondear(num(p.devuelto)),
           parte_vendida: redondear(parte, 4),
-          bruta_neta: cancelado ? 0 : redondear(bruta * parte),
+          base_neta,
+          envio_neto,
+          bruta_neta,
+          iva_neto: redondear(iva * queda),
+          total_neto,
         },
         metros,
-        metros_estimados: lineas.some(
-          (l) => l.metros_origen === "precio_ajustes" || l.metros_origen === "precio_linea",
-        ),
-        eur_metro: metros > 0 ? redondear(bruta / metros) : null,
-        coste_metro: costeMetro,
-        coste_metro_es_actual: congelado == null || congelado === "",
+        metros_de: p.origen === "woocommerce" ? "lineas_medidas" : "suma_de_cantidades",
+        metros_estimados: filas.some(esEstimada),
+        venta_metros,
+        eur_metro: !cancelado && metros > 0 ? redondear(venta_metros / metros) : null,
+        coste_metro: sinCongelar ? costeHoy : redondear(num(congelado), 4),
+        coste_metro_es_actual: sinCongelar,
         coste_produccion: coste,
-        margen_estimado: cancelado ? 0 : redondear(bruta * parte - coste),
+        margen_estimado: cancelado ? 0 : redondear(bruta_neta - coste),
         cobros: {
           cobrado: rc.cobrado,
-          pendiente: rc.pendiente,
-          estado: rc.estado,
-          propinas: redondear(cobros.reduce((s, c) => s + num(c.propina), 0)),
+          pendiente: cancelado ? 0 : rc.pendiente,
+          estado: cancelado ? "cancelado" : rc.estado,
+          propinas: sumar(cobros, (c) => num(c.propina)),
           lista: cobros.map((c) => ({
             fecha: c.fecha ?? null,
             importe: redondear(num(c.importe)),
@@ -242,63 +301,107 @@ export function construirExportAnalisis(d: {
         lineas,
       };
     });
+  type Fila = (typeof pedidos)[number];
 
-  // Resumen por mes y tienda, con las funciones de las pantallas.
-  const grupos = new Map<string, PedidoExport[]>();
-  for (const p of d.pedidos) {
-    const clave = `${fechaDe(p).slice(0, 7)}|${nombreTienda.get(p.tienda_id) ?? p.tienda_id}`;
-    grupos.set(clave, [...(grupos.get(clave) ?? []), p]);
-  }
-  const fila = (lista: readonly PedidoExport[]) => {
-    const k = calcularKpis(lista);
-    const coste = costeProduccion(lista, costeHoy);
-    const conMetros = calcularKpis(lista.filter((p) => num(p.metros_total) > 0));
-    const validos = lista.filter((p) => p.estado !== ESTADO_CANCELADO);
+  // Los cobros por la fecha del cobro, que es como los enseñan las pantallas.
+  const pedidoDe = new Map(pedidos.map((p) => [p.id, p]));
+  const cobrosPorFecha = d.cobros
+    .filter((c) => pedidoDe.has(c.pedido_id))
+    .map((c) => ({
+      mes: (c.fecha ?? "").slice(0, 7),
+      tienda: pedidoDe.get(c.pedido_id)!.tienda,
+      importe: num(c.importe),
+    }));
+
+  /** Una fila del resumen: sumas de lo ya redondeado en cada pedido. */
+  const fila = (lista: readonly Fila[], cobrosDelMes: readonly { importe: number }[]) => {
+    const validos = lista.filter((p) => !p.cancelado);
+    const cancelados = lista.filter((p) => p.cancelado);
+    const metros = redondear(
+      validos.reduce((s, p) => s + p.metros, 0),
+      3,
+    );
+    const conMetros = validos.filter((p) => p.metros > 0);
+    const metrosCon = conMetros.reduce((s, p) => s + p.metros, 0);
+    const bruta_neta = sumar(validos, (p) => p.importes.bruta_neta);
+    const coste = sumar(validos, (p) => p.coste_produccion);
     return {
-      pedidos: k.pedidos,
-      cancelados: k.cancelados,
-      metros: k.metros,
-      base: k.base,
-      envios: k.envios,
-      bruta: k.bruta,
-      iva: k.iva,
-      vendido: k.total,
-      devuelto: k.devuelto,
-      cobrado: redondear(
-        validos.reduce(
-          (s, p) => s + (cobrosDe.get(p.id) ?? []).reduce((t, c) => t + num(c.importe), 0),
-          0,
-        ),
-      ),
+      pedidos: validos.length,
+      metros,
+      base_neta: sumar(validos, (p) => p.importes.base_neta),
+      envios_netos: sumar(validos, (p) => p.importes.envio_neto),
+      bruta_neta,
+      iva_neto: sumar(validos, (p) => p.importes.iva_neto),
+      total_neto: sumar(validos, (p) => p.importes.total_neto),
+      devuelto: sumar(validos, (p) => p.importes.total - p.importes.total_neto),
+      venta_metros: sumar(validos, (p) => p.venta_metros),
+      eur_metro:
+        metrosCon > 0 ? redondear(sumar(conMetros, (p) => p.venta_metros) / metrosCon) : null,
+      eur_metro_neto:
+        metrosCon > 0
+          ? redondear(sumar(conMetros, (p) => p.importes.bruta_neta) / metrosCon)
+          : null,
       coste_produccion: coste,
-      margen_estimado: redondear(k.bruta - coste),
-      eur_metro: conMetros.metros > 0 ? redondear(conMetros.bruta / conMetros.metros) : null,
-      pedidos_con_metros_estimados: validos.filter((p) =>
-        (lineasDe.get(p.id) ?? []).some(
-          (l) => l.metros_origen === "precio_ajustes" || l.metros_origen === "precio_linea",
-        ),
-      ).length,
+      margen_estimado: redondear(bruta_neta - coste),
+      cobrado: sumar(validos, (p) => p.cobros.cobrado),
+      pendiente: sumar(validos, (p) => p.cobros.pendiente),
+      propinas: sumar(validos, (p) => p.cobros.propinas),
+      cobrado_por_fecha_de_cobro: sumar(cobrosDelMes, (c) => c.importe),
+      pedidos_con_metros_estimados: validos.filter((p) => p.metros_estimados).length,
+      cancelados: cancelados.length,
+      importe_cancelados: sumar(cancelados, (p) => p.importes.total),
+      devuelto_cancelados: sumar(cancelados, (p) => p.importes.devuelto),
+      cobrado_cancelados: sumar(cancelados, (p) => p.cobros.cobrado),
     };
   };
+
+  // Resumen por mes y tienda. Un mes sin pedidos pero con cobros también sale.
+  const clave = (mes: string, tienda: string) => `${mes}|${tienda}`;
+  const grupos = new Map<string, Fila[]>();
+  for (const p of pedidos) {
+    const k = clave(p.fecha.slice(0, 7), p.tienda);
+    const lista = grupos.get(k);
+    if (lista) lista.push(p);
+    else grupos.set(k, [p]);
+  }
+  for (const c of cobrosPorFecha) {
+    const k = clave(c.mes, c.tienda);
+    if (!grupos.has(k)) grupos.set(k, []);
+  }
   const resumen_mensual = [...grupos.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([clave, lista]) => {
-      const [mes, tienda] = clave.split("|");
-      return { mes, tienda, ...fila(lista) };
+    .map(([k, lista]) => {
+      const [mes, tienda] = k.split("|");
+      return {
+        mes,
+        tienda,
+        ...fila(
+          lista,
+          cobrosPorFecha.filter((c) => c.mes === mes && c.tienda === tienda),
+        ),
+      };
     });
+
+  const descuadres = pedidos.filter((p) => Math.abs(p.importes.descuadre) >= 0.01).length;
+  const avisos = [...(d.avisos ?? [])];
+  if (descuadres > 0) {
+    avisos.push(
+      `${descuadres} pedido(s) en los que base + IVA no da el total: ver importes.descuadre.`,
+    );
+  }
 
   return {
     formato: FORMATO_EXPORT_ANALISIS,
     generado: d.generado.toISOString(),
     alcance: d.alcance,
     leeme: LEEME_ANALISIS,
-    avisos: [...(d.avisos ?? [])],
+    avisos,
     empresa: {
       coste_metro_hoy: { ...d.costesMetro, total: costeHoy },
       precio_metro_ajustes: d.precioMetroAjustes,
     },
     tiendas: d.tiendas.map((t) => t.nombre),
-    totales: fila(d.pedidos),
+    totales: fila(pedidos, cobrosPorFecha),
     resumen_mensual,
     pedidos,
   };
