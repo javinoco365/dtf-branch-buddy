@@ -5,13 +5,15 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { eur, metros, numero } from "@/lib/format";
 import { useLineasPeriodo } from "@/lib/periodo";
-import { topPorMetros } from "@/dominio/kpis";
+import { calcularKpis, topPorMetros, type KpisPeriodo } from "@/dominio/kpis";
+import { sumarCantidades } from "@/dominio/sumatorios";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { CANALES, desglose, porDiaSemana, type FilaDesglose } from "@/dominio/gerencia";
 import type { DatosGerencia } from "./destinos";
@@ -48,6 +50,9 @@ export function Ventas({ d }: { d: DatosGerencia }) {
     [d.ventas, d.filtro.canal],
   );
   const semana = useMemo(() => porDiaSemana(d.ventas), [d.ventas]);
+  // El pie de «Por tienda» y «Por canal»: el mismo cálculo con el que desglose
+  // saca el peso, así las dos tablas dan el mismo total y el 100 % es este.
+  const total = useMemo(() => calcularKpis(d.ventas), [d.ventas]);
 
   // Los productos salen de las líneas de los pedidos de tienda: el textil no
   // se vende por metros. El filtro de canal no llega a las líneas.
@@ -57,12 +62,14 @@ export function Ventas({ d }: { d: DatosGerencia }) {
     tiendaId: d.filtro.tienda !== "todas" && !soloTextil ? d.filtro.tienda : undefined,
   });
   const productos = useMemo(() => topPorMetros(lineas.data ?? [], 10), [lineas.data]);
+  // Solo los productos que se ven: topPorMetros ya llega recortada a 10.
+  const metrosProductos = useMemo(() => sumarCantidades(productos, (p) => p.metros), [productos]);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <TablaDesglose titulo="Por tienda" columna="Tienda" filas={porTienda} />
-        <TablaDesglose titulo="Por canal" columna="Canal" filas={porCanal} />
+        <TablaDesglose titulo="Por tienda" columna="Tienda" filas={porTienda} total={total} />
+        <TablaDesglose titulo="Por canal" columna="Canal" filas={porCanal} total={total} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -137,6 +144,19 @@ export function Ventas({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                {/* Con la lista llena puede haber más productos: la etiqueta dice que es el top. */}
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">
+                      {productos.length < 10
+                        ? `Total · ${productos.length} ${productos.length === 1 ? "producto" : "productos"}`
+                        : "Total de los 10 primeros"}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {metros(metrosProductos)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
@@ -150,10 +170,13 @@ function TablaDesglose({
   titulo,
   columna,
   filas,
+  total,
 }: {
   titulo: string;
   columna: string;
   filas: FilaDesglose[];
+  /** El total de las ventas de las que salen las filas (calcularKpis). */
+  total: KpisPeriodo;
 }) {
   return (
     <Card>
@@ -191,6 +214,32 @@ function TablaDesglose({
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell className="font-bold">
+                  Total
+                  {total.cancelados > 0 &&
+                    ` · ${numero(total.cancelados, 0)} ${
+                      total.cancelados === 1 ? "cancelado" : "cancelados"
+                    } aparte`}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {numero(total.pedidos, 0)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(total.total)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {total.metros > 0 ? metros(total.metros) : "—"}
+                </TableCell>
+                {/* El ticket es una media: el de todos, lo vendido entre los pedidos. */}
+                <TableCell className="text-right font-bold tabular-nums">
+                  {total.pedidos > 0 ? eur(total.ticket) : "—"}
+                </TableCell>
+                {/* El peso es una parte del total: no se suma. */}
+                <TableCell />
+              </TableRow>
+            </TableFooter>
           </Table>
         )}
       </CardContent>

@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -17,6 +18,7 @@ import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { aplicarAjustesVentas, filtrarVentas } from "@/dominio/gerencia";
 import { pedidosPorEstado, tiemposEnvio, trabajoAbierto } from "@/dominio/produccion";
+import { totalPorEstado, totalTaller } from "@/dominio/sumatorios-gerencia-b";
 import { destinoPedidosEstado, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, NotaGrupo, VerDetalle } from "./comun";
 
@@ -25,14 +27,13 @@ export function Produccion({ d }: { d: DatosGerencia }) {
   const envios = useEnvios(d.rango);
   const enviosPrevios = useEnvios(d.comparacion?.previo ?? d.rango);
 
-  const abierto = useMemo(
-    () =>
-      trabajoAbierto(
-        aplicarAjustesVentas(filtrarVentas(taller.data ?? [], d.filtro), d.ajustes),
-        d.hoy,
-      ),
-    [taller.data, d.filtro, d.ajustes, d.hoy],
+  const enTallerHoy = useMemo(
+    () => aplicarAjustesVentas(filtrarVentas(taller.data ?? [], d.filtro), d.ajustes),
+    [taller.data, d.filtro, d.ajustes],
   );
+  const abierto = useMemo(() => trabajoAbierto(enTallerHoy, d.hoy), [enTallerHoy, d.hoy]);
+  // El pie sale de los mismos pedidos: la media de días, de todos y no de las filas.
+  const totalAbierto = useMemo(() => totalTaller(enTallerHoy, d.hoy), [enTallerHoy, d.hoy]);
   const tiempos = useMemo(
     () => tiemposEnvio(filtrarVentas(envios.data ?? [], d.filtro)),
     [envios.data, d.filtro],
@@ -45,6 +46,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
     [d.comparacion, enviosPrevios.data, d.filtro],
   );
   const porEstado = useMemo(() => pedidosPorEstado(d.ventas), [d.ventas]);
+  const totalEstados = useMemo(() => totalPorEstado(porEstado), [porEstado]);
 
   if (taller.error) return <ErrorPestana que="los pedidos abiertos" error={taller.error} />;
   if (envios.error) return <ErrorPestana que="los envíos" error={envios.error} />;
@@ -174,6 +176,34 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell className="font-bold">Total</TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {numero(totalAbierto.pedidos, 0)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {metros(totalAbierto.metros)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(totalAbierto.importe)}
+                </TableCell>
+                {/* Los días no se suman: la media de todos los pedidos y el que más espera. */}
+                <TableCell className="text-right font-bold tabular-nums">
+                  {totalAbierto.diasMedios === null
+                    ? "—"
+                    : `${numero(totalAbierto.diasMedios, 1)} días`}
+                </TableCell>
+                <TableCell
+                  className={`text-right font-bold tabular-nums ${
+                    (totalAbierto.diasMaximo ?? 0) > 7 ? "text-status-cancelado" : ""
+                  }`}
+                >
+                  {totalAbierto.diasMaximo === null ? "—" : `${totalAbierto.diasMaximo} días`}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
           </Table>
         </CardContent>
       </Card>
@@ -207,6 +237,23 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">
+                      Total
+                      {totalEstados.cancelados > 0 &&
+                        ` · ${numero(totalEstados.cancelados, 0)} ${
+                          totalEstados.cancelados === 1 ? "cancelado" : "cancelados"
+                        } aparte`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(totalEstados.pedidos, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {metros(totalEstados.metros)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
@@ -250,6 +297,16 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(tiempos.envios, 0)}
+                    </TableCell>
+                    {/* El peso es una parte del total: no se suma. */}
+                    <TableCell />
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
