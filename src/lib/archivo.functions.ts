@@ -56,7 +56,7 @@ export const listarArchivo = createServerFn({ method: "POST" })
         enRango(
           tabla(sb, "facturas")
             .select(
-              "id, tienda_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url",
+              "id, tienda_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url, sustituye_a_id, rectifica_a_id",
             )
             .neq("estado", "borrador"),
         )
@@ -68,7 +68,7 @@ export const listarArchivo = createServerFn({ method: "POST" })
         enRango(
           tabla(sb, "textil_facturas")
             .select(
-              "id, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, subtotal, iva, total, pdf_path, marca:textil_marcas(nombre)",
+              "id, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, subtotal, iva, total, pdf_path, sustituye_a_id, rectifica_a_id, marca:textil_marcas(nombre)",
             )
             .neq("estado", "borrador"),
         )

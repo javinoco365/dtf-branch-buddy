@@ -304,6 +304,7 @@ function StockPage() {
                   <TableCell
                     className="text-right font-bold tabular-nums"
                     title={EXPLICACION_VALOR_STOCK}
+                    data-etiqueta-fija="Valor del stock"
                   >
                     {fmtEUR(totales.valor)}
                   </TableCell>

@@ -172,6 +172,7 @@ function Facturas() {
           iva: f.iva_total,
           total: f.total,
           sustituye_a_id: f.sustituye_a_id,
+          rectifica_a_id: f.rectifica_a_id,
         })),
       ),
     [filtrados],

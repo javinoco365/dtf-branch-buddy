@@ -105,6 +105,7 @@ function FacturasPage() {
           iva: f.iva,
           total: f.total,
           sustituye_a_id: (f.sustituye_a_id as string | null) ?? null,
+          rectifica_a_id: (f.rectifica_a_id as string | null) ?? null,
         })),
       ),
     [filtrados],

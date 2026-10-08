@@ -57,6 +57,10 @@ export type DocArchivo = {
   ext: string;
   /** Si tiene el fichero guardado. Una venta sin él se genera antes de empaquetar. */
   tieneFichero: boolean;
+  /** En ventas: el ticket que canjea esta factura, para no sumar la venta dos veces. */
+  sustituye_a_id?: string | null;
+  /** En ventas: el documento que corrige esta rectificativa. */
+  rectifica_a_id?: string | null;
 };
 
 const num = (v: unknown) => {
@@ -233,6 +237,8 @@ export type FilaFacturaTienda = {
   iva_total?: number | string | null;
   total?: number | string | null;
   pdf_url?: string | null;
+  sustituye_a_id?: string | null;
+  rectifica_a_id?: string | null;
 };
 
 /** Una factura o ticket de tienda. `referencia` la compone quien llama (referenciaFactura). */
@@ -256,6 +262,8 @@ export function deFacturaTienda(
     estado: String(f.estado ?? ""),
     ext: "pdf",
     tieneFichero: !!f.pdf_url,
+    sustituye_a_id: f.sustituye_a_id ?? null,
+    rectifica_a_id: f.rectifica_a_id ?? null,
   };
 }
 
@@ -272,6 +280,8 @@ export type FilaFacturaTextil = {
   total?: number | string | null;
   pdf_path?: string | null;
   marca?: { nombre?: string | null } | null;
+  sustituye_a_id?: string | null;
+  rectifica_a_id?: string | null;
 };
 
 export function deFacturaTextil(f: FilaFacturaTextil): DocArchivo {
@@ -290,6 +300,8 @@ export function deFacturaTextil(f: FilaFacturaTextil): DocArchivo {
     estado: String(f.estado ?? ""),
     ext: "pdf",
     tieneFichero: !!f.pdf_path,
+    sustituye_a_id: f.sustituye_a_id ?? null,
+    rectifica_a_id: f.rectifica_a_id ?? null,
   };
 }
 

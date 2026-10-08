@@ -610,10 +610,11 @@ function ClienteDetalle({
   const { data: facturas = [] } = useQuery({
     queryKey: ["cliente-facturas", clienteId],
     queryFn: async () => {
-      // sustituye_a_id, para que el total no cuente dos veces un ticket
-      // canjeado por factura. tabla(): types.ts todavía no conoce la columna.
+      // sustituye_a_id y rectifica_a_id, para que el total no cuente dos veces
+      // un ticket canjeado por factura y lo vuelva a contar si esa factura se
+      // anula. tabla(): types.ts todavía no conoce la columna.
       const { data, error } = await tabla(supabase, "facturas")
-        .select("id, serie, numero, fecha, estado, total, sustituye_a_id")
+        .select("id, serie, numero, fecha, estado, total, sustituye_a_id, rectifica_a_id")
         .eq("cliente_id", clienteId)
         .order("fecha", { ascending: false });
       if (error) throw error;
@@ -625,6 +626,7 @@ function ClienteDetalle({
         estado: string;
         total: number;
         sustituye_a_id: string | null;
+        rectifica_a_id: string | null;
       }[];
     },
   });

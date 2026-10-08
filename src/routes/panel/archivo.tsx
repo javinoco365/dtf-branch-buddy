@@ -229,6 +229,8 @@ function ArchivoPage() {
                       {recortada
                         ? `los ${totales.ventas.documentos} documentos, no solo los que se ven`
                         : `${totales.ventas.documentos} documento${totales.ventas.documentos === 1 ? "" : "s"}`}
+                      {totales.ventas.canjeados > 0 &&
+                        ` · sin ${totales.ventas.canjeados} ticket${totales.ventas.canjeados === 1 ? "" : "s"} canjeado${totales.ventas.canjeados === 1 ? "" : "s"}`}
                     </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">
                       {eur(totales.ventas.total)}

@@ -132,9 +132,9 @@ export type TotalesArchivo = {
  * suma de las dos no significa nada (y en compras el total es el líquido, que
  * descuenta la retención, no el total con IVA de una venta).
  *
- * El archivo ya llega sin borradores ni compras borradas o sin registrar. Los
- * documentos del archivo no traen a qué ticket sustituye una factura, así que
- * aquí un canje no se puede detectar: el ticket y su factura suman los dos.
+ * El archivo ya llega sin borradores ni compras borradas o sin registrar. Un
+ * ticket canjeado por una factura del mismo archivo no suma: la venta la
+ * cuenta la factura (ver totalesDocumentos).
  */
 export function totalesArchivo(docs: readonly DocArchivo[]): TotalesArchivo {
   const compras = docs.filter((d) => d.clase === "compra");

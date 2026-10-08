@@ -74,7 +74,26 @@ describe("totalesDocumentos", () => {
     expect(totalesDocumentos([{ id: "t1", total: 121 }]).total).toBe(121);
   });
 
-  it("si la factura del canje se anuló, el ticket vuelve a contar", () => {
+  it("si la factura del canje se anuló con una rectificativa, el ticket vuelve a contar", () => {
+    // Así se anula de verdad: la factura sigue emitida y una rectificativa la corrige.
+    const t = totalesDocumentos([
+      { id: "t1", estado: "emitida", total: 121 },
+      { id: "f1", estado: "emitida", total: 121, sustituye_a_id: "t1" },
+      { id: "r1", estado: "emitida", total: -121, rectifica_a_id: "f1" },
+    ]);
+    expect(t).toMatchObject({ documentos: 3, total: 121, canjeados: 0 });
+  });
+
+  it("una rectificativa en borrador no anula el canje", () => {
+    const t = totalesDocumentos([
+      { id: "t1", estado: "emitida", total: 121 },
+      { id: "f1", estado: "emitida", total: 121, sustituye_a_id: "t1" },
+      { id: "r1", estado: "borrador", total: -121, rectifica_a_id: "f1" },
+    ]);
+    expect(t).toMatchObject({ documentos: 1, total: 121, canjeados: 1, borradores: 1 });
+  });
+
+  it("con el estado «anulada» (datos antiguos), el ticket también vuelve a contar", () => {
     const t = totalesDocumentos([
       { id: "t1", estado: "emitida", total: 121 },
       { id: "f1", estado: "anulada", total: 121, sustituye_a_id: "t1" },

@@ -111,6 +111,14 @@ describe("totalesArchivo", () => {
     expect(t.compras).toEqual({ documentos: 2, total: 77.2 });
   });
 
+  it("un ticket canjeado por una factura del archivo no suma dos veces", () => {
+    const t = totalesArchivo([
+      doc({ id: "t1", clase: "ticket", base: 100, iva: 21, total: 121 }),
+      doc({ id: "f1", clase: "emitida", base: 100, iva: 21, total: 121, sustituye_a_id: "t1" }),
+    ]);
+    expect(t.ventas).toMatchObject({ documentos: 1, total: 121, canjeados: 1 });
+  });
+
   it("sin documentos, ceros", () => {
     const t = totalesArchivo([]);
     expect(t.ventas.documentos).toBe(0);

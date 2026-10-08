@@ -93,6 +93,9 @@ export type TotalesDocumentos = {
  * - Un ticket canjeado por una factura que está en la misma lista no suma: la
  *   venta ya la cuenta la factura. Si la factura del canje no está en la
  *   lista (otro periodo, otro filtro), el ticket sí suma.
+ * - Si la factura del canje está anulada, es decir, una rectificativa de la
+ *   lista la corrige (`rectifica_a_id`), el ticket vuelve a contar, como en
+ *   `documentoDelPedido`: la factura y su rectificativa suman cero.
  */
 export function totalesDocumentos(
   docs: readonly {
@@ -102,11 +105,20 @@ export function totalesDocumentos(
     iva?: Valor;
     total: Valor;
     sustituye_a_id?: string | null;
+    rectifica_a_id?: string | null;
   }[],
 ): TotalesDocumentos {
   const emitidos = docs.filter((d) => d.estado !== "borrador");
+  // Una factura se anula con una rectificativa nueva, no cambiándole el estado.
+  const rectificados = new Set(
+    emitidos.flatMap((d) => (d.rectifica_a_id ? [d.rectifica_a_id] : [])),
+  );
   const canjeados = new Set(
-    emitidos.flatMap((d) => (d.sustituye_a_id && d.estado !== "anulada" ? [d.sustituye_a_id] : [])),
+    emitidos.flatMap((d) =>
+      d.sustituye_a_id && d.estado !== "anulada" && !rectificados.has(d.id)
+        ? [d.sustituye_a_id]
+        : [],
+    ),
   );
   const cuentan = emitidos.filter((d) => !canjeados.has(d.id));
   return {

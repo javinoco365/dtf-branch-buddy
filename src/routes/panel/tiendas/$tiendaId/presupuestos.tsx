@@ -226,9 +226,14 @@ function PresupuestosTienda() {
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
+          {/* Lo mismo que el pie: el importe no suma rechazados ni caducados, y el número tampoco. */}
           <div className="text-xs text-muted-foreground ml-auto">
-            {filtrados.length} presupuesto{filtrados.length === 1 ? "" : "s"} ·{" "}
-            <span className="font-semibold text-foreground">{eur(totales.total)}</span>
+            {totales.presupuestos} presupuesto{totales.presupuestos === 1 ? "" : "s"}
+            {totales.rechazados > 0 &&
+              ` · sin ${totales.rechazados} rechazado${totales.rechazados === 1 ? "" : "s"}`}
+            {totales.caducados > 0 &&
+              ` · sin ${totales.caducados} caducado${totales.caducados === 1 ? "" : "s"}`}{" "}
+            · <span className="font-semibold text-foreground">{eur(totales.total)}</span>
           </div>
         </CardContent>
       </Card>
