@@ -35,7 +35,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   const data = { factura_id: facturaId };
   const { data: factura, error: fErr } = await tabla(supabaseAdmin, "facturas")
     .select(
-      "id, tienda_id, serie, numero, tipo, fecha, desglose_iva, receptor_snapshot, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
+      "id, tienda_id, estado, serie, numero, tipo, fecha, desglose_iva, receptor_snapshot, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
     )
     .eq("id", data.factura_id)
     .maybeSingle();
@@ -137,44 +137,155 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   return { factura, pdfData };
 }
 
+/** Dónde vive el PDF A4 de una factura o ticket de tienda en el bucket `facturas`. */
+const rutaPdfTienda = (tiendaId: string, facturaId: string) => `${tiendaId}/${facturaId}.pdf`;
+
+/** ¿El error de Storage es «ese fichero ya existe»? */
+const yaExiste = (e: { message?: string; statusCode?: string | number } | null) =>
+  !!e && (String(e.statusCode) === "409" || /exist|duplicate/i.test(e.message ?? ""));
+
 /**
- * Genera el PDF de una factura, lo sube al bucket privado `facturas`
- * en la ruta `{tienda_id}/{factura_id}.pdf` y guarda la URL firmada
- * en `facturas.pdf_url`.
+ * Guarda el PDF A4 de una factura o ticket de tienda, si todavía no lo tiene.
+ *
+ * El primero que se guarda es el definitivo: no se sobrescribe nunca (una
+ * factura emitida no cambia, y su PDF tampoco). En `pdf_url` queda la RUTA del
+ * fichero, no una URL firmada: la URL caducaba al año y el botón dejaba de
+ * abrir el PDF. Para abrirlo se firma la ruta en el momento.
+ *
+ * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
+ */
+async function guardarPdfTienda(sb: Sb, facturaId: string, userId: string): Promise<string> {
+  const { factura, pdfData } = await leerDatosPdfFactura(sb, facturaId, userId);
+  // Un borrador todavía cambia: su PDF no se guarda como el definitivo.
+  if (factura.estado === "borrador") throw new Error("Es un borrador: emítelo antes");
+  const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+  const blob = await generarFacturaPDF(pdfData);
+  const { error } = await sb.storage
+    .from("facturas")
+    .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+  if (error && !yaExiste(error)) throw new Error(`No se pudo guardar el PDF: ${error.message}`);
+  await tabla(sb, "facturas").update({ pdf_url: ruta }).eq("id", factura.id);
+  return ruta;
+}
+
+/**
+ * Después de emitir: guarda el PDF, pero un fallo aquí no deshace nada. La
+ * factura ya está emitida y numerada en la base; el PDF se puede generar
+ * después con «Generar los que faltan».
+ */
+async function guardarPdfTrasEmitir(userId: string, facturaId: string): Promise<boolean> {
+  try {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    await guardarPdfTienda(adminComoUsuario(userId), facturaId, userId);
+    return true;
+  } catch (e) {
+    console.error("PDF de la factura", facturaId, e);
+    return false;
+  }
+}
+
+/**
+ * Abre el PDF A4 de una factura o ticket de tienda: si no está guardado, lo
+ * guarda; después devuelve una URL firmada de diez minutos.
  */
 export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { factura, pdfData } = await leerDatosPdfFactura(
-      supabaseAdmin,
-      data.factura_id,
-      context.userId,
-    );
+    const sb = adminComoUsuario(context.userId);
+    const { data: factura } = await tabla(sb, "facturas")
+      .select("id, tienda_id, estado")
+      .eq("id", data.factura_id)
+      .maybeSingle();
+    if (!factura) throw new Error("Factura no encontrada");
+    await comprobarAccesoTienda(sb, factura.tienda_id, context.userId);
 
-    const blob = await generarFacturaPDF(pdfData);
-    const arrayBuffer = await blob.arrayBuffer();
-    const path = `${factura.tienda_id}/${factura.id}.pdf`;
+    // Un borrador se imprime tal como está ahora, aparte, y no cuenta como su PDF.
+    if (factura.estado === "borrador") {
+      const { pdfData } = await leerDatosPdfFactura(sb, factura.id, context.userId);
+      const blob = await generarFacturaPDF(pdfData);
+      const rutaBorrador = `${factura.tienda_id}/borradores/${factura.id}.pdf`;
+      const { error } = await sb.storage
+        .from("facturas")
+        .upload(rutaBorrador, new Uint8Array(await blob.arrayBuffer()), {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (error) throw new Error(`No se pudo generar el PDF: ${error.message}`);
+      const f = await sb.storage.from("facturas").createSignedUrl(rutaBorrador, 60 * 10);
+      if (f.error || !f.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
+      return { ok: true, path: rutaBorrador, url: f.data.signedUrl as string };
+    }
 
-    const { error: upErr } = await supabaseAdmin.storage
-      .from("facturas")
-      .upload(path, new Uint8Array(arrayBuffer), {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (upErr) throw new Error(`Error subiendo PDF: ${upErr.message}`);
+    const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+    let firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+    if (firmada.error || !firmada.data?.signedUrl) {
+      await guardarPdfTienda(sb, factura.id, context.userId);
+      firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+    }
+    if (firmada.error || !firmada.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
+    return { ok: true, path: ruta, url: firmada.data.signedUrl as string };
+  });
 
-    // URL firmada (1 año) para mostrar/descargar desde la UI
-    const { data: signed, error: sErr } = await supabaseAdmin.storage
-      .from("facturas")
-      .createSignedUrl(path, 60 * 60 * 24 * 365);
-    if (sErr || !signed) throw new Error("No se pudo generar la URL firmada");
+/**
+ * Guarda el PDF de las facturas y tickets de tienda que todavía no lo tienen,
+ * de pocos en pocos para no pasarse del tiempo de una función. Las de antes de
+ * guardarse siempre el PDF, las de los tickets en bloque y cualquiera cuyo PDF
+ * falló al emitir. La pantalla la llama hasta que no quedan.
+ */
+export const rellenarPdfsTienda = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid().optional(),
+        ids: z.array(z.string().uuid()).max(10).optional(),
+        /** Las que ya fallaron en esta tanda de tandas: no se reintentan. */
+        excluir: z.array(z.string().uuid()).max(100).optional(),
+        limite: z.number().int().min(1).max(10).default(5),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    // Con el cliente del usuario: la RLS deja ver solo las de sus tiendas.
+    let consulta = tabla(context.supabase, "facturas")
+      .select("id, serie, ejercicio, numero", { count: "exact" })
+      .neq("estado", "borrador")
+      .is("pdf_url", null)
+      .order("fecha")
+      .order("id")
+      .limit(data.limite);
+    if (data.tienda_id) consulta = consulta.eq("tienda_id", data.tienda_id);
+    if (data.ids?.length) consulta = consulta.in("id", data.ids);
+    if (data.excluir?.length) consulta = consulta.not("id", "in", `(${data.excluir.join(",")})`);
+    const { data: filas, count, error } = await consulta;
+    if (error) throw new Error(error.message);
 
-    await supabaseAdmin.from("facturas").update({ pdf_url: signed.signedUrl }).eq("id", factura.id);
-
-    return { ok: true, path, url: signed.signedUrl };
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    let generados = 0;
+    const fallidos: { id: string; referencia: string; motivo: string }[] = [];
+    for (const f of filas ?? []) {
+      try {
+        await guardarPdfTienda(sb, f.id, context.userId);
+        generados++;
+      } catch (e) {
+        fallidos.push({
+          id: f.id,
+          referencia: referenciaFactura(f.serie, f.ejercicio, f.numero),
+          motivo: (e as Error).message,
+        });
+      }
+    }
+    return {
+      generados,
+      fallidos,
+      quedan: Math.max(0, (count ?? 0) - generados - fallidos.length),
+    };
   });
 
 /**
@@ -352,7 +463,7 @@ export const emitirFactura = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    return llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+    const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: data.receptor,
@@ -365,6 +476,7 @@ export const emitirFactura = createServerFn({ method: "POST" })
       _rectifica_a_id: null,
       _motivo_rectificacion: null,
     });
+    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
   });
 
 /* ==========================================================================
@@ -565,7 +677,7 @@ export const emitirTicket = createServerFn({ method: "POST" })
     const receptor: Record<string, string> = {};
     if (data.nombre?.trim()) receptor.nombre = data.nombre.trim();
     if (data.tipo_fiscal) receptor.tipo_fiscal = data.tipo_fiscal;
-    return llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+    const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: receptor,
@@ -576,6 +688,7 @@ export const emitirTicket = createServerFn({ method: "POST" })
       _notas: data.notas ?? null,
       _simplificada: true,
     });
+    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
   });
 
 /** Un pedido cobrado y sin documento, con lo que toca emitirle. */
@@ -731,7 +844,9 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
     const sb = adminComoUsuario(context.userId);
     const fecha = new Date().toISOString().slice(0, 10);
 
-    const emitidos: { pedido: string; referencia: string }[] = [];
+    // Sin PDF aquí: son hasta 200. La pantalla los guarda después, por tandas
+    // (rellenarPdfsTienda con estos ids).
+    const emitidos: { pedido: string; referencia: string; id: string }[] = [];
     const omitidos: { pedido: string; motivo: string }[] = [];
 
     for (const id of data.pedido_ids) {
@@ -771,7 +886,7 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
           _pedido_id: id,
           _simplificada: true,
         });
-        emitidos.push({ pedido: numero, referencia: r.referencia });
+        emitidos.push({ pedido: numero, referencia: r.referencia, id: r.id });
       } catch (e) {
         omitidos.push({ pedido: numero, motivo: (e as Error).message || "error al emitir" });
       }
@@ -812,11 +927,12 @@ export const anularFactura = createServerFn({ method: "POST" })
         `Este ticket se canjeó por la factura ${referenciaFactura(canje.serie, canje.ejercicio, canje.numero)}: rectifica esa.`,
       );
     }
-    return llamarRpc<ResultadoEmision>(supabaseAdmin, "anular_factura", {
+    const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "anular_factura", {
       _usuario_id: context.userId,
       _factura_id: data.factura_id,
       _motivo: data.motivo,
     });
+    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
   });
 
 /** Por dónde va cada serie: para saber qué factura es la última y se puede borrar. */
@@ -859,7 +975,11 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
       const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
       await adminComoUsuario(context.userId)
         .storage.from("facturas")
-        .remove([`${carpeta}/${data.factura_id}.pdf`, `${carpeta}/${data.factura_id}-80mm.pdf`]);
+        .remove([
+          `${carpeta}/${data.factura_id}.pdf`,
+          `${carpeta}/${data.factura_id}-80mm.pdf`,
+          `${carpeta}/borradores/${data.factura_id}.pdf`,
+        ]);
     }
     return r;
   });
@@ -1004,7 +1124,7 @@ export const canjearTicket = createServerFn({ method: "POST" })
     await comprobarAccesoTienda(sb, ticket.tienda_id, context.userId);
     if (ticket.tipo !== "simplificada") throw new Error("Solo se canjean tickets");
 
-    return llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+    const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: ticket.tienda_id,
       _receptor: data.receptor,
@@ -1014,4 +1134,5 @@ export const canjearTicket = createServerFn({ method: "POST" })
       _notas: null,
       _sustituye_a_id: ticket.id,
     });
+    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
   });

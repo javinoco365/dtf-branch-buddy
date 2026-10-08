@@ -39,11 +39,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, FileUp, Loader2, PackageCheck, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  FileText,
+  FileUp,
+  Loader2,
+  PackageCheck,
+  Paperclip,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { revisarCompra, type CompraLeida } from "@/dominio/factura-compra";
 import {
+  adjuntarFicheroCompra,
   borrarCompra,
   guardarCompra,
   hayLector,
@@ -51,6 +60,7 @@ import {
   listCompras,
   pagarCompra,
   registrarCompra,
+  verFicheroCompra,
 } from "@/lib/compras.functions";
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
@@ -100,6 +110,11 @@ type Revision = {
   id?: string;
   motivos?: string | null;
   fichero_huella?: string | null;
+  /**
+   * El fichero de la factura, para guardarlo al registrar: el que se leyó o el
+   * que se adjunta a mano. Las de la cola ya tienen el suyo guardado.
+   */
+  fichero?: File | null;
   /** Confirmado que no es un duplicado (mismo proveedor, fecha e importe). */
   otraFactura?: boolean;
 };
@@ -221,6 +236,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     anio: "todos",
     trimestre: "todos",
     proveedor: "todos",
+    fichero: "todos",
   });
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -237,6 +253,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         // Las borradas solo se ven si se piden.
         (filtros.estado === "todos" ? !c.borrada_en : estadoDe(c) === filtros.estado) &&
         (filtros.categoria === "todas" || (c.categoria ?? "textil") === filtros.categoria) &&
+        (filtros.fichero === "todos" || (filtros.fichero === "con") === !!c.fichero_ruta) &&
         (!q || normalizarTexto(c.proveedor).includes(q) || normalizarTexto(c.numero).includes(q)),
     );
   }, [
@@ -248,6 +265,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     filtros.anio,
     filtros.trimestre,
     filtros.proveedor,
+    filtros.fichero,
     periodo.rango,
   ]);
   const enLaCola = useMemo(
@@ -279,8 +297,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       fd.append("fichero", fichero);
       return leerFn({ data: fd });
     },
-    onSuccess: (r: any) => {
-      setRevisando(nueva(r.compra, r.bruto_json ?? null));
+    onSuccess: (r: any, fichero) => {
+      setRevisando({ ...nueva(r.compra, r.bruto_json ?? null), fichero });
       if (r.avisos.length > 0) {
         toast.warning(`Leída con ${r.avisos.length} cosa(s) que revisar`);
       } else {
@@ -292,6 +310,38 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 
   const registrarFn = useServerFn(registrarCompra);
   const guardarFn = useServerFn(guardarCompra);
+  const adjuntarFn = useServerFn(adjuntarFicheroCompra);
+  const adjuntar = (id: string, fichero: File) => {
+    const fd = new FormData();
+    fd.append("id", id);
+    fd.append("fichero", fichero);
+    return adjuntarFn({ data: fd });
+  };
+  // Adjuntar desde la lista, a una compra que no tiene fichero.
+  const adjuntarRef = useRef<HTMLInputElement>(null);
+  const [adjuntandoA, setAdjuntandoA] = useState<string | null>(null);
+  const adjuntarDesdeLista = useMutation({
+    mutationFn: (v: { id: string; fichero: File }) => adjuntar(v.id, v.fichero),
+    onSuccess: () => {
+      toast.success("Fichero guardado");
+      qc.invalidateQueries({ queryKey: ["compras"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar el fichero"),
+    onSettled: () => setAdjuntandoA(null),
+  });
+  const verFn = useServerFn(verFicheroCompra);
+  /** La pestaña se abre con el clic: al volver de la red el navegador ya no deja. */
+  async function verFichero(id: string) {
+    const ventana = window.open("", "_blank");
+    try {
+      const { url } = await verFn({ data: { id } });
+      if (ventana) ventana.location.href = url;
+      else window.location.href = url;
+    } catch (e: any) {
+      ventana?.close();
+      toast.error(e?.message ?? "No se pudo abrir el fichero");
+    }
+  }
   const registrar = useMutation({
     mutationFn: async () => {
       if (!revisando) throw new Error("Nada que registrar");
@@ -345,12 +395,26 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           })),
         },
       })) as { id: string };
-      return registrarFn({ data: { id } });
+      const r = await registrarFn({ data: { id } });
+      // El fichero, después de registrar: si falla, la compra ya está bien
+      // registrada y el fichero se adjunta desde la lista.
+      let sinFichero: string | null = null;
+      if (revisando.fichero) {
+        try {
+          await adjuntar(id, revisando.fichero);
+        } catch (e: any) {
+          sinFichero = e?.message ?? "error desconocido";
+        }
+      }
+      return { ...r, sinFichero };
     },
     onSuccess: (r: any) => {
       toast.success(
         r.movidas > 0 ? `${r.movidas} línea(s) dadas de alta en el stock` : "Factura registrada",
       );
+      if (r.sinFichero) {
+        toast.warning(`No se pudo guardar el fichero: ${r.sinFichero}. Adjúntalo desde la lista.`);
+      }
       setRevisando(null);
       qc.invalidateQueries({ queryKey: ["compras"] });
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
@@ -537,9 +601,32 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
             ancho="w-[220px] max-md:w-full"
           />
         )}
+        <SelectFiltro
+          etiqueta="Fichero"
+          valor={filtros.fichero}
+          alCambiar={(fichero) => cambiar({ fichero })}
+          opciones={[
+            { valor: "todos", etiqueta: "Con y sin fichero" },
+            { valor: "con", etiqueta: "Con fichero" },
+            { valor: "sin", etiqueta: "Sin fichero" },
+          ]}
+          ancho="w-[170px]"
+        />
         <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
+      <input
+        ref={adjuntarRef}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f && adjuntandoA) adjuntarDesdeLista.mutate({ id: adjuntandoA, fichero: f });
+          else setAdjuntandoA(null);
+        }}
+      />
       <Card>
         <CardContent className="p-0">
           <Table movil="tarjetas">
@@ -605,6 +692,37 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex items-center gap-1">
+                      {c.fichero_ruta ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Ver el fichero"
+                          aria-label="Ver el fichero"
+                          onClick={() => verFichero(c.id)}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        !c.borrada_en && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Sin fichero: adjuntarlo"
+                            aria-label="Adjuntar el fichero"
+                            disabled={adjuntarDesdeLista.isPending}
+                            onClick={() => {
+                              setAdjuntandoA(c.id);
+                              adjuntarRef.current?.click();
+                            }}
+                          >
+                            {adjuntandoA === c.id && adjuntarDesdeLista.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Paperclip className="h-4 w-4 text-status-pendiente" />
+                            )}
+                          </Button>
+                        )
+                      )}
                       {general &&
                         recibidas &&
                         c.estado === "registrada" &&
@@ -1243,6 +1361,13 @@ function RevisarCompra({
         </div>
       )}
 
+      {!estado.id && (
+        <FicheroRevision
+          fichero={estado.fichero ?? null}
+          onCambiar={(fichero) => onCambiar({ ...estado, fichero })}
+        />
+      )}
+
       <DialogFooter className="items-center gap-3">
         {sinCasar > 0 && (
           <span className="text-sm text-muted-foreground mr-auto">
@@ -1280,6 +1405,56 @@ function RevisarCompra({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+/**
+ * El fichero de la factura que se va a registrar. Se guarda al registrar; sin
+ * él se puede registrar igual (un recibo que no llegó, una compra antigua) y
+ * adjuntarlo después desde la lista.
+ */
+function FicheroRevision({
+  fichero,
+  onCambiar,
+}: {
+  fichero: File | null;
+  onCambiar: (f: File | null) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
+      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="flex-1 min-w-0 truncate">
+        {fichero ? (
+          <>
+            Se guardará el fichero <span className="font-medium">{fichero.name}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">
+            Sin fichero. Puedes adjuntarlo ahora o después desde la lista.
+          </span>
+        )}
+      </span>
+      <input
+        ref={ref}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) onCambiar(f);
+        }}
+      />
+      <Button size="sm" variant="outline" onClick={() => ref.current?.click()}>
+        {fichero ? "Cambiar" : "Adjuntar fichero"}
+      </Button>
+      {fichero && (
+        <Button size="sm" variant="ghost" onClick={() => onCambiar(null)}>
+          Quitar
+        </Button>
+      )}
+    </div>
   );
 }
 

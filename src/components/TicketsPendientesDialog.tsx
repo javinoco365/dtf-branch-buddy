@@ -21,6 +21,7 @@ import { explicarDecision } from "@/dominio/tickets";
 import {
   emitirTicketsPedidos,
   pedidosSinDocumento,
+  rellenarPdfsTienda,
   type PedidoParaTicket,
 } from "@/lib/facturas.functions";
 
@@ -37,13 +38,18 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
   const qc = useQueryClient();
   const listarFn = useServerFn(pedidosSinDocumento);
   const emitirFn = useServerFn(emitirTicketsPedidos);
+  const rellenarFn = useServerFn(rellenarPdfsTienda);
 
   const [abierto, setAbierto] = useState(false);
   const [desde, setDesde] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [hasta, setHasta] = useState(() => format(endOfMonth(new Date()), "yyyy-MM-dd"));
   const [emitiendo, setEmitiendo] = useState(false);
+  // El PDF de cada ticket se guarda después de emitirlos, de diez en diez.
+  const [pdfs, setPdfs] = useState<{ hechos: number; total: number; fallidos: number } | null>(
+    null,
+  );
   const [resultado, setResultado] = useState<{
-    emitidos: { pedido: string; referencia: string }[];
+    emitidos: { pedido: string; referencia: string; id: string }[];
     omitidos: { pedido: string; motivo: string }[];
   } | null>(null);
 
@@ -62,8 +68,9 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
       setResultado(r);
       if (r.emitidos.length) toast.success(`${r.emitidos.length} ticket(s) emitido(s)`);
       if (r.omitidos.length) toast.warning(`${r.omitidos.length} pedido(s) no se han emitido`);
-      qc.invalidateQueries({ queryKey: ["facturas"] });
       qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+      await guardarPdfs(r.emitidos.map((e) => e.id));
+      qc.invalidateQueries({ queryKey: ["facturas"] });
     } catch (e: any) {
       toast.error(e?.message ?? "No se pudieron emitir los tickets");
     } finally {
@@ -71,12 +78,39 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     }
   }
 
+  /**
+   * Guarda el PDF de los tickets recién emitidos, de diez en diez: todos de una
+   * vez se pasarían del tiempo de una función. Si alguno falla, el ticket ya
+   * está emitido; su PDF sale después con «Generar los que faltan».
+   */
+  async function guardarPdfs(ids: string[]) {
+    if (!ids.length) return;
+    let hechos = 0;
+    let fallidos = 0;
+    setPdfs({ hechos, total: ids.length, fallidos });
+    for (let i = 0; i < ids.length; i += 10) {
+      const lote = ids.slice(i, i + 10);
+      try {
+        const r = await rellenarFn({ data: { ids: lote, limite: 10 } });
+        fallidos += r.fallidos.length;
+      } catch {
+        fallidos += lote.length;
+      }
+      hechos += lote.length;
+      setPdfs({ hechos, total: ids.length, fallidos });
+    }
+    if (fallidos) toast.warning(`${fallidos} ticket(s) se han quedado sin PDF`);
+  }
+
   return (
     <Dialog
       open={abierto}
       onOpenChange={(o) => {
         setAbierto(o);
-        if (!o) setResultado(null);
+        if (!o) {
+          setResultado(null);
+          setPdfs(null);
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -117,6 +151,15 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
               <p>
                 Emitidos:{" "}
                 {resultado.emitidos.map((e) => `${e.referencia} (${e.pedido})`).join(", ")}
+              </p>
+            )}
+            {pdfs && (
+              <p className="text-muted-foreground">
+                {pdfs.hechos < pdfs.total
+                  ? `Guardando los PDF… ${pdfs.hechos} de ${pdfs.total}`
+                  : pdfs.fallidos
+                    ? `PDF guardados: ${pdfs.total - pdfs.fallidos} de ${pdfs.total}. Los que faltan se generan desde la lista.`
+                    : `PDF guardados: ${pdfs.total}`}
               </p>
             )}
             {resultado.omitidos.map((o) => (

@@ -410,3 +410,67 @@ export const verFicheroCompra = createServerFn({ method: "POST" })
     if (firmada.error || !firmada.data) throw new Error("No se pudo abrir el fichero.");
     return { url: firmada.data.signedUrl };
   });
+
+/**
+ * Guarda el fichero de una compra que todavía no lo tiene: la que se leyó sin
+ * la cola (el fichero se leía y se tiraba), la que se dio de alta a mano y
+ * cualquiera de antes. Sirve también con la compra ya registrada: el fichero
+ * no cambia ningún importe ni ninguna línea.
+ *
+ * No sustituye uno que ya está: el fichero es el justificante, y cambiarlo
+ * sin dejar rastro es justo lo que no se puede hacer.
+ */
+export const adjuntarFicheroCompra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => {
+    const { fichero } = ficheroDe(d);
+    const id = z
+      .string()
+      .uuid()
+      .parse((d as FormData).get("id"));
+    return { id, fichero };
+  })
+  .handler(async ({ data, context }) => {
+    const { huellaDe } = await import("./cola-compras.server");
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { data: compra, error } = await tabla(context.supabase, "textil_compras")
+      .select("id, fecha, fichero_ruta")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!compra) throw new Error("La compra no existe");
+    if (compra.fichero_ruta) throw new Error("Esta compra ya tiene su fichero.");
+
+    const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    const huella = await huellaDe(bytes);
+    // El mismo fichero en otra compra viva es, casi seguro, la misma factura dos veces.
+    const previas = await tabla(context.supabase, "textil_compras")
+      .select("id, proveedor, numero, fecha, estado, borrada_en")
+      .eq("fichero_huella", huella)
+      .is("borrada_en", null)
+      .neq("id", data.id);
+    const conHuella = !faltaLaColumna(previas.error);
+    if (conHuella && previas.error) throw new Error(previas.error.message);
+    const otra = ((previas.data ?? []) as CompraComparable[])[0];
+    if (conHuella && otra) {
+      throw new Error(avisoDuplicado({ nivel: "archivo", de: otra, borrada: false }));
+    }
+
+    const anio = String(compra.fecha ?? new Date().toISOString()).slice(0, 4);
+    const ruta = `ronoca/${anio}/${compra.id}.${TIPOS_FICHERO[data.fichero.type]}`;
+    const admin = adminComoUsuario(context.userId);
+    const subida = await admin.storage
+      .from("compras")
+      .upload(ruta, bytes, { contentType: data.fichero.type, upsert: false });
+    if (subida.error) throw new Error(`No se pudo guardar el fichero: ${subida.error.message}`);
+
+    const { error: updErr } = await tabla(context.supabase, "textil_compras")
+      .update(conHuella ? { fichero_ruta: ruta, fichero_huella: huella } : { fichero_ruta: ruta })
+      .eq("id", compra.id);
+    if (updErr) {
+      // Sin la fila apuntándolo, el fichero no lo encontraría nadie.
+      await admin.storage.from("compras").remove([ruta]);
+      throw new Error(updErr.message);
+    }
+    return { ruta };
+  });

@@ -13,7 +13,7 @@ const MAX_BYTES = 2 * 1024 * 1024;
 /**
  * Descarga el logo congelado en la factura y lo deja listo para incrustarlo.
  *
- * Devuelve null ante cualquier problema —URL vacía, red caída, formato que
+ * Devuelve null ante cualquier problema —URL vacía, red caída o lenta, formato que
  * jsPDF no admite, fichero enorme— y nunca lanza: la factura sale sin logo,
  * que es infinitamente mejor que no poder emitirla o no poder imprimirla.
  * Por eso el aviso va a consola y no al usuario.
@@ -21,7 +21,9 @@ const MAX_BYTES = 2 * 1024 * 1024;
 export async function descargarLogo(url: string | null | undefined): Promise<LogoPDF | null> {
   if (!url) return null;
   try {
-    const respuesta = await fetch(url);
+    // Con tope: un servidor de imágenes colgado no puede dejar la emisión
+    // esperando hasta que la función se agote.
+    const respuesta = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!respuesta.ok) {
       console.warn(`[logo] ${url} devolvió ${respuesta.status}`);
       return null;

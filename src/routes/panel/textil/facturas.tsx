@@ -30,10 +30,12 @@ import {
   generarPdfFacturaTextil,
   generarTicket80Textil,
   urlFacturaTextil,
+  rellenarPdfsTextil,
   canjearTicketTextil,
   anularTicketTextil,
 } from "@/lib/textil.functions";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
+import { PdfsPendientes } from "@/components/documentos/PdfsPendientes";
 import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
@@ -100,6 +102,7 @@ function FacturasPage() {
   const [generando, setGenerando] = useState<string | null>(null);
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
+  const rellenarFn = useServerFn(rellenarPdfsTextil);
   const ticket80Fn = useServerFn(generarTicket80Textil);
   const canjearFn = useServerFn(canjearTicketTextil);
   const anularFn = useServerFn(anularTicketTextil);
@@ -203,6 +206,11 @@ function FacturasPage() {
         <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
+      <PdfsPendientes
+        faltan={(data as any[]).filter((f) => f.estado !== "borrador" && !f.pdf_path).length}
+        generar={(excluir) => rellenarFn({ data: { excluir, limite: 3 } })}
+        alTerminar={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
+      />
       <Card>
         <CardContent className="p-0">
           <Table movil="tarjetas">
