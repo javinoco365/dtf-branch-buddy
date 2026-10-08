@@ -48,6 +48,7 @@ import {
   FilePen,
   Package,
   ReceiptText,
+  FolderArchive,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
@@ -134,6 +135,14 @@ export function AppSidebar() {
                   <Link to="/panel/compras">
                     <ReceiptText />
                     <span>Facturas de compra</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/panel/archivo"}>
+                  <Link to="/panel/archivo">
+                    <FolderArchive />
+                    <span>Archivo</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

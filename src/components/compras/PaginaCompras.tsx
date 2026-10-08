@@ -65,6 +65,8 @@ import {
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
+import { deCompra, nombreZip } from "@/dominio/archivo";
 import { SubidaFacturas } from "./SubidaFacturas";
 import { ColaRevision } from "./ColaRevision";
 import {
@@ -268,6 +270,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     filtros.fichero,
     periodo.rango,
   ]);
+  // Los que se están viendo, para descargarlos en un ZIP.
+  const docsFiltrados = useMemo(() => (filtrados as any[]).map(deCompra), [filtrados]);
   const enLaCola = useMemo(
     () => (cola ? (compras as any[]).filter((c) => enCola(c) && !c.borrada_en) : []),
     [compras, cola],
@@ -449,7 +453,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
+        <div className="min-w-[260px] flex-1">
           <h1 className="text-2xl font-bold tracking-tight">
             {general ? "Facturas de compra" : "Compras"}
           </h1>
@@ -459,7 +463,16 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               : "Sube la factura del proveedor y da el género de alta en el stock."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <DescargarPdfs
+            docs={docsFiltrados}
+            etiqueta="Descargar ficheros"
+            nombreZip={nombreZip(
+              periodo.seleccion,
+              periodo.rango,
+              general ? "Compras" : "Compras_textil",
+            )}
+          />
           {!cola && (
             <>
               <input

@@ -6,6 +6,7 @@ import { generarFacturaPDF } from "@/lib/pdf-factura";
 import type { TicketPDFData } from "@/lib/pdf-ticket";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
+import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // El dominio se importa aquí arriba y no con await import() dentro de cada
 // función: un módulo que se carga de las dos formas obliga al empaquetador a
 // generar un auxiliar que acabó en el arranque del servidor, en una
@@ -137,12 +138,13 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   return { factura, pdfData };
 }
 
-/** Dónde vive el PDF A4 de una factura o ticket de tienda en el bucket `facturas`. */
-const rutaPdfTienda = (tiendaId: string, facturaId: string) => `${tiendaId}/${facturaId}.pdf`;
-
-/** ¿El error de Storage es «ese fichero ya existe»? */
+/**
+ * ¿El error de Storage es «ese fichero ya existe»? (409, «The resource already
+ * exists»). Solo ese: un «no existe» o cualquier otro fallo no puede pasar por
+ * «ya estaba guardado», o la fila apuntaría a un fichero que no hay.
+ */
 const yaExiste = (e: { message?: string; statusCode?: string | number } | null) =>
-  !!e && (String(e.statusCode) === "409" || /exist|duplicate/i.test(e.message ?? ""));
+  !!e && (String(e.statusCode) === "409" || /already exists|duplicate/i.test(e.message ?? ""));
 
 /**
  * Guarda el PDF A4 de una factura o ticket de tienda, si todavía no lo tiene.

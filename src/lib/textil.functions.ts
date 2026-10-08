@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { rutaPdfTextil } from "./rutas-pdf";
+import { leerTodas } from "./paginar";
 import type { Cobro } from "./cobros.functions";
 import type { TicketPDFData } from "@/lib/pdf-ticket";
 import {
@@ -707,10 +709,15 @@ export const confirmarPresupuestoTextil = createServerFn({ method: "POST" })
 export const listTextilFacturas = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("textil_facturas")
-      .select("*, items:textil_factura_items(*), marca:textil_marcas(id,nombre,color)")
-      .order("fecha", { ascending: false });
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data, error } = await leerTodas<any>((a, b) =>
+      context.supabase
+        .from("textil_facturas")
+        .select("*, items:textil_factura_items(*), marca:textil_marcas(id,nombre,color)")
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (error) throw error;
     return data ?? [];
   });
@@ -1044,9 +1051,13 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
   return { factura, pdfData };
 }
 
-/** ¿El error de Storage es «ese fichero ya existe»? */
+/**
+ * ¿El error de Storage es «ese fichero ya existe»? (409, «The resource already
+ * exists»). Solo ese: un «no existe» o cualquier otro fallo no puede pasar por
+ * «ya estaba guardado», o la fila apuntaría a un fichero que no hay.
+ */
 const yaExiste = (e: { message?: string; statusCode?: string | number } | null) =>
-  !!e && (String(e.statusCode) === "409" || /exist|duplicate/i.test(e.message ?? ""));
+  !!e && (String(e.statusCode) === "409" || /already exists|duplicate/i.test(e.message ?? ""));
 
 /**
  * Genera el PDF de una factura textil y lo deja en Storage, si todavía no
@@ -1073,7 +1084,7 @@ async function guardarPdfTextil(sb: any, facturaId: string, userId: string): Pro
   const { factura, pdfData } = await leerDatosPdfTextil(sb, facturaId, userId);
 
   const blob = await generarFacturaPDF(pdfData);
-  const ruta = `textil/${factura.id}.pdf`;
+  const ruta = rutaPdfTextil(factura.id);
   const { error: subErr } = await sb.storage
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
@@ -1127,6 +1138,8 @@ export const rellenarPdfsTextil = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
+        /** Solo estas (el archivo, antes de empaquetar). */
+        ids: z.array(z.string().uuid()).max(10).optional(),
         /** Las que ya fallaron en esta tanda de tandas: no se reintentan. */
         excluir: z.array(z.string().uuid()).max(100).optional(),
         limite: z.number().int().min(1).max(10).default(5),
@@ -1141,6 +1154,7 @@ export const rellenarPdfsTextil = createServerFn({ method: "POST" })
       .order("fecha")
       .order("id")
       .limit(data.limite);
+    if (data.ids?.length) consulta = consulta.in("id", data.ids);
     if (data.excluir?.length) consulta = consulta.not("id", "in", `(${data.excluir.join(",")})`);
     const { data: filas, count, error } = await consulta;
     if (error) throw new Error(error.message);

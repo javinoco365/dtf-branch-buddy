@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
+import { Route as PanelArchivoRouteImport } from './routes/panel/archivo'
 import { Route as PanelCajaRouteImport } from './routes/panel/caja'
 import { Route as PanelClientesRouteImport } from './routes/panel/clientes'
 import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
@@ -66,6 +67,11 @@ const PanelRouteRoute = PanelRouteRouteImport.update({
 const PanelIndexRoute = PanelIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelArchivoRoute = PanelArchivoRouteImport.update({
+  id: '/archivo',
+  path: '/archivo',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelCajaRoute = PanelCajaRouteImport.update({
@@ -255,6 +261,7 @@ export interface FileRoutesByFullPath {
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
@@ -293,6 +300,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
@@ -333,6 +341,7 @@ export interface FileRoutesById {
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
   '/panel/cobros': typeof PanelCobrosRoute
@@ -375,6 +384,7 @@ export interface FileRouteTypes {
     | '/panel'
     | '/auth'
     | '/panel/textil'
+    | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
@@ -413,6 +423,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
@@ -452,6 +463,7 @@ export interface FileRouteTypes {
     | '/panel'
     | '/auth'
     | '/panel/textil'
+    | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
     | '/panel/cobros'
@@ -522,6 +534,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/panel/'
       preLoaderRoute: typeof PanelIndexRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/archivo': {
+      id: '/panel/archivo'
+      path: '/archivo'
+      fullPath: '/panel/archivo'
+      preLoaderRoute: typeof PanelArchivoRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/caja': {
@@ -823,6 +842,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 
 interface PanelRouteRouteChildren {
   PanelTextilRouteRoute: typeof PanelTextilRouteRouteWithChildren
+  PanelArchivoRoute: typeof PanelArchivoRoute
   PanelCajaRoute: typeof PanelCajaRoute
   PanelClientesRoute: typeof PanelClientesRoute
   PanelCobrosRoute: typeof PanelCobrosRoute
@@ -844,6 +864,7 @@ interface PanelRouteRouteChildren {
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelTextilRouteRoute: PanelTextilRouteRouteWithChildren,
+  PanelArchivoRoute: PanelArchivoRoute,
   PanelCajaRoute: PanelCajaRoute,
   PanelClientesRoute: PanelClientesRoute,
   PanelCobrosRoute: PanelCobrosRoute,

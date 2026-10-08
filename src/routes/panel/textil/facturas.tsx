@@ -36,6 +36,8 @@ import {
 } from "@/lib/textil.functions";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
 import { PdfsPendientes } from "@/components/documentos/PdfsPendientes";
+import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
+import { deFacturaTextil, nombreZip } from "@/dominio/archivo";
 import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
@@ -180,11 +182,17 @@ function FacturasPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Facturas textil</h1>
-        <p className="text-sm text-muted-foreground">
-          Las facturas se generan al convertir un presupuesto aceptado.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Facturas textil</h1>
+          <p className="text-sm text-muted-foreground">
+            Las facturas se generan al convertir un presupuesto aceptado.
+          </p>
+        </div>
+        <DescargarPdfs
+          docs={(filtrados as any[]).map(deFacturaTextil)}
+          nombreZip={nombreZip(periodo.seleccion, periodo.rango, "Facturas_textil")}
+        />
       </div>
       <BarraFiltros>
         <CampoBusqueda
