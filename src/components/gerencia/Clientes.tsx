@@ -6,6 +6,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -18,6 +19,7 @@ import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { aplicarAjustesVentas, etiquetaCanal, filtrarVentas } from "@/dominio/gerencia";
 import { clientesDormidos, DIAS_DORMIDO, PARTE_PARETO, resumenClientes } from "@/dominio/clientela";
+import { totalDormidos, totalRankingClientes } from "@/dominio/sumatorios-gerencia-a";
 import { destinoCliente, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, NotaGrupo, VerDetalle } from "./comun";
 
@@ -36,6 +38,9 @@ export function Clientes({ d }: { d: DatosGerencia }) {
     [ventas, d.comparacion],
   );
   const dormidos = useMemo(() => clientesDormidos(ventas, d.hoy), [ventas, d.hoy]);
+  // Los pies suman la lista entera, no solo las FILAS que se enseñan.
+  const totalRanking = useMemo(() => totalRankingClientes(r), [r]);
+  const totalDormido = useMemo(() => totalDormidos(dormidos), [dormidos]);
 
   if (historial.error) return <ErrorPestana que="los pedidos" error={historial.error} />;
   if (!historial.data) return <CargandoPestana />;
@@ -146,6 +151,26 @@ export function Clientes({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={2}>
+                    {r.ranking.length > FILAS
+                      ? `Total de los ${totalRanking.clientes} clientes`
+                      : `Total · ${totalRanking.clientes} ${totalRanking.clientes === 1 ? "cliente" : "clientes"}`}
+                    {r.sinCliente.pedidos > 0 &&
+                      ` · ${r.sinCliente.pedidos} ${r.sinCliente.pedidos === 1 ? "pedido" : "pedidos"} sin cliente aparte`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(totalRanking.pedidos, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalRanking.vendido)}
+                  </TableCell>
+                  {/* El peso y el acumulado son porcentajes: no se suman. */}
+                  <TableCell />
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
             </Table>
           )}
         </CardContent>
@@ -191,6 +216,21 @@ export function Clientes({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={3}>
+                    {dormidos.length > FILAS
+                      ? `Total de los ${totalDormido.clientes} clientes dormidos`
+                      : `Total · ${totalDormido.clientes} ${totalDormido.clientes === 1 ? "cliente dormido" : "clientes dormidos"}`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(totalDormido.pedidos, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalDormido.vendido)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           )}
         </CardContent>

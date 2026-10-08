@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -17,6 +18,7 @@ import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { ivaSoportado, resultadoIva, resumenIva } from "@/dominio/fiscal";
+import { totalTiposIva } from "@/dominio/sumatorios-gerencia-a";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, NotaGrupo } from "./comun";
 
@@ -37,6 +39,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
     () => resumenIva(deLaTienda(fiscal.data?.documentos ?? [], d.filtro.tienda)),
     [fiscal.data, d.filtro.tienda],
   );
+  const totalIva = useMemo(() => totalTiposIva(iva.porTipoIva), [iva]);
   const ivaPrevio = useMemo(
     () =>
       d.comparacion && previo.data
@@ -176,6 +179,29 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              {/* El IVA repercutido de la tarjeta de arriba: los tres tipos, con
+                  las rectificativas ya en negativo, y sin los borradores. */}
+              <TableFooter>
+                <TableRow>
+                  <TableCell>
+                    Total
+                    {iva.borradores > 0 &&
+                      ` · sin ${iva.borradores} ${iva.borradores === 1 ? "borrador" : "borradores"}`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(iva.repercutido.documentos, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(iva.repercutido.base)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(iva.repercutido.iva)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(iva.repercutido.total)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           </CardContent>
         </Card>
@@ -210,6 +236,17 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalIva.base)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalIva.cuota)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
