@@ -36,6 +36,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  FileJson,
   Loader2,
   MoreVertical,
   Plus,
@@ -58,6 +59,7 @@ import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
+import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
@@ -193,6 +195,22 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo sincronizar"),
+  });
+
+  // Todos los pedidos de la tienda (o de todas), no solo los del periodo: es
+  // para analizarlos fuera del CRM.
+  const nombreTiendaConsulta = tiendaConsulta
+    ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "Tienda")
+    : "Todas las tiendas";
+  const exportarAnalisis = useMutation({
+    mutationFn: () =>
+      exportarPedidosParaAnalisis({ tiendaId: tiendaConsulta, alcance: nombreTiendaConsulta }),
+    onSuccess: (r) => {
+      toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${nombreTiendaConsulta}`, {
+        description: r.avisos.join(" ") || undefined,
+      });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo exportar"),
   });
 
   const setEstadoFn = useServerFn(updatePedidoEstado);
@@ -331,6 +349,20 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           )}
           <Button variant="outline" size="sm" onClick={exportar}>
             <Download className="h-4 w-4 mr-2" /> Exportar CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarAnalisis.mutate()}
+            disabled={exportarAnalisis.isPending}
+            title={`Todos los pedidos de ${nombreTiendaConsulta}, de todas las fechas, con sus líneas, cobros y documentos, en un JSON que se explica solo`}
+          >
+            {exportarAnalisis.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileJson className="h-4 w-4 mr-2" />
+            )}
+            {exportarAnalisis.isPending ? "Exportando…" : "Exportar para análisis"}
           </Button>
           {tiendaId && (
             <Button size="sm" onClick={() => setNuevoOpen(true)}>
