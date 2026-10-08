@@ -75,9 +75,10 @@ function Dashboard() {
   const kAnt = useMemo(() => calcularKpis(consultaAnt.data ?? []), [consultaAnt.data]);
 
   const delta = variacion(k.total, kAnt.total);
-  // El envío también: se cobra al cliente y se paga a la agencia.
+  // El envío no entra: la bruta ya va sin él, y lo que se cobra al cliente es
+  // lo que se paga a la agencia.
   const costeMes = costeVariable(pedidosMes, costeMetro);
-  const margenMes = k.bruta - costeMes.total;
+  const margenMes = k.bruta - costeMes.produccion;
   const margenPct = k.bruta > 0 ? (margenMes / k.bruta) * 100 : null;
   const sinCostes = costeMetro === 0 && costeMes.produccion === 0;
 
@@ -119,7 +120,7 @@ function Dashboard() {
           sub={
             sinCostes
               ? "Configura los costes en Ajustes › Datos de la empresa"
-              : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)} (${metros(k.metros)})${costeMes.envios > 0 ? ` − envíos ${eur(costeMes.envios)}` : ""}${
+              : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)} (${metros(k.metros)})${
                   margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
                 }`
           }

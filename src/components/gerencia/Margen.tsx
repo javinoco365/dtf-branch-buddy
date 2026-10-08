@@ -86,7 +86,9 @@ export function Margen({ d }: { d: DatosGerencia }) {
           icon={Wrench}
           pie={
             <span className="text-muted-foreground">
-              DTF {eur(c.costeDtf)} · Envíos {eur(c.costeEnvios)} · Textil {eur(c.costeTextil)}
+              DTF {eur(c.costeDtf)} · Textil {eur(c.costeTextil)}
+              {c.envios > 0 &&
+                ` · Envíos cobrados ${eur(c.envios)}, aparte de la bruta y del coste`}
             </span>
           }
         />

@@ -35,9 +35,9 @@ export const DEFINICIONES = {
     fuente: PEDIDOS_TIENDAS,
   },
   bruta: {
-    que: "Lo vendido sin IVA: la base imponible, con el envío dentro.",
+    que: "Lo vendido sin IVA y sin el envío cobrado al cliente.",
     calculo:
-      "Suma de la base de los pedidos no cancelados. Si un pedido tiene devoluciones, se le quita la misma proporción que se devolvió del total.",
+      "Suma de la base imponible de los pedidos no cancelados, menos el envío que se les cobró (el envío se paga a la agencia por lo mismo: no es venta de la empresa, y se enseña aparte). Si un pedido tiene devoluciones, se le quita la misma proporción que se devolvió del total.",
     fuente: PEDIDOS_TIENDAS,
   },
   cobrado: {
@@ -49,7 +49,7 @@ export const DEFINICIONES = {
   margen: {
     que: "Lo que queda de la facturación bruta después del coste de producción.",
     calculo:
-      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad) − envíos. El envío lo paga el cliente y se le paga a la agencia por lo mismo: es venta y coste a la vez. Cada pedido usa el coste por metro que había en Ajustes › Datos de la empresa al crearse, así que cambiarlo no altera el margen de meses pasados. Es una estimación: no incluye gastos fijos.",
+      "Facturación bruta − metros vendidos × coste por metro (consumibles + packaging + electricidad). El envío no entra ni en la bruta ni en el coste: lo paga el cliente y se le paga a la agencia por lo mismo. Cada pedido usa el coste por metro que había en Ajustes › Datos de la empresa al crearse, así que cambiarlo no altera el margen de meses pasados. Es una estimación: no incluye gastos fijos.",
     fuente: PEDIDOS_TIENDAS,
   },
   ticket: {
@@ -123,7 +123,7 @@ export const DEFINICIONES = {
   g_margen: {
     que: "Lo que queda de lo vendido después de lo que cuesta producirlo.",
     calculo:
-      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido, más el envío, que se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
+      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. El envío no entra ni en la bruta ni en el coste: se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_beneficio: {
@@ -165,7 +165,7 @@ export const DEFINICIONES = {
   g_euro_metro: {
     que: "A cuánto se vende de media el metro, sin IVA.",
     calculo:
-      "(Facturación bruta − envíos) de los pedidos que llevan metros ÷ sus metros. Incluye lo que vaya en esos pedidos además del metro (diseño); el envío no.",
+      "Facturación bruta (ya sin el envío) de los pedidos que llevan metros ÷ sus metros. Incluye lo que vaya en esos pedidos además del metro (diseño); el envío no.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_dias_cobro: {
@@ -277,15 +277,17 @@ export const DEFINICIONES = {
 
   // --- Gerencia › Margen ------------------------------------------------------
   g_bruta: {
-    que: "Lo vendido sin IVA: lo que es de la empresa.",
-    calculo: "Suma de las bases imponibles de los pedidos no cancelados, menos lo devuelto.",
+    que: "Lo vendido sin IVA y sin el envío cobrado: lo que es de la empresa.",
+    calculo:
+      "Suma de las bases imponibles de los pedidos no cancelados, menos el envío cobrado y menos lo devuelto. El envío se cobra al cliente y se paga a la agencia por lo mismo: va aparte.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_coste: {
     que: "Lo que ha costado producir lo vendido.",
     calculo:
-      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Envíos: lo mismo que se cobra al cliente, que es lo que se paga a la agencia. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
-    fuente: "Pedidos del periodo y salidas del almacén textil. No incluye gastos fijos ni sueldos.",
+      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
+    fuente:
+      "Pedidos del periodo y salidas del almacén textil. No incluye gastos fijos ni sueldos, ni el envío: lo que se paga a la agencia es lo que se cobra al cliente, y tampoco está en la bruta.",
   },
   g_margen_pct: {
     que: "Qué parte de cada euro vendido (sin IVA) queda después del coste.",
@@ -295,7 +297,7 @@ export const DEFINICIONES = {
   g_margen_metro: {
     que: "Cuánto queda de cada metro de DTF.",
     calculo:
-      "Precio medio del metro ((base imponible − envío) ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
+      "Precio medio del metro (facturación bruta, ya sin el envío, ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
     fuente: GERENCIA_PEDIDOS,
   },
 
@@ -349,7 +351,7 @@ export const DEFINICIONES = {
   g_resultado: {
     que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
     calculo:
-      "Ingresos sin IVA − costes variables (producción DTF, envíos y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
+      "Ingresos sin IVA (con el envío cobrado) − costes variables (producción DTF, envíos pagados a la agencia y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
     fuente:
       "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
   },

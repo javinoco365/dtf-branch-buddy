@@ -88,7 +88,8 @@ function FacturacionTienda() {
     [consultaLineas.data],
   );
 
-  const pctIva = k.bruta === 0 ? 0 : (k.iva / k.bruta) * 100;
+  // El IVA se cobra sobre la base entera: la bruta más el envío.
+  const pctIva = k.base === 0 ? 0 : (k.iva / k.base) * 100;
 
   const cargando = consultaPedidos.isPending;
   const error = consultaPedidos.error;
@@ -235,28 +236,28 @@ function FacturacionTienda() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Bloque
               titulo="Bruta"
-              subtitulo="Base imponible"
+              subtitulo="Lo vendido sin IVA y sin el envío"
               valor={eur(k.bruta)}
               icon={Receipt}
               tono="primary"
             />
             <Bloque
-              titulo="IVA"
-              subtitulo={`${numero(pctIva, 1)}% sobre bruta`}
-              valor={eur(k.iva)}
-              icon={Percent}
-              tono="info"
-            />
-            <Bloque
-              titulo="Envíos"
-              subtitulo="Portes sin IVA; ya van dentro de la bruta"
+              titulo="Envíos cobrados"
+              subtitulo="Portes sin IVA, aparte de la bruta"
               valor={eur(k.envios)}
               icon={Truck}
               tono="warn"
             />
             <Bloque
+              titulo="IVA"
+              subtitulo={`${numero(pctIva, 1)}% sobre la base (bruta + envíos)`}
+              valor={eur(k.iva)}
+              icon={Percent}
+              tono="info"
+            />
+            <Bloque
               titulo="Total"
-              subtitulo="Bruta + IVA (el envío va en la bruta)"
+              subtitulo="Bruta + envíos + IVA"
               valor={eur(k.total)}
               icon={Wallet}
               tono="success"

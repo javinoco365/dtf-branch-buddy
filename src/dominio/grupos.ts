@@ -215,8 +215,10 @@ export function resultadosPorGrupo(d: {
     conIs: boolean,
   ) => {
     const c = cifrasGerencia(ventas, d.costeActual);
-    const ingresos = redondear(c.bruta + extra);
-    const margen = redondear(ingresos - c.coste);
+    // En la cuenta de resultados el envío cobrado sí es ingreso, y lo pagado a
+    // la agencia, gasto: los ingresos son la base entera, con el envío.
+    const ingresos = redondear(c.base + extra);
+    const margen = redondear(ingresos - c.coste - c.costeEnvios);
     const bai = redondear(margen - fijos - compras - amortizacion);
     const sociedades = conIs && bai > 0 ? redondear((bai * d.tipoIs) / 100) : 0;
     return {

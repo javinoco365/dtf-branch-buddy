@@ -58,9 +58,16 @@ export type KpisPeriodo = {
   pedidos: number;
   /** Lo devuelto de esos pedidos, con IVA. Ya está restado de lo demás. */
   devuelto: number;
-  /** Facturación bruta: suma de bases imponibles. */
+  /** Suma de las bases imponibles, con el envío dentro: la base de la factura. */
+  base: number;
+  /**
+   * Facturación bruta: lo vendido sin IVA y sin el envío cobrado (base −
+   * envíos). El envío se cobra al cliente y se paga a la agencia: no es venta
+   * de la empresa, y se enseña aparte.
+   */
   bruta: number;
   iva: number;
+  /** El envío cobrado a los clientes, sin IVA. Va dentro de `base`, no de `bruta`. */
   envios: number;
   /** Suma de totales con IVA y envío. */
   total: number;
@@ -73,6 +80,7 @@ export type KpisPeriodo = {
 export const KPIS_VACIOS: KpisPeriodo = {
   pedidos: 0,
   devuelto: 0,
+  base: 0,
   bruta: 0,
   iva: 0,
   envios: 0,
@@ -113,12 +121,15 @@ export function calcularKpis(pedidos: readonly PedidoResumen[]): KpisPeriodo {
   const parte = (campo: "subtotal" | "iva" | "envio") =>
     redondear(validos.reduce((s, p) => s + num(p[campo]) * parteVendida(p), 0));
 
+  const base = parte("subtotal");
+  const envios = parte("envio");
   return {
     pedidos: validos.length,
     devuelto: redondear(validos.reduce((s, p) => s + num(p.total) - totalNeto(p), 0)),
-    bruta: parte("subtotal"),
+    base,
+    bruta: redondear(base - envios),
     iva: parte("iva"),
-    envios: parte("envio"),
+    envios,
     total: redondear(total),
     metros: redondear(
       validos.reduce((s, p) => s + num(p.metros_total), 0),
@@ -151,8 +162,9 @@ export function costeProduccion(pedidos: readonly PedidoResumen[], costeActual: 
  * Lo que cuesta servir los pedidos no cancelados: la producción más el envío.
  *
  * El envío lo paga el cliente y la empresa se lo paga a la agencia por el
- * mismo importe: entra como venta y sale como coste, así que no deja margen.
- * Contarlo solo como venta inflaba el margen y el precio del metro.
+ * mismo importe: no deja margen. La facturación bruta ya va sin él, así que el
+ * margen es bruta − producción; `total` (con el envío) solo cuadra contra la
+ * base, que sí lo lleva.
  */
 export function costeVariable(
   pedidos: readonly PedidoResumen[],

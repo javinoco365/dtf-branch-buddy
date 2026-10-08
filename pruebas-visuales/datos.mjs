@@ -154,10 +154,13 @@ function fechaDia(dia, mes = 10) {
 export const PEDIDOS = Array.from({ length: 14 }, (_, i) => {
   const enOctubre = i < 9;
   const dia = enOctubre ? 5 - Math.floor(i / 2) : 28 - i;
-  const subtotal = [30, 45.5, 120, 18.75, 260, 64, 12.4, 88, 310, 22, 75, 140, 33, 51][i];
+  const articulos = [30, 45.5, 120, 18.75, 260, 64, 12.4, 88, 310, 22, 75, 140, 33, 51][i];
   const envio = i % 3 === 0 ? 5.95 : 0;
-  const iva = Math.round((subtotal + envio) * 0.21 * 100) / 100;
-  const total = Math.round((subtotal + envio + iva) * 100) / 100;
+  // Como los pedidos reales (WooCommerce y manuales): la base, `subtotal`,
+  // lleva el envío dentro, y el total es base + IVA.
+  const subtotal = Math.round((articulos + envio) * 100) / 100;
+  const iva = Math.round(subtotal * 0.21 * 100) / 100;
+  const total = Math.round((subtotal + iva) * 100) / 100;
   const cliente = CLIENTES[i % CLIENTES.length];
   const estado = ESTADOS[i % ESTADOS.length];
   const tienda = i % 2 === 0 ? TIENDA : TIENDA_2;
@@ -188,7 +191,7 @@ export const PEDIDOS = Array.from({ length: 14 }, (_, i) => {
     iva,
     envio,
     total,
-    metros_total: Math.round((subtotal / 12) * 100) / 100,
+    metros_total: Math.round((articulos / 12) * 100) / 100,
     metodo_pago: i % 2 === 0 ? "tarjeta" : "transferencia",
     notas: i === 2 ? "Entregar antes del viernes" : null,
     fecha_entrega: null,
@@ -219,9 +222,10 @@ export const PEDIDO_ITEMS = PEDIDOS.flatMap((p, i) => [
     unidad: "m",
     precio_unitario: 12,
     iva_rate: 21,
-    subtotal: p.subtotal,
-    iva: p.iva,
-    total: p.total,
+    // La línea, sin el envío: el envío no es una línea del pedido.
+    subtotal: Math.round((p.subtotal - p.envio) * 100) / 100,
+    iva: Math.round((p.subtotal - p.envio) * 0.21 * 100) / 100,
+    total: Math.round((p.subtotal - p.envio) * 1.21 * 100) / 100,
     // El primero, estimado (importe ÷ precio por metro): se ve «≈ … estimado».
     metros_origen: i === 0 ? "precio_ajustes" : "montador",
     precio_metro_usado: i === 0 ? 7 : null,
@@ -291,10 +295,10 @@ export const FACTURAS = PEDIDOS.slice(0, 6).map((p, i) => ({
   ejercicio: 2026,
   fecha: p.fecha_pedido.slice(0, 10),
   fecha_vencimiento: null,
-  base_imponible: p.subtotal + p.envio,
+  base_imponible: p.subtotal,
   iva_total: p.iva,
   total: p.total,
-  desglose_iva: [{ tipo: 21, base: p.subtotal + p.envio, cuota: p.iva }],
+  desglose_iva: [{ tipo: 21, base: p.subtotal, cuota: p.iva }],
   estado: i % 2 === 0 ? "pagada" : "emitida",
   cliente_nombre: i % 2 === 0 ? null : p.cliente_nombre,
   cliente_nif: i % 2 === 0 ? null : "B00000001",

@@ -38,9 +38,11 @@ describe("calcularKpis", () => {
       pedido({ estado: "cancelado", subtotal: 999, total: 999, metros_total: 99 }),
     ]);
     expect(k.pedidos).toBe(2);
-    expect(k.bruta).toBe(150);
-    expect(k.iva).toBe(31.5);
+    // La base lleva el envío dentro; la facturación bruta, no.
+    expect(k.base).toBe(150);
     expect(k.envios).toBe(5);
+    expect(k.bruta).toBe(145);
+    expect(k.iva).toBe(31.5);
     expect(k.total).toBe(186.5);
     expect(k.metros).toBe(15);
     expect(k.cancelados).toBe(1);
@@ -65,7 +67,8 @@ describe("calcularKpis", () => {
     const k = calcularKpis([
       pedido({ subtotal: "52.50", iva: "11.03", total: "63.53", metros_total: "3.500" }),
     ]);
-    expect(k.bruta).toBe(52.5);
+    expect(k.base).toBe(52.5);
+    expect(k.bruta).toBe(47.5);
     expect(k.iva).toBe(11.03);
     expect(k.total).toBe(63.53);
     expect(k.metros).toBe(3.5);
@@ -73,6 +76,7 @@ describe("calcularKpis", () => {
 
   it("trata los nulos como cero en lugar de propagar NaN", () => {
     const k = calcularKpis([pedido({ subtotal: null, iva: null, envio: null, total: null })]);
+    expect(k.base).toBe(0);
     expect(k.bruta).toBe(0);
     expect(k.total).toBe(0);
   });
@@ -83,7 +87,8 @@ describe("devoluciones", () => {
     // 126 € con 25,20 € devueltos: queda el 80 %.
     const k = calcularKpis([pedido({ devuelto: 25.2 })]);
     expect(k.total).toBe(100.8);
-    expect(k.bruta).toBe(80);
+    expect(k.base).toBe(80);
+    expect(k.bruta).toBe(76);
     expect(k.iva).toBe(16.8);
     expect(k.envios).toBe(4);
     expect(k.devuelto).toBe(25.2);
