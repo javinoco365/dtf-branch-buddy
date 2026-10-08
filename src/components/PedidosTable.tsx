@@ -5,7 +5,7 @@ import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  FileJson,
   Loader2,
   MoreVertical,
   Plus,
@@ -58,6 +59,7 @@ import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
+import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
@@ -159,6 +161,9 @@ function estadoVariant(estado: string): "default" | "secondary" | "destructive" 
   return "secondary";
 }
 
+const CLAVE_SINCRONIZAR = ["sincronizar-woo"];
+const CLAVE_EXPORTAR = ["exportar-analisis"];
+
 export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const queryClient = useQueryClient();
   // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
@@ -183,6 +188,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const list = useServerFn(listPedidos);
   const sincronizarFn = useServerFn(sincronizarWoo);
   const sincronizar = useMutation({
+    mutationKey: CLAVE_SINCRONIZAR,
     mutationFn: () => sincronizarFn({ data: { tienda_id: tiendaId! } }),
     onSuccess: (r: any) => {
       toast.success(
@@ -194,6 +200,28 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo sincronizar"),
   });
+
+  // Todos los pedidos de la tienda (o de todas), no solo los del periodo: es
+  // para analizarlos fuera del CRM. La tienda va con el clic, y el nombre lo
+  // devuelve la exportación: si el filtro cambia mientras tanto, el aviso
+  // sigue hablando de lo que se exportó.
+  const exportarAnalisis = useMutation({
+    mutationKey: CLAVE_EXPORTAR,
+    mutationFn: (tienda: string | undefined) => exportarPedidosParaAnalisis({ tiendaId: tienda }),
+    onSuccess: (r) => {
+      toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${r.alcance}`, {
+        description: r.avisos.join(" ") || undefined,
+      });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo exportar"),
+  });
+  // Exportar mientras se sincroniza leería pedidos a medio reescribir. Por la
+  // clave, y no por el estado de cada botón, para que el bloqueo siga aunque
+  // se pase de la vista de una tienda a la de todas (en esta pestaña).
+  const ocupado =
+    useIsMutating({ mutationKey: CLAVE_SINCRONIZAR }) +
+      useIsMutating({ mutationKey: CLAVE_EXPORTAR }) >
+    0;
 
   const setEstadoFn = useServerFn(updatePedidoEstado);
   const delFn = useServerFn(deletePedido);
@@ -319,7 +347,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               variant="outline"
               size="sm"
               onClick={() => sincronizar.mutate()}
-              disabled={sincronizar.isPending}
+              disabled={ocupado}
             >
               {sincronizar.isPending ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -329,9 +357,49 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               {sincronizar.isPending ? "Sincronizando…" : "Sincronizar ahora"}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={exportar}>
-            <Download className="h-4 w-4 mr-2" /> Exportar CSV
-          </Button>
+          {/* Un solo botón para las dos exportaciones: con uno más, la barra
+              no cabía en una fila en un portátil y se salía en una tableta. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                {exportarAnalisis.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {exportarAnalisis.isPending ? "Exportando…" : "Exportar"}
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem onClick={exportar}>
+                <Download />
+                <div>
+                  <div>CSV</div>
+                  <div className="text-xs text-muted-foreground">
+                    Los pedidos que se ven, para abrir en Excel
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => exportarAnalisis.mutate(tiendaConsulta)}
+                disabled={ocupado}
+              >
+                <FileJson />
+                <div>
+                  <div>Para análisis</div>
+                  <div className="text-xs text-muted-foreground">
+                    Todos los pedidos de{" "}
+                    {tiendaConsulta
+                      ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "la tienda")
+                      : "todas las tiendas"}
+                    , de todas las fechas, con líneas, cobros y documentos, en un JSON que se
+                    explica solo (para Claude)
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {tiendaId && (
             <Button size="sm" onClick={() => setNuevoOpen(true)}>
               <Plus className="h-4 w-4 mr-2" /> Nuevo pedido

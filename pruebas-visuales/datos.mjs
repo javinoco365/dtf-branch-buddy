@@ -231,6 +231,7 @@ export const PEDIDO_ITEMS = PEDIDOS.flatMap((p, i) => [
     precio_metro_usado: i === 0 ? 7 : null,
     created_at: p.created_at,
     pedidos: { fecha_pedido: p.fecha_pedido, tienda_id: p.tienda_id, estado: p.estado },
+    pedido: { tienda_id: p.tienda_id },
   },
 ]);
 
