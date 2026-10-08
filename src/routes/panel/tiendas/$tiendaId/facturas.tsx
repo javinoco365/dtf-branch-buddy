@@ -224,6 +224,12 @@ function Facturas() {
       );
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
       qc.invalidateQueries({ queryKey: ["series-contadores"] });
+      // El pedido vuelve a quedar sin documento: que ninguna pantalla se
+      // quede con el borrado en la memoria (el botón verde, el diálogo).
+      qc.invalidateQueries({ queryKey: ["pedidos"] });
+      qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+      qc.invalidateQueries({ queryKey: ["pedidos-para-facturar"] });
+      qc.removeQueries({ queryKey: ["preparar-factura-pedido"] });
     },
     onError: (e: any) => toast.error(e.message ?? "No se pudo borrar"),
   });
@@ -747,9 +753,6 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
           <div className="space-y-1.5">
             <Label>Fecha de emisión</Label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            <p className="text-xs text-muted-foreground">
-              No puede ser anterior a la última factura emitida.
-            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Vencimiento</Label>

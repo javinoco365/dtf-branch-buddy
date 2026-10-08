@@ -20,7 +20,6 @@ import {
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
 import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
 import { fechaDocumentoDePedido } from "@/dominio/fecha-documento";
-import { fechaParaEmitir, ultimasFechasSeries } from "./series-fechas";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1280,10 +1279,7 @@ async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
     ? (clienteRes.data.tipo_fiscal as "particular" | "profesional")
     : null;
 
-  // La de emitir_factura_textil(): la empresa activa. La serie es suya.
-  const empresaId = (empresa?.id as string | undefined) ?? null;
-
-  return { pedido, vigente, receptor, lineas, limites, tipoFiscal, empresaId };
+  return { pedido, vigente, receptor, lineas, limites, tipoFiscal };
 }
 
 /** Lo que el diálogo necesita para proponer ticket o factura. Solo lee. */
@@ -1291,7 +1287,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ textil_pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { pedido, vigente, receptor, lineas, limites, tipoFiscal, empresaId } =
+    const { pedido, vigente, receptor, lineas, limites, tipoFiscal } =
       await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
 
     if (vigente) {
@@ -1312,17 +1308,8 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       tipo_fiscal: tipoFiscal,
       limites,
       notas: (pedido.notas as string | null) ?? null,
-      // El documento sale, por defecto, con la fecha del pedido.
+      // El documento sale con la fecha del pedido: no se cambia.
       fecha_pedido: fechaPedido,
-      // Si la serie ya tiene un documento posterior, el diálogo lo avisa. Con
-      // el cliente de servicio, como la base: la RLS del usuario solo le deja
-      // ver las facturas de sus tiendas, y la serie es de toda la empresa. Ya
-      // se sabe que es de la empresa: ha podido leer el pedido.
-      ultimas_fechas: await ultimasFechasSeries(
-        (await import("@/integrations/supabase/client.server")).adminComoUsuario(context.userId),
-        empresaId,
-        Number(fechaPedido.slice(0, 4)),
-      ),
     };
   });
 
@@ -1344,14 +1331,13 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         nif: z.string().nullable().optional(),
         direccion: z.string().nullable().optional(),
         tipo_fiscal: z.enum(["particular", "profesional"]).nullable().optional(),
-        fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         notas: z.string().nullable().optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { pedido, vigente, receptor, lineas, empresaId } = await leerPedidoTextilParaDocumento(
+    const { pedido, vigente, receptor, lineas } = await leerPedidoTextilParaDocumento(
       context.supabase,
       data.textil_pedido_id,
     );
@@ -1377,16 +1363,9 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
       ) as Record<string, string>;
     }
 
-    // Si la serie ya tiene un documento posterior, sale con la fecha de ese y
-    // la pedida va escrita en él como fecha de la operación.
-    const emision = await fechaParaEmitir(
-      // Con el cliente de servicio, como la base (ver prepararDocumentoTextil).
-      (await import("@/integrations/supabase/client.server")).adminComoUsuario(context.userId),
-      empresaId,
-      data.documento,
-      data.fecha,
-      data.notas,
-    );
+    // Con la fecha del pedido, siempre, aunque la serie ya tenga un documento
+    // posterior (decisión de Javier, 8-10-2026). Se lee del pedido, no del navegador.
+    const fecha = fechaDocumentoDePedido(pedido.fecha as string | null);
     const r = await llamarRpcTextil<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
@@ -1395,17 +1374,16 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         _receptor: receptorEmision,
         _lineas: lineas,
         _marca_id: pedido.marca_id ?? null,
-        _fecha: emision.fecha,
+        _fecha: fecha,
         _cliente_id: pedido.cliente_id ?? null,
-        _notas: emision.notas,
+        _notas: data.notas ?? null,
         _simplificada: data.documento === "ticket",
         _textil_pedido_id: data.textil_pedido_id,
       },
     );
     return {
       ...r,
-      fecha: emision.fecha,
-      fecha_operacion: emision.fecha_operacion,
+      fecha,
       pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id),
     };
   });

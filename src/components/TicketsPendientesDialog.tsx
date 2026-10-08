@@ -51,7 +51,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     null,
   );
   const [resultado, setResultado] = useState<{
-    emitidos: { pedido: string; referencia: string; id: string; nota?: string }[];
+    emitidos: { pedido: string; referencia: string; id: string }[];
     omitidos: { pedido: string; motivo: string }[];
   } | null>(null);
 
@@ -155,13 +155,6 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
                 {resultado.emitidos.map((e) => `${e.referencia} (${e.pedido})`).join(", ")}
               </p>
             )}
-            {resultado.emitidos
-              .filter((e) => e.nota)
-              .map((e) => (
-                <p key={`nota-${e.id}`} className="text-muted-foreground">
-                  {e.referencia} ({e.pedido}): {e.nota}
-                </p>
-              ))}
             {pdfs && (
               <p className="text-muted-foreground">
                 {pdfs.hechos < pdfs.total

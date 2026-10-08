@@ -115,6 +115,9 @@ function FacturasPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
       qc.invalidateQueries({ queryKey: ["series-contadores"] });
+      // El pedido vuelve a quedar sin documento: que el diálogo no lo recuerde.
+      qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
+      qc.removeQueries({ queryKey: ["preparar-documento-textil"] });
       toast.success("Borrada. Su número lo cogerá la siguiente.");
     },
     onError: (e: any) => toast.error(e.message),

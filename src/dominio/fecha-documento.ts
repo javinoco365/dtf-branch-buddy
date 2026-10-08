@@ -1,6 +1,8 @@
 /**
  * La fecha con la que se emite el ticket o la factura de un pedido: la del
- * pedido, en hora de España.
+ * pedido, en hora de España. Siempre la del pedido, aunque la serie ya tenga
+ * un documento posterior (decisión de Javier, 8-10-2026): la numeración sigue
+ * correlativa, pero un número posterior puede llevar una fecha anterior.
  *
  * Un pedido de la tienda guarda el instante (timestamptz) y uno textil, el día.
  *
@@ -11,12 +13,6 @@
  *   zona: quedó grabada tal cual como si fuera UTC. Su día es el de la cadena;
  *   pasarla a Madrid le sumaría dos horas y un pedido de las 23:00 caería en el
  *   día siguiente.
- *
- * La base sigue mandando: no deja emitir con una fecha anterior a la última
- * factura de la serie (la numeración tiene que ir en orden de fechas). Si el
- * pedido es más antiguo que eso, el documento sale con la fecha de ese último
- * (la más temprana que admite la serie) y la del pedido queda escrita en él
- * como fecha de la operación: ver `fechaEmision`.
  */
 
 const ZONA = "Europe/Madrid";
@@ -48,58 +44,8 @@ export function fechaDocumentoDePedido(
   return horaDeLaWeb ? instante.toISOString().slice(0, 10) : diaEnEspana(instante);
 }
 
-/** ¿La base ha rechazado la fecha porque la serie ya tiene un documento posterior? */
-export function esRechazoPorFecha(mensaje: string | null | undefined): boolean {
-  return /No se puede emitir con fecha/i.test(mensaje ?? "");
-}
-
-/**
- * La fecha con la que puede salir un documento y, si no puede ser la que se
- * quería, esa como fecha de la operación.
- *
- * La numeración es correlativa por serie y las fechas tienen que acompañarla:
- * un documento no puede llevar fecha anterior al último de su serie y año. Si
- * se quería una anterior (la de un pedido antiguo), sale con la del último, la
- * más cercana que admite la serie, y la deseada se escribe en el documento
- * como fecha de la operación, que es lo que pide el reglamento de facturación
- * cuando no coincide con la de expedición (RD 1619/2012, art. 6.1.f).
- *
- * Fechas 'yyyy-mm-dd'. `ultimaDeLaSerie`: la del último documento de la serie
- * en el año de `deseada`, o null si no hay ninguno. `hoy`: el día de hoy en
- * España; si el último es posterior a hoy, no se ajusta.
- */
-export function fechaEmision(
-  deseada: string,
-  ultimaDeLaSerie: string | null | undefined,
-  hoy: string,
-): { fecha: string; fechaOperacion: string | null } {
-  // Un documento con fecha futura (una errata) no arrastra a los demás a esa
-  // fecha: sin ajuste, la base rechaza y dice cuál es la fecha que estorba.
-  if (ultimaDeLaSerie && deseada < ultimaDeLaSerie && ultimaDeLaSerie <= hoy) {
-    return { fecha: ultimaDeLaSerie, fechaOperacion: deseada };
-  }
-  return { fecha: deseada, fechaOperacion: null };
-}
-
 /** '2026-09-19' → '19/09/2026'. */
 export function diaLegible(dia: string): string {
   const [a, m, d] = dia.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
-}
-
-/** La línea que deja escrita la fecha de la operación en el documento. */
-export function notaFechaOperacion(fechaOperacion: string): string {
-  return `Fecha de la operación: ${diaLegible(fechaOperacion)}`;
-}
-
-/** Las notas del documento con la fecha de la operación al final, una sola vez. */
-export function notasConFechaOperacion(
-  notas: string | null | undefined,
-  fechaOperacion: string | null,
-): string | null {
-  const texto = (notas ?? "").trim();
-  if (!fechaOperacion) return texto || null;
-  const linea = notaFechaOperacion(fechaOperacion);
-  if (texto.includes(linea)) return texto;
-  return texto ? `${texto}\n${linea}` : linea;
 }

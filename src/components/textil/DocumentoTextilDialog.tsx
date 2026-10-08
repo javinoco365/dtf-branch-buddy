@@ -47,7 +47,6 @@ export function DocumentoTextilDialog({
             nif: p.nif || null,
             direccion: p.direccion || null,
             tipo_fiscal: p.tipo_fiscal,
-            fecha: p.fecha,
             notas: p.notas,
           },
         })

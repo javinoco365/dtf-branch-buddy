@@ -78,25 +78,32 @@ SELECT CASE WHEN count(*) = 0
 FROM public.facturas_huecos_en_serie();
 
 -- ---------------------------------------------------------------------------
--- 9-10. La fecha acompaña a la numeración
+-- 9-10. La fecha es la del pedido, aunque la serie vaya por delante
 -- ---------------------------------------------------------------------------
--- La factura manual deja elegir fecha. Un número mayor con fecha anterior
--- rompe la correlatividad aunque los números vayan seguidos.
+-- Desde 20261021100000 (decisión de Javier, 8-10-2026) un documento lleva la
+-- fecha de su pedido aunque la serie ya tenga uno posterior. El número sigue
+-- siendo el siguiente: la serie no tiene huecos.
 DO $$
-DECLARE v_ultima DATE;
+DECLARE
+  v_ultima DATE;
+  v_r JSONB;
+  v_fecha DATE;
 BEGIN
   SELECT max(fecha) INTO v_ultima FROM public.facturas;
-  BEGIN
-    PERFORM public.emitir_factura(
+  v_r := public.emitir_factura(
       _usuario_id => '11111111-1111-4111-8111-111111111111',
       _tienda_id  => '22222222-2222-4222-8222-222222222222',
       _receptor   => '{"nombre":"Cliente con fecha vieja"}'::jsonb,
       _lineas     => '[{"descripcion":"x","cantidad":1,"unidad":"ud","precio_unitario":10,"iva_rate":21}]'::jsonb,
       _fecha      => v_ultima - 1);
-    RAISE NOTICE 'MAL   9. dejó emitir con fecha anterior a la última';
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'BIEN  9. rechaza una fecha anterior a la última de la serie';
-  END;
+  SELECT f.fecha INTO v_fecha FROM public.facturas f WHERE f.id = (v_r ->> 'id')::UUID;
+  IF v_fecha = v_ultima - 1 THEN
+    RAISE NOTICE 'BIEN  9. deja emitir con fecha anterior a la última, con su fecha';
+  ELSE
+    RAISE NOTICE 'MAL   9. salió con fecha %', v_fecha;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'MAL   9. rechazó una fecha anterior a la última: %', SQLERRM;
 END $$;
 
 -- El mismo día sí: varias facturas por día es lo normal.
