@@ -1044,8 +1044,13 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
   return { factura, pdfData };
 }
 
+/** ¿El error de Storage es «ese fichero ya existe»? */
+const yaExiste = (e: { message?: string; statusCode?: string | number } | null) =>
+  !!e && (String(e.statusCode) === "409" || /exist|duplicate/i.test(e.message ?? ""));
+
 /**
- * Genera el PDF de una factura textil y lo deja en Storage.
+ * Genera el PDF de una factura textil y lo deja en Storage, si todavía no
+ * está.
  *
  * Reutiliza el mismo generador que las facturas de DTF: una factura de la
  * misma sociedad debe salir con la misma cara, y tener dos maquetadores es
@@ -1056,41 +1061,107 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
  * factura tiene que imprimirse como se emitió aunque la marca cambie de logo
  * después.
  *
- * Se guarda la ruta, no una URL firmada: las URL caducan, y guardar una de un
+ * El primero que se guarda es el definitivo: no se sobrescribe nunca. Se
+ * guarda la ruta, no una URL firmada: las URL caducan, y guardar una de un
  * año en la base es guardar un enlace que un día deja de funcionar sin que
  * nadie se entere. La URL se pide al abrir.
+ *
+ * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
  */
+async function guardarPdfTextil(sb: any, facturaId: string, userId: string): Promise<string> {
+  const { generarFacturaPDF } = await import("@/lib/pdf-factura");
+  const { factura, pdfData } = await leerDatosPdfTextil(sb, facturaId, userId);
+
+  const blob = await generarFacturaPDF(pdfData);
+  const ruta = `textil/${factura.id}.pdf`;
+  const { error: subErr } = await sb.storage
+    .from("facturas")
+    .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+  if (subErr && !yaExiste(subErr)) throw new Error(`No se pudo guardar el PDF: ${subErr.message}`);
+
+  const { error: updErr } = await tabla(sb, "textil_facturas")
+    .update({ pdf_path: ruta })
+    .eq("id", factura.id);
+  if (updErr) throw new Error(updErr.message);
+  return ruta;
+}
+
+/**
+ * Después de emitir: guarda el PDF, pero un fallo aquí no deshace nada. La
+ * factura ya está emitida y numerada; el PDF se puede generar después.
+ */
+async function guardarPdfTextilTrasEmitir(userId: string, facturaId: string): Promise<boolean> {
+  try {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    await guardarPdfTextil(adminComoUsuario(userId), facturaId, userId);
+    return true;
+  } catch (e) {
+    console.error("PDF de la factura textil", facturaId, e);
+    return false;
+  }
+}
+
 export const generarPdfFacturaTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { generarFacturaPDF } = await import("@/lib/pdf-factura");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-
-    const { factura, pdfData } = await leerDatosPdfTextil(
-      supabaseAdmin,
+    const ruta = await guardarPdfTextil(
+      adminComoUsuario(context.userId),
       data.factura_id,
       context.userId,
     );
-
-    const blob = await generarFacturaPDF(pdfData);
-    const ruta = `textil/${factura.id}.pdf`;
-
-    const { error: subErr } = await supabaseAdmin.storage
-      .from("facturas")
-      .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (subErr) throw new Error(`No se pudo guardar el PDF: ${subErr.message}`);
-
-    const { error: updErr } = await tabla(supabaseAdmin, "textil_facturas")
-      .update({ pdf_path: ruta })
-      .eq("id", factura.id);
-    if (updErr) throw new Error(updErr.message);
-
     return { ruta };
+  });
+
+/**
+ * Guarda el PDF de las facturas y tickets textil que todavía no lo tienen, de
+ * pocos en pocos para no pasarse del tiempo de una función. La pantalla la
+ * llama hasta que no quedan.
+ */
+export const rellenarPdfsTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        /** Las que ya fallaron en esta tanda de tandas: no se reintentan. */
+        excluir: z.array(z.string().uuid()).max(100).optional(),
+        limite: z.number().int().min(1).max(10).default(5),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    let consulta = tabla(context.supabase, "textil_facturas")
+      .select("id, numero", { count: "exact" })
+      .neq("estado", "borrador")
+      .is("pdf_path", null)
+      .order("fecha")
+      .order("id")
+      .limit(data.limite);
+    if (data.excluir?.length) consulta = consulta.not("id", "in", `(${data.excluir.join(",")})`);
+    const { data: filas, count, error } = await consulta;
+    if (error) throw new Error(error.message);
+
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    let generados = 0;
+    const fallidos: { id: string; referencia: string; motivo: string }[] = [];
+    for (const f of (filas ?? []) as { id: string; numero: string | null }[]) {
+      try {
+        await guardarPdfTextil(sb, f.id, context.userId);
+        generados++;
+      } catch (e) {
+        fallidos.push({ id: f.id, referencia: f.numero ?? f.id, motivo: (e as Error).message });
+      }
+    }
+    return {
+      generados,
+      fallidos,
+      quedan: Math.max(0, (count ?? 0) - generados - fallidos.length),
+    };
   });
 
 /** Una URL de un rato para abrir o descargar el PDF. */
@@ -1275,7 +1346,7 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
       ) as Record<string, string>;
     }
 
-    return llamarRpcTextil<{ id: string; referencia: string }>(
+    const r = await llamarRpcTextil<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
       {
@@ -1290,6 +1361,7 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         _textil_pedido_id: data.textil_pedido_id,
       },
     );
+    return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
   });
 
 /** El ticket textil en 80 mm, para la impresora térmica. URL de un rato. */
@@ -1368,7 +1440,7 @@ export const canjearTicketTextil = createServerFn({ method: "POST" })
     const ticket = await leerTicketTextil(context.supabase, data.factura_id);
     const receptor: Record<string, string> = { nombre: data.nombre, nif: data.nif };
     if (data.direccion) receptor.direccion = data.direccion;
-    return llamarRpcTextil<{ id: string; referencia: string }>(
+    const r = await llamarRpcTextil<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
       {
@@ -1381,6 +1453,7 @@ export const canjearTicketTextil = createServerFn({ method: "POST" })
         _sustituye_a_id: ticket.id,
       },
     );
+    return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
   });
 
 /**
@@ -1412,7 +1485,7 @@ export const anularTicketTextil = createServerFn({ method: "POST" })
       );
     }
 
-    return llamarRpcTextil<{ id: string; referencia: string }>(
+    const r = await llamarRpcTextil<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
       {
@@ -1428,4 +1501,5 @@ export const anularTicketTextil = createServerFn({ method: "POST" })
         _textil_pedido_id: ticket.textil_pedido_id ?? null,
       },
     );
+    return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
   });

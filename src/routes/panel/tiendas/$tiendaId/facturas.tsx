@@ -53,11 +53,13 @@ import {
   emitirFactura,
   generarTicket80,
   generarYSubirFacturaPDF,
+  rellenarPdfsTienda,
 } from "@/lib/facturas.functions";
 import { toast } from "sonner";
 import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
 import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
+import { PdfsPendientes } from "@/components/documentos/PdfsPendientes";
 import { situacionTicket, type SituacionTicket } from "@/dominio/tickets";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
@@ -92,6 +94,7 @@ function Facturas() {
   const [abierto, setAbierto] = useState(false);
   const [generandoId, setGenerandoId] = useState<string | null>(null);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
+  const rellenarFn = useServerFn(rellenarPdfsTienda);
   const ticket80Fn = useServerFn(generarTicket80);
   const [porCorreo, setPorCorreo] = useState<any>(null);
   const [canjeando, setCanjeando] = useState<any>(null);
@@ -199,25 +202,29 @@ function Facturas() {
     onError: (e: any) => toast.error(e.message ?? "No se pudo anular"),
   });
 
-  // Si pdf_url es una URL firmada absoluta y no ha expirado, abrirla directamente.
-  // Si no, llamar a la server function para generar + subir el PDF y obtener URL firmada.
+  /**
+   * Abre el PDF guardado; si todavía no lo tiene, el servidor lo genera y lo
+   * guarda antes. Siempre pasa por el servidor: lo que hay en pdf_url es la
+   * ruta del fichero (o, en las antiguas, una URL firmada que caduca), y la
+   * URL para abrirlo se firma en el momento.
+   *
+   * La pestaña se abre ANTES de la llamada: al volver de una espera de red el
+   * navegador ya no deja abrirla.
+   */
   async function descargar(f: any) {
-    if (f.pdf_url && /^https?:\/\//.test(f.pdf_url)) {
-      window.open(f.pdf_url, "_blank");
-      return;
-    }
+    const ventana = window.open("", "_blank");
     setGenerandoId(f.id);
     try {
       const res = await generarPDFFn({ data: { factura_id: f.id } });
-      if (res?.url) {
-        window.open(res.url, "_blank");
-        toast.success("PDF generado");
+      if (!res?.url) throw new Error("No se pudo abrir el PDF");
+      if (ventana) ventana.location.href = res.url;
+      else window.location.href = res.url;
+      if (!f.pdf_url || /^https?:\/\//.test(f.pdf_url)) {
         qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
-      } else {
-        toast.error("No se pudo generar el PDF");
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "Error generando el PDF");
+      ventana?.close();
+      toast.error(e?.message ?? "No se pudo abrir el PDF");
     } finally {
       setGenerandoId(null);
     }
@@ -273,6 +280,11 @@ function Facturas() {
         <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
+      <PdfsPendientes
+        faltan={(facturas as any[]).filter((f) => f.estado !== "borrador" && !f.pdf_url).length}
+        generar={(excluir) => rellenarFn({ data: { tienda_id: tiendaId, excluir, limite: 3 } })}
+        alTerminar={() => qc.invalidateQueries({ queryKey: ["facturas", tiendaId] })}
+      />
       <Card>
         <CardContent className="p-0">
           <Table movil="tarjetas">
