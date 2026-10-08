@@ -20,6 +20,7 @@ import {
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
 import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
 import { fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import { fechaParaEmitir, ultimasFechasSeries } from "./series-fechas";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1233,7 +1234,7 @@ async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
           .maybeSingle()
       : Promise.resolve({ data: null }),
     tabla(supabase, "empresas")
-      .select("limite_simplificada, limite_simplificada_particular")
+      .select("id, limite_simplificada, limite_simplificada_particular")
       .eq("activa", true)
       .order("created_at")
       .limit(1)
@@ -1279,7 +1280,10 @@ async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
     ? (clienteRes.data.tipo_fiscal as "particular" | "profesional")
     : null;
 
-  return { pedido, vigente, receptor, lineas, limites, tipoFiscal };
+  // La de emitir_factura_textil(): la empresa activa. La serie es suya.
+  const empresaId = (empresa?.id as string | undefined) ?? null;
+
+  return { pedido, vigente, receptor, lineas, limites, tipoFiscal, empresaId };
 }
 
 /** Lo que el diálogo necesita para proponer ticket o factura. Solo lee. */
@@ -1287,7 +1291,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ textil_pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { pedido, vigente, receptor, lineas, limites, tipoFiscal } =
+    const { pedido, vigente, receptor, lineas, limites, tipoFiscal, empresaId } =
       await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
 
     if (vigente) {
@@ -1299,6 +1303,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
     if (lineas.length === 0) {
       throw new Error("Este pedido no tiene líneas: no hay nada que documentar.");
     }
+    const fechaPedido = fechaDocumentoDePedido(pedido.fecha as string | null);
     return {
       ya_facturado: false as const,
       receptor,
@@ -1308,7 +1313,13 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       limites,
       notas: (pedido.notas as string | null) ?? null,
       // El documento sale, por defecto, con la fecha del pedido.
-      fecha_pedido: fechaDocumentoDePedido(pedido.fecha as string | null),
+      fecha_pedido: fechaPedido,
+      // Si la serie ya tiene un documento posterior, el diálogo lo avisa.
+      ultimas_fechas: await ultimasFechasSeries(
+        context.supabase,
+        empresaId,
+        Number(fechaPedido.slice(0, 4)),
+      ),
     };
   });
 
@@ -1337,7 +1348,7 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { pedido, vigente, receptor, lineas } = await leerPedidoTextilParaDocumento(
+    const { pedido, vigente, receptor, lineas, empresaId } = await leerPedidoTextilParaDocumento(
       context.supabase,
       data.textil_pedido_id,
     );
@@ -1363,6 +1374,15 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
       ) as Record<string, string>;
     }
 
+    // Si la serie ya tiene un documento posterior, sale con la fecha de ese y
+    // la pedida va escrita en él como fecha de la operación.
+    const emision = await fechaParaEmitir(
+      context.supabase,
+      empresaId,
+      data.documento,
+      data.fecha,
+      data.notas,
+    );
     const r = await llamarRpcTextil<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
@@ -1371,14 +1391,19 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         _receptor: receptorEmision,
         _lineas: lineas,
         _marca_id: pedido.marca_id ?? null,
-        _fecha: data.fecha,
+        _fecha: emision.fecha,
         _cliente_id: pedido.cliente_id ?? null,
-        _notas: data.notas?.trim() || null,
+        _notas: emision.notas,
         _simplificada: data.documento === "ticket",
         _textil_pedido_id: data.textil_pedido_id,
       },
     );
-    return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
+    return {
+      ...r,
+      fecha: emision.fecha,
+      fecha_operacion: emision.fecha_operacion,
+      pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id),
+    };
   });
 
 /** El ticket textil en 80 mm, para la impresora térmica. URL de un rato. */

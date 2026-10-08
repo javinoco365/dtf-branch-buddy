@@ -14,7 +14,15 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
-import { diaEnEspana, esRechazoPorFecha, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import {
+  diaEnEspana,
+  diaLegible,
+  esRechazoPorFecha,
+  fechaDocumentoDePedido,
+  fechaEmision,
+  notasConFechaOperacion,
+} from "@/dominio/fecha-documento";
+import { fechaParaEmitir, ultimaFechaSerie, ultimasFechasSeries } from "./series-fechas";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -432,6 +440,12 @@ const receptorSchema = z.object({
   email: z.string().nullable().optional(),
 });
 
+/** La empresa de una tienda: la serie es de la empresa, no de la tienda. */
+async function empresaDeTienda(sb: Sb, tiendaId: string): Promise<string | null> {
+  const { data } = await tabla(sb, "tiendas").select("empresa_id").eq("id", tiendaId).maybeSingle();
+  return (data?.empresa_id as string | null) ?? null;
+}
+
 type ResultadoEmision = {
   id: string;
   serie: string;
@@ -461,25 +475,44 @@ export const emitirFactura = createServerFn({ method: "POST" })
         cliente_id: z.string().uuid().nullable().optional(),
         pedido_id: z.string().uuid().nullable().optional(),
         notas: z.string().nullable().optional(),
+        // El documento de un pedido: si la serie ya tiene uno posterior a la
+        // fecha pedida, sale con la de ese y la pedida va como fecha de la
+        // operación. Sin esto, la base rechaza la fecha y lo dice.
+        ajustar_fecha: z.boolean().optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const deseada = data.fecha ?? diaEnEspana(new Date());
+    const emision = data.ajustar_fecha
+      ? await fechaParaEmitir(
+          supabaseAdmin,
+          await empresaDeTienda(supabaseAdmin, data.tienda_id),
+          "factura",
+          deseada,
+          data.notas,
+        )
+      : { fecha: deseada, fecha_operacion: null, notas: data.notas ?? null };
     const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: data.receptor,
       _lineas: data.lineas,
-      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _fecha: emision.fecha,
       _fecha_vencimiento: data.fecha_vencimiento ?? null,
       _cliente_id: data.cliente_id ?? null,
       _pedido_id: data.pedido_id ?? null,
-      _notas: data.notas ?? null,
+      _notas: emision.notas,
       _rectifica_a_id: null,
       _motivo_rectificacion: null,
     });
-    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
+    return {
+      ...r,
+      fecha: emision.fecha,
+      fecha_operacion: emision.fecha_operacion,
+      pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id),
+    };
   });
 
 /* ==========================================================================
@@ -630,6 +663,9 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
 
     const limites = await leerLimitesTicket(supabaseAdmin, pedido.empresa_id ?? null);
     const total = calcularTotales(lineas).total;
+    const fechaPedido = fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
+      horaDeLaWeb: pedido.origen === "woocommerce",
+    });
 
     return {
       ya_facturado: false as const,
@@ -640,9 +676,13 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       sin_nif: !receptor.nif,
       notas: (pedido.notas as string | null) ?? null,
       // El documento sale, por defecto, con la fecha del pedido.
-      fecha_pedido: fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
-        horaDeLaWeb: pedido.origen === "woocommerce",
-      }),
+      fecha_pedido: fechaPedido,
+      // Si la serie ya tiene un documento posterior, el diálogo lo avisa.
+      ultimas_fechas: await ultimasFechasSeries(
+        supabaseAdmin,
+        (pedido.empresa_id as string | null) ?? null,
+        Number(fechaPedido.slice(0, 4)),
+      ),
       total,
       tipo_fiscal: tipoFiscal,
       limites,
@@ -676,6 +716,9 @@ export const emitirTicket = createServerFn({ method: "POST" })
         nombre: z.string().nullable().optional(),
         tipo_fiscal: tipoFiscalSchema,
         notas: z.string().nullable().optional(),
+        // Como en emitirFactura: la fecha que admita la serie, y la pedida
+        // como fecha de la operación.
+        ajustar_fecha: z.boolean().optional(),
       })
       .parse(d),
   )
@@ -684,18 +727,33 @@ export const emitirTicket = createServerFn({ method: "POST" })
     const receptor: Record<string, string> = {};
     if (data.nombre?.trim()) receptor.nombre = data.nombre.trim();
     if (data.tipo_fiscal) receptor.tipo_fiscal = data.tipo_fiscal;
+    const deseada = data.fecha ?? diaEnEspana(new Date());
+    const emision = data.ajustar_fecha
+      ? await fechaParaEmitir(
+          supabaseAdmin,
+          await empresaDeTienda(supabaseAdmin, data.tienda_id),
+          "ticket",
+          deseada,
+          data.notas,
+        )
+      : { fecha: deseada, fecha_operacion: null, notas: data.notas ?? null };
     const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: data.tienda_id,
       _receptor: receptor,
       _lineas: data.lineas,
-      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _fecha: emision.fecha,
       _cliente_id: data.cliente_id ?? null,
       _pedido_id: data.pedido_id ?? null,
-      _notas: data.notas ?? null,
+      _notas: emision.notas,
       _simplificada: true,
     });
-    return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
+    return {
+      ...r,
+      fecha: emision.fecha,
+      fecha_operacion: emision.fecha_operacion,
+      pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id),
+    };
   });
 
 /** Un pedido cobrado y sin documento, con lo que toca emitirle. */
@@ -878,6 +936,8 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
       nota?: string;
     }[] = [];
     const omitidos: { pedido: string; motivo: string }[] = [];
+    // La fecha del último ticket de cada empresa y año, según se van emitiendo.
+    const ultimas = new Map<string, string | null>();
 
     for (const id of enOrden) {
       let numero = id;
@@ -906,8 +966,25 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
           omitidos.push({ pedido: numero, motivo: "no va en ticket: revísalo en el pedido" });
           continue;
         }
-        const emitir = (fecha: string) =>
-          llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+        // La serie de tickets es una para toda la empresa: si ya tiene uno
+        // posterior al pedido, sale con la fecha de ese y la del pedido va en
+        // el ticket como fecha de la operación.
+        const fechaPedido = fechaDe.get(id) ?? hoy;
+        const empresa = (pedido.empresa_id as string | null) ?? null;
+        const clave = `${empresa}|${fechaPedido.slice(0, 4)}`;
+        const ultima = async (releer = false) => {
+          if (!empresa) return null;
+          if (releer || !ultimas.has(clave)) {
+            ultimas.set(
+              clave,
+              await ultimaFechaSerie(sb, empresa, "ticket", Number(fechaPedido.slice(0, 4))),
+            );
+          }
+          return ultimas.get(clave) ?? null;
+        };
+        const emitir = async (releer = false) => {
+          const { fecha, fechaOperacion } = fechaEmision(fechaPedido, await ultima(releer));
+          const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
             _usuario_id: context.userId,
             _tienda_id: pedido.tienda_id,
             _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
@@ -915,24 +992,32 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
             _fecha: fecha,
             _cliente_id: pedido.cliente_id ?? null,
             _pedido_id: id,
+            _notas: notasConFechaOperacion(null, fechaOperacion),
             _simplificada: true,
           });
-        const fechaPedido = fechaDe.get(id) ?? hoy;
+          // Lo que acaba de salir es ahora lo último de la serie.
+          if (empresa) ultimas.set(clave, fecha);
+          return { r, fecha, fechaOperacion };
+        };
+        let emitido;
         try {
-          const r = await emitir(fechaPedido);
-          emitidos.push({ pedido: numero, referencia: r.referencia, id: r.id });
+          emitido = await emitir();
         } catch (e) {
-          // La serie de tickets es una para toda la empresa: si ya tiene uno
-          // posterior, el del pedido no puede ir hacia atrás. Sale con la de hoy.
-          if (!esRechazoPorFecha((e as Error).message) || fechaPedido === hoy) throw e;
-          const r = await emitir(hoy);
-          emitidos.push({
-            pedido: numero,
-            referencia: r.referencia,
-            id: r.id,
-            nota: "con fecha de hoy: la serie ya tenía un ticket posterior a su pedido",
-          });
+          // Si entretanto salió otro documento posterior (otra pestaña, otra
+          // persona), se vuelve a mirar la serie una vez.
+          if (!esRechazoPorFecha((e as Error).message)) throw e;
+          emitido = await emitir(true);
         }
+        emitidos.push({
+          pedido: numero,
+          referencia: emitido.r.referencia,
+          id: emitido.r.id,
+          ...(emitido.fechaOperacion
+            ? {
+                nota: `con fecha ${diaLegible(emitido.fecha)}: la serie ya tenía un ticket posterior; la del pedido (${diaLegible(emitido.fechaOperacion)}) va en él como fecha de la operación`,
+              }
+            : {}),
+        });
       } catch (e) {
         omitidos.push({ pedido: numero, motivo: (e as Error).message || "error al emitir" });
       }

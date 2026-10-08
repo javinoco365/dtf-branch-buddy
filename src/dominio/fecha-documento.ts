@@ -14,8 +14,9 @@
  *
  * La base sigue mandando: no deja emitir con una fecha anterior a la última
  * factura de la serie (la numeración tiene que ir en orden de fechas). Si el
- * pedido es más antiguo que eso, la emisión se rechaza con ese motivo y la
- * fecha se puede cambiar a mano.
+ * pedido es más antiguo que eso, el documento sale con la fecha de ese último
+ * (la más temprana que admite la serie) y la del pedido queda escrita en él
+ * como fecha de la operación: ver `fechaEmision`.
  */
 
 const ZONA = "Europe/Madrid";
@@ -50,4 +51,51 @@ export function fechaDocumentoDePedido(
 /** ¿La base ha rechazado la fecha porque la serie ya tiene un documento posterior? */
 export function esRechazoPorFecha(mensaje: string | null | undefined): boolean {
   return /No se puede emitir con fecha/i.test(mensaje ?? "");
+}
+
+/**
+ * La fecha con la que puede salir un documento y, si no puede ser la que se
+ * quería, esa como fecha de la operación.
+ *
+ * La numeración es correlativa por serie y las fechas tienen que acompañarla:
+ * un documento no puede llevar fecha anterior al último de su serie y año. Si
+ * se quería una anterior (la de un pedido antiguo), sale con la del último, la
+ * más cercana que admite la serie, y la deseada se escribe en el documento
+ * como fecha de la operación, que es lo que pide el reglamento de facturación
+ * cuando no coincide con la de expedición (RD 1619/2012, art. 6.1.f).
+ *
+ * Fechas 'yyyy-mm-dd'. `ultimaDeLaSerie`: la del último documento de la serie
+ * en el año de `deseada`, o null si no hay ninguno.
+ */
+export function fechaEmision(
+  deseada: string,
+  ultimaDeLaSerie: string | null | undefined,
+): { fecha: string; fechaOperacion: string | null } {
+  if (ultimaDeLaSerie && deseada < ultimaDeLaSerie) {
+    return { fecha: ultimaDeLaSerie, fechaOperacion: deseada };
+  }
+  return { fecha: deseada, fechaOperacion: null };
+}
+
+/** '2026-09-19' → '19/09/2026'. */
+export function diaLegible(dia: string): string {
+  const [a, m, d] = dia.slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
+}
+
+/** La línea que deja escrita la fecha de la operación en el documento. */
+export function notaFechaOperacion(fechaOperacion: string): string {
+  return `Fecha de la operación: ${diaLegible(fechaOperacion)}`;
+}
+
+/** Las notas del documento con la fecha de la operación al final, una sola vez. */
+export function notasConFechaOperacion(
+  notas: string | null | undefined,
+  fechaOperacion: string | null,
+): string | null {
+  const texto = (notas ?? "").trim();
+  if (!fechaOperacion) return texto || null;
+  const linea = notaFechaOperacion(fechaOperacion);
+  if (texto.includes(linea)) return texto;
+  return texto ? `${texto}\n${linea}` : linea;
 }

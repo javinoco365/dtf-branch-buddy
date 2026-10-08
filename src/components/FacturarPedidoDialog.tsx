@@ -55,6 +55,7 @@ export function FacturarPedidoDialog({
               nombre: p.nombre || null,
               tipo_fiscal: p.tipo_fiscal,
               notas: p.notas,
+              ajustar_fecha: true,
             },
           });
         }
@@ -72,6 +73,7 @@ export function FacturarPedidoDialog({
             cliente_id: prep.cliente_id,
             pedido_id: pedidoId,
             notas: p.notas,
+            ajustar_fecha: true,
           },
         });
       }}
