@@ -45,7 +45,8 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { eur } from "@/lib/format";
+import { eur, metros, numero } from "@/lib/format";
+import { esEstimado } from "@/dominio/metros-woo";
 import { descargarCSV } from "@/lib/csv";
 import {
   lineasDireccion,
@@ -117,6 +118,9 @@ export type PedidoFila = {
     subtotal: number;
     iva: number;
     total: number;
+    /** De dónde salen los metros (20261020100000). Falta en líneas antiguas. */
+    metros_origen?: string | null;
+    precio_metro_usado?: number | null;
   }[];
   tracking: {
     id: string;
@@ -964,7 +968,7 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
             <TableRow key={l.id}>
               <TableCell>{l.descripcion}</TableCell>
               <TableCell className="text-right">
-                {l.cantidad} {l.unidad}
+                <CantidadLinea linea={l} />
               </TableCell>
               <TableCell className="text-right">{eur(l.precio_unitario)}</TableCell>
               <TableCell className="text-right font-medium">{eur(l.subtotal)}</TableCell>
@@ -1076,5 +1080,26 @@ function BloqueDireccion({
       )}
       {nota && filas.length > 0 && <div className="text-xs text-muted-foreground mt-1">{nota}</div>}
     </div>
+  );
+}
+
+/**
+ * La cantidad de una línea. Si los metros son estimados (importe ÷ precio por
+ * metro, porque WooCommerce no trajo la longitud del montador), se dice.
+ */
+function CantidadLinea({ linea }: { linea: PedidoFila["items"][number] }) {
+  const cantidad = Number(linea.cantidad);
+  if (linea.unidad !== "m") {
+    return <>{`${numero(cantidad, Number.isInteger(cantidad) ? 0 : 2)} ${linea.unidad}`}</>;
+  }
+  if (!esEstimado(linea.metros_origen)) return <>{metros(cantidad)}</>;
+  const precio = Number(linea.precio_metro_usado);
+  return (
+    <span
+      title={`Estimado: ${eur(Number(linea.subtotal))} ÷ ${eur(precio)}/m. WooCommerce no trajo la longitud del montador.`}
+    >
+      ≈ {metros(cantidad)}
+      <span className="block text-xs text-muted-foreground">estimado</span>
+    </span>
   );
 }

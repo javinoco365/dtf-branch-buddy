@@ -107,9 +107,10 @@ export const listPedidos = createServerFn({ method: "POST" })
         // no puede saber a qué tipo estaba una línea y la rellena con el 21 %.
         // Una línea al 10 % o al 4 % se convertía en una al 21 % con solo
         // abrir el pedido y guardarlo, sin avisar de nada.
-        .select(
-          "id, pedido_id, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total",
-        )
+        // select("*") y no la lista de columnas: metros_origen y
+        // precio_metro_usado (20261020100000) pueden no existir todavía, y
+        // nombrarlas haría fallar la consulta entera.
+        .select("*")
         .in("pedido_id", ids),
       supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
       clienteIds.length

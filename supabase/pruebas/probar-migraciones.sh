@@ -234,6 +234,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/C7_borrar_ultima_factura.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
 
 echo
+echo "== De dónde salen los metros de una línea =="
+$PSQL -f "$RAIZ/supabase/pruebas/C8_metros_origen.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
+
+echo
 echo "== Bucket de los PDF de facturas =="
 $PSQL -f "$RAIZ/supabase/pruebas/B8_bucket_facturas.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
