@@ -111,6 +111,28 @@ export function totalNeto(p: Pick<PedidoResumen, "total" | "devuelto">): number 
 }
 
 /**
+ * La base imponible del pedido con el envío dentro, sea como sea que se
+ * guardó.
+ *
+ * Desde el 2-9-2026 (y siempre en los de WooCommerce) `subtotal` ya lleva el
+ * envío y total = subtotal + IVA. Los manuales y textil de antes lo guardaban
+ * fuera: total = subtotal + IVA + envío. Se distingue por cuál de las dos
+ * sumas da el total; restarles el envío a esos sería quitárselo dos veces.
+ */
+export function baseConEnvio(
+  p: Pick<PedidoResumen, "subtotal" | "iva" | "envio" | "total">,
+): number {
+  const subtotal = num(p.subtotal);
+  const envio = num(p.envio);
+  if (envio <= 0) return subtotal;
+  const iva = num(p.iva);
+  const total = num(p.total);
+  const cuadraDentro = Math.abs(subtotal + iva - total) < 0.015;
+  const cuadraFuera = Math.abs(subtotal + iva + envio - total) < 0.015;
+  return cuadraFuera && !cuadraDentro ? subtotal + envio : subtotal;
+}
+
+/**
  * Los pedidos cancelados no facturan, pero sí se cuentan aparte. Las
  * devoluciones parciales se restan (ver `parteVendida`); los metros no,
  * porque no se sabe qué se devolvió y lo impreso, impreso está.
@@ -118,17 +140,17 @@ export function totalNeto(p: Pick<PedidoResumen, "total" | "devuelto">): number 
 export function calcularKpis(pedidos: readonly PedidoResumen[]): KpisPeriodo {
   const validos = pedidos.filter((p) => p.estado !== ESTADO_CANCELADO);
   const total = validos.reduce((s, p) => s + totalNeto(p), 0);
-  const parte = (campo: "subtotal" | "iva" | "envio") =>
-    redondear(validos.reduce((s, p) => s + num(p[campo]) * parteVendida(p), 0));
+  const parte = (valor: (p: PedidoResumen) => number) =>
+    redondear(validos.reduce((s, p) => s + valor(p) * parteVendida(p), 0));
 
-  const base = parte("subtotal");
-  const envios = parte("envio");
+  const base = parte(baseConEnvio);
+  const envios = parte((p) => num(p.envio));
   return {
     pedidos: validos.length,
     devuelto: redondear(validos.reduce((s, p) => s + num(p.total) - totalNeto(p), 0)),
     base,
-    bruta: redondear(base - envios),
-    iva: parte("iva"),
+    bruta: parte((p) => baseConEnvio(p) - num(p.envio)),
+    iva: parte((p) => num(p.iva)),
     envios,
     total: redondear(total),
     metros: redondear(

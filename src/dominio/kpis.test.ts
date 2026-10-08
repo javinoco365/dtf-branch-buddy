@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  baseConEnvio,
   agruparPorDia,
   agruparPorRangos,
   agruparPorTienda,
@@ -12,6 +13,8 @@ import {
   type PedidoResumen,
 } from "./kpis";
 
+// Por defecto, un pedido del modelo antiguo: el envío (5) va fuera del
+// subtotal y total = subtotal + IVA + envío. Ver baseConEnvio.
 function pedido(p: Partial<PedidoResumen> = {}): PedidoResumen {
   return {
     fecha_pedido: "2026-09-02T10:00:00.000Z",
@@ -39,9 +42,9 @@ describe("calcularKpis", () => {
     ]);
     expect(k.pedidos).toBe(2);
     // La base lleva el envío dentro; la facturación bruta, no.
-    expect(k.base).toBe(150);
+    expect(k.base).toBe(155);
     expect(k.envios).toBe(5);
-    expect(k.bruta).toBe(145);
+    expect(k.bruta).toBe(150);
     expect(k.iva).toBe(31.5);
     expect(k.total).toBe(186.5);
     expect(k.metros).toBe(15);
@@ -74,6 +77,21 @@ describe("calcularKpis", () => {
     expect(k.metros).toBe(3.5);
   });
 
+  it("un pedido antiguo con el envío fuera de la base no se queda sin él dos veces", () => {
+    // Manual o textil de antes del 2-9-2026: total = subtotal + IVA + envío.
+    const antiguo = pedido({ subtotal: 100, iva: 21, envio: 10, total: 131 });
+    // De ahora (y de WooCommerce): total = subtotal + IVA, envío dentro.
+    const nuevo = pedido({ subtotal: 110, iva: 23.1, envio: 10, total: 133.1 });
+    expect(baseConEnvio(antiguo)).toBe(110);
+    expect(baseConEnvio(nuevo)).toBe(110);
+    const k = calcularKpis([antiguo, nuevo]);
+    expect(k.bruta).toBe(200);
+    expect(k.envios).toBe(20);
+    expect(k.base).toBe(220);
+    // Bruta + envíos + IVA = total, en los dos.
+    expect(k.bruta + k.envios + k.iva).toBeCloseTo(k.total, 2);
+  });
+
   it("trata los nulos como cero en lugar de propagar NaN", () => {
     const k = calcularKpis([pedido({ subtotal: null, iva: null, envio: null, total: null })]);
     expect(k.base).toBe(0);
@@ -87,8 +105,8 @@ describe("devoluciones", () => {
     // 126 € con 25,20 € devueltos: queda el 80 %.
     const k = calcularKpis([pedido({ devuelto: 25.2 })]);
     expect(k.total).toBe(100.8);
-    expect(k.base).toBe(80);
-    expect(k.bruta).toBe(76);
+    expect(k.base).toBe(84);
+    expect(k.bruta).toBe(80);
     expect(k.iva).toBe(16.8);
     expect(k.envios).toBe(4);
     expect(k.devuelto).toBe(25.2);

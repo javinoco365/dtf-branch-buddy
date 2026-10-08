@@ -30,6 +30,7 @@ import {
   sincronizarClientesWoo,
   diagnosticoNumeroWoo,
   diagnosticoLineasWoo,
+  recuperarEnviosWoo,
 } from "@/lib/woocommerce.functions";
 import { eur, metros as fmtMetros } from "@/lib/format";
 import {
@@ -247,6 +248,8 @@ function Ajustes() {
           <DiagnosticoNumero tiendaId={tiendaId} />
 
           <DiagnosticoLineas tiendaId={tiendaId} />
+
+          <RecuperarEnvios tiendaId={tiendaId} />
 
           <CredencialesCard
             tieneCreds={!!creds?.tiene}
@@ -1078,6 +1081,71 @@ const ORIGEN_METROS: Record<string, string> = {
  * pinta con su propio HTML, que no llega por la API: esto enseña lo que sí
  * llega. Los valores solo se ven si son medidas o precios.
  */
+/**
+ * Una sola vez: el envío de los pedidos de WooCommerce sincronizados antes de
+ * que se guardara. Se pide a WooCommerce de cien en cien hasta acabar.
+ */
+function RecuperarEnvios({ tiendaId }: { tiendaId: string }) {
+  const qc = useQueryClient();
+  const recuperar = useServerFn(recuperarEnviosWoo);
+  const [progreso, setProgreso] = useState<{ revisados: number; actualizados: number } | null>(
+    null,
+  );
+  const [trabajando, setTrabajando] = useState(false);
+
+  async function lanzar() {
+    setTrabajando(true);
+    let revisados = 0;
+    let actualizados = 0;
+    let desde = 0;
+    setProgreso({ revisados, actualizados });
+    try {
+      for (;;) {
+        const r = await recuperar({ data: { tienda_id: tiendaId, desde } });
+        revisados += r.revisados;
+        actualizados += r.actualizados;
+        setProgreso({ revisados, actualizados });
+        if (r.siguiente === null) break;
+        desde = r.siguiente;
+      }
+      toast.success(
+        actualizados
+          ? `${actualizados} pedido(s) con su envío recuperado`
+          : "Ningún pedido tenía envío por recuperar",
+      );
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error((e as Error).message || "No se ha podido consultar WooCommerce");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Envíos de los pedidos antiguos</CardTitle>
+        <CardDescription>
+          Los pedidos de WooCommerce sincronizados antes del 7 de octubre de 2026 se guardaron sin
+          el envío. Esto lo pide a WooCommerce y lo completa, para que la facturación bruta de los
+          meses anteriores vaya también sin portes. Basta con hacerlo una vez; repetirlo no cambia
+          nada.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={lanzar} disabled={trabajando}>
+          {trabajando ? "Recuperando…" : "Recuperar envíos"}
+        </Button>
+        {progreso && (
+          <span className="text-sm text-muted-foreground">
+            {progreso.revisados} pedido(s) revisados · {progreso.actualizados} con envío
+          </span>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
   const [numero, setNumero] = useState("");
   const diagnosticar = useServerFn(diagnosticoLineasWoo);

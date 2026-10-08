@@ -190,6 +190,13 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
+              pie={
+                k.envios > 0 ? (
+                  <span className="text-muted-foreground">
+                    Aparte, {eur(k.envios)} de envíos cobrados
+                  </span>
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo="Cobrado"
