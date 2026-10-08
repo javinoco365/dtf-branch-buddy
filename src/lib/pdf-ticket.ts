@@ -30,7 +30,14 @@ export async function generarTicketPDF(d: TicketPDFData): Promise<Blob> {
   // Primera pasada en un papel largo para saber cuánto mide; la segunda, en su medida.
   const borrador = new jsPDF({ unit: "mm", format: [ANCHO, 1000] });
   const alto = Math.max(pintar(borrador, d) + MARGEN, 50);
-  const doc = new jsPDF({ unit: "mm", format: [ANCHO, alto] });
+  // La orientación, explícita: jsPDF pone en vertical el lado más largo, así
+  // que un ticket corto (menos de 80 mm de alto) salía girado, con 80 mm de
+  // alto y el ancho recortado: la columna de la derecha se quedaba fuera.
+  const doc = new jsPDF({
+    unit: "mm",
+    format: [ANCHO, alto],
+    orientation: alto >= ANCHO ? "portrait" : "landscape",
+  });
   pintar(doc, d);
   return doc.output("blob");
 }
