@@ -187,6 +187,26 @@ export function documentoVigente<T extends DocumentoPedido>(
   );
 }
 
+/**
+ * El documento que se enseña como «el» del pedido. Es `documentoVigente`
+ * más el canje: si una factura sustituye a un ticket y ella sigue valiendo,
+ * cuenta la factura. Si esa factura se anula o se rectifica, vuelve a contar
+ * el ticket, como hace la base.
+ */
+export function documentoDelPedido<T extends DocumentoPedido & { sustituye_a_id?: string | null }>(
+  docs: readonly T[],
+  rectificados: Iterable<string> = [],
+): T | null {
+  const corregidos = new Set<string>(rectificados);
+  for (const d of docs) if (d.rectifica_a_id) corregidos.add(d.rectifica_a_id);
+  const sustituidos = docs.flatMap((d) =>
+    d.sustituye_a_id && d.estado !== "anulada" && d.estado !== "borrador" && !corregidos.has(d.id)
+      ? [d.sustituye_a_id]
+      : [],
+  );
+  return documentoVigente(docs, [...corregidos, ...sustituidos]);
+}
+
 /** Cobrado entero: lo cobrado llega al total del pedido, céntimo a céntimo. */
 export function estaCobrado(total: number, cobrado: number): boolean {
   return centimos(total) > 0 && centimos(cobrado) >= centimos(total);
