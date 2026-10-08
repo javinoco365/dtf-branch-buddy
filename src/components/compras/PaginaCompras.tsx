@@ -35,6 +35,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -84,6 +85,8 @@ import {
   tipoIrpfProbable,
   tipoProbable,
 } from "@/dominio/compras";
+import { sumarImportes } from "@/dominio/sumatorios";
+import { totalesCompras } from "@/dominio/sumatorios-facturas";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -272,6 +275,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   ]);
   // Los que se están viendo, para descargarlos en un ZIP.
   const docsFiltrados = useMemo(() => (filtrados as any[]).map(deCompra), [filtrados]);
+  // El pie: lo que se ve, sin los borradores (no cuentan en Gerencia ni en el IVA).
+  const totales = useMemo(() => totalesCompras(filtrados), [filtrados]);
   const enLaCola = useMemo(
     () => (cola ? (compras as any[]).filter((c) => enCola(c) && !c.borrada_en) : []),
     [compras, cola],
@@ -779,6 +784,24 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                 </TableRow>
               ))}
             </TableBody>
+            {!isLoading && filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={general ? 4 : 3} className="font-semibold">
+                    Total · {totales.facturas} factura{totales.facturas === 1 ? "" : "s"}
+                    {totales.borradores > 0 &&
+                      ` · sin ${totales.borradores} borrador${totales.borradores === 1 ? "" : "es"}`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.base)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.liquido)}
+                  </TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -1185,6 +1208,19 @@ function RevisarCompra({
             </TableRow>
           ))}
         </TableBody>
+        {compra.lineas.length > 0 && (
+          <TableFooter>
+            <TableRow>
+              <TableCell colSpan={3} className="font-semibold">
+                Total · {compra.lineas.length} línea{compra.lineas.length === 1 ? "" : "s"}
+              </TableCell>
+              <TableCell className="text-right font-bold tabular-nums">
+                {eur(sumarImportes(compra.lineas, (l) => l.importe))}
+              </TableCell>
+              {esTextil && <TableCell />}
+            </TableRow>
+          </TableFooter>
+        )}
       </Table>
 
       <Button

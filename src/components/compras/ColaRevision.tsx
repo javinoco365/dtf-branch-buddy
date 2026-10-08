@@ -9,6 +9,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -16,6 +17,7 @@ import {
 import { eur, fechaCorta } from "@/lib/format";
 import { releerFacturaRecibida, verFicheroCompra } from "@/lib/compras.functions";
 import { UMBRAL_CONFIANZA } from "@/dominio/cola-compras";
+import { totalesCola } from "@/dominio/sumatorios-facturas";
 
 /**
  * Las facturas que ha leído la IA y aún no ha confirmado nadie, y las que no
@@ -52,6 +54,8 @@ export function ColaRevision({
   };
 
   if (compras.length === 0) return null;
+  // Lo leído, sin confirmar: da idea de lo pendiente, pero no cuenta en nada.
+  const totales = totalesCola(compras);
   return (
     <Card className="border-amber-500/50">
       <CardHeader className="pb-2">
@@ -163,6 +167,19 @@ export function ColaRevision({
               );
             })}
           </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell colSpan={2} className="font-semibold">
+                Total leído, sin confirmar · {totales.leidas} factura
+                {totales.leidas === 1 ? "" : "s"}
+                {totales.sinLeer > 0 && ` · ${totales.sinLeer} sin leer`}
+              </TableCell>
+              <TableCell className="text-right font-bold tabular-nums">
+                {eur(totales.total)}
+              </TableCell>
+              <TableCell colSpan={3} />
+            </TableRow>
+          </TableFooter>
         </Table>
       </CardContent>
     </Card>

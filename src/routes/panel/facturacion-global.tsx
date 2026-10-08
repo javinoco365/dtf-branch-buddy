@@ -553,6 +553,24 @@ function FacturacionGlobal() {
                       </TableRow>
                     ))}
                   </TableBody>
+                  {/* Los mismos totales que el desglose por tienda: son los mismos cobros. */}
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-semibold">Total</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {totales.cobros}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.cobrado)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.propina)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.total)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
                 </Table>
               </CardContent>
             </Card>
@@ -666,7 +684,10 @@ function FacturacionGlobal() {
               <CardTitle className="text-base">Detalle de cobros ({detalle.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[480px] overflow-auto">
+              {/* El envoltorio de <Table> también es overflow-auto y un pie
+                  sticky se pegaría a él, que no se desplaza: se deja visible
+                  para que el pie se pegue a esta caja, la que sí se desplaza. */}
+              <div className="max-h-[480px] overflow-auto [&>div]:overflow-visible">
                 <Table movil="tarjetas">
                   <TableHeader>
                     <TableRow>
@@ -702,6 +723,20 @@ function FacturacionGlobal() {
                       </TableRow>
                     ))}
                   </TableBody>
+                  {/* Pegado abajo: con el desplazamiento de la caja, si no, no se ve. */}
+                  <TableFooter className="sticky bottom-0 bg-card">
+                    <TableRow>
+                      <TableCell colSpan={6} className="font-semibold">
+                        Total · {totales.cobros} cobro{totales.cobros === 1 ? "" : "s"}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.cobrado)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.propina)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
                 </Table>
               </div>
             </CardContent>
