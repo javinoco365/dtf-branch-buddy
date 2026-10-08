@@ -1326,6 +1326,10 @@ function lineasDeSnapshot(snapshot: unknown) {
  * los datos fiscales que da ahora el cliente. El ticket no se toca. La base
  * comprueba que es un ticket, que no se canjeó ni rectificó antes y que la
  * factura suma lo mismo.
+ *
+ * Su fecha es la del pedido del ticket, como la de cualquier documento de un
+ * pedido (decisión de Javier, 8-10-2026); si el ticket no es de un pedido, la
+ * del ticket.
  */
 export const canjearTicket = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -1336,7 +1340,6 @@ export const canjearTicket = createServerFn({ method: "POST" })
         receptor: receptorSchema.extend({
           nif: z.string().trim().min(1, "El canje necesita el NIF del cliente"),
         }),
-        fecha: z.string().optional(),
       })
       .parse(d),
   )
@@ -1345,19 +1348,22 @@ export const canjearTicket = createServerFn({ method: "POST" })
       await import("@/integrations/supabase/client.server");
     const sb = adminComoUsuario(context.userId);
     const { data: ticket } = await tabla(sb, "facturas")
-      .select("id, tienda_id, tipo, cliente_id, lineas_snapshot")
+      .select("id, tienda_id, tipo, cliente_id, lineas_snapshot, pedido_id, fecha")
       .eq("id", data.factura_id)
       .maybeSingle();
     if (!ticket) throw new Error("El ticket no existe");
     await comprobarAccesoTienda(sb, ticket.tienda_id, context.userId);
     if (ticket.tipo !== "simplificada") throw new Error("Solo se canjean tickets");
+    const fecha = ticket.pedido_id
+      ? await fechaDelPedido(sb, ticket.tienda_id, ticket.pedido_id)
+      : String(ticket.fecha).slice(0, 10);
 
     const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
       _usuario_id: context.userId,
       _tienda_id: ticket.tienda_id,
       _receptor: data.receptor,
       _lineas: lineasDeSnapshot(ticket.lineas_snapshot),
-      _fecha: data.fecha ?? new Date().toISOString().slice(0, 10),
+      _fecha: fecha,
       _cliente_id: ticket.cliente_id ?? null,
       _notas: null,
       _sustituye_a_id: ticket.id,

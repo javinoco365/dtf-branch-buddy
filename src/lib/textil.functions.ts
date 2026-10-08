@@ -1433,7 +1433,7 @@ function lineasDeSnapshotTextil(snapshot: unknown, signo: 1 | -1 = 1) {
 async function leerTicketTextil(supabase: any, facturaId: string) {
   const { data: ticket } = await tabla(supabase, "textil_facturas")
     .select(
-      "id, numero, tipo, cliente_id, marca_id, textil_pedido_id, lineas_snapshot, receptor_snapshot",
+      "id, numero, tipo, fecha, cliente_id, marca_id, textil_pedido_id, lineas_snapshot, receptor_snapshot",
     )
     .eq("id", facturaId)
     .maybeSingle();
@@ -1445,7 +1445,8 @@ async function leerTicketTextil(supabase: any, facturaId: string) {
 /**
  * Canjea un ticket textil por una factura completa (en Verifactu, F3): mismas
  * líneas, datos fiscales del cliente, el ticket intacto. La base comprueba el
- * resto.
+ * resto. Su fecha es la del pedido del ticket (decisión de Javier,
+ * 8-10-2026); si el ticket no es de un pedido, la del ticket.
  */
 export const canjearTicketTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -1462,6 +1463,15 @@ export const canjearTicketTextil = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const ticket = await leerTicketTextil(context.supabase, data.factura_id);
+    let fecha = String(ticket.fecha).slice(0, 10);
+    if (ticket.textil_pedido_id) {
+      const { data: pedido, error } = await tabla(context.supabase, "textil_pedidos")
+        .select("fecha")
+        .eq("id", ticket.textil_pedido_id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (pedido?.fecha) fecha = fechaDocumentoDePedido(pedido.fecha as string);
+    }
     const receptor: Record<string, string> = { nombre: data.nombre, nif: data.nif };
     if (data.direccion) receptor.direccion = data.direccion;
     const r = await llamarRpcTextil<{ id: string; referencia: string }>(
@@ -1472,7 +1482,7 @@ export const canjearTicketTextil = createServerFn({ method: "POST" })
         _receptor: receptor,
         _lineas: lineasDeSnapshotTextil(ticket.lineas_snapshot),
         _marca_id: ticket.marca_id ?? null,
-        _fecha: new Date().toISOString().slice(0, 10),
+        _fecha: fecha,
         _cliente_id: ticket.cliente_id ?? null,
         _sustituye_a_id: ticket.id,
       },

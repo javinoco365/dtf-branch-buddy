@@ -1,4 +1,4 @@
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, eurUnitario, fechaCorta, numeroJusto } from "@/lib/format";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
 import { importeLineaSinIva, pieDocumentoEmitido } from "@/dominio/importes";
 
@@ -120,7 +120,7 @@ function pintar(doc: Doc, d: TicketPDFData): number {
   for (const it of d.items) {
     linea(it.descripcion, 8, false, "left");
     par(
-      `  ${it.cantidad} ${it.unidad} x ${eur(it.precio_unitario)} (${it.iva_rate} %)`,
+      `  ${numeroJusto(it.cantidad)} ${it.unidad} x ${eurUnitario(it.precio_unitario)} (${numeroJusto(it.iva_rate, 2)} %)`,
       eur(importeLineaSinIva(it)),
       7,
     );
@@ -132,7 +132,7 @@ function pintar(doc: Doc, d: TicketPDFData): number {
   const pie = pieDocumentoEmitido(d);
   par("Base =", eur(pie.base), 8);
   for (const r of pie.iva) {
-    par(r.tipo == null ? "IVA =" : `IVA ${r.tipo} % =`, eur(r.cuota), 8);
+    par(r.tipo == null ? "IVA =" : `IVA ${numeroJusto(r.tipo, 2)} % =`, eur(r.cuota), 8);
   }
   y += 1.5;
   par("TOTAL =", eur(pie.total), 11, true);
