@@ -77,6 +77,11 @@ const PedidoTrackingDialog = lazy(() =>
 const FacturarPedidoDialog = lazy(() =>
   import("@/components/FacturarPedidoDialog").then((m) => ({ default: m.FacturarPedidoDialog })),
 );
+const FacturarPedidosDialog = lazy(() =>
+  import("@/components/documentos/FacturarPedidosDialog").then((m) => ({
+    default: m.FacturarPedidosDialog,
+  })),
+);
 const CobrosPedidoDialog = lazy(() =>
   import("@/components/cobros/CobrosPedidoDialog").then((m) => ({
     default: m.CobrosPedidoDialog,
@@ -193,6 +198,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const [borrar, setBorrar] = useState<PedidoFila | null>(null);
   const [facturar, setFacturar] = useState<PedidoFila | null>(null);
   const [cobrando, setCobrando] = useState<PedidoFila | null>(null);
+  const [facturandoVarios, setFacturandoVarios] = useState(false);
 
   const { desde, hasta } = periodo.rango!;
   const list = useServerFn(listPedidos);
@@ -293,6 +299,16 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
 
   // Agrupar por día
+  // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
+  // más antiguo al más nuevo. Como mucho 500 de una vez.
+  const sinDocumento = useMemo(
+    () =>
+      filtrados
+        .filter((p) => p.estado !== "cancelado" && !p.documento)
+        .sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido)),
+    [filtrados],
+  );
+
   const grupos = useMemo(() => {
     const map = new Map<string, PedidoFila[]>();
     for (const p of filtrados) {
@@ -349,7 +365,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} className="max-md:w-full" />
-        <div className="ml-auto flex gap-2 max-md:ml-0 max-md:flex-wrap">
+        {/* Se parte en dos filas si no cabe, a cualquier ancho: en una tableta
+            con la barra lateral, una sola fila se salía de la pantalla. */}
+        <div className="ml-auto flex flex-wrap justify-end gap-2 max-md:ml-0 max-md:justify-start">
           {/* Solo con una tienda delante: sincronizar «todas» no significa
               nada, cada una tiene sus credenciales y su web. */}
           {tiendaId && (
@@ -364,7 +382,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               ) : (
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
-              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar ahora"}
+              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar"}
             </Button>
           )}
           {/* Un solo botón para las dos exportaciones: con uno más, la barra
@@ -410,6 +428,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFacturandoVarios(true)}
+            title="Emitir tickets o facturas de varios pedidos, del más antiguo al más nuevo"
+          >
+            <Receipt className="h-4 w-4 mr-2" /> Facturar
+          </Button>
           {tiendaId && (
             <Button size="sm" onClick={() => setNuevoOpen(true)}>
               <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
@@ -662,6 +688,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               queryClient.invalidateQueries({ queryKey: ["pedidos"] });
               setFacturar(null);
             }}
+          />
+        )}
+        {facturandoVarios && (
+          <FacturarPedidosDialog
+            open={facturandoVarios}
+            onOpenChange={setFacturandoVarios}
+            pedidoIds={sinDocumento.slice(0, 500).map((p) => p.id)}
+            recortados={Math.max(0, sinDocumento.length - 500)}
+            nombreTienda={
+              tiendaId ? undefined : (id) => tiendasLista.find((t) => t.id === id)?.nombre ?? null
+            }
           />
         )}
         {cobrando && (
