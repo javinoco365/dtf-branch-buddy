@@ -168,6 +168,80 @@ export function calcularTotales(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Documentos ya emitidos: se imprimen con lo congelado, sin recalcular
+// ---------------------------------------------------------------------------
+
+/**
+ * Una línea de un documento ya emitido, como quedó en `factura_items` o en
+ * `textil_factura_items`.
+ */
+export type LineaEmitida = LineaBruta & {
+  /** Base imponible de la línea, congelada al emitir (la columna `subtotal`). */
+  subtotal?: number | null;
+};
+
+/**
+ * El importe sin IVA de una línea ya emitida: su base imponible.
+ *
+ * Es la base que se congeló al emitir, no cantidad × precio otra vez: si la
+ * línea llevaba descuento, solo la base congelada lo recoge, y es la que sumó
+ * el desglose del documento. Solo cuando una línea no la trae se calcula con
+ * `calcularLinea`, que es la misma cuenta que hace la base al emitir
+ * (`factura_calcular`).
+ */
+export function importeLineaSinIva(linea: LineaEmitida): number {
+  const congelada = linea.subtotal;
+  if (typeof congelada === "number" && Number.isFinite(congelada)) return congelada;
+  return calcularLinea(linea).base;
+}
+
+/** Una cuota de IVA del pie de un documento impreso. */
+export type CuotaImpresa = {
+  /**
+   * Tipo impositivo de la cuota. Nulo cuando el documento no trae desglose y
+   * la cuota es la de todo el documento.
+   */
+  tipo: number | null;
+  cuota: number;
+};
+
+/** Las cifras del pie de un documento impreso. */
+export type PieImporte = {
+  base: number;
+  /** Una cuota por tipo impositivo, en el orden del desglose congelado. */
+  iva: CuotaImpresa[];
+  total: number;
+};
+
+/**
+ * Las cifras del pie de un documento ya emitido: base, IVA por tipo y total.
+ *
+ * Todas salen de lo congelado al emitir y ninguna se recalcula: ni la base se
+ * suma de las líneas ni el total sale de base más IVA. Así lo impreso coincide
+ * céntimo a céntimo con lo que hay en la base de datos y en el libro de IVA.
+ *
+ * El IVA va por tipo, como el desglose congelado, incluido un tipo del 0 %. Si
+ * el documento no trae desglose (las facturas anteriores al motor de
+ * facturación no lo tienen), sale una sola cuota, sin tipo: el IVA total.
+ */
+export function pieDocumentoEmitido(doc: {
+  base_imponible: number;
+  iva_total: number;
+  total: number;
+  desglose?: readonly DesgloseIva[] | null;
+}): PieImporte {
+  const desglose = doc.desglose ?? [];
+  return {
+    base: doc.base_imponible,
+    iva:
+      desglose.length > 0
+        ? desglose.map((r) => ({ tipo: r.tipo, cuota: r.cuota }))
+        : [{ tipo: null, cuota: doc.iva_total }],
+    total: doc.total,
+  };
+}
+
 /**
  * Metros lineales de un conjunto de líneas.
  *

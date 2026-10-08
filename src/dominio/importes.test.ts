@@ -3,6 +3,8 @@ import {
   calcularLinea,
   calcularMetros,
   calcularTotales,
+  importeLineaSinIva,
+  pieDocumentoEmitido,
   redondear,
   type LineaBruta,
 } from "./importes";
@@ -197,6 +199,117 @@ describe("calcularTotales", () => {
       envio: 0,
     });
     expect(t.desglose_iva).toHaveLength(1);
+  });
+});
+
+describe("importeLineaSinIva", () => {
+  it("es la base de la línea, sin IVA: 1 m × 7,00 € al 21 % son 7,00 €", () => {
+    expect(importeLineaSinIva({ cantidad: 1, precio_unitario: 7, iva_rate: 21, subtotal: 7 })).toBe(
+      7,
+    );
+    expect(
+      importeLineaSinIva({ cantidad: 1, precio_unitario: 5.99, iva_rate: 21, subtotal: 5.99 }),
+    ).toBe(5.99);
+  });
+
+  it("usa la base congelada y no vuelve a multiplicar cantidad por precio", () => {
+    // 10 × 10 € con un 15 % de descuento: la base congelada es 85, no 100.
+    expect(
+      importeLineaSinIva({ cantidad: 10, precio_unitario: 10, iva_rate: 21, subtotal: 85 }),
+    ).toBe(85);
+  });
+
+  it("respeta una base congelada de cero", () => {
+    expect(
+      importeLineaSinIva({ cantidad: 1, precio_unitario: 10, iva_rate: 21, subtotal: 0 }),
+    ).toBe(0);
+  });
+
+  it("mantiene el signo de una línea en negativo", () => {
+    expect(
+      importeLineaSinIva({ cantidad: -1, precio_unitario: 7, iva_rate: 21, subtotal: -7 }),
+    ).toBe(-7);
+  });
+
+  it("sin base congelada, la calcula como al emitir", () => {
+    expect(importeLineaSinIva({ cantidad: 3.5, precio_unitario: 15, iva_rate: 21 })).toBe(52.5);
+    expect(
+      importeLineaSinIva({ cantidad: 1.005, precio_unitario: 1, iva_rate: 21, subtotal: null }),
+    ).toBe(1.01);
+    expect(
+      importeLineaSinIva({
+        cantidad: 2,
+        precio_unitario: 10,
+        iva_rate: 21,
+        subtotal: Number.NaN,
+      }),
+    ).toBe(20);
+  });
+});
+
+describe("pieDocumentoEmitido", () => {
+  it("base, una cuota por el único tipo y total, tal como se congelaron", () => {
+    expect(
+      pieDocumentoEmitido({
+        base_imponible: 12.99,
+        iva_total: 2.73,
+        total: 15.72,
+        desglose: [{ tipo: 21, base: 12.99, cuota: 2.73 }],
+      }),
+    ).toEqual({ base: 12.99, iva: [{ tipo: 21, cuota: 2.73 }], total: 15.72 });
+  });
+
+  it("una cuota por cada tipo, en el orden del desglose", () => {
+    const pie = pieDocumentoEmitido({
+      base_imponible: 16,
+      iva_total: 2.37,
+      total: 18.37,
+      desglose: [
+        { tipo: 21, base: 7, cuota: 1.47 },
+        { tipo: 10, base: 9, cuota: 0.9 },
+      ],
+    });
+    expect(pie.iva).toEqual([
+      { tipo: 21, cuota: 1.47 },
+      { tipo: 10, cuota: 0.9 },
+    ]);
+  });
+
+  it("pone también el tipo del 0 %, con su cuota de cero", () => {
+    const pie = pieDocumentoEmitido({
+      base_imponible: 110,
+      iva_total: 21,
+      total: 131,
+      desglose: [
+        { tipo: 21, base: 100, cuota: 21 },
+        { tipo: 0, base: 10, cuota: 0 },
+      ],
+    });
+    expect(pie.iva).toEqual([
+      { tipo: 21, cuota: 21 },
+      { tipo: 0, cuota: 0 },
+    ]);
+  });
+
+  it("no recalcula: la base y el total son los congelados aunque no cuadren", () => {
+    // Si la base guardada no fuese la suma del desglose, se imprime la
+    // guardada: el papel tiene que decir lo mismo que la base de datos.
+    const pie = pieDocumentoEmitido({
+      base_imponible: 12.98,
+      iva_total: 2.73,
+      total: 15.7,
+      desglose: [{ tipo: 21, base: 12.99, cuota: 2.73 }],
+    });
+    expect(pie.base).toBe(12.98);
+    expect(pie.total).toBe(15.7);
+  });
+
+  it("sin desglose, una sola cuota sin tipo con el IVA total", () => {
+    const sinDesglose = { base_imponible: 100, iva_total: 21, total: 121 };
+    const esperado = { base: 100, iva: [{ tipo: null, cuota: 21 }], total: 121 };
+    expect(pieDocumentoEmitido(sinDesglose)).toEqual(esperado);
+    expect(pieDocumentoEmitido({ ...sinDesglose, desglose: null })).toEqual(esperado);
+    expect(pieDocumentoEmitido({ ...sinDesglose, desglose: [] })).toEqual(esperado);
   });
 });
 
