@@ -23,6 +23,7 @@ import {
 import { AlertTriangle, FileText, Receipt } from "lucide-react";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import {
   cabeEnTicket,
   decidirDocumento,
@@ -49,6 +50,8 @@ export type DocumentoPreparado =
       }[];
       total: number;
       tipo_fiscal: TipoFiscal | null;
+      /** El día del pedido ('yyyy-mm-dd'): la fecha que se propone para el documento. */
+      fecha_pedido?: string | null;
       limites: LimitesTicket;
       notas: string | null;
     };
@@ -98,7 +101,7 @@ export function DocumentoPedidoDialog({
   alEmitir: () => void;
 }) {
   const qc = useQueryClient();
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(() => diaEnEspana(new Date()));
   const [notas, setNotas] = useState("");
   const [nombre, setNombre] = useState("");
   const [nif, setNif] = useState("");
@@ -115,12 +118,15 @@ export function DocumentoPedidoDialog({
 
   useEffect(() => {
     if (!open) return;
-    setFecha(new Date().toISOString().slice(0, 10));
+    setFecha(diaEnEspana(new Date()));
     setTipoElegido(null);
   }, [open]);
 
   useEffect(() => {
     if (!data || data.ya_facturado) return;
+    // Por defecto, la fecha del pedido. Se puede cambiar: si la serie ya tiene
+    // una factura posterior, la base no deja emitir hacia atrás y lo dice.
+    if (data.fecha_pedido) setFecha(data.fecha_pedido);
     setNotas(data.notas ?? "");
     setNombre(data.receptor.nombre ?? "");
     setNif(data.receptor.nif ?? "");
@@ -313,7 +319,7 @@ export function DocumentoPedidoDialog({
                 <Label>Fecha de emisión</Label>
                 <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
                 <p className="text-xs text-muted-foreground">
-                  No puede ser anterior al último documento de su serie.
+                  Por defecto, la del pedido. No puede ser anterior al último documento de su serie.
                 </p>
               </div>
               <div className="space-y-1.5">

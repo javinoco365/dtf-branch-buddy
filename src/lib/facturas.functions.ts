@@ -14,6 +14,7 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { fechaDocumentoDePedido } from "@/dominio/fecha-documento";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -548,7 +549,7 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
   // tabla() y no .from(): direccion_facturacion no está en types.ts.
   const { data: pedido, error: pErr } = await tabla(sb, "pedidos")
     .select(
-      "id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas",
+      "id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas, fecha_pedido",
     )
     .eq("id", pedidoId)
     .maybeSingle();
@@ -638,6 +639,8 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       lineas,
       sin_nif: !receptor.nif,
       notas: (pedido.notas as string | null) ?? null,
+      // El documento sale, por defecto, con la fecha del pedido.
+      fecha_pedido: fechaDocumentoDePedido(pedido.fecha_pedido as string | null),
       total,
       tipo_fiscal: tipoFiscal,
       limites,
@@ -844,14 +847,28 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
     const { adminComoUsuario, supabaseAdmin } =
       await import("@/integrations/supabase/client.server");
     const sb = adminComoUsuario(context.userId);
-    const fecha = new Date().toISOString().slice(0, 10);
+
+    // Cada ticket, con la fecha de su pedido, y en orden de fecha: la base no
+    // deja numerar hacia atrás, así que el más antiguo va primero.
+    const { data: fechas } = await tabla(sb, "pedidos")
+      .select("id, fecha_pedido")
+      .in("id", data.pedido_ids);
+    const fechaDe = new Map<string, string>(
+      ((fechas ?? []) as { id: string; fecha_pedido: string | null }[]).map((p) => [
+        p.id,
+        fechaDocumentoDePedido(p.fecha_pedido),
+      ]),
+    );
+    const enOrden = [...data.pedido_ids].sort((a, b) =>
+      (fechaDe.get(a) ?? "").localeCompare(fechaDe.get(b) ?? ""),
+    );
 
     // Sin PDF aquí: son hasta 200. La pantalla los guarda después, por tandas
     // (rellenarPdfsTienda con estos ids).
     const emitidos: { pedido: string; referencia: string; id: string }[] = [];
     const omitidos: { pedido: string; motivo: string }[] = [];
 
-    for (const id of data.pedido_ids) {
+    for (const id of enOrden) {
       let numero = id;
       try {
         const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
@@ -883,7 +900,7 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
           _tienda_id: pedido.tienda_id,
           _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
           _lineas: lineas,
-          _fecha: fecha,
+          _fecha: fechaDocumentoDePedido(pedido.fecha_pedido as string | null),
           _cliente_id: pedido.cliente_id ?? null,
           _pedido_id: id,
           _simplificada: true,
