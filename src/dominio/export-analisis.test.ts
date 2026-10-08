@@ -402,8 +402,8 @@ describe("lo que el analista necesita separar", () => {
       eur_metro_medido: 12,
       metros_de_lineas_estimadas: 10,
       pedidos_con_metros_estimados: 1,
-      pedidos_manuales: 1,
-      metros_manuales: 23,
+      pedidos_metros_dudosos: 1,
+      metros_dudosos: 23,
     });
     // El global mezcla los tres: (120 + 70 + 196) ÷ 43.
     expect(e.totales.eur_metro).toBe(redondear(386 / 43));
@@ -469,5 +469,96 @@ describe("lo que el analista necesita separar", () => {
     expect(de("a").documento_vigente).toBeNull();
     expect(de("s").documento_vigente).toBeNull();
     expect(e.totales).toMatchObject({ pedidos_sin_documento: 2, total_neto_sin_documento: 266.2 });
+  });
+});
+
+describe("metros dudosos y canjes anulados", () => {
+  it("un pedido web antiguo (líneas en 'm' sin origen) no cuenta como medido", () => {
+    const e = exportar(
+      [
+        pedido({ id: "nuevo", subtotal: 120, iva: 25.2, envio: 0, total: 145.2, metros_total: 10 }),
+        // Antes del 7-10: la cantidad de WooCommerce (1 trabajo) guardada como «1 m».
+        pedido({ id: "viejo", subtotal: 30.83, iva: 6.47, envio: 0, total: 37.3, metros_total: 1 }),
+      ],
+      {
+        lineas: [
+          {
+            pedido_id: "nuevo",
+            cantidad: 10,
+            unidad: "m",
+            subtotal: 120,
+            metros_origen: "montador",
+          },
+          { pedido_id: "viejo", cantidad: 1, unidad: "m", subtotal: 30.83, metros_origen: null },
+        ],
+      },
+    );
+    const viejo = e.pedidos.find((p) => p.id === "viejo")!;
+    expect(viejo).toMatchObject({ metros_de: "sin_origen", metros_medidos: false });
+    expect(e.totales).toMatchObject({
+      eur_metro_medido: 12,
+      pedidos_metros_dudosos: 1,
+      metros_dudosos: 1,
+    });
+    expect(e.avisos.join(" ")).toMatch(/sin origen/);
+  });
+
+  it("sin la columna metros_origen no hay precio medido", () => {
+    const e = exportar([pedido({ id: "x", subtotal: 120, iva: 25.2, envio: 0, total: 145.2 })], {
+      lineas: [{ pedido_id: "x", cantidad: 10, unidad: "m", subtotal: 120 }],
+    });
+    expect(e.totales.eur_metro_medido).toBeNull();
+    expect(e.pedidos[0].metros_de).toBe("sin_origen");
+  });
+
+  it("un manual de presupuesto conserva la unidad y sus metros son buenos", () => {
+    const e = exportar(
+      [
+        pedido({
+          id: "pres",
+          origen: "manual",
+          subtotal: 196,
+          iva: 41.16,
+          envio: 0,
+          total: 237.16,
+          metros_total: 3,
+        }),
+      ],
+      {
+        lineas: [
+          { pedido_id: "pres", descripcion: "Camiseta", cantidad: 20, unidad: "ud", subtotal: 160 },
+          { pedido_id: "pres", descripcion: "Metro DTF", cantidad: 3, unidad: "m", subtotal: 36 },
+        ],
+      },
+    );
+    expect(e.pedidos[0]).toMatchObject({ metros_de: "lineas_en_metros", eur_metro: 12 });
+    expect(e.totales.pedidos_metros_dudosos).toBe(0);
+  });
+
+  it("si se anula la factura de un canje, vuelve a contar el ticket (como el CRM)", () => {
+    const e = exportar([pedido({ id: "p" })], {
+      documentos: [
+        { id: "T1", pedido_id: "p", referencia: "T1", tipo: "simplificada", estado: "pagada" },
+        {
+          id: "F1",
+          pedido_id: "p",
+          referencia: "F1",
+          tipo: "ordinaria",
+          estado: "anulada",
+          sustituye_a_id: "T1",
+        },
+        {
+          id: "R1",
+          pedido_id: "p",
+          referencia: "R1",
+          tipo: "rectificativa",
+          estado: "emitida",
+          total: -133.1,
+          rectifica_a_id: "F1",
+        },
+      ],
+    });
+    expect(e.pedidos[0].documento_vigente).toBe("T1");
+    expect(e.totales.pedidos_sin_documento).toBe(0);
   });
 });

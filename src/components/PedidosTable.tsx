@@ -5,7 +5,7 @@ import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -161,6 +161,9 @@ function estadoVariant(estado: string): "default" | "secondary" | "destructive" 
   return "secondary";
 }
 
+const CLAVE_SINCRONIZAR = ["sincronizar-woo"];
+const CLAVE_EXPORTAR = ["exportar-analisis"];
+
 export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const queryClient = useQueryClient();
   // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
@@ -185,6 +188,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const list = useServerFn(listPedidos);
   const sincronizarFn = useServerFn(sincronizarWoo);
   const sincronizar = useMutation({
+    mutationKey: CLAVE_SINCRONIZAR,
     mutationFn: () => sincronizarFn({ data: { tienda_id: tiendaId! } }),
     onSuccess: (r: any) => {
       toast.success(
@@ -202,6 +206,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   // devuelve la exportación: si el filtro cambia mientras tanto, el aviso
   // sigue hablando de lo que se exportó.
   const exportarAnalisis = useMutation({
+    mutationKey: CLAVE_EXPORTAR,
     mutationFn: (tienda: string | undefined) => exportarPedidosParaAnalisis({ tiendaId: tienda }),
     onSuccess: (r) => {
       toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${r.alcance}`, {
@@ -210,8 +215,13 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo exportar"),
   });
-  // Exportar mientras se sincroniza leería pedidos a medio reescribir.
-  const ocupado = sincronizar.isPending || exportarAnalisis.isPending;
+  // Exportar mientras se sincroniza leería pedidos a medio reescribir. Por la
+  // clave, y no por el estado de cada botón, para que el bloqueo siga aunque
+  // se pase de la vista de una tienda a la de todas (en esta pestaña).
+  const ocupado =
+    useIsMutating({ mutationKey: CLAVE_SINCRONIZAR }) +
+      useIsMutating({ mutationKey: CLAVE_EXPORTAR }) >
+    0;
 
   const setEstadoFn = useServerFn(updatePedidoEstado);
   const delFn = useServerFn(deletePedido);
@@ -351,7 +361,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               no cabía en una fila en un portátil y se salía en una tableta. */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={exportarAnalisis.isPending}>
+              <Button variant="outline" size="sm">
                 {exportarAnalisis.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (

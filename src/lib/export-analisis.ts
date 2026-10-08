@@ -100,7 +100,7 @@ export async function exportarPedidosParaAnalisis({
   // metros, y PostgREST no avisa: select("*") simplemente no trae la columna.
   if (lineas.data.length > 0 && !lineas.data.some((l) => "metros_origen" in l)) {
     avisos.push(
-      "Sin la migración 20261020100000 no se sabe qué metros son estimados: metros_estimados sale false en todos.",
+      "Sin la migración 20261020100000 no se sabe de dónde salen los metros: los pedidos web salen con metros_de 'sin_origen', metros_estimados false y eur_metro_medido null.",
     );
   }
 
@@ -111,21 +111,34 @@ export async function exportarPedidosParaAnalisis({
     de_fabrica: true,
   };
   if (empresa.data?.id) {
-    const r = await tabla(supabase, "gerencia_ajustes")
-      .select("precio_metro, web_sin_pagar_cuenta")
-      .eq("empresa_id", empresa.data.id)
-      .maybeSingle();
+    // Como leerAjustesGerencia: sin la migración del precio (20261010100000)
+    // se lee lo de antes, y el precio es el de fábrica.
+    const leer = (conPrecio: boolean) =>
+      tabla(supabase, "gerencia_ajustes")
+        .select(conPrecio ? "precio_metro, web_sin_pagar_cuenta" : "web_sin_pagar_cuenta")
+        .eq("empresa_id", empresa.data.id)
+        .maybeSingle();
+    const r0 = await leer(true);
+    const sinPrecio = faltaLaColumna(r0.error);
+    const r = sinPrecio ? await leer(false) : r0;
     if (r.error) {
       avisos.push(
-        faltaLaTabla(r.error) || faltaLaColumna(r.error)
+        faltaLaTabla(r.error)
           ? "Sin la migración de Ajustes de Gerencia: van los ajustes de fábrica."
           : "No se pudieron leer los Ajustes de Gerencia: van los de fábrica.",
       );
-    } else if (r.data) {
-      ajustes.de_fabrica = false;
-      if (Number(r.data.precio_metro) > 0) ajustes.precio_metro = Number(r.data.precio_metro);
-      if (typeof r.data.web_sin_pagar_cuenta === "boolean") {
-        ajustes.web_sin_pagar_cuenta = r.data.web_sin_pagar_cuenta;
+    } else {
+      if (sinPrecio) {
+        avisos.push(
+          `Sin la migración 20261010100000: el precio por metro es el de fábrica (${AJUSTES_POR_DEFECTO.precio_metro} €).`,
+        );
+      }
+      if (r.data) {
+        ajustes.de_fabrica = false;
+        if (Number(r.data.precio_metro) > 0) ajustes.precio_metro = Number(r.data.precio_metro);
+        if (typeof r.data.web_sin_pagar_cuenta === "boolean") {
+          ajustes.web_sin_pagar_cuenta = r.data.web_sin_pagar_cuenta;
+        }
       }
     }
   }

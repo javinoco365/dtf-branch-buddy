@@ -102,12 +102,12 @@ export const LEEME_ANALISIS = {
     "Pedidos de DTF por metros de las tiendas de DTI S.L. (RONOCA DESARROLLOS S.L.), exportados del CRM para comprobaciones económicas: precio real del metro, márgenes, envíos, devoluciones, cobros y documentos fiscales. Todos los pedidos de todas las fechas del alcance indicado; no lleva el textil, las facturas de compra ni los gastos fijos.",
   moneda: "EUR. Importes redondeados al céntimo; metros con 3 decimales.",
   fechas:
-    "`fecha` es el día del pedido: en los de WooCommerce, el de la hora de la web; en los manuales, el de la hora de España. Es el día que llevan su ticket o su factura. `mes` (yyyy-mm) sale de esa fecha.",
+    "`fecha` es el día del pedido: en los de WooCommerce, el de la hora de la web; en los manuales, el de la hora de España. `mes` (yyyy-mm) sale de esa fecha. Desde el 8-10-2026 el ticket o la factura se proponen con esta fecha; los anteriores, los canjes, las anulaciones, los que se cambiaron a mano y los tickets en bloque que no cabían en la serie llevan otra. Para periodos fiscales, usar documentos[].fecha.",
   definiciones: {
     origen:
       "'woocommerce' (pedido de la tienda online, sincronizado) o 'manual' (dado de alta en el CRM).",
     estado:
-      "Columna antigua que el CRM mantiene a partir de los tres estados de abajo: pendiente, en_produccion, imprimiendo, listo, enviado, entregado, cancelado. En los pedidos web, 'pendiente' es el «pendiente de pago» o «en espera» de WooCommerce (ver web_sin_pagar); en los manuales, que no se ha empezado. Solo 'cancelado' cambia las cifras.",
+      "Columna antigua que el CRM mantiene a partir de los tres estados de abajo: pendiente, en_produccion, imprimiendo, listo, enviado, entregado, cancelado. En los pedidos web, 'pendiente' es el «pendiente de pago» o «en espera» de WooCommerce (ver web_sin_pagar); en los manuales, que no se ha empezado. 'cancelado' saca el pedido de las cifras; 'pendiente' en un pedido web lo marca como web_sin_pagar.",
     estado_pago:
       "pendiente, parcial, pagado o reembolsado. En los manuales, 'parcial' es un anticipo; en los web, un reembolso parcial, y 'reembolsado', uno total. Para el dinero mandan los cobros, no este campo.",
     estado_produccion: "sin_empezar, en_cola, imprimiendo o listo (impreso y empaquetado).",
@@ -135,13 +135,15 @@ export const LEEME_ANALISIS = {
     metros:
       "Metros lineales del pedido (pedidos.metros_total). Los cancelados también lo traen, pero no suman en el resumen. Las devoluciones no los descuentan: lo impreso, impreso está. Ver `metros_de`.",
     metros_de:
-      "'lineas_medidas' (WooCommerce: suma de las líneas en metros, unidad 'm') o 'suma_de_cantidades' (pedidos manuales: el CRM guarda todas sus líneas en 'ud', aunque sean metros, y suma las cantidades de TODAS; si el pedido lleva algo que no es metros, sus metros, su coste y su €/m están mal y no se puede saber qué línea corregir salvo por la descripción).",
+      "De dónde salen los metros del pedido. 'lineas_medidas': pedido web cuyas líneas en metros (unidad 'm') dicen de dónde salen (metros_origen). 'lineas_en_metros': pedido manual hecho desde un presupuesto, que conserva la unidad de cada línea y solo suma las de 'm'. 'sin_origen': pedido web sincronizado antes del 7-10-2026 y no vuelto a sincronizar (o sin la migración de metros_origen): todas sus líneas van en 'm' con la cantidad de WooCommerce, que son unidades, no metros. 'suma_de_cantidades': pedido manual hecho con el formulario: todas sus líneas van en 'ud' aunque sean metros, y se suman las cantidades de TODAS. En 'sin_origen' y 'suma_de_cantidades', si el pedido lleva algo que no es metros, sus metros, su coste y su €/m están mal (ver metros_dudosos en el resumen).",
     metros_estimados:
       "true si alguna línea no trae la longitud del montador de DTFBuild y sus metros se estimaron como subtotal ÷ precio por metro (metros_origen 'precio_ajustes' o 'precio_linea'); metros_de_lineas_estimadas dice cuántos. En esas líneas el €/m es el precio usado por construcción, y la longitud del montador también se descarta y se estima si da un precio fuera de 0,5–1,5 veces el de Ajustes. Por eso los metros mal leídos aparecen como estimados, no como un €/m extremo.",
+    metros_medidos:
+      "true si el pedido tiene líneas en metros y todas traen la longitud leída del montador (metros_origen 'montador'). Solo estos entran en eur_metro_medido.",
     metros_origen:
       "En cada línea: 'montador' (longitud leída del montador), 'precio_linea' o 'precio_ajustes' (estimada), o null (sin dato: líneas que no van en metros o anteriores a guardar el origen; null no garantiza que se midiera).",
     venta_metros:
-      "La parte de la bruta que corresponde a las líneas en metros (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos sin líneas en metros, la bruta entera.",
+      "La parte de la bruta que corresponde a las líneas en metros (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos con metros pero sin líneas en 'm' (manuales del formulario), la bruta entera; en los que no tienen metros, 0 (y eur_metro null).",
     eur_metro:
       "Precio de venta del metro del pedido: venta_metros ÷ metros, sin IVA, sin envío y sin descontar devoluciones. null en los cancelados y en los que no tienen metros.",
     coste_metro:
@@ -153,16 +155,18 @@ export const LEEME_ANALISIS = {
     cobros:
       "Dinero recibido por el pedido. cobrado es la suma de los importes; pendiente = total_neto − cobrado (negativo si se cobró de más). La propina va aparte (propinas y lista[].propina): no es del pedido, pero llega al banco junto con el importe. En los cancelados el estado es 'cancelado' y el pendiente 0, aunque tengan cobros (dinero de un pedido que no se vendió).",
     "cobros.lista[].metodo":
-      "efectivo, tarjeta, transferencia, web o sin_especificar. 'web' es el cobro automático de la tienda online: no dice si se pagó con tarjeta, Bizum o transferencia, ya va neto de reembolsos y lleva la fecha del pedido (en hora de España), no la del pago.",
+      "efectivo, tarjeta, transferencia, web o sin_especificar. 'web' es el cobro automático de la tienda online: no dice si se pagó con tarjeta, Bizum o transferencia, ya va neto de reembolsos y lleva la fecha del pedido (en hora de España), no la del pago. 'sin_especificar' es el apunte que se creó al empezar a registrar cobros (29-9-2026) para los pedidos manuales que constaban pagados o con anticipo: por el TOTAL del pedido y con su fecha; no dice cuándo ni cuánto se cobró de verdad y no sirve para medir plazos de cobro ni tesorería anteriores.",
     documentos:
       "Tickets ('simplificada'), facturas ('ordinaria') y rectificativas ('rectificativa') del pedido. estado: emitida, pagada, vencida o anulada ('pagada' o 'vencida' no dicen nada del cobro: para eso, los cobros). Una rectificativa corrige a la que señala rectifica_a; la de una anulación lleva los importes en negativo. Un canje es una factura que sustituye a un ticket (sustituye_a) por el mismo importe: no se suman los dos. Los ids son los de esos documentos.",
     documento_vigente:
-      "La referencia del documento que cuenta para el pedido (la factura o el ticket que no esté anulado, rectificado ni sustituido), o null si no tiene ninguno.",
+      "La referencia del documento que cuenta para el pedido, con la regla del CRM: la factura o el ticket que no esté anulado ni rectificado; en un canje, la factura (si se anula la factura del canje, vuelve a contar el ticket). null si no tiene ninguno.",
     lineas:
       "subtotal es sin IVA (en WooCommerce, antes de cupones; el pedido ya los descuenta). iva es el IVA real de la línea; iva_pct es el tipo guardado, que en los pedidos web siempre es 21 aunque el IVA real sea otro. coste_unit es el coste congelado por unidad de la línea (0 en las que no van en 'm').",
     resumen_mensual:
-      "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web sin metros estimados, que es el precio real más fiable; `eur_metro_neto` = bruta_neta ÷ metros de los pedidos con metros, la cifra «€/metro» de Gerencia.",
+      "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web cuyas líneas en metros traen todas la longitud del montador (metros_origen 'montador'), que es el precio real más fiable (null si no hay ninguno); `metros_dudosos` y `pedidos_metros_dudosos`, los de metros_de 'sin_origen' o 'suma_de_cantidades'; `eur_metro_neto` = bruta_neta ÷ metros de los pedidos con metros, la cifra «€/metro» de Gerencia.",
     totales: "Lo mismo que una fila del resumen, para todo el fichero.",
+    empresa:
+      "coste_metro_hoy: coste estándar por metro de hoy, por partidas; es el que se usa en los pedidos sin coste guardado. ajustes.precio_metro: precio sin IVA con el que la sincronización estima los metros de las líneas sin longitud; no es una tarifa de venta. ajustes.web_sin_pagar_cuenta: ver diferencias_con_las_pantallas. ajustes.de_fabrica: true si no hay Ajustes de Gerencia guardados; con false, precio_metro puede seguir siendo el 7 por defecto si nunca se cambió.",
   },
   reglas: [
     "Los pedidos cancelados no cuentan en ventas, metros, costes ni pendiente: van aparte (cancelados, importe_cancelados, devuelto_cancelados, cobrado_cancelados).",
@@ -171,14 +175,15 @@ export const LEEME_ANALISIS = {
   ],
   diferencias_con_las_pantallas: [
     "Las cifras usan las reglas de las pantallas (Dashboard, Facturación, Gerencia) y coinciden con ellas salvo céntimos: aquí se redondea cada pedido y se suma; allí se suma y se redondea.",
-    "Mes: las pantallas cortan los meses a medianoche de España sobre la hora guardada, y los pedidos de WooCommerce se guardan con la hora de la web como si fuera UTC. Un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) aquí cuenta en su mes y allí en el siguiente. El de aquí es el del ticket o la factura. Su cobro web cae en el mes siguiente también aquí.",
+    "Mes: las pantallas cortan los meses a medianoche de España sobre la hora guardada, y los pedidos de WooCommerce se guardan con la hora de la web como si fuera UTC. Un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) aquí cuenta en su mes y allí en el siguiente. El de aquí suele ser el del ticket o la factura (ver `fechas`). Su cobro web cae en el mes siguiente también aquí.",
     "«Cobrado» de las pantallas va por la fecha del cobro: es `cobrado_por_fecha_de_cobro`, no `cobrado`.",
+    "Gerencia con «Todas las tiendas» y «Todos los canales», y Facturación Consolidada con «Todas», suman también el textil, que este fichero no lleva. Para comparar, usar en Gerencia una tienda o los canales web y manual, o el Dashboard y la Facturación de cada tienda. El €/metro de Gerencia sí cuadra: el textil no tiene metros.",
     "Si en Ajustes de Gerencia los pedidos web sin pagar no cuentan (empresa.ajustes.web_sin_pagar_cuenta = false), Gerencia los quita de las ventas; aquí siempre cuentan, y se dan aparte (pedidos_web_sin_pagar, total_neto_web_sin_pagar).",
   ],
   comprobaciones_sugeridas: [
     "Que en cada fila base_neta = bruta_neta + envios_netos, y que la suma de los pedidos de cada mes dé su fila.",
     "Precio real del metro (eur_metro_medido) por mes y tienda frente al precio de Ajustes (empresa.ajustes.precio_metro). eur_metro mezcla metros estimados, que valen el precio de Ajustes por construcción.",
-    "Pedidos con eur_metro muy por encima o por debajo de la media, sobre todo manuales (metros_de 'suma_de_cantidades') con líneas que no son metros.",
+    "Pedidos con eur_metro muy por encima o por debajo de la media, sobre todo los de metros dudosos (metros_de 'sin_origen' o 'suma_de_cantidades') con líneas que no son metros.",
     "Peso de los metros estimados (metros_de_lineas_estimadas ÷ metros): cuanto más alto, menos se sabe de lo impreso de verdad.",
     "Peso de los envíos y de las devoluciones (también las de los cancelados) sobre la venta.",
     "Margen estimado por mes, por tienda y por metro; pedidos con margen negativo.",
@@ -276,6 +281,15 @@ export function construirExportAnalisis(d: {
           : subMetros > 0 && subLineas > 0
             ? redondear((bruta * subMetros) / subLineas)
             : bruta;
+      // Medido: todas sus líneas en metros traen la longitud del montador.
+      const medido = enMetros.length > 0 && enMetros.every((l) => l.metros_origen === "montador");
+      const metros_de = web
+        ? enMetros.some((l) => l.metros_origen == null)
+          ? "sin_origen"
+          : "lineas_medidas"
+        : enMetros.length > 0
+          ? "lineas_en_metros"
+          : "suma_de_cantidades";
       const metrosEstimados = redondear(
         enMetros.filter(esLineaEstimada).reduce((s, l) => s + num(l.cantidad), 0),
         3,
@@ -289,8 +303,16 @@ export function construirExportAnalisis(d: {
       const rc = resumenCobros(total_neto, cobros);
 
       const docs = documentosDe.get(p.id) ?? [];
-      // En un canje cuenta la factura: el ticket sustituido deja de valer.
-      const sustituidos = docs.flatMap((x) => (x.sustituye_a_id ? [x.sustituye_a_id] : []));
+      // En un canje cuenta la factura, mientras ella misma valga: si se anula
+      // o se rectifica, el CRM vuelve a dar por bueno el ticket.
+      const sustituidos = docs.flatMap((x) =>
+        x.sustituye_a_id &&
+        x.estado !== "anulada" &&
+        x.estado !== "borrador" &&
+        !docs.some((r) => r.rectifica_a_id === x.id)
+          ? [x.sustituye_a_id]
+          : [],
+      );
       const vigente = documentoVigente(
         docs
           .filter((x) => TIPOS_DOCUMENTO.has(x.tipo ?? ""))
@@ -335,7 +357,8 @@ export function construirExportAnalisis(d: {
           total_neto,
         },
         metros,
-        metros_de: web ? "lineas_medidas" : "suma_de_cantidades",
+        metros_de,
+        metros_medidos: medido,
         metros_estimados: filas.some(esLineaEstimada),
         metros_de_lineas_estimadas: metrosEstimados,
         venta_metros,
@@ -390,10 +413,10 @@ export function construirExportAnalisis(d: {
     const validos = lista.filter((p) => !p.cancelado);
     const cancelados = lista.filter((p) => p.cancelado);
     const conMetros = validos.filter((p) => p.metros > 0);
-    const medidos = conMetros.filter(
-      (p) => p.metros_de === "lineas_medidas" && !p.metros_estimados,
+    const medidos = conMetros.filter((p) => p.metros_medidos);
+    const dudosos = validos.filter(
+      (p) => p.metros_de === "sin_origen" || p.metros_de === "suma_de_cantidades",
     );
-    const manuales = validos.filter((p) => p.metros_de === "suma_de_cantidades");
     const sinPagar = validos.filter((p) => p.web_sin_pagar);
     const sinDocumento = validos.filter((p) => p.documento_vigente === null);
     const metrosDe = (l: readonly Fila[]) =>
@@ -425,8 +448,8 @@ export function construirExportAnalisis(d: {
         3,
       ),
       pedidos_con_metros_estimados: validos.filter((p) => p.metros_estimados).length,
-      pedidos_manuales: manuales.length,
-      metros_manuales: metrosDe(manuales),
+      pedidos_metros_dudosos: dudosos.length,
+      metros_dudosos: metrosDe(dudosos),
       coste_produccion: coste,
       margen_estimado: redondear(bruta_neta - coste),
       cobrado: sumar(validos, (p) => p.cobros.cobrado),
@@ -472,7 +495,13 @@ export function construirExportAnalisis(d: {
     });
 
   const descuadres = pedidos.filter((p) => Math.abs(p.importes.descuadre) >= 0.01).length;
+  const sinOrigen = pedidos.filter((p) => p.metros_de === "sin_origen").length;
   const avisos = [...(d.avisos ?? [])];
+  if (sinOrigen > 0) {
+    avisos.push(
+      `${sinOrigen} pedido(s) web con metros sin origen (metros_de 'sin_origen'): sus «metros» pueden ser unidades de WooCommerce. Quedan fuera de eur_metro_medido.`,
+    );
+  }
   if (descuadres > 0) {
     avisos.push(
       `${descuadres} pedido(s) en los que base + IVA no da el total: ver importes.descuadre.`,
