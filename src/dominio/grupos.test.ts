@@ -147,6 +147,19 @@ describe("cuenta de resultados en tres columnas", () => {
     });
   });
 
+  it("en la cuenta de resultados el envío cobrado es ingreso y lo de la agencia, gasto", () => {
+    const r = resultadosPorGrupo({
+      ventas: [pedido("a", 110, { envio: 10 })],
+      documentados: new Set(["a"]),
+      costeActual: 0,
+      facturadoSinPedido: 0,
+      costesFijos: { a: 0, b: 0 },
+      tipoIs: 0,
+    });
+    // Ingresos con el envío; el envío vuelve a salir como gasto: el margen, sin él.
+    expect(r.a).toMatchObject({ ingresos: 110, envios: 10, margen: 100 });
+  });
+
   it("un gasto sin justificante no rebaja Sociedades", () => {
     const base = {
       ventas: [pedido("a", 1000)],

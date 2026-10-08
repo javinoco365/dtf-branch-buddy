@@ -19,6 +19,7 @@ import {
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
 import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
+import { fechaDocumentoDePedido } from "@/dominio/fecha-documento";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1209,7 +1210,7 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
 async function leerPedidoTextilParaDocumento(supabase: any, pedidoId: string) {
   const { data: pedido, error } = await supabase
     .from("textil_pedidos")
-    .select("id, numero, cliente_id, cliente_nombre, cliente_email, marca_id, envio, notas")
+    .select("id, numero, cliente_id, cliente_nombre, cliente_email, marca_id, envio, notas, fecha")
     .eq("id", pedidoId)
     .maybeSingle();
   if (error) throw error;
@@ -1306,6 +1307,8 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
       tipo_fiscal: tipoFiscal,
       limites,
       notas: (pedido.notas as string | null) ?? null,
+      // El documento sale, por defecto, con la fecha del pedido.
+      fecha_pedido: fechaDocumentoDePedido(pedido.fecha as string | null),
     };
   });
 

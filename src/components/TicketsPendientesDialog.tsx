@@ -30,7 +30,7 @@ import {
  * documento.
  *
  * Primero se ve qué entra, en un periodo que se elige (por defecto, este
- * mes): emitir hoy tickets de ventas de hace meses es una decisión fiscal, no
+ * mes): emitir tickets de ventas de hace meses es una decisión fiscal, no
  * un clic. En bloque solo van los que no admiten duda —sin NIF y dentro del
  * límite—; el resto se enseña para hacerlo uno a uno desde el pedido.
  */
@@ -49,7 +49,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     null,
   );
   const [resultado, setResultado] = useState<{
-    emitidos: { pedido: string; referencia: string; id: string }[];
+    emitidos: { pedido: string; referencia: string; id: string; nota?: string }[];
     omitidos: { pedido: string; motivo: string }[];
   } | null>(null);
 
@@ -122,8 +122,8 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
         <DialogHeader>
           <DialogTitle>Tickets de pedidos cobrados</DialogTitle>
           <DialogDescription>
-            Pedidos cobrados enteros que todavía no tienen ticket ni factura. Los tickets salen con
-            la fecha de hoy.
+            Pedidos cobrados enteros que todavía no tienen ticket ni factura. Cada ticket sale con
+            la fecha de su pedido, del más antiguo al más reciente.
           </DialogDescription>
         </DialogHeader>
 
@@ -153,6 +153,13 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
                 {resultado.emitidos.map((e) => `${e.referencia} (${e.pedido})`).join(", ")}
               </p>
             )}
+            {resultado.emitidos
+              .filter((e) => e.nota)
+              .map((e) => (
+                <p key={`nota-${e.id}`} className="text-muted-foreground">
+                  {e.referencia} ({e.pedido}): {e.nota}
+                </p>
+              ))}
             {pdfs && (
               <p className="text-muted-foreground">
                 {pdfs.hechos < pdfs.total

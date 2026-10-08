@@ -90,6 +90,23 @@ describe("cifrasGerencia", () => {
     expect(c.euroMetro).toBe(10);
   });
 
+  it("la bruta va sin el envío cobrado, y el coste sin el de la agencia: el margen no cambia", () => {
+    // 100 € de base con 10 € de envío dentro, 10 m a 1,5 €/m.
+    const c = cifrasGerencia(
+      [tienda({ subtotal: 100, envio: 10, iva: 21, total: 121, coste_metro_snapshot: 1.5 })],
+      0,
+    );
+    expect(c.base).toBe(100);
+    expect(c.envios).toBe(10);
+    expect(c.bruta).toBe(90);
+    expect(c.costeEnvios).toBe(10);
+    expect(c.coste).toBe(15);
+    // Igual que antes: 100 − 15 de producción − 10 de agencia.
+    expect(c.margen).toBe(75);
+    // El metro, sin el envío: 90 ÷ 10.
+    expect(c.euroMetro).toBe(9);
+  });
+
   it("sin metros, el € por metro es cero, no infinito", () => {
     expect(cifrasGerencia([textil()], 1).euroMetro).toBe(0);
   });

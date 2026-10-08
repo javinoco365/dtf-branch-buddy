@@ -159,7 +159,10 @@ export function filtrarPendientesGerencia(
 // ---------------------------------------------------------------------------
 
 export type CifrasGerencia = KpisPeriodo & {
-  /** Coste DTF, envíos y coste textil. */
+  /**
+   * Coste DTF y coste textil. Sin el envío: tampoco va en la bruta (se cobra
+   * al cliente y se paga a la agencia por lo mismo).
+   */
   coste: number;
   /** Lo que se paga a la agencia: lo mismo que el envío cobrado al cliente. */
   costeEnvios: number;
@@ -181,10 +184,10 @@ export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): C
   const costeDtf = variable.produccion;
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
-  const coste = redondear(variable.total + costeTextil);
+  const coste = redondear(costeDtf + costeTextil);
   const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
-  // El precio del metro sin el envío: lo que se cobra por imprimir.
-  const brutaMetros = conMetros.bruta - conMetros.envios;
+  // El precio del metro: la bruta ya va sin el envío, lo que se cobra por imprimir.
+  const brutaMetros = conMetros.bruta;
   return {
     ...k,
     coste,

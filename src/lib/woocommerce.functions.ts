@@ -757,3 +757,93 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
       }),
     };
   });
+
+/**
+ * Recupera el envío de los pedidos de WooCommerce sincronizados antes de que
+ * se guardara (F1, 7-10-2026): esos se quedaron con `envio` a 0 aunque el
+ * cliente pagara portes, y el envío iba escondido dentro de la base. Sin él,
+ * la facturación bruta de los meses viejos lleva los portes y la de los nuevos
+ * no, y no se pueden comparar.
+ *
+ * Se hace de cien en cien (una llamada a WooCommerce cada vez) y la pantalla la
+ * repite con `desde` hasta que no quedan. Solo toca pedidos con el envío a 0 y
+ * solo les pone lo que dice WooCommerce: se puede repetir sin estropear nada.
+ */
+export const recuperarEnviosWoo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid(),
+        /** El último woo_order_id revisado: se sigue a partir de ahí. */
+        desde: z.number().int().nonnegative().default(0),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    // La misma comprobación que la sincronización: de la tienda o administrador.
+    const { data: miembro } = await supabaseAdmin
+      .from("tienda_usuarios")
+      .select("tienda_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("Esta tienda no tiene URL de WooCommerce");
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Esta tienda no tiene credenciales de WooCommerce guardadas");
+
+    const { data: filas, error } = await tabla(supabaseAdmin, "pedidos")
+      .select("id, woo_order_id")
+      .eq("tienda_id", data.tienda_id)
+      .eq("envio", 0)
+      .not("woo_order_id", "is", null)
+      .gt("woo_order_id", data.desde)
+      .order("woo_order_id")
+      .limit(100);
+    if (error) throw new Error(error.message);
+    const pedidos = (filas ?? []) as { id: string; woo_order_id: number }[];
+    if (pedidos.length === 0) return { revisados: 0, actualizados: 0, siguiente: null };
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const ids = pedidos.map((p) => p.woo_order_id).join(",");
+    const r = await fetch(
+      `${base}/wp-json/wc/v3/orders?include=${ids}&per_page=100&status=any&_fields=id,shipping_total`,
+      { headers: { Authorization: autorizacionWoo(creds), Accept: "application/json" } },
+    );
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+    const ordenes = (await r.json()) as { id: number; shipping_total?: string | number | null }[];
+    const envioDe = new Map(ordenes.map((o) => [Number(o.id), importesPedidoWoo(o).envio]));
+
+    let actualizados = 0;
+    for (const p of pedidos) {
+      const envio = envioDe.get(Number(p.woo_order_id)) ?? 0;
+      if (envio <= 0) continue;
+      const { error: uErr } = await tabla(supabaseAdmin, "pedidos")
+        .update({ envio })
+        .eq("id", p.id)
+        .eq("envio", 0);
+      if (uErr) throw new Error(uErr.message);
+      actualizados++;
+    }
+    return {
+      revisados: pedidos.length,
+      actualizados,
+      siguiente: pedidos.length === 100 ? pedidos[pedidos.length - 1].woo_order_id : null,
+    };
+  });

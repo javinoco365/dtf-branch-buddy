@@ -14,6 +14,7 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import { diaEnEspana, esRechazoPorFecha, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -548,7 +549,7 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
   // tabla() y no .from(): direccion_facturacion no está en types.ts.
   const { data: pedido, error: pErr } = await tabla(sb, "pedidos")
     .select(
-      "id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas",
+      "id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas, fecha_pedido, origen",
     )
     .eq("id", pedidoId)
     .maybeSingle();
@@ -638,6 +639,10 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       lineas,
       sin_nif: !receptor.nif,
       notas: (pedido.notas as string | null) ?? null,
+      // El documento sale, por defecto, con la fecha del pedido.
+      fecha_pedido: fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
+        horaDeLaWeb: pedido.origen === "woocommerce",
+      }),
       total,
       tipo_fiscal: tipoFiscal,
       limites,
@@ -844,14 +849,37 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
     const { adminComoUsuario, supabaseAdmin } =
       await import("@/integrations/supabase/client.server");
     const sb = adminComoUsuario(context.userId);
-    const fecha = new Date().toISOString().slice(0, 10);
+
+    // Cada ticket, con la fecha de su pedido, y en orden de fecha: la base no
+    // deja numerar hacia atrás, así que el más antiguo va primero.
+    const { data: fechas } = await tabla(sb, "pedidos")
+      .select("id, fecha_pedido, origen")
+      .in("id", data.pedido_ids);
+    const fechaDe = new Map<string, string>(
+      ((fechas ?? []) as { id: string; fecha_pedido: string | null; origen: string | null }[]).map(
+        (p) => [
+          p.id,
+          fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" }),
+        ],
+      ),
+    );
+    const hoy = diaEnEspana(new Date());
+    const enOrden = [...data.pedido_ids].sort((a, b) =>
+      (fechaDe.get(a) ?? "").localeCompare(fechaDe.get(b) ?? ""),
+    );
 
     // Sin PDF aquí: son hasta 200. La pantalla los guarda después, por tandas
     // (rellenarPdfsTienda con estos ids).
-    const emitidos: { pedido: string; referencia: string; id: string }[] = [];
+    const emitidos: {
+      pedido: string;
+      referencia: string;
+      id: string;
+      /** Si no pudo llevar la fecha de su pedido, por qué. */
+      nota?: string;
+    }[] = [];
     const omitidos: { pedido: string; motivo: string }[] = [];
 
-    for (const id of data.pedido_ids) {
+    for (const id of enOrden) {
       let numero = id;
       try {
         const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
@@ -878,17 +906,33 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
           omitidos.push({ pedido: numero, motivo: "no va en ticket: revísalo en el pedido" });
           continue;
         }
-        const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
-          _usuario_id: context.userId,
-          _tienda_id: pedido.tienda_id,
-          _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
-          _lineas: lineas,
-          _fecha: fecha,
-          _cliente_id: pedido.cliente_id ?? null,
-          _pedido_id: id,
-          _simplificada: true,
-        });
-        emitidos.push({ pedido: numero, referencia: r.referencia, id: r.id });
+        const emitir = (fecha: string) =>
+          llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
+            _usuario_id: context.userId,
+            _tienda_id: pedido.tienda_id,
+            _receptor: receptor.nombre ? { nombre: receptor.nombre } : {},
+            _lineas: lineas,
+            _fecha: fecha,
+            _cliente_id: pedido.cliente_id ?? null,
+            _pedido_id: id,
+            _simplificada: true,
+          });
+        const fechaPedido = fechaDe.get(id) ?? hoy;
+        try {
+          const r = await emitir(fechaPedido);
+          emitidos.push({ pedido: numero, referencia: r.referencia, id: r.id });
+        } catch (e) {
+          // La serie de tickets es una para toda la empresa: si ya tiene uno
+          // posterior, el del pedido no puede ir hacia atrás. Sale con la de hoy.
+          if (!esRechazoPorFecha((e as Error).message) || fechaPedido === hoy) throw e;
+          const r = await emitir(hoy);
+          emitidos.push({
+            pedido: numero,
+            referencia: r.referencia,
+            id: r.id,
+            nota: "con fecha de hoy: la serie ya tenía un ticket posterior a su pedido",
+          });
+        }
       } catch (e) {
         omitidos.push({ pedido: numero, motivo: (e as Error).message || "error al emitir" });
       }

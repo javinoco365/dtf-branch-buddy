@@ -88,11 +88,11 @@ function DashboardGlobal() {
   const cobradoPrev = totalizar(cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [])).cobrado;
 
   // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
-  // con el de hoy.
-  // El envío también: se cobra al cliente y se paga a la agencia.
+  // con el de hoy. El envío no entra: la bruta ya va sin él, y lo que se
+  // cobra al cliente es lo que se paga a la agencia.
   const costePer = costeVariable(pedidos, costeMetro);
-  const margenPer = k.bruta - costePer.total;
-  const margenPrev = kPrev.bruta - costeVariable(pedidosAnt, costeMetro).total;
+  const margenPer = k.bruta - costePer.produccion;
+  const margenPrev = kPrev.bruta - costeVariable(pedidosAnt, costeMetro).produccion;
   // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
   const sinCostes = costeMetro === 0 && costePer.produccion === 0;
 
@@ -190,6 +190,13 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
+              pie={
+                k.envios > 0 ? (
+                  <span className="text-muted-foreground">
+                    Aparte, {eur(k.envios)} de envíos cobrados
+                  </span>
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo="Cobrado"
