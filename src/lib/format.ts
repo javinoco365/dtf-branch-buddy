@@ -52,6 +52,16 @@ export const eurUnitario = (n: number | null | undefined) =>
   }).format(Number(n ?? 0));
 
 /**
+ * Un importe con su signo delante, como en los libros de caja: +1.234,00 € ·
+ * −56,78 €. El menos es el signo «−», no el guion que escribe eur()
+ * (-56,78 €), y el cero lleva «+».
+ */
+export const eurConSigno = (n: number | null | undefined) => {
+  const v = Number(n ?? 0);
+  return `${v < 0 ? "−" : "+"}${eur(Math.abs(v))}`;
+};
+
+/**
  * La referencia visible de una factura: 2026/0001, R2026/0001.
  *
  * Réplica exacta de public.factura_referencia(). La base es la fuente de
