@@ -33,7 +33,13 @@ import {
   recuperarEnviosWoo,
 } from "@/lib/woocommerce.functions";
 import { eur, metros as fmtMetros, numero } from "@/lib/format";
-import { seguirConOtraTanda, type CursorWoo } from "@/dominio/cursor-woo";
+import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
+import {
+  SUMA_SYNC_WOO_VACIA,
+  sumarTandaWoo,
+  textoProtegidos,
+  textoSincronizado,
+} from "@/lib/sync-woo";
 import {
   RefreshCw,
   KeyRound,
@@ -178,27 +184,15 @@ function Ajustes() {
   // dice por dónde seguir; se repite hasta que no queda nada. Lo traído se
   // queda guardado aunque una tanda falle.
   async function sincronizarAhora() {
-    const suma = {
-      pedidos: 0,
-      clientes: 0,
-      productos: 0,
-      devoluciones: 0,
-      borrados: 0,
-      protegidos: 0,
-    };
+    let suma = SUMA_SYNC_WOO_VACIA;
     const avisos = new Set<string>();
-    let continuar: CursorWoo | undefined;
+    let continuar: ContinuacionWoo | undefined;
     let quedan: number | null = null;
     setProgresoSync({ pedidos: 0, quedan: null });
     try {
       for (let tanda = 1; ; tanda++) {
         const r = await sync({ data: { tienda_id: tiendaId, continuar } });
-        suma.pedidos += r.pedidos;
-        suma.clientes += r.clientes;
-        suma.productos += r.productos;
-        suma.devoluciones += r.devoluciones_actualizadas;
-        suma.borrados += r.pedidos_borrados;
-        suma.protegidos += r.protegidos_por_factura;
+        suma = sumarTandaWoo(suma, r);
         r.avisos.forEach((a) => avisos.add(a));
         quedan = r.quedan;
         setProgresoSync({ pedidos: suma.pedidos, quedan });
@@ -223,27 +217,9 @@ function Ajustes() {
         break;
       }
 
-      const detalles = [
-        `${numero(suma.pedidos, 0)} pedidos`,
-        `${numero(suma.clientes, 0)} clientes`,
-        `${numero(suma.productos, 0)} productos`,
-      ];
-      if (suma.devoluciones > 0) {
-        detalles.push(`${numero(suma.devoluciones, 0)} con devolución`);
-      }
-      if (suma.borrados > 0) {
-        detalles.push(`${numero(suma.borrados, 0)} borrados (ya no están en WooCommerce)`);
-      }
-      toast.success(`Sincronizado: ${detalles.join(", ")}`);
-      if (suma.protegidos > 0) {
-        toast.warning(
-          `${numero(suma.protegidos, 0)} ${
-            suma.protegidos === 1
-              ? "pedido ha desaparecido de WooCommerce pero no se ha borrado"
-              : "pedidos han desaparecido de WooCommerce pero no se han borrado"
-          }: tienen una factura emitida.`,
-        );
-      }
+      toast.success(textoSincronizado(suma));
+      const protegidos = textoProtegidos(suma);
+      if (protegidos) toast.warning(protegidos);
       avisos.forEach((a) => toast.warning(a));
     } catch (e) {
       toast.error(
@@ -385,11 +361,12 @@ function Ajustes() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            «Sincronizar ahora» trae todo lo que ha cambiado en WooCommerce desde la última vez:
-            pedidos nuevos o modificados, clientes nuevos y productos. Si hay mucho, va por tandas y
-            dice cuántos pedidos quedan. «Sincronizar clientes» recorre todo el historial de la
-            tienda en WooCommerce: úsala si sospechas que algún cliente —con cuenta o de invitado—
-            nunca ha llegado a tener ficha aquí. Puede tardar más si la tienda tiene mucho
+            «Sincronizar ahora» vuelve a traer los 100 últimos pedidos y todo lo que ha cambiado en
+            WooCommerce desde la última vez: pedidos nuevos o modificados, clientes nuevos y
+            productos. Si hay mucho, va por tandas y dice cuántos pedidos quedan. Solo puede haber
+            una sincronización a la vez por tienda. «Sincronizar clientes» recorre todo el historial
+            de la tienda en WooCommerce: úsala si sospechas que algún cliente —con cuenta o de
+            invitado— nunca ha llegado a tener ficha aquí. Puede tardar más si la tienda tiene mucho
             historial.
           </p>
         </TabsContent>

@@ -36,6 +36,38 @@
  * avanza; entonces sí se pide la página siguiente de la misma consulta.
  * WooCommerce desempata por id, así que ese orden es estable.
  *
+ * La página se guarda con la fecha (`pedidos_pagina`, migración
+ * 20261024110000): sin ella, una sincronización de una sola tanda (el botón de
+ * Pedidos) volvía siempre a la página 1 de ese segundo y, con 500 o más
+ * pedidos en él, no salía nunca de ahí. Lo que no cubre: si entre una tanda y
+ * la siguiente se vuelve a modificar un pedido de las páginas ya vistas de ese
+ * segundo, se va al final y los demás se corren un puesto; el que queda justo
+ * en el borde de la página no se ve hasta que vuelva a cambiar. Solo pasa con
+ * cientos de pedidos en el mismo segundo y otro cambio encima de ellos.
+ *
+ * ## Además, siempre, los 100 últimos por fecha
+ *
+ * Si la tienda guarda los pedidos en el almacenamiento clásico de WordPress
+ * (sin HPOS), editar las líneas de un pedido sin cambiarle el estado no mueve
+ * su fecha de modificación: por el cursor no llegaría nunca. Por eso cada
+ * sincronización empieza trayendo los 100 últimos pedidos por fecha de
+ * creación, como se hacía antes, y con esa misma lista mira qué pedidos se han
+ * borrado en WooCommerce. Los que después vuelven a salir por el cursor con la
+ * misma fecha de modificación no se guardan dos veces (`sinGuardarTodavia`).
+ *
+ * Sin la tabla del cursor (migración 20261024100000 sin aplicar) solo se hace
+ * eso: sin un sitio donde guardar por dónde va, recorrer desde un día antes del
+ * último pedido se quedaba dando vueltas sobre lo mismo si un cambio masivo
+ * tocaba más pedidos de los que caben en una tanda.
+ *
+ * ## Por tandas, con un presupuesto
+ *
+ * Una llamada hace como mucho `TANDA_WOO` (páginas y tiempo), contando TODO lo
+ * que pide a WooCommerce: los 100 últimos, los clientes nuevos, los pedidos y
+ * los productos, por ese orden. Lo que no cabe queda en `ContinuacionWoo`, que
+ * la pantalla de Ajustes devuelve en la tanda siguiente, y además guardado en
+ * woo_sincronizacion, de donde sigue cualquier sincronización posterior.
+ *
  * ## La hora
  *
  * Con `dates_are_gmt=true` WooCommerce compara con la fecha GMT. WordPress lee
@@ -48,26 +80,32 @@
 export const POR_PAGINA_WOO = 100;
 
 /**
- * Cuánto trabajo hace una llamada a `sincronizarWoo` como mucho. Una página de
- * 100 pedidos completos tarda unos segundos entre WooCommerce y la base; con
- * esto una tanda se queda por debajo de lo que una función en Vercel puede
- * tardar. Lo que no cabe lo hace la tanda siguiente, desde donde se quedó.
+ * Cuánto trabajo hace una llamada a `sincronizarWoo` como mucho, contando
+ * todas las páginas que pide a WooCommerce (los 100 últimos, clientes, pedidos
+ * y productos). Una página de 100 pedidos completos tarda unos segundos entre
+ * WooCommerce y la base; con esto una tanda se queda por debajo de lo que una
+ * función en Vercel puede tardar. Lo que no cabe lo hace la tanda siguiente,
+ * desde donde se quedó.
  */
 export const TANDA_WOO = { paginas: 5, milisegundos: 10_000 } as const;
 
 /**
- * Páginas de productos o de clientes nuevos en una sincronización: 2.000 de
- * cada. Muy por encima de lo que cambia entre dos sincronizaciones; si se
- * alcanza, se avisa.
- */
-export const PAGINAS_MAX_CATALOGO = 20;
-
-/**
- * Página más alta que se pide de una misma consulta: solo se pasa de la 1
- * cuando cientos de pedidos comparten el mismo segundo de modificación.
- * 100 páginas son 10.000 pedidos en un segundo: si se llega, algo va mal.
+ * Página más alta que se pide de una misma consulta. Para pedidos y productos
+ * solo se pasa de la 1 cuando cientos comparten el mismo segundo de
+ * modificación: 100 páginas son 10.000 en un segundo, y si se llega, algo va
+ * mal. Para los clientes nuevos son 10.000 altas desde la última vez: para
+ * eso está «Sincronizar clientes».
  */
 export const PAGINA_MAXIMA_WOO = 100;
+
+/**
+ * Cuánto dura el turno de una sincronización (el arrendamiento de
+ * woo_sincronizacion, migración 20261024110000). Se renueva antes de guardar
+ * cada página, así que solo tiene que cubrir una página con holgura. Si la
+ * función muere sin soltarlo, la tienda queda libre como mucho este rato
+ * después.
+ */
+export const ARRENDAMIENTO_WOO_SEGUNDOS = 120;
 
 /** Tandas seguidas que lanza la pantalla antes de parar y avisar. */
 export const TANDAS_MAX_WOO = 200;
@@ -107,6 +145,18 @@ export function fechaGmtWoo(valor: unknown): string | null {
  */
 export function modificadoDespuesDe(desde: string, margenMs = MARGEN_MS): string {
   return new Date(Date.parse(desde) - margenMs).toISOString().slice(0, 19);
+}
+
+/**
+ * Los parámetros de los 100 más recientes, sin cursor: los pedidos por fecha
+ * de creación (`date`), lo que se hacía antes de haber cursor, y los productos
+ * por fecha de modificación (`modified`) cuando no hay dónde guardar el suyo.
+ */
+export function parametrosUltimosWoo(
+  orden: "date" | "modified",
+  porPagina = POR_PAGINA_WOO,
+): Record<string, string> {
+  return { per_page: String(porPagina), orderby: orden, order: "desc" };
 }
 
 /** Los parámetros de la consulta de una página, desde el cursor. */
@@ -198,12 +248,17 @@ export function quedanTrasPagina(
   return Math.max(0, totalConsulta - (cursor.pagina - 1) * porPagina - recibidos);
 }
 
-/** Si cabe otra página en esta tanda. La primera siempre se pide. */
+/**
+ * Si cabe otra página en esta tanda. La primera siempre se pide, aunque lo de
+ * antes (credenciales, permisos) haya tardado: si no, una tanda podría no
+ * hacer nada y la siguiente repetiría lo mismo.
+ */
 export function otraPaginaEnEstaTanda(
   paginasHechas: number,
   msTranscurridos: number,
   limites: { paginas: number; milisegundos: number } = TANDA_WOO,
 ): boolean {
+  if (paginasHechas === 0) return true;
   return paginasHechas < limites.paginas && msTranscurridos < limites.milisegundos;
 }
 
@@ -248,23 +303,233 @@ export function clientesNuevosDePagina<T extends { id: number }>(
   return { nuevos, fin };
 }
 
+/**
+ * Una pasada por los clientes nuevos de WooCommerce: de id mayor a menor, una
+ * página detrás de otra, hasta llegar a `hasta_id`.
+ *
+ * - `hasta_id`: hasta dónde están ya todos (los de id menor o igual). Es el
+ *   tope de la pasada anterior; la primera vez, el id más alto que hay aquí.
+ *   No se saca del id más alto de Clientes en cada pasada: los pedidos que se
+ *   sincronizan dan de alta a sus clientes, y uno con un id alto haría creer
+ *   que ya están todos los de debajo, aunque se registraran antes sin comprar.
+ * - `tope_id`: el id más alto que se vio en la primera página de esta pasada.
+ *   Al terminar, pasa a ser el `hasta_id` de la siguiente: quien se dé de alta
+ *   mientras tanto tiene un id mayor y entra en ella.
+ * - `pagina`: la siguiente que pedir.
+ *
+ * Seguir por número de página es seguro: los clientes que se dan de alta
+ * mientras tanto entran arriba y empujan a los demás hacia abajo, así que la
+ * página siguiente repite alguno (se vuelve a guardar igual) pero no se salta
+ * ninguno.
+ */
+export type PasadaClientesWoo = { hasta_id: number | null; tope_id: number | null; pagina: number };
+
+/**
+ * Lo que se guarda de los clientes en woo_sincronizacion: una pasada a medias
+ * (`pagina` con número) o, entre pasadas, solo hasta dónde están todos
+ * (`pagina: null`).
+ */
+export type EstadoClientesWoo = {
+  hasta_id: number | null;
+  tope_id: number | null;
+  pagina: number | null;
+};
+
+/** La pasada que toca con lo guardado: la que quedó a medias, o una nueva desde lo cubierto. */
+export function pasadaDesdeEstado(e: EstadoClientesWoo): PasadaClientesWoo {
+  return e.pagina != null
+    ? { hasta_id: e.hasta_id, tope_id: e.tope_id, pagina: e.pagina }
+    : { hasta_id: e.hasta_id, tope_id: null, pagina: 1 };
+}
+
+/**
+ * Lo que queda de la pasada después de una página (`siguiente: null` si ya ha
+ * terminado) y lo que hay que guardar.
+ */
+export function siguientePasadaClientes<T extends { id: number }>(
+  pasada: PasadaClientesWoo,
+  pagina: readonly T[],
+  porPagina = POR_PAGINA_WOO,
+): { nuevos: T[]; siguiente: PasadaClientesWoo | null; estado: EstadoClientesWoo; tope: boolean } {
+  const { nuevos, fin } = clientesNuevosDePagina(pagina, pasada.hasta_id, porPagina);
+  let tope_id = pasada.tope_id;
+  if (pasada.pagina === 1) {
+    for (const c of pagina) {
+      const id = Number(c.id);
+      if (Number.isFinite(id) && (tope_id === null || id > tope_id)) tope_id = id;
+    }
+  }
+  const alcanzado = pasada.pagina + 1 > PAGINA_MAXIMA_WOO;
+  if (fin || alcanzado) {
+    // Terminada: todo lo de debajo del tope ya está. Nunca hacia atrás.
+    const hasta =
+      tope_id !== null && (pasada.hasta_id === null || tope_id > pasada.hasta_id)
+        ? tope_id
+        : pasada.hasta_id;
+    return {
+      nuevos,
+      siguiente: null,
+      estado: { hasta_id: hasta, tope_id: null, pagina: null },
+      tope: !fin,
+    };
+  }
+  const siguiente = { hasta_id: pasada.hasta_id, tope_id, pagina: pasada.pagina + 1 };
+  return { nuevos, siguiente, estado: siguiente, tope: false };
+}
+
+/**
+ * Lo que le queda a una sincronización: cada parte es `null` cuando ya está al
+ * día. Se recorre en este orden: clientes nuevos, pedidos, productos.
+ */
+export type ContinuacionWoo = {
+  clientes: PasadaClientesWoo | null;
+  pedidos: CursorWoo | null;
+  productos: CursorWoo | null;
+};
+
+/** La continuación, o `null` si ya no queda nada. */
+export function continuacionPendiente(c: ContinuacionWoo): ContinuacionWoo | null {
+  return c.clientes || c.pedidos || c.productos ? c : null;
+}
+
+function mismoCursor(a: CursorWoo | null, b: CursorWoo | null): boolean {
+  if (!a || !b) return a === b;
+  return a.desde === b.desde && a.pagina === b.pagina;
+}
+
+/** Si dos continuaciones dicen exactamente lo mismo. */
+export function mismaContinuacion(a: ContinuacionWoo, b: ContinuacionWoo): boolean {
+  const mismosClientes =
+    !a.clientes || !b.clientes
+      ? a.clientes === b.clientes
+      : a.clientes.hasta_id === b.clientes.hasta_id &&
+        a.clientes.tope_id === b.clientes.tope_id &&
+        a.clientes.pagina === b.clientes.pagina;
+  return (
+    mismosClientes && mismoCursor(a.pedidos, b.pedidos) && mismoCursor(a.productos, b.productos)
+  );
+}
+
+/**
+ * Los pedidos de una página que no se han guardado ya en esta misma llamada
+ * tal como vienen ahora.
+ *
+ * `guardados` es id de WooCommerce → fecha de modificación (ISO UTC) con la que
+ * se guardó. Un pedido que ya se guardó con la misma fecha no se vuelve a
+ * escribir (los 100 últimos y el cursor se solapan casi siempre); si la fecha
+ * ha cambiado, o no se sabe, sí.
+ */
+export function sinGuardarTodavia<T extends { id: number } & ModificadoWoo>(
+  pagina: readonly T[],
+  guardados: ReadonlyMap<number, string | null>,
+): T[] {
+  return pagina.filter((o) => {
+    const id = Number(o.id);
+    if (!guardados.has(id)) return true;
+    const ahora = fechaGmtWoo(o.date_modified_gmt);
+    return ahora === null || ahora !== guardados.get(id);
+  });
+}
+
+/**
+ * Lo que hay guardado en woo_sincronizacion, leído de su fila. Las columnas que
+ * no existan (migración 20261024110000 sin aplicar) se toman como la página 1 y
+ * sin nada guardado de los clientes.
+ */
+export type EstadoGuardadoWoo = {
+  /** `null`: nunca se ha guardado; se empieza desde el último pedido de aquí. */
+  pedidos: CursorWoo | null;
+  /** `null`: nunca se ha guardado; se empieza desde el principio del catálogo. */
+  productos: CursorWoo | null;
+  /** `null`: nunca se ha guardado; se empieza desde el último cliente de aquí. */
+  clientes: EstadoClientesWoo | null;
+};
+
+function paginaGuardada(valor: unknown): number {
+  const n = Number(valor);
+  return Number.isInteger(n) && n >= 1 && n <= PAGINA_MAXIMA_WOO ? n : 1;
+}
+
+function idGuardado(valor: unknown): number | null {
+  if (valor == null) return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function estadoDeFilaWoo(
+  fila: Record<string, unknown> | null | undefined,
+): EstadoGuardadoWoo {
+  const pedidosHasta = fechaGmtWoo(fila?.pedidos_hasta);
+  const productosHasta = fechaGmtWoo(fila?.productos_hasta);
+  const enCurso = fila?.clientes_pagina != null;
+  const hastaId = idGuardado(fila?.clientes_hasta_id);
+  return {
+    pedidos: pedidosHasta
+      ? { desde: pedidosHasta, pagina: paginaGuardada(fila?.pedidos_pagina) }
+      : null,
+    productos: productosHasta
+      ? { desde: productosHasta, pagina: paginaGuardada(fila?.productos_pagina) }
+      : null,
+    clientes:
+      enCurso || hastaId !== null
+        ? {
+            hasta_id: hastaId,
+            tope_id: enCurso ? idGuardado(fila?.clientes_tope_id) : null,
+            pagina: enCurso ? paginaGuardada(fila?.clientes_pagina) : null,
+          }
+        : null,
+  };
+}
+
+/** Lo que se escribe en woo_sincronizacion de cada parte. */
+export type CambioEstadoWoo = {
+  pedidos?: CursorWoo;
+  productos?: CursorWoo;
+  clientes?: EstadoClientesWoo;
+};
+
+/**
+ * Las columnas de woo_sincronizacion para un cambio. Sin la migración
+ * 20261024110000 (`completo = false`) solo existen las fechas: ni la página ni
+ * lo de los clientes.
+ */
+export function columnasEstadoWoo(
+  cambio: CambioEstadoWoo,
+  completo: boolean,
+): Record<string, string | number | null> {
+  const c: Record<string, string | number | null> = {};
+  if (cambio.pedidos) {
+    c.pedidos_hasta = cambio.pedidos.desde;
+    if (completo) c.pedidos_pagina = cambio.pedidos.pagina;
+  }
+  if (cambio.productos) {
+    c.productos_hasta = cambio.productos.desde;
+    if (completo) c.productos_pagina = cambio.productos.pagina;
+  }
+  if (completo && cambio.clientes) {
+    c.clientes_hasta_id = cambio.clientes.hasta_id;
+    c.clientes_tope_id = cambio.clientes.tope_id;
+    c.clientes_pagina = cambio.clientes.pagina;
+  }
+  return c;
+}
+
 /** Qué hace la pantalla después de una tanda. */
 export type DecisionTanda = "seguir" | "terminado" | "sin_avance" | "tope";
 
 /**
- * Si la pantalla lanza otra tanda: no si ya no queda nada, no si el cursor no
- * se ha movido (se repetiría lo mismo para siempre), y no más de `maxTandas`.
+ * Si la pantalla lanza otra tanda: no si ya no queda nada, no si la
+ * continuación no se ha movido (se repetiría lo mismo para siempre), y no más
+ * de `maxTandas`.
  */
 export function seguirConOtraTanda(
   tandasHechas: number,
-  anterior: CursorWoo | undefined,
-  siguiente: CursorWoo | null,
+  anterior: ContinuacionWoo | undefined,
+  siguiente: ContinuacionWoo | null,
   maxTandas = TANDAS_MAX_WOO,
 ): DecisionTanda {
   if (!siguiente) return "terminado";
-  if (anterior && anterior.desde === siguiente.desde && anterior.pagina === siguiente.pagina) {
-    return "sin_avance";
-  }
+  if (anterior && mismaContinuacion(anterior, siguiente)) return "sin_avance";
   if (tandasHechas >= maxTandas) return "tope";
   return "seguir";
 }
