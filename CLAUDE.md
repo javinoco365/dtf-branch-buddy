@@ -84,8 +84,6 @@ Los tres usuarios son administradores con permisos idénticos. El único control
   (`src/integrations/supabase/client.server.ts`) en vez de con `supabaseAdmin`, que manda el
   autor en la cabecera `x-usuario-id`; o llamar a una función SQL que recibe `_usuario_id` y
   fija ella `app.usuario_id` dentro de su transacción, como `emitir_factura()`.
-  `supabaseAdmin` a secas escribe sin autor: solo para lo que de verdad no lo tiene
-  (webhooks, sincronizaciones automáticas).
 - Datos sensibles (`consumer_key`, `consumer_secret`, tokens) van enmascarados en el log. Si
   añades un campo sensible nuevo, añádelo a `auditoria_enmascarar()`.
 
