@@ -76,9 +76,16 @@ Los tres usuarios son administradores con permisos idénticos. El único control
 - La tabla `auditoria` es _append-only_, escrita por trigger y encadenada por hash. No se
   escribe desde la aplicación y no se modifica jamás.
 - **Toda server function que use `supabaseAdmin` debe fijar `app.usuario_id` antes de
-  escribir**, o el cambio queda sin autor. El punto de enganche es `src/start.ts`, que
-  registra el middleware global de todas las server functions: es un solo sitio, no
-  diecisiete.
+  escribir**, o el cambio queda sin autor. El objetivo es hacerlo en un solo sitio, no en
+  diecisiete: un middleware global en `src/start.ts`, que es donde se registran los de todas
+  las server functions. Ese middleware **todavía no existe**. Hasta que exista, el autor se
+  pone en cada escritura de una de estas dos maneras, que `auditoria_autor()` lee igual que
+  `app.usuario_id`: escribir con `adminComoUsuario(context.userId)`
+  (`src/integrations/supabase/client.server.ts`) en vez de con `supabaseAdmin`, que manda el
+  autor en la cabecera `x-usuario-id`; o llamar a una función SQL que recibe `_usuario_id` y
+  fija ella `app.usuario_id` dentro de su transacción, como `emitir_factura()`.
+  `supabaseAdmin` a secas escribe sin autor: solo para lo que de verdad no lo tiene
+  (webhooks, sincronizaciones automáticas).
 - Datos sensibles (`consumer_key`, `consumer_secret`, tokens) van enmascarados en el log. Si
   añades un campo sensible nuevo, añádelo a `auditoria_enmascarar()`.
 
@@ -119,23 +126,24 @@ paquetes al registro privado `lovable-core-prod`. Ese registro no resuelve fuera
 así que **no uses bun**: `bun install` falla con 403. El fichero de bloqueo vivo es
 `package-lock.json`.
 
-## Qué de estas reglas todavía NO existe
+## Estado de estas reglas (9-10-2026)
 
-Las reglas de arriba son el objetivo, no una descripción del repositorio. A fecha de hoy
-**no existen** y no debes dar por hecho que puedes usarlas:
+Las reglas de arriba son el objetivo, no una descripción del repositorio. Esta tabla dice
+cómo está cada una. Lo que no pone «Hecho» **no existe todavía**, o solo a medias, y no debes
+dar por hecho que puedes usarlo:
 
-| Regla                                       | Estado                                                                                                             |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `empresa_id` en las tablas                  | Hecho en las tablas raíz (33, `NOT NULL` y con FK a `empresas`). Las de línea y las de tienda lo heredan del padre |
-| Tabla `auditoria`, `auditoria_enmascarar()` | Hecho. Las cinco tablas que faltaban, desde 20261023110000. Sin trigger: `profiles`, `empresa_global`              |
-| Autor de cada cambio (`app.usuario_id`)     | Hecho, sin middleware en `src/start.ts`: `adminComoUsuario()` o funciones SQL que reciben `_usuario_id`            |
-| `rls_auto_enable()`                         | Hecho (20260902120200)                                                                                             |
-| Sin `FOR ALL` en tablas de negocio          | Hecho: los doce últimos pasan a políticas por operación, con el mismo acceso, en 20261023100000                    |
-| Tres estados de pedido                      | A medias: columnas y trigger que las sincroniza con el enum viejo; la app aún usa el `estado` único                |
-| `coste_unit_snapshot`                       | Hecho: lo congela un trigger al insertar en `pedido_items`                                                         |
-| Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                       |
-| Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                  |
-| Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                        |
+| Regla                                       | Estado                                                                                                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `empresa_id` en las tablas                  | Hecho en las tablas raíz (33, `NOT NULL` y con FK a `empresas`). Las de línea y las de tienda lo heredan del padre                                                                                         |
+| Tabla `auditoria`, `auditoria_enmascarar()` | Hecho. Las cinco tablas que faltaban, desde 20261023110000. Sin trigger: `profiles`, `empresa_global`, `auth_intentos_fallidos_login` y `woo_sincronizacion` (el cursor de la sincronización: a propósito) |
+| Autor de cada cambio (`app.usuario_id`)     | Hecho, sin middleware en `src/start.ts`: `adminComoUsuario()` o funciones SQL que reciben `_usuario_id`                                                                                                    |
+| `rls_auto_enable()`                         | Hecho (20260902120200)                                                                                                                                                                                     |
+| Sin `FOR ALL` en tablas de negocio          | Hecho: los doce últimos pasan a políticas por operación, con el mismo acceso, en 20261023100000                                                                                                            |
+| Tres estados de pedido                      | A medias: columnas y trigger que las sincroniza con el enum viejo; la app aún usa el `estado` único                                                                                                        |
+| `coste_unit_snapshot`                       | Hecho: lo congela un trigger al insertar en `pedido_items`                                                                                                                                                 |
+| Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                                                                                                               |
+| Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                                                                                                          |
+| Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                |
 
 Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
 trabajos: `npm run verify`, y las migraciones y pruebas SQL de
