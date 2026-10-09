@@ -72,6 +72,13 @@ import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
+import {
+  SUMA_SYNC_WOO_VACIA,
+  sumarTandaWoo,
+  textoProtegidos,
+  textoQuedan,
+  textoSincronizado,
+} from "@/lib/sync-woo";
 import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
@@ -211,11 +218,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const sincronizar = useMutation({
     mutationKey: CLAVE_SINCRONIZAR,
     mutationFn: () => sincronizarFn({ data: { tienda_id: tiendaId! } }),
-    onSuccess: (r: any) => {
-      toast.success(
-        `Sincronizado: ${r?.pedidos ?? 0} pedidos, ${r?.clientes ?? 0} clientes, ` +
-          `${r?.productos ?? 0} productos`,
-      );
+    // Una sola tanda: lo que quede, y los avisos (topes, migraciones que
+    // faltan), se dicen aquí en vez de callarlos. Mismos textos que Ajustes.
+    onSuccess: (r) => {
+      const suma = sumarTandaWoo(SUMA_SYNC_WOO_VACIA, r);
+      const quedan = textoQuedan(r);
+      toast.success(textoSincronizado(suma), {
+        description: quedan ?? undefined,
+        duration: quedan ? 15_000 : undefined,
+      });
+      const protegidos = textoProtegidos(suma);
+      if (protegidos) toast.warning(protegidos);
+      r.avisos.forEach((a) => toast.warning(a, { duration: 15_000 }));
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
     },
