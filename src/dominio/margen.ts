@@ -9,7 +9,8 @@
  */
 
 import { redondear } from "./importes";
-import { enRango, type Tramo } from "./periodos";
+import { diaDelPedido } from "./dia-pedido";
+import { diasDelRango, type Tramo } from "./periodos";
 import { cifrasGerencia, gastosFijosDelRango, type GastoFijo, type Venta } from "./gerencia";
 
 export type FilaMargen = {
@@ -81,12 +82,16 @@ export function margenPorTramos(
   hoy: Date,
 ): TramoMargen[] {
   const finHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59, 999);
+  // Cada venta en el día de su pedido, como el filtro del periodo (ver
+  // dia-pedido.ts). Se calcula una vez y se compara con cada tramo.
+  const dias = ventas.map((v) => diaDelPedido(v));
   // Los tramos que aún no han empezado no tienen nada que contar.
   return tramos
     .filter((t) => t.desde <= finHoy)
     .map((t) => {
+      const r = diasDelRango(t);
       const k = cifrasGerencia(
-        ventas.filter((v) => enRango(v.fecha_pedido, t)),
+        r ? ventas.filter((_, i) => dias[i] >= r.desde && dias[i] <= r.hasta) : [],
         costeActual,
       );
       const hasta = t.hasta < finHoy ? t.hasta : finHoy;

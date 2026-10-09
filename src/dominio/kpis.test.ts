@@ -187,6 +187,14 @@ describe("agruparPorDia", () => {
     );
     expect(r[1].total).toBe(0);
   });
+
+  it("un pedido web de las 23:15 es de su día, no del siguiente", () => {
+    const r = agruparPorDia(
+      [pedido({ fecha_pedido: "2026-09-02T23:15:00+00:00", origen: "woocommerce", total: 100 })],
+      dias,
+    );
+    expect(r.map((d) => d.total)).toEqual([0, 100, 0]);
+  });
 });
 
 describe("agruparPorRangos", () => {
@@ -227,6 +235,30 @@ describe("agruparPorRangos", () => {
       semanas,
     );
     expect(r[1].total).toBe(0);
+  });
+
+  it("cada pedido en el día de su ticket, como el filtro del periodo", () => {
+    const meses = [
+      { desde: new Date(2026, 9, 1), hasta: new Date(2026, 9, 31, 23, 59, 59, 999) },
+      { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30, 23, 59, 59, 999) },
+    ];
+    const r = agruparPorRangos(
+      [
+        // Web de las 23:15 del 31 de octubre (hora de la web guardada como UTC): octubre.
+        pedido({ fecha_pedido: "2026-10-31T23:15:00+00:00", origen: "woocommerce", total: 100 }),
+        // CRM de las 23:30 UTC del 31: las 00:30 del 1 de noviembre en Madrid.
+        pedido({ fecha_pedido: "2026-10-31T23:30:00+00:00", origen: "manual", total: 10 }),
+      ],
+      meses,
+    );
+    expect(r.map((m) => m.total)).toEqual([100, 10]);
+  });
+
+  it("un rango vacío (empieza después de acabar) no cuenta nada", () => {
+    const vacio = { desde: new Date(2026, 9, 31, 23, 59, 59), hasta: new Date(2026, 9, 31) };
+    expect(agruparPorRangos([pedido({ fecha_pedido: "2026-10-31T10:00:00" })], [vacio])).toEqual([
+      { ...vacio, total: 0 },
+    ]);
   });
 });
 

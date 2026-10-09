@@ -78,10 +78,15 @@ import {
 } from "@/dominio/cola-compras";
 import {
   calcularCompra,
+  cambiarLineaCompra,
   CATEGORIAS_COMPRA,
   categoriaCompra,
   descuadreLiquido,
   FORMAS_PAGO,
+  lineaCompraNueva,
+  TIPO_IVA_GENERAL,
+  TIPOS_IRPF,
+  TIPOS_IVA,
   tipoIrpfProbable,
   tipoProbable,
 } from "@/dominio/compras";
@@ -132,8 +137,8 @@ const trimestreDe = (c: any): string =>
 
 const SIN_GASTO = "ninguno";
 const SIN_FORMA = "sin_forma";
-const TIPOS_IVA = [0.21, 0.1, 0.04, 0];
-const TIPOS_IRPF = [0, 0.07, 0.15, 0.19];
+/** En el desplegable, de menos a más: sin retención primero. */
+const TIPOS_IRPF_DE_MENOS_A_MAS = [...TIPOS_IRPF].sort((a, b) => a - b);
 const porcentaje = (t: number) => `${Math.round(t * 100)} %`;
 /** Una compra borrada (borrado lógico) se enseña con ese estado. */
 const estadoDe = (c: any): string => (c.borrada_en ? "borrada" : String(c.estado));
@@ -184,7 +189,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     categoria: general ? "" : "textil",
     gasto_id: null,
     // Una factura a mano empieza al 21 %; una leída, con el tipo que explica su IVA.
-    tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : 0.21,
+    tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : TIPO_IVA_GENERAL,
     tipo_irpf: (compra.base > 0 && tipoIrpfProbable(compra.base, compra.irpf)) || 0,
     origen: null,
     nota: "",
@@ -219,7 +224,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       categoria: c.categoria ?? "",
       gasto_id: c.gasto_id ?? null,
       // Si la cuota leída no la explica ningún tipo, que se elija a mano.
-      tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : 0.21,
+      tipo_iva: compra.base > 0 ? tipoProbable(compra.base, compra.iva) : TIPO_IVA_GENERAL,
       tipo_irpf: Number(c.tipo_irpf ?? 0),
       concepto: c.concepto ?? "",
       forma_pago: c.forma_pago ?? null,
@@ -357,7 +362,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       const { irpf, ...compra } = revisando.compra;
       const calculado = calcularCompra({
         base: compra.base,
-        tipo_iva: revisando.tipo_iva ?? 0.21,
+        tipo_iva: revisando.tipo_iva ?? TIPO_IVA_GENERAL,
         tipo_irpf: revisando.tipo_irpf,
       });
       const descuadre = descuadreLiquido(calculado.liquido, compra.total) !== null;
@@ -377,7 +382,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           // los importes con ellos.
           ...(recibidas
             ? {
-                tipo_iva: revisando.tipo_iva ?? 0.21,
+                tipo_iva: revisando.tipo_iva ?? TIPO_IVA_GENERAL,
                 tipo_irpf: revisando.tipo_irpf,
                 ...(general
                   ? {
@@ -958,8 +963,10 @@ function RevisarCompra({
   const set = (cambios: Partial<CompraLeida>) =>
     onCambiar({ ...estado, compra: { ...compra, ...cambios } });
 
-  const setLinea = (i: number, cambios: any) =>
-    set({ lineas: compra.lineas.map((l, j) => (i === j ? { ...l, ...cambios } : l)) });
+  // Al cambiar la cantidad o el coste, el importe de la línea se recalcula;
+  // al cambiar el importe (uno con descuento), el coste unitario.
+  const setLinea = (i: number, cambios: Partial<CompraLeida["lineas"][number]>) =>
+    set({ lineas: compra.lineas.map((l, j) => (i === j ? cambiarLineaCompra(l, cambios) : l)) });
 
   const setAsignacion = (i: number, valor: string | null) =>
     onCambiar({
@@ -1183,8 +1190,14 @@ function RevisarCompra({
                   onChange={(e) => setLinea(i, { precio_unitario: Number(e.target.value) })}
                 />
               </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {eur(Number(l.importe))}
+              <TableCell>
+                <Input
+                  type="number"
+                  step="any"
+                  className="text-right"
+                  value={l.importe}
+                  onChange={(e) => setLinea(i, { importe: Number(e.target.value) })}
+                />
               </TableCell>
               {esTextil && (
                 <TableCell>
@@ -1232,10 +1245,7 @@ function RevisarCompra({
             ...estado,
             compra: {
               ...compra,
-              lineas: [
-                ...compra.lineas,
-                { descripcion: "", cantidad: 1, precio_unitario: 0, importe: 0, unidad: null },
-              ],
+              lineas: [...compra.lineas, lineaCompraNueva()],
             },
             asignaciones: [...asignaciones, null],
           })
@@ -1281,7 +1291,7 @@ function RevisarCompra({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_IRPF.map((t) => (
+                  {TIPOS_IRPF_DE_MENOS_A_MAS.map((t) => (
                     <SelectItem key={t} value={String(t)}>
                       {porcentaje(t)}
                     </SelectItem>

@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur } from "@/lib/format";
+import { diaLegible } from "@/dominio/fecha-documento";
 import {
   emitirFacturasPedidos,
   emitirTicketsPedidos,
@@ -279,8 +280,11 @@ export function FacturarPedidosDialog({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-3">
+                        {/* El día del documento, tal cual: con fechaCorta pasaba
+                            por Date a medianoche UTC, y en un navegador al oeste
+                            de Greenwich salía el día anterior. */}
                         <span className="tabular-nums text-muted-foreground">
-                          {fechaCorta(p.fecha)}
+                          {diaLegible(p.fecha)}
                         </span>
                         <span className="font-mono">{p.numero}</span>
                         {tienda && <span className="text-xs text-muted-foreground">{tienda}</span>}

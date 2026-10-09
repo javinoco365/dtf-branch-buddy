@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
-import { trozos } from "./paginar";
+import { leerTodas, trozos } from "./paginar";
 import { cuadreExtracto, huellaMovimiento, normalizarIban } from "@/dominio/extractos";
 import { emparejar, type FacturaPendiente, type MovimientoBanco } from "@/dominio/conciliacion";
 import { referenciaFactura } from "./format";
@@ -228,27 +228,39 @@ export const guardarCuenta = createServerFn({ method: "POST" })
 export const listMovimientosBanco = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await tabla(context.supabase, "banco_movimientos")
-      .select("*, conciliacion:banco_conciliaciones(id, factura_id, motivo, diferencia)")
-      .order("fecha", { ascending: false });
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data, error } = await leerTodas<any>((a, b) =>
+      tabla(context.supabase, "banco_movimientos")
+        .select("*, conciliacion:banco_conciliaciones(id, factura_id, motivo, diferencia)")
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return data;
   });
 
 /**
  * Qué factura paga cada ingreso, según el CRM.
  *
  * El emparejamiento vive en `src/dominio/conciliacion.ts` y se prueba sin base
- * de datos. Aquí solo se le dan los dos lados.
+ * de datos. Aquí solo se le dan los dos lados: todos los ingresos y todas las
+ * facturas por cobrar, por páginas, porque Supabase corta en 1000 filas sin
+ * avisar (ver paginar.ts). Antes se pedían 1000 ingresos y 2000 facturas, sin
+ * orden, y llegaban 1000 cualesquiera: una factura vieja sin cobrar podía no
+ * salir nunca.
  */
 export const proponerConciliacion = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: movs, error: e1 } = await tabla(context.supabase, "banco_movimientos")
-      .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
-      .gt("importe", 0)
-      .order("fecha", { ascending: false })
-      .limit(1000);
+    const { data: movs, error: e1 } = await leerTodas<any>((a, b) =>
+      tabla(context.supabase, "banco_movimientos")
+        .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
+        .gt("importe", 0)
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (e1) throw new Error(e1.message);
 
     const sinCasar: MovimientoBanco[] = (movs ?? [])
@@ -260,12 +272,16 @@ export const proponerConciliacion = createServerFn({ method: "GET" })
         importe: Number(m.importe),
       }));
 
-    const { data: facs, error: e2 } = await tabla(context.supabase, "facturas")
-      .select(
-        "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
-      )
-      .in("estado", ["emitida", "vencida"])
-      .limit(2000);
+    const { data: facs, error: e2 } = await leerTodas<any>((a, b) =>
+      tabla(context.supabase, "facturas")
+        .select(
+          "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
+        )
+        .in("estado", ["emitida", "vencida"])
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (e2) throw new Error(e2.message);
 
     const pendientes: FacturaPendiente[] = (facs ?? [])

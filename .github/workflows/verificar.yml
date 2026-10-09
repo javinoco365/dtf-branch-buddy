@@ -1,7 +1,10 @@
 # Verificación automática de cada cambio.
 #
 # Ejecuta lo mismo que `npm run verify` en local: lint, comprobación de tipos,
-# pruebas de dominio y compilación. Si algo falla aquí, el cambio no entra.
+# pruebas de dominio y compilación. En un segundo job, en paralelo, aplica las
+# migraciones a un PostgreSQL 16 vacío y ejecuta las pruebas SQL
+# (supabase/pruebas/probar-migraciones.sh). Si algo falla aquí, el cambio no
+# entra.
 #
 # Sobre el gestor de paquetes: el repositorio arrastra un bun.lock generado
 # dentro del sandbox de Lovable, que fija 62 paquetes al registro privado
@@ -57,3 +60,53 @@ jobs:
           VITE_SUPABASE_URL: https://ejemplo.supabase.co
           VITE_SUPABASE_PROJECT_ID: ejemplo
           VITE_SUPABASE_PUBLISHABLE_KEY: clave-de-relleno-para-compilar
+
+  pruebas-sql:
+    # Aplica todas las migraciones sobre un PostgreSQL 16 vacío y ejecuta las
+    # pruebas SQL de supabase/pruebas. El script sale con 1 si hay alguna
+    # línea MAL, una prueba cortada por un error de SQL, un hueco en la
+    # numeración o la cadena de auditoría rota, y entonces el job falla.
+    # No toca ninguna base real: el Postgres nace y muere dentro del job.
+    name: Migraciones y pruebas SQL (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # initdb toma la codificación del entorno: UTF-8, como en Supabase.
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar PostgreSQL 16 si la imagen no lo trae
+        # La imagen de ubuntu-latest trae PostgreSQL 16 instalado (sin
+        # arrancar). Si una imagen futura no lo trae, se instala del
+        # repositorio oficial de PostgreSQL (apt.postgresql.org), con su clave
+        # firmada, tal como lo documenta postgresql.org.
+        run: |
+          set -euo pipefail
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL --retry 3 \
+              -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            . /etc/os-release
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends postgresql-16
+          fi
+          PG_BIN=/usr/lib/postgresql/16/bin
+          "$PG_BIN/initdb" --version | grep -q ' 16\.' \
+            || { echo "No encuentro PostgreSQL 16 en $PG_BIN"; exit 1; }
+          "$PG_BIN/initdb" --version
+          echo "PG_BIN=$PG_BIN" >> "$GITHUB_ENV"
+
+      - name: Migraciones y pruebas SQL
+        # El runner no es root, así que el script corre con el usuario actual
+        # (si fuera root, cambiaría al usuario postgres). PG_BIN viene del
+        # paso anterior.
+        run: bash supabase/pruebas/probar-migraciones.sh
+        env:
+          PG_DIR: ${{ runner.temp }}/pgcrm

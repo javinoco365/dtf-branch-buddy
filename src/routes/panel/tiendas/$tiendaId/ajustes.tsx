@@ -32,16 +32,21 @@ import {
   diagnosticoLineasWoo,
   recuperarEnviosWoo,
 } from "@/lib/woocommerce.functions";
-import { eur, metros as fmtMetros } from "@/lib/format";
+import { eur, metros as fmtMetros, numero } from "@/lib/format";
+import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
+import {
+  SUMA_SYNC_WOO_VACIA,
+  sumarTandaWoo,
+  textoProtegidos,
+  textoSincronizado,
+} from "@/lib/sync-woo";
 import {
   RefreshCw,
   KeyRound,
   ShieldCheck,
   Building2,
   Receipt,
-  Truck,
   ShoppingBag,
-  Construction,
   Mail,
   Users,
 } from "lucide-react";
@@ -80,6 +85,10 @@ function Ajustes() {
   const sync = useServerFn(sincronizarWoo);
   const syncClientes = useServerFn(sincronizarClientesWoo);
   const [sincronizandoClientes, setSincronizandoClientes] = useState(false);
+  const [progresoSync, setProgresoSync] = useState<{
+    pedidos: number;
+    quedan: number | null;
+  } | null>(null);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda", tiendaId],
@@ -171,6 +180,60 @@ function Ajustes() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Por tandas: cada llamada trae lo que cabe en el tiempo de una función y
+  // dice por dónde seguir; se repite hasta que no queda nada. Lo traído se
+  // queda guardado aunque una tanda falle.
+  async function sincronizarAhora() {
+    let suma = SUMA_SYNC_WOO_VACIA;
+    const avisos = new Set<string>();
+    let continuar: ContinuacionWoo | undefined;
+    let quedan: number | null = null;
+    setProgresoSync({ pedidos: 0, quedan: null });
+    try {
+      for (let tanda = 1; ; tanda++) {
+        const r = await sync({ data: { tienda_id: tiendaId, continuar } });
+        suma = sumarTandaWoo(suma, r);
+        r.avisos.forEach((a) => avisos.add(a));
+        quedan = r.quedan;
+        setProgresoSync({ pedidos: suma.pedidos, quedan });
+
+        const decision = seguirConOtraTanda(tanda, continuar, r.siguiente);
+        if (decision === "seguir" && r.siguiente) {
+          continuar = r.siguiente;
+          continue;
+        }
+        if (decision === "sin_avance") {
+          avisos.add(
+            "La sincronización no avanzaba y se ha parado. Vuelve a intentarlo más tarde.",
+          );
+        }
+        if (decision === "tope") {
+          avisos.add(
+            `Se ha parado después de ${numero(tanda, 0)} tandas` +
+              (quedan ? `; quedan unos ${numero(quedan, 0)} pedidos` : "") +
+              ". Vuelve a pulsar «Sincronizar ahora» para seguir donde se quedó.",
+          );
+        }
+        break;
+      }
+
+      toast.success(textoSincronizado(suma));
+      const protegidos = textoProtegidos(suma);
+      if (protegidos) toast.warning(protegidos);
+      avisos.forEach((a) => toast.warning(a));
+    } catch (e) {
+      toast.error(
+        `${(e as Error).message}` +
+          (suma.pedidos
+            ? ` (antes de fallar se guardaron ${numero(suma.pedidos, 0)} pedidos)`
+            : ""),
+      );
+    } finally {
+      setProgresoSync(null);
+      qc.invalidateQueries();
+    }
+  }
+
   if (!isAdmin) {
     return (
       <Card>
@@ -186,12 +249,12 @@ function Ajustes() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ajustes de la tienda</h1>
         <p className="text-sm text-muted-foreground">
-          Configuración de WooCommerce, datos fiscales, facturación y seguimiento.
+          Configuración de WooCommerce, datos fiscales, facturación y correos.
         </p>
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto max-md:h-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto max-md:h-auto">
           <TabsTrigger value="woo" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             WooCommerce
@@ -207,10 +270,6 @@ function Ajustes() {
           <TabsTrigger value="correos" className="gap-2">
             <Mail className="h-4 w-4" />
             <span className="hidden sm:inline">Correos</span>
-          </TabsTrigger>
-          <TabsTrigger value="seguimiento" className="gap-2">
-            <Truck className="h-4 w-4" />
-            Seguimiento
           </TabsTrigger>
         </TabsList>
 
@@ -270,39 +329,14 @@ function Ajustes() {
             </Button>
             <Button
               variant="secondary"
-              onClick={async () => {
-                try {
-                  const r = await sync({ data: { tienda_id: tiendaId } });
-                  const detalles = [
-                    `${r.pedidos} pedidos`,
-                    `${r.clientes} clientes`,
-                    `${r.productos} productos`,
-                  ];
-                  if (r.devoluciones_actualizadas > 0) {
-                    detalles.push(`${r.devoluciones_actualizadas} con devolución`);
-                  }
-                  if (r.pedidos_borrados > 0) {
-                    detalles.push(`${r.pedidos_borrados} borrados (ya no están en WooCommerce)`);
-                  }
-                  toast.success(`Sincronizado: ${detalles.join(", ")}`);
-                  if (r.protegidos_por_factura > 0) {
-                    toast.warning(
-                      `${r.protegidos_por_factura} ${
-                        r.protegidos_por_factura === 1
-                          ? "pedido ha desaparecido de WooCommerce pero no se ha borrado"
-                          : "pedidos han desaparecido de WooCommerce pero no se han borrado"
-                      }: tienen una factura emitida.`,
-                    );
-                  }
-                  qc.invalidateQueries();
-                } catch (e) {
-                  toast.error((e as Error).message);
-                }
-              }}
-              disabled={!form.sync_enabled || !creds?.tiene}
+              onClick={sincronizarAhora}
+              disabled={!form.sync_enabled || !creds?.tiene || !!progresoSync}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sincronizar ahora
+              <RefreshCw className={`h-4 w-4 mr-2 ${progresoSync ? "animate-spin" : ""}`} />
+              {progresoSync
+                ? `Sincronizando… ${numero(progresoSync.pedidos, 0)} pedidos` +
+                  (progresoSync.quedan ? `, quedan unos ${numero(progresoSync.quedan, 0)}` : "")
+                : "Sincronizar ahora"}
             </Button>
             <Button
               variant="outline"
@@ -327,10 +361,13 @@ function Ajustes() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            «Sincronizar ahora» solo mira los últimos 100 pedidos y clientes, para ser rápida.
-            «Sincronizar clientes» recorre todo el historial de la tienda en WooCommerce: úsala si
-            sospechas que algún cliente —con cuenta o de invitado— nunca ha llegado a tener ficha
-            aquí. Puede tardar más si la tienda tiene mucho historial.
+            «Sincronizar ahora» vuelve a traer los 100 últimos pedidos y todo lo que ha cambiado en
+            WooCommerce desde la última vez: pedidos nuevos o modificados, clientes nuevos y
+            productos. Si hay mucho, va por tandas y dice cuántos pedidos quedan. Solo puede haber
+            una sincronización a la vez por tienda. «Sincronizar clientes» recorre todo el historial
+            de la tienda en WooCommerce: úsala si sospechas que algún cliente —con cuenta o de
+            invitado— nunca ha llegado a tener ficha aquí. Puede tardar más si la tienda tiene mucho
+            historial.
           </p>
         </TabsContent>
 
@@ -455,44 +492,8 @@ function Ajustes() {
           </Button>
         </TabsContent>
 
-        {/* === SEGUIMIENTO === */}
+        {/* === CORREOS === */}
         <PlantillasCorreo tiendaId={tiendaId} isAdmin={isAdmin} />
-
-        <TabsContent value="seguimiento" className="space-y-4 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Seguimiento de envíos
-                <Badge variant="outline">Próximamente</Badge>
-              </CardTitle>
-              <CardDescription>
-                Generador de enlaces de seguimiento para los pedidos. Aún no disponible.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Alert>
-                <Construction className="h-4 w-4" />
-                <AlertDescription>
-                  Esta sección está preparada como placeholder. Cuando definas qué empresas de
-                  transporte (Correos Express, SEUR, GLS, MRW, …) usaréis, configuraremos la
-                  generación automática de URLs de tracking para incluir en emails y facturas.
-                </AlertDescription>
-              </Alert>
-              <div className="grid gap-4 md:grid-cols-2 opacity-50 pointer-events-none">
-                <Field label="Transportista" v="" on={() => {}} placeholder="Próximamente" />
-                <Field
-                  label="Plantilla URL de tracking"
-                  v=""
-                  on={() => {}}
-                  placeholder="https://transportista.com/track/{codigo}"
-                />
-                <Field label="Código de cuenta" v="" on={() => {}} placeholder="—" />
-                <Field label="API key" v="" on={() => {}} placeholder="—" />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

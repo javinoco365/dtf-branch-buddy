@@ -16,16 +16,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur } from "@/lib/format";
+import { diaLegible } from "@/dominio/fecha-documento";
 import { explicarDecision } from "@/dominio/tickets";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
+import { emitirPorTandas, type ResultadoTandas } from "@/dominio/emision-tandas";
 import {
   emitirTicketsPedidos,
   pedidosSinDocumento,
   rellenarPdfsTienda,
   type PedidoParaTicket,
 } from "@/lib/facturas.functions";
+
+/** De cuántos en cuántos se emite, como en «Facturar» de Pedidos. */
+const TANDA = 20;
+
+/**
+ * Si una tanda no responde, alguno de sus pedidos puede haberse emitido sin
+ * que llegara la respuesta: tiene ticket, pero no PDF.
+ */
+const AVISO_PDF_QUE_FALTEN =
+  "Si alguno llegó a emitirse sin respuesta, ya no sale como pendiente y puede faltarle el PDF: genéralo con «Generar los que faltan», en esta pantalla.";
 
 /**
  * Emitir de una vez los tickets de los pedidos cobrados que no tienen
@@ -45,15 +57,12 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
   const [abierto, setAbierto] = useState(false);
   const [desde, setDesde] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [hasta, setHasta] = useState(() => format(endOfMonth(new Date()), "yyyy-MM-dd"));
-  const [emitiendo, setEmitiendo] = useState(false);
+  const [emitiendo, setEmitiendo] = useState<{ hechos: number; total: number } | null>(null);
   // El PDF de cada ticket se guarda después de emitirlos, de diez en diez.
   const [pdfs, setPdfs] = useState<{ hechos: number; total: number; fallidos: number } | null>(
     null,
   );
-  const [resultado, setResultado] = useState<{
-    emitidos: { pedido: string; referencia: string; id: string }[];
-    omitidos: { pedido: string; motivo: string }[];
-  } | null>(null);
+  const [resultado, setResultado] = useState<ResultadoTandas | null>(null);
 
   const clave = ["pedidos-sin-documento", tiendaId, desde, hasta] as const;
   const { data, isLoading, error } = useQuery({
@@ -62,22 +71,44 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     enabled: abierto && desde <= hasta,
   });
 
+  /**
+   * Por tandas, del más antiguo al más reciente (la lista ya viene así): todos
+   * de una vez se pasarían del tiempo de una función, y el servidor no admite
+   * más de 200 por petición. Si una tanda falla, lo emitido hasta ahí se
+   * enseña igual y guarda su PDF, y los pedidos de esa tanda y de las
+   * siguientes salen para revisarlos (ver emision-tandas.ts).
+   */
   async function emitir() {
     if (!data?.tickets.length) return;
-    setEmitiendo(true);
-    try {
-      const r = await emitirFn({ data: { pedido_ids: data.tickets.map((p) => p.id) } });
-      setResultado(r);
-      if (r.emitidos.length) toast.success(`${r.emitidos.length} ticket(s) emitido(s)`);
-      if (r.omitidos.length) toast.warning(`${r.omitidos.length} pedido(s) no se han emitido`);
-      qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
-      await guardarPdfs(r.emitidos.map((e) => e.id));
+    const total = data.tickets.length;
+    setEmitiendo({ hechos: 0, total });
+    const r = await emitirPorTandas(
+      data.tickets,
+      TANDA,
+      (ids) => emitirFn({ data: { pedido_ids: ids } }),
+      (hechos) => setEmitiendo({ hechos, total }),
+    );
+    setEmitiendo(null);
+    // También si se cortó: lo que llegó a emitirse ya no está pendiente.
+    qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+    if (r.corte?.enLaPrimera) {
+      // No respondió ni la primera tanda: sigue la lista, ya al día, para
+      // volver a intentarlo; y el aviso de PDF que faltan, recontado.
       qc.invalidateQueries({ queryKey: ["facturas"] });
-    } catch (e: any) {
-      toast.error(e?.message ?? "No se pudieron emitir los tickets");
-    } finally {
-      setEmitiendo(false);
+      toast.error(`No se pudieron emitir los tickets: ${r.corte.motivo}`, {
+        description: AVISO_PDF_QUE_FALTEN,
+      });
+      return;
     }
+    setResultado(r);
+    const saltados = r.omitidos.length - (r.corte?.pedidos ?? 0);
+    if (r.emitidos.length) toast.success(`${r.emitidos.length} ticket(s) emitido(s)`);
+    if (saltados) toast.warning(`${saltados} pedido(s) no se han emitido`);
+    if (r.corte) {
+      toast.error(`La emisión se cortó: ${r.corte.pedidos} pedido(s) sin emitir. Revísalos.`);
+    }
+    await guardarPdfs(r.emitidos.map((e) => e.id));
+    qc.invalidateQueries({ queryKey: ["facturas"] });
   }
 
   /**
@@ -108,6 +139,8 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     <Dialog
       open={abierto}
       onOpenChange={(o) => {
+        // Mientras emite por tandas no se cierra: el resultado se perdería.
+        if (emitiendo) return;
         setAbierto(o);
         if (!o) {
           setResultado(null);
@@ -169,6 +202,14 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
                 {o.pedido}: {o.motivo}
               </p>
             ))}
+            {/* Una tanda no respondió: sus pedidos y los de detrás están
+                arriba como «no se pudo emitir». */}
+            {resultado.corte && (
+              <p className="text-destructive">
+                La emisión se cortó ({resultado.corte.motivo}): {resultado.corte.pedidos} pedido(s)
+                no se pudieron emitir: revísalos. {AVISO_PDF_QUE_FALTEN}
+              </p>
+            )}
           </div>
         )}
 
@@ -196,12 +237,14 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setAbierto(false)}>
+          <Button variant="outline" onClick={() => setAbierto(false)} disabled={!!emitiendo}>
             Cerrar
           </Button>
           {data && !resultado && (
-            <Button onClick={emitir} disabled={emitiendo || data.tickets.length === 0}>
-              {emitiendo ? "Emitiendo…" : `Emitir ${data.tickets.length} ticket(s)`}
+            <Button onClick={emitir} disabled={!!emitiendo || data.tickets.length === 0}>
+              {emitiendo
+                ? `Emitiendo… ${emitiendo.hechos} de ${emitiendo.total}`
+                : `Emitir ${data.tickets.length} ticket(s)`}
             </Button>
           )}
         </DialogFooter>
@@ -228,7 +271,10 @@ function Bloque({
       {pedidos.map((p) => (
         <div key={p.id} className="flex flex-wrap items-baseline gap-x-3 text-muted-foreground">
           <span className="font-mono text-foreground">{p.numero}</span>
-          <span>{fechaCorta(p.fecha)}</span>
+          {/* El día del pedido, el que llevará su ticket: con fechaCorta y la
+              hora del navegador, un pedido web de las 23:15 salía del día
+              siguiente. */}
+          <span>{diaLegible(p.fecha)}</span>
           <span className="truncate">{p.cliente_nombre || "Sin nombre"}</span>
           <span className="ml-auto tabular-nums text-foreground">{eur(p.total)}</span>
           {conMotivo && <span className="w-full text-xs">{explicarDecision(p.decision)}</span>}

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/table";
 import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, eurConSigno, fechaCorta } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { porSocio, totalesCaja } from "@/dominio/caja";
 import { totalPuestoSocios } from "@/dominio/sumatorios-banco";
@@ -219,7 +219,7 @@ function CajaPage() {
         <Resumen titulo="Gastos" valor={eur(totales.gastos)} tono="text-status-cancelado" />
         <Resumen
           titulo="Saldo del periodo"
-          valor={eur(totales.saldo)}
+          valor={eurConSigno(totales.saldo)}
           tono={totales.saldo < 0 ? "text-status-cancelado" : "text-status-completado"}
         />
       </div>
@@ -316,8 +316,7 @@ function CajaPage() {
                       m.categoria === "gasto" ? "text-status-cancelado" : "text-status-completado"
                     }`}
                   >
-                    {m.categoria === "gasto" ? "−" : "+"}
-                    {eur(m.importe)}
+                    {eurConSigno(m.categoria === "gasto" ? -m.importe : m.importe)}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {m.observaciones ?? ""}
@@ -352,14 +351,14 @@ function CajaPage() {
                     <TableRow>
                       <TableCell colSpan={4}>Ingresos</TableCell>
                       <TableCell className="text-right font-bold tabular-nums text-status-completado">
-                        +{eur(totales.ingresos)}
+                        {eurConSigno(totales.ingresos)}
                       </TableCell>
                       <TableCell colSpan={2} />
                     </TableRow>
                     <TableRow>
                       <TableCell colSpan={4}>Gastos</TableCell>
                       <TableCell className="text-right font-bold tabular-nums text-status-cancelado">
-                        −{eur(totales.gastos)}
+                        {eurConSigno(-totales.gastos)}
                       </TableCell>
                       <TableCell colSpan={2} />
                     </TableRow>
@@ -374,9 +373,8 @@ function CajaPage() {
                       totales.saldo < 0 ? "text-status-cancelado" : "text-status-completado"
                     }`}
                   >
-                    {/* El signo como en las filas: «−» delante del importe en positivo. */}
-                    {totales.saldo < 0 ? "−" : "+"}
-                    {eur(Math.abs(totales.saldo))}
+                    {/* El signo como en las filas y en la tarjeta del saldo. */}
+                    {eurConSigno(totales.saldo)}
                   </TableCell>
                   <TableCell colSpan={2} />
                 </TableRow>

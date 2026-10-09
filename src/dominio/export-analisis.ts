@@ -22,7 +22,7 @@ import {
   type PedidoResumen,
 } from "./kpis";
 import { resumenCobros } from "./cobros";
-import { fechaDocumentoDePedido } from "./fecha-documento";
+import { diaDelPedido } from "./dia-pedido";
 import { redondear } from "./importes";
 import { esEstimado } from "./metros-woo";
 import { documentoVigente } from "./tickets";
@@ -170,12 +170,12 @@ export const LEEME_ANALISIS = {
   },
   reglas: [
     "Los pedidos cancelados no cuentan en ventas, metros, costes ni pendiente: van aparte (cancelados, importe_cancelados, devuelto_cancelados, cobrado_cancelados).",
-    "Los importes y costes de cada pedido son los que se guardaron con él; no se recalculan con los precios de hoy. Excepción: cada sincronización vuelve a escribir los últimos 100 pedidos web, y sus metros estimados se recalculan con el precio por metro de Ajustes de ese momento.",
+    "Los importes y costes de cada pedido son los que se guardaron con él; no se recalculan con los precios de hoy. Excepción: cada sincronización vuelve a escribir los pedidos web que han cambiado en WooCommerce desde la anterior, y sus metros estimados se recalculan con el precio por metro de Ajustes de ese momento.",
     "No hay datos de contacto de los clientes (ni email, ni teléfono, ni dirección): solo su id y su nombre.",
   ],
   diferencias_con_las_pantallas: [
     "Las cifras usan las reglas de las pantallas (Dashboard, Facturación, Gerencia) y coinciden con ellas salvo céntimos: aquí se redondea cada pedido y se suma; allí se suma y se redondea.",
-    "Mes: las pantallas cortan los meses a medianoche de España sobre la hora guardada, y los pedidos de WooCommerce se guardan con la hora de la web como si fuera UTC. Un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) aquí cuenta en su mes y allí en el siguiente. El de aquí suele ser el del ticket o la factura (ver `fechas`). Su cobro web cae en el mes siguiente también aquí.",
+    "Mes: las pantallas (Pedidos, Dashboard, Facturación y Gerencia) cuentan cada pedido en su día, el mismo `fecha` de aquí, así que un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) cuenta en su mes aquí y allí. Su cobro web, en cambio, se fechó pasando la hora de la web a la de España como si fuera UTC: cae en el día siguiente y, a fin de mes, en el mes siguiente, aquí (`cobrado_por_fecha_de_cobro`) y allí («Cobrado»).",
     "«Cobrado» de las pantallas va por la fecha del cobro: es `cobrado_por_fecha_de_cobro`, no `cobrado`.",
     "Gerencia con «Todas las tiendas» y «Todos los canales», y Facturación Consolidada con «Todas», suman también el textil, que este fichero no lleva. Para comparar, usar en Gerencia una tienda o los canales web y manual, o el Dashboard y la Facturación de cada tienda. El €/metro de Gerencia sí cuadra: el textil no tiene metros.",
     "Si en Ajustes de Gerencia los pedidos web sin pagar no cuentan (empresa.ajustes.web_sin_pagar_cuenta = false), Gerencia los quita de las ventas; aquí siempre cuentan, y se dan aparte (pedidos_web_sin_pagar, total_neto_web_sin_pagar).",
@@ -233,8 +233,8 @@ export function construirExportAnalisis(d: {
   const cobrosDe = agrupar(d.cobros);
   const documentosDe = agrupar(d.documentos);
 
-  const fechaDe = (p: PedidoExport) =>
-    fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" });
+  // El día del pedido, el de su ticket y el de las pantallas (ver dia-pedido.ts).
+  const fechaDe = (p: PedidoExport) => diaDelPedido(p);
 
   const pedidos = [...d.pedidos]
     .map((p) => ({ p, fecha: fechaDe(p) }))

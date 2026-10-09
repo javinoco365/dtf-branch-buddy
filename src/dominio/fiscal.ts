@@ -10,6 +10,7 @@
  */
 
 import { redondear } from "./importes";
+import { apuntesDeVenta } from "./canjes";
 import type { DocumentoPedido } from "./tickets";
 import { pedidosDocumentados, pendienteDocumentar } from "./grupos";
 import type { Venta } from "./gerencia";
@@ -26,6 +27,8 @@ export type DocumentoFiscal = {
   pedido_id?: string | null;
   /** Solo rectificativas: el documento que corrigen. */
   rectifica_a_id?: string | null;
+  /** Solo facturas de canje: el ticket al que sustituyen. */
+  sustituye_a_id?: string | null;
   tipo: TipoDocumento;
   estado: string | null;
   /** `yyyy-MM-dd`. */
@@ -41,13 +44,35 @@ export type DocumentoFiscal = {
 export type CuentaFiscal = { documentos: number; base: number; iva: number; total: number };
 
 export type ResumenIva = {
-  /** Ordinarias, tickets y rectificativas emitidos (las rectificativas restan). */
+  /**
+   * Lo que cuenta en el periodo: ordinarias, tickets y rectificativas
+   * emitidos (las rectificativas restan) y los canjes de ticket por factura
+   * (`canjes`). `documentos` son los emitidos del periodo.
+   */
   repercutido: CuentaFiscal;
+  /** Lo de cada documento emitido en el periodo, por tipo, sin los canjes. */
   porTipoDocumento: { tipo: TipoDocumento; etiqueta: string; cuenta: CuentaFiscal }[];
-  /** Por tipo de IVA (21, 10, 4…), de mayor a menor. */
+  /** Por tipo de IVA (21, 10, 4…), de mayor a menor, con los canjes. */
   porTipoIva: { tipo: number; base: number; cuota: number }[];
   /** Borradores: no son facturas todavía y no cuentan. */
   borradores: number;
+  /** Lo que mueven en el periodo los canjes de ticket por factura (ver canjes.ts). */
+  canjes: CuentaCanjes;
+};
+
+/**
+ * Los canjes de ticket por factura de un periodo. El ticket ya contó el día
+ * que se emitió: la factura del canje resta lo suyo, y la rectificativa que
+ * anula esa factura lo vuelve a sumar.
+ */
+export type CuentaCanjes = {
+  /** Facturas del periodo que canjean un ticket: restan lo del ticket. */
+  canjes: number;
+  /** Rectificativas del periodo que anulan una factura de canje: lo del ticket vuelve. */
+  anulados: number;
+  base: number;
+  iva: number;
+  total: number;
 };
 
 const ETIQUETAS: Record<TipoDocumento, string> = {
@@ -75,31 +100,53 @@ const cerrar = (c: CuentaFiscal): CuentaFiscal => ({
  * Las rectificativas llevan importes negativos y restan solas. Sin desglose
  * guardado, el documento cuenta entero en su IVA total, bajo el tipo 0 «sin
  * desglose».
+ *
+ * Un ticket canjeado por factura cuenta una sola vez, cada paso en su fecha
+ * (`apuntesDeVenta`): el ticket suma el día que se emite, la factura del
+ * canje resta lo del ticket el día de la factura, y una rectificativa que
+ * anule esa factura lo vuelve a sumar el día de la rectificativa. Así un
+ * periodo da lo mismo aquí que en los trimestres de Resultados.
+ *
+ * `docs` son los documentos del periodo. `referencias`, los de fuera que
+ * hacen falta para casar los canjes: el ticket de cada factura de canje y la
+ * factura (y su ticket) de cada rectificativa. Solo se miran: no cuentan.
  */
-export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
+export function resumenIva(
+  docs: readonly DocumentoFiscal[],
+  referencias: readonly DocumentoFiscal[] = [],
+): ResumenIva {
   const total = vacia();
   const porTipo = new Map<TipoDocumento, CuentaFiscal>(
     (["ordinaria", "simplificada", "rectificativa"] as const).map((t) => [t, vacia()]),
   );
+  const canjes = { canjes: 0, anulados: 0, base: 0, iva: 0, total: 0 };
   const porIva = new Map<number, { base: number; cuota: number }>();
-  let borradores = 0;
 
-  for (const d of docs) {
-    if (d.estado === "borrador") {
-      borradores += 1;
-      continue;
+  for (const a of apuntesDeVenta(docs, referencias)) {
+    const x = a.importes;
+    const s = a.signo;
+    total.base += s * num(x.base);
+    total.iva += s * num(x.iva);
+    total.total += s * num(x.total);
+    if (a.motivo === "documento") {
+      total.documentos += 1;
+      sumar(porTipo.get(x.tipo) ?? vacia(), x);
+    } else {
+      if (a.motivo === "canje") canjes.canjes += 1;
+      else canjes.anulados += 1;
+      canjes.base += s * num(x.base);
+      canjes.iva += s * num(x.iva);
+      canjes.total += s * num(x.total);
     }
-    sumar(total, d);
-    sumar(porTipo.get(d.tipo) ?? vacia(), d);
-    const desglose = d.desglose_iva?.length
-      ? d.desglose_iva
-      : [{ tipo: 0, base: d.base, cuota: d.iva }];
-    for (const x of desglose) {
-      const t = num(x.tipo);
-      const a = porIva.get(t) ?? { base: 0, cuota: 0 };
-      a.base += num(x.base);
-      a.cuota += num(x.cuota);
-      porIva.set(t, a);
+    const desglose = x.desglose_iva?.length
+      ? x.desglose_iva
+      : [{ tipo: 0, base: x.base, cuota: x.iva }];
+    for (const l of desglose) {
+      const t = num(l.tipo);
+      const acc = porIva.get(t) ?? { base: 0, cuota: 0 };
+      acc.base += s * num(l.base);
+      acc.cuota += s * num(l.cuota);
+      porIva.set(t, acc);
     }
   }
 
@@ -113,7 +160,14 @@ export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
     porTipoIva: [...porIva.entries()]
       .map(([tipo, a]) => ({ tipo, base: redondear(a.base), cuota: redondear(a.cuota) }))
       .sort((a, b) => b.tipo - a.tipo),
-    borradores,
+    borradores: docs.filter((d) => d.estado === "borrador").length,
+    canjes: {
+      canjes: canjes.canjes,
+      anulados: canjes.anulados,
+      base: redondear(canjes.base),
+      iva: redondear(canjes.iva),
+      total: redondear(canjes.total),
+    },
   };
 }
 

@@ -14,6 +14,7 @@ import { descargarCSV } from "@/lib/csv";
 import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
@@ -98,8 +99,9 @@ function FacturacionTienda() {
   function exportar() {
     const filas: (string | number)[][] = [
       ["Fecha", "Estado", "Metros", "Base", "IVA", "Envío", "Total"],
+      // El día del pedido, el de su ticket y el de la lista de pedidos.
       ...pedidos.map((p) => [
-        format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+        diaDelPedido(p),
         p.estado,
         Number(p.metros_total ?? 0),
         Number(p.subtotal ?? 0),

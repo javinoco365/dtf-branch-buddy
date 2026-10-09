@@ -21,9 +21,10 @@
  * Lógica pura: se prueba sin base de datos.
  */
 
-import { redondear } from "./importes";
+import { IVA_GENERAL, redondear } from "./importes";
 import { cargoDeFactura, sumarMeses, type GastoFijo } from "./gerencia";
 import type { CompraResumen } from "./fiscal";
+import type { LineaLeida } from "./factura-compra";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -222,21 +223,95 @@ export function descuadreLiquido(calculado: number, impreso: number): number | n
   return Math.abs(d) >= 0.01 ? d : null;
 }
 
-const TIPOS_IVA = [0.21, 0.1, 0.04, 0];
-const TIPOS_IRPF = [0.19, 0.15, 0.07, 0];
+/** El tipo con que empieza una factura escrita a mano: el general, en tanto por uno. */
+export const TIPO_IVA_GENERAL = IVA_GENERAL / 100;
+
+/** Los tipos de IVA de una factura recibida, en tanto por uno. */
+export const TIPOS_IVA: readonly number[] = [TIPO_IVA_GENERAL, 0.1, 0.04, 0];
+/** Las retenciones de IRPF habituales, en tanto por uno. */
+export const TIPOS_IRPF: readonly number[] = [0.19, 0.15, 0.07, 0];
 
 /**
  * El tipo habitual que explica una cuota leída de la factura: 21,00 € sobre
  * 100 € son el 21 %. Nulo si ninguno la explica (dos tipos en la misma
  * factura, o una lectura mala): entonces lo elige la persona.
  */
-export function tipoProbable(base: number, cuota: number, tipos = TIPOS_IVA): number | null {
+export function tipoProbable(
+  base: number,
+  cuota: number,
+  tipos: readonly number[] = TIPOS_IVA,
+): number | null {
   if (!(base > 0)) return cuota === 0 ? 0 : null;
   return tipos.find((t) => Math.abs(redondear(base * t) - Math.abs(cuota)) <= 0.02) ?? null;
 }
 
 export const tipoIrpfProbable = (base: number, cuota: number) =>
   tipoProbable(base, cuota, TIPOS_IRPF);
+
+/**
+ * El importe de una línea de compra: cantidad × coste unitario, al céntimo.
+ * Es la misma cuenta que comprueba revisarCompra (factura-compra.ts).
+ */
+export function importeLineaCompra(l: { cantidad: Numerico; precio_unitario: Numerico }): number {
+  return redondear(num(l.cantidad) * num(l.precio_unitario));
+}
+
+/**
+ * Decimales del coste unitario que sale de dividir un importe: los mismos con
+ * que normalizarCompra (factura-compra.ts) deduce el coste de una lectura.
+ */
+export const DECIMALES_COSTE_UNITARIO = 4;
+
+/**
+ * El coste unitario que explica el importe de una línea: importe / cantidad,
+ * a cuatro decimales. Un importe con descuento (27 € por 3 unidades de 10 €)
+ * da 9 €. Sin cantidad no se puede dividir: nulo.
+ *
+ * Con muchas unidades, cuatro decimales pueden no devolver el importe exacto
+ * (1.234,56 € / 1.000 = 1,2346; × 1.000 = 1.234,60): revisarCompra lo avisa,
+ * y la línea se queda con el importe escrito.
+ */
+export function costeUnitarioDeImporte(l: {
+  cantidad: Numerico;
+  importe: Numerico;
+}): number | null {
+  const cantidad = num(l.cantidad);
+  if (cantidad === 0) return null;
+  return redondear(num(l.importe) / cantidad, DECIMALES_COSTE_UNITARIO);
+}
+
+/**
+ * Una línea después de que la corrija quien revisa la factura:
+ *
+ * - Si cambia el importe, se queda el escrito y el coste unitario se calcula
+ *   otra vez (importe / cantidad). Así cabe el importe del papel aunque lleve
+ *   descuento. Con cantidad 0 el coste se queda como estaba (revisarCompra ya
+ *   avisa de la cantidad).
+ * - Si cambia la cantidad o el coste unitario, el importe se calcula otra vez
+ *   (cantidad × coste).
+ * - Si solo cambia el concepto, se queda el importe que tenía (el leído del
+ *   papel, aunque no cuadre: eso ya lo avisa revisarCompra).
+ *
+ * Si llegan a la vez el importe y el coste, se quedan los dos como vienen.
+ */
+export function cambiarLineaCompra<L extends LineaLeida>(linea: L, cambios: Partial<L>): L {
+  const nueva = { ...linea, ...cambios };
+  const cambiaImporte = "importe" in cambios;
+  const cambiaCoste = "precio_unitario" in cambios;
+  if (cambiaImporte && !cambiaCoste) {
+    return { ...nueva, precio_unitario: costeUnitarioDeImporte(nueva) ?? nueva.precio_unitario };
+  }
+  if (cambiaImporte) return nueva;
+  return "cantidad" in cambios || cambiaCoste
+    ? { ...nueva, importe: importeLineaCompra(nueva) }
+    : nueva;
+}
+
+/** Una línea en blanco para escribirla a mano: una unidad a 0 €. */
+export function lineaCompraNueva(): LineaLeida {
+  const linea = { descripcion: "", cantidad: 1, precio_unitario: 0, unidad: null };
+  return { ...linea, importe: importeLineaCompra(linea) };
+}
 
 export const FORMAS_PAGO: readonly { valor: string; etiqueta: string }[] = [
   { valor: "transferencia", etiqueta: "Transferencia" },

@@ -357,6 +357,22 @@ export function enRango(fecha: Date | string | null | undefined, r: Rango | null
   return d >= r.desde && d <= r.hasta;
 }
 
+/** El día ('yyyy-mm-dd') de una fecha, en la hora del navegador. */
+export function diaDeFecha(d: Date): string {
+  return dia(d);
+}
+
+/**
+ * El primer y el último día de un rango ('yyyy-mm-dd'), en la hora del
+ * navegador como todo este fichero: con ellos se compara el día de un pedido
+ * (ver dia-pedido.ts). `null` si el rango está vacío porque empieza después de
+ * acabar, como el que piden las pantallas que no comparan.
+ */
+export function diasDelRango(r: Rango): { desde: string; hasta: string } | null {
+  if (r.desde.getTime() > r.hasta.getTime()) return null;
+  return { desde: dia(r.desde), hasta: dia(r.hasta) };
+}
+
 /**
  * «2026-10-05» es ese día en hora local, no a medianoche UTC: si no, en
  * Madrid el día 5 caería el 4 a las dos de la madrugada y saldría del rango

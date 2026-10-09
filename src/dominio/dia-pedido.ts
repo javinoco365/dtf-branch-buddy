@@ -1,0 +1,184 @@
+/**
+ * El día de un pedido de tienda, el mismo en todas partes: en la lista de
+ * pedidos, en sus totales por día, en el CSV, en el filtro por periodo y en
+ * el ticket o la factura que se le emite.
+ *
+ * Lógica pura: no consulta nada y se prueba sin base de datos.
+ *
+ * ## El problema
+ *
+ * `fecha_pedido` no guarda lo mismo en todos los pedidos (ver
+ * fecha-documento.ts):
+ *
+ * - Los creados en el CRM guardan el instante de verdad, en UTC.
+ * - Los de WooCommerce guardan la hora de la web, sin zona, grabada como si
+ *   fuera UTC.
+ *
+ * El ticket ya lo tenía en cuenta, pero la lista agrupaba con la hora del
+ * navegador: un pedido web de las 23:15 salía en el día siguiente, en otro
+ * total del día y, a fin de mes, fuera del periodo, mientras su ticket
+ * llevaba el día bueno. Lo mismo el Dashboard, la Facturación y Gerencia, que
+ * cortaban el periodo por instantes: ahora todos van por este día.
+ */
+
+import { fechaDocumentoDePedido } from "./fecha-documento";
+import { diasDelRango, type Rango } from "./periodos";
+
+const ZONA = "Europe/Madrid";
+
+/** Lo justo de un pedido para saber su día y su hora. */
+export type FechaPedido = {
+  fecha_pedido: string | null | undefined;
+  /** `woocommerce` o `manual`. */
+  origen?: string | null;
+};
+
+/** La fecha del pedido es la hora de la web guardada como si fuera UTC. */
+function horaDeLaWeb(p: FechaPedido): boolean {
+  return p.origen === "woocommerce";
+}
+
+/**
+ * Una hora sin zona ('2026-10-03T12:00:00'): una hora del reloj de España,
+ * no un instante. Así fecha Gerencia los pedidos textil, que solo guardan el
+ * día (ver ventaDeTextil). De la base, `fecha_pedido` llega siempre con zona.
+ */
+const HORA_DE_RELOJ = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?(\.\d+)?$/;
+
+/**
+ * El día del pedido ('yyyy-mm-dd'), en hora de España: el mismo con el que
+ * sale su ticket o su factura. Una hora sin zona es de su día en cualquier
+ * navegador: leída como hora del navegador y pasada a Madrid, en un navegador
+ * con otra hora podía cambiar de día.
+ */
+export function diaDelPedido(p: FechaPedido): string {
+  const sinZona = HORA_DE_RELOJ.exec(String(p.fecha_pedido ?? "").trim());
+  if (sinZona) return sinZona[1];
+  return fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: horaDeLaWeb(p) });
+}
+
+const reloj = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ZONA,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+const MS_MINUTO = 60_000;
+const MS_DIA = 86_400_000;
+
+/**
+ * Cuántos minutos va el reloj de España por delante de UTC en un instante
+ * (60 en invierno, 120 en verano): la hora de `reloj` leída como UTC, menos
+ * el instante. Pasa por Intl, que es lo que cuesta.
+ */
+function desfaseEn(ms: number): number {
+  const p = Object.fromEntries(reloj.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  const comoUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((comoUtc - Math.floor(ms / 1000) * 1000) / MS_MINUTO);
+}
+
+/**
+ * El desfase de cada día UTC ya consultado: un número si es el mismo todo el
+ * día, o nulo si ese día cambia la hora (dos domingos al año, a la 01:00
+ * UTC). Así la lista de pedidos, Facturación y Gerencia (decenas de miles de
+ * pedidos) no pasan por Intl con cada pedido, sino un par de veces por día.
+ */
+const desfasePorDia = new Map<number, number | null>();
+
+function desfaseDeEspana(ms: number): number {
+  const dia = Math.floor(ms / MS_DIA);
+  let fijo = desfasePorDia.get(dia);
+  if (fijo === undefined) {
+    // En España la hora cambia como mucho una vez al día: si al empezar y al
+    // acabar el día UTC el desfase es el mismo, lo es todo el día.
+    const alEmpezar = desfaseEn(dia * MS_DIA);
+    fijo = alEmpezar === desfaseEn((dia + 1) * MS_DIA - 1) ? alEmpezar : null;
+    desfasePorDia.set(dia, fijo);
+  }
+  return fijo ?? desfaseEn(ms);
+}
+
+/**
+ * El día y la hora del pedido en el reloj de España, 'yyyy-mm-ddThh:mm:ss',
+ * para ordenar los pedidos de un día: comparar `fecha_pedido` tal cual pone
+ * un pedido web de las 9:00 después de uno del CRM de las 10:00 (el web lleva
+ * su hora local como UTC, dos horas «más tarde»). Un pedido con solo el día,
+ * o sin fecha, va a las 00:00 de su día. Su día, `.slice(0, 10)`, es siempre
+ * el de diaDelPedido.
+ */
+export function momentoDelPedido(p: FechaPedido): string {
+  const texto = String(p.fecha_pedido ?? "").trim();
+  const sinZona = HORA_DE_RELOJ.exec(texto);
+  if (sinZona) return `${sinZona[1]}T${sinZona[2]}${sinZona[3] ?? ":00"}`;
+  const instante = new Date(texto);
+  const ms = instante.getTime();
+  if (texto.length <= 10 || Number.isNaN(ms)) return `${diaDelPedido(p)}T00:00:00`;
+  if (horaDeLaWeb(p)) return instante.toISOString().slice(0, 19);
+  // La hora de España es la UTC más el desfase de ese momento.
+  return new Date(ms + desfaseDeEspana(ms) * MS_MINUTO).toISOString().slice(0, 19);
+}
+
+/**
+ * Los pedidos por su momento en el reloj de España: del más reciente al más
+ * antiguo, o al revés. Los que coinciden se quedan en el orden en que venían.
+ * Devuelve una lista nueva.
+ */
+export function ordenarPedidos<P extends FechaPedido>(
+  pedidos: readonly P[],
+  orden: "reciente" | "antiguo",
+): P[] {
+  const signo = orden === "reciente" ? -1 : 1;
+  return pedidos
+    .map((p) => ({ p, m: momentoDelPedido(p) }))
+    .sort((a, b) => signo * (a.m < b.m ? -1 : a.m > b.m ? 1 : 0))
+    .map((x) => x.p);
+}
+
+const DIA = /^\d{4}-\d{2}-\d{2}$/;
+
+function sumarDias(dia: string, n: number): string {
+  const d = new Date(`${dia}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Qué pedir a la base para tener todos los pedidos de los días `desde` a
+ * `hasta` (los dos incluidos): `fecha_pedido >= desde` y `< hasta`.
+ *
+ * El día D de un pedido web cae entre las 00:00 y las 24:00 UTC de D; el de
+ * uno del CRM, entre las 22:00 o las 23:00 UTC del día anterior y las 22:00 o
+ * las 23:00 UTC de D. Ningún tramo UTC exacto vale para los dos, así que se
+ * pide un día más por cada lado y lo que sobra se quita con `pedidoEnDias`.
+ */
+export function tramoDeConsulta(desde: string, hasta: string): { desde: string; hasta: string } {
+  if (!DIA.test(desde) || !DIA.test(hasta)) {
+    throw new Error("Las fechas del periodo tienen que ser días (aaaa-mm-dd)");
+  }
+  return {
+    desde: `${sumarDias(desde, -1)}T00:00:00Z`,
+    hasta: `${sumarDias(hasta, 2)}T00:00:00Z`,
+  };
+}
+
+/** Si el día del pedido está entre `desde` y `hasta` ('yyyy-mm-dd', incluidos). */
+export function pedidoEnDias(p: FechaPedido, desde: string, hasta: string): boolean {
+  const dia = diaDelPedido(p);
+  return dia >= desde && dia <= hasta;
+}
+
+/**
+ * Si el día del pedido cae en un rango del selector de periodo (ver
+ * periodos.ts): del día de `desde` al de `hasta`, los dos incluidos. Así las
+ * pantallas que filtran por periodo, o que reparten en días o en meses,
+ * cuentan cada pedido en el día de su ticket, como la lista de pedidos.
+ */
+export function pedidoEnRango(p: FechaPedido, r: Rango): boolean {
+  const dias = diasDelRango(r);
+  return dias !== null && pedidoEnDias(p, dias.desde, dias.hasta);
+}

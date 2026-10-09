@@ -57,6 +57,95 @@ describe("IVA repercutido", () => {
   });
 });
 
+describe("IVA repercutido con tickets canjeados por factura", () => {
+  // Un ticket de 1.000 € de base y la factura que lo canjea, el mismo día.
+  const ticket = doc("simplificada", 1000, { id: "t1", fecha: "2026-02-10" });
+  const factura = doc("ordinaria", 1000, {
+    id: "f1",
+    fecha: "2026-02-10",
+    sustituye_a_id: "t1",
+  });
+  // La rectificativa que anula la factura del canje, en el trimestre siguiente.
+  const rectificativa = doc("rectificativa", -1000, {
+    id: "r1",
+    fecha: "2026-04-02",
+    rectifica_a_id: "f1",
+  });
+
+  it("canje sin anular: el IVA de la venta cuenta una vez", () => {
+    const r = resumenIva([ticket, factura]);
+    // Ticket 210 + factura 210 − el ticket que sustituye 210.
+    expect(r.repercutido).toEqual({ documentos: 2, base: 1000, iva: 210, total: 1210 });
+    expect(r.canjes).toEqual({ canjes: 1, anulados: 0, base: -1000, iva: -210, total: -1210 });
+    // Cada documento, por su tipo, con lo suyo; el canje va aparte.
+    expect(r.porTipoDocumento.find((x) => x.tipo === "simplificada")?.cuenta.iva).toBe(210);
+    expect(r.porTipoDocumento.find((x) => x.tipo === "ordinaria")?.cuenta.iva).toBe(210);
+    expect(r.porTipoIva).toEqual([{ tipo: 21, base: 1000, cuota: 210 }]);
+  });
+
+  it("canje sin anular en dos periodos: el ticket en el suyo, la factura no suma en el suyo", () => {
+    const tarde = { ...factura, fecha: "2026-04-03" };
+    expect(resumenIva([ticket]).repercutido.iva).toBe(210);
+    // El periodo de la factura conoce el ticket como referencia: 210 − 210.
+    expect(resumenIva([tarde], [ticket]).repercutido.iva).toBe(0);
+  });
+
+  it("el ejemplo: ticket y canje el 10-02-2026, rectificativa el 02-04-2026", () => {
+    // Primer trimestre: ticket y factura, que lo sustituye.
+    expect(resumenIva([ticket, factura]).repercutido.iva).toBe(210);
+    // Segundo: la rectificativa (−210) y el ticket que vuelve (+210).
+    const t2 = resumenIva([rectificativa], [ticket, factura]);
+    expect(t2.repercutido.iva).toBe(0);
+    expect(t2.canjes).toMatchObject({ canjes: 0, anulados: 1, iva: 210 });
+    // Los dos trimestres juntos: el IVA del ticket, una vez.
+    expect(resumenIva([ticket, factura, rectificativa]).repercutido.iva).toBe(210);
+  });
+
+  it("una factura de canje en borrador no canjea nada", () => {
+    const r = resumenIva([ticket, { ...factura, estado: "borrador" }]);
+    expect(r.repercutido).toMatchObject({ documentos: 1, iva: 210 });
+    expect(r.borradores).toBe(1);
+    expect(r.canjes).toMatchObject({ canjes: 0, anulados: 0, iva: 0 });
+  });
+
+  it("vale igual para el textil: la misma regla con sus documentos", () => {
+    const textil = { tienda_id: "textil-personalizado" };
+    const r = resumenIva([
+      { ...ticket, ...textil },
+      { ...factura, ...textil },
+    ]);
+    expect(r.repercutido.iva).toBe(210);
+    expect(
+      resumenIva(
+        [{ ...rectificativa, ...textil }],
+        [
+          { ...ticket, ...textil },
+          { ...factura, ...textil },
+        ],
+      ).repercutido.iva,
+    ).toBe(0);
+  });
+
+  it("por tienda, cada una cuenta lo suyo y juntas dan lo de la empresa", () => {
+    // Una factura de canje de otra tienda que la del ticket: las dos se leen.
+    const deB = { ...ticket, tienda_id: "b" };
+    const deA = { ...factura, tienda_id: "a" };
+    const leidos = [deB, deA];
+    expect(resumenIva([deA], leidos).repercutido.iva).toBe(0);
+    expect(resumenIva([deB], leidos).repercutido.iva).toBe(210);
+    expect(resumenIva(leidos).repercutido.iva).toBe(210);
+  });
+
+  it("las referencias no cuentan por sí mismas", () => {
+    expect(resumenIva([], [ticket, factura, rectificativa]).repercutido).toEqual({
+      documentos: 0,
+      base: 0,
+      iva: 0,
+      total: 0,
+    });
+  });
+});
+
 describe("IVA soportado", () => {
   it("solo cuentan las compras registradas", () => {
     expect(

@@ -7,10 +7,12 @@
  *
  * ## Por qué el borrado se limita a la fecha del pedido más antiguo de la página
  *
- * La sincronización trae los últimos 100 pedidos de WooCommerce, no todos.
- * Comparar «qué hay en el CRM» contra «qué ha traído Woo» sin más borraría
- * cualquier pedido antiguo que se haya quedado fuera de esos 100 —no porque
- * lo hayan borrado, sino porque hay más de 100 pedidos nuevos por delante—.
+ * Para ver qué se ha borrado en WooCommerce, la sincronización pide los 100
+ * pedidos más recientes por fecha de creación (solo id y fecha), no todos: los
+ * pedidos en sí llegan por otro lado, por fecha de modificación (ver
+ * cursor-woo.ts). Comparar «qué hay en el CRM» contra esos 100 sin más
+ * borraría cualquier pedido antiguo que se haya quedado fuera —no porque lo
+ * hayan borrado, sino porque hay más de 100 pedidos nuevos por delante—.
  *
  * La solución: solo se compara contra los pedidos del CRM cuya fecha cae
  * dentro del tramo que Woo acaba de traer. Un pedido de hace un año nunca

@@ -16,6 +16,7 @@
 
 import { redondear } from "./importes";
 import { desglosarCobro, etiquetaMetodo, TIENDA_TEXTIL, type MetodoCobro } from "./cobros";
+import { diaDelPedido, momentoDelPedido } from "./dia-pedido";
 
 export type CriterioFecha = "pedido" | "cobro";
 
@@ -62,6 +63,11 @@ export type CobroLeido = {
     numero: string;
     /** Instante (tiendas) o día (textil) del pedido. */
     fecha: string;
+    /**
+     * `woocommerce` o `manual`, en los de tienda: un pedido web guarda la hora
+     * de la web como si fuera UTC (ver dia-pedido.ts).
+     */
+    origen?: string | null;
     cliente_nombre: string | null;
     total: Numerico;
     iva: Numerico;
@@ -73,7 +79,10 @@ export type CobroLeido = {
 /** Un cobro ya repartido y fechado según el criterio elegido. */
 export type CobroConsolidado = {
   id: string;
-  /** Instante por el que se agrupa en semanas: el del pedido o el del cobro. */
+  /**
+   * Por dónde se agrupa en semanas, en el reloj de España y sin zona: el
+   * momento del pedido (ver momentoDelPedido) o el día del cobro a mediodía.
+   */
   fecha: string;
   fecha_cobro: string;
   /** Día del pedido, `yyyy-MM-dd`, o vacío si el pedido no tiene fecha. */
@@ -120,6 +129,10 @@ export function diaLocal(fecha: string | null | undefined): string {
  * (desglosarCobro), y los envíos y los metros en la parte que se ha cobrado.
  * Un pedido cobrado entero suma sus metros y su envío completos; uno cobrado a
  * medias, la mitad.
+ *
+ * El pedido se fecha por su día, el de su ticket (ver dia-pedido.ts), como en
+ * la lista de pedidos: un pedido web de las 23:15 del último día del mes es
+ * de ese mes, no del siguiente.
  */
 export function consolidarCobro(c: CobroLeido, criterio: CriterioFecha): CobroConsolidado {
   const importe = redondear(num(c.importe));
@@ -129,11 +142,19 @@ export function consolidarCobro(c: CobroLeido, criterio: CriterioFecha): CobroCo
     iva: c.pedido.iva ?? null,
     total: c.pedido.total ?? null,
   });
+  // Un pedido sin fecha no puede tumbar la lectura de todos los cobros.
+  const delPedido = { fecha_pedido: c.pedido.fecha, origen: c.pedido.origen };
+  const conHora = !!c.pedido.fecha && c.pedido.fecha.length > 10;
   return {
     id: c.id,
-    fecha: instante(criterio === "pedido" ? c.pedido.fecha : c.fecha),
+    fecha:
+      criterio === "pedido"
+        ? conHora
+          ? momentoDelPedido(delPedido)
+          : instante(c.pedido.fecha)
+        : instante(c.fecha),
     fecha_cobro: c.fecha.slice(0, 10),
-    fecha_pedido: diaLocal(c.pedido.fecha),
+    fecha_pedido: c.pedido.fecha ? diaDelPedido(delPedido) : "",
     tienda_id: c.tienda_id,
     pedido_id: c.pedido.id,
     pedido_numero: c.pedido.numero,
