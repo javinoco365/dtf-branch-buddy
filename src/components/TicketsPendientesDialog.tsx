@@ -16,7 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur } from "@/lib/format";
+import { diaLegible } from "@/dominio/fecha-documento";
 import { explicarDecision } from "@/dominio/tickets";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
@@ -228,7 +229,10 @@ function Bloque({
       {pedidos.map((p) => (
         <div key={p.id} className="flex flex-wrap items-baseline gap-x-3 text-muted-foreground">
           <span className="font-mono text-foreground">{p.numero}</span>
-          <span>{fechaCorta(p.fecha)}</span>
+          {/* El día del pedido, el que llevará su ticket: con fechaCorta y la
+              hora del navegador, un pedido web de las 23:15 salía del día
+              siguiente. */}
+          <span>{diaLegible(p.fecha)}</span>
           <span className="truncate">{p.cliente_nombre || "Sin nombre"}</span>
           <span className="ml-auto tabular-nums text-foreground">{eur(p.total)}</span>
           {conMotivo && <span className="w-full text-xs">{explicarDecision(p.decision)}</span>}

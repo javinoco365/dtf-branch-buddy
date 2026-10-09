@@ -3,7 +3,7 @@ import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-ur
 import { useTiendas } from "@/lib/periodo";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -51,6 +51,7 @@ import {
 import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
 import { esEstimado } from "@/dominio/metros-woo";
+import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { descargarCSV } from "@/lib/csv";
 import {
   lineasDireccion,
@@ -249,9 +250,15 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const { data, isLoading } = useQuery({
     queryKey,
+    // Los días del periodo, no los instantes: el servidor filtra por el día
+    // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
     queryFn: () =>
       list({
-        data: { tiendaId: tiendaConsulta, desde: desde.toISOString(), hasta: hasta.toISOString() },
+        data: {
+          tiendaId: tiendaConsulta,
+          desde: format(desde, "yyyy-MM-dd"),
+          hasta: format(hasta, "yyyy-MM-dd"),
+        },
       }),
   });
 
@@ -301,21 +308,23 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     });
   }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
 
-  // Agrupar por día
   // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
   // más antiguo al más nuevo. Como mucho 500 de una vez.
   const sinDocumento = useMemo(
     () =>
-      filtrados
-        .filter((p) => p.estado !== "cancelado" && !p.documento)
-        .sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido)),
+      ordenarPedidos(
+        filtrados.filter((p) => p.estado !== "cancelado" && !p.documento),
+        "antiguo",
+      ),
     [filtrados],
   );
 
+  // Por el día del pedido, el mismo que lleva su ticket: con la hora del
+  // navegador, un pedido web de las 23:15 caía en el día siguiente.
   const grupos = useMemo(() => {
     const map = new Map<string, PedidoFila[]>();
     for (const p of filtrados) {
-      const k = format(new Date(p.fecha_pedido), "yyyy-MM-dd");
+      const k = diaDelPedido(p);
       const arr = map.get(k) ?? [];
       arr.push(p);
       map.set(k, arr);
@@ -352,7 +361,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       ...filtrados.map((p) => {
         const cobro = resumenCobros(p.total, p.cobros ?? []);
         return [
-          format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+          diaDelPedido(p),
           p.numero,
           p.tienda_nombre ?? "",
           p.cliente_nombre ?? "",
@@ -554,7 +563,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           <div key={g.fecha}>
             <div className="flex items-center justify-between pb-2 border-b mb-2">
               <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:text-xs">
-                {format(new Date(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
+                {format(parseISO(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{eur(g.totales.total)}</span>

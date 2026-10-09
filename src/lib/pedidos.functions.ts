@@ -7,6 +7,12 @@ import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { normalizarDireccion } from "@/dominio/direcciones";
 import { documentoDelPedido, type DocumentoPedido } from "@/dominio/tickets";
+import {
+  ordenarPedidos,
+  pedidoEnDias,
+  tramoDeConsulta,
+  type FechaPedido,
+} from "@/dominio/dia-pedido";
 import { referenciaFactura } from "@/lib/format";
 import type { Cobro } from "./cobros.functions";
 
@@ -121,8 +127,9 @@ export const listPedidos = createServerFn({ method: "POST" })
     z
       .object({
         tiendaId: z.string().uuid().optional(),
-        desde: z.string(),
-        hasta: z.string(),
+        /** El primer y el último día del periodo, 'yyyy-mm-dd', los dos incluidos. */
+        desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
       .parse(d),
   )
@@ -133,17 +140,29 @@ export const listPedidos = createServerFn({ method: "POST" })
     // dirección, y nombrarlas en el select haría fallar la consulta entera
     // mientras la migración no esté aplicada. Ya pasó una vez con el menú de
     // tiendas: la lista se quedaba vacía sin decir por qué.
+    //
+    // Por días y no por instantes: un pedido web guarda su hora local como si
+    // fuera UTC, y con el corte en hora de Madrid el de las 23:15 del último
+    // día se quedaba fuera del periodo (y el de las 23:30 del día anterior,
+    // dentro). Se pide un día más por cada lado y se filtra aquí por el día
+    // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
+    const tramo = tramoDeConsulta(data.desde, data.hasta);
     let query = tabla(supabase, "pedidos")
       .select("*")
-      .gte("fecha_pedido", data.desde)
-      .lte("fecha_pedido", data.hasta)
+      .gte("fecha_pedido", tramo.desde)
+      .lt("fecha_pedido", tramo.hasta)
       .order("fecha_pedido", { ascending: false });
     if (data.tiendaId) query = query.eq("tienda_id", data.tiendaId);
 
     const { data: filas, error } = await query;
-    if (error) throw error;
-    if (!filas || filas.length === 0) return { pedidos: [], cobrosDisponibles: true };
-    const pedidos = filas as Record<string, any>[];
+    if (error) throw new Error(error.message);
+    const pedidos = ordenarPedidos(
+      ((filas ?? []) as (FechaPedido & Record<string, any>)[]).filter((p) =>
+        pedidoEnDias(p, data.desde, data.hasta),
+      ),
+      "reciente",
+    );
+    if (pedidos.length === 0) return { pedidos: [], cobrosDisponibles: true };
 
     const ids = pedidos.map((p) => p.id);
     const tiendaIds = Array.from(new Set(pedidos.map((p) => p.tienda_id)));

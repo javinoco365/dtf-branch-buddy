@@ -14,6 +14,7 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
 import { diaEnEspana, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import { diaDelPedido, ordenarPedidos, pedidoEnDias, tramoDeConsulta } from "@/dominio/dia-pedido";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -713,6 +714,7 @@ export const emitirTicket = createServerFn({ method: "POST" })
 export type PedidoParaTicket = {
   id: string;
   numero: string;
+  /** El día del pedido ('yyyy-mm-dd'): el que llevará su ticket. */
   fecha: string;
   total: number;
   cliente_nombre: string | null;
@@ -743,27 +745,36 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
     const sb = adminComoUsuario(context.userId);
     await comprobarAccesoTienda(sb, data.tienda_id, context.userId);
 
-    const hastaExclusivo = new Date(`${data.hasta}T00:00:00Z`);
-    hastaExclusivo.setUTCDate(hastaExclusivo.getUTCDate() + 1);
-
+    // Por el día del pedido, el que llevará su ticket, y no por el instante
+    // guardado: un pedido web guarda su hora local como si fuera UTC y uno
+    // del CRM el instante de verdad (ver dia-pedido.ts). Se pide un día más
+    // por cada lado y se filtra aquí.
+    const tramo = tramoDeConsulta(data.desde, data.hasta);
     const { data: pedidos, error } = await tabla(sb, "pedidos")
-      .select("id, numero, empresa_id, fecha_pedido, total, cliente_id, cliente_nombre")
+      .select("id, numero, empresa_id, fecha_pedido, origen, total, cliente_id, cliente_nombre")
       .eq("tienda_id", data.tienda_id)
       .is("cancelado_en", null)
-      .gte("fecha_pedido", `${data.desde}T00:00:00`)
-      .lt("fecha_pedido", hastaExclusivo.toISOString())
+      .gte("fecha_pedido", tramo.desde)
+      .lt("fecha_pedido", tramo.hasta)
       .order("fecha_pedido")
       .limit(500);
     if (error) throw new Error(error.message);
-    const lista = (pedidos ?? []) as {
-      id: string;
-      numero: string;
-      empresa_id: string | null;
-      fecha_pedido: string;
-      total: number;
-      cliente_id: string | null;
-      cliente_nombre: string | null;
-    }[];
+    // Del más antiguo al más reciente, como se emitirán.
+    const lista = ordenarPedidos(
+      (
+        (pedidos ?? []) as {
+          id: string;
+          numero: string;
+          empresa_id: string | null;
+          fecha_pedido: string;
+          origen: string | null;
+          total: number;
+          cliente_id: string | null;
+          cliente_nombre: string | null;
+        }[]
+      ).filter((p) => pedidoEnDias(p, data.desde, data.hasta)),
+      "antiguo",
+    );
     const limites = await leerLimitesTicket(sb, lista[0]?.empresa_id ?? null);
     if (lista.length === 0) return { tickets: [], facturas: [], revisar: [], limites };
 
@@ -805,7 +816,7 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
         return {
           id: p.id,
           numero: p.numero,
-          fecha: p.fecha_pedido,
+          fecha: diaDelPedido(p),
           total: Number(p.total),
           cliente_nombre: ficha?.nombre ?? p.cliente_nombre,
           cliente: ficha
