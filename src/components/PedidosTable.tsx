@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
 import { esEstimado } from "@/dominio/metros-woo";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
+import { desglosePedido } from "@/dominio/desglose-pedido";
 import { descargarCSV } from "@/lib/csv";
 import {
   lineasDireccion,
@@ -1260,6 +1261,7 @@ function MenuAcciones({
 
 /** Lo que se ve al desplegar un pedido: líneas, totales, cliente y envío. */
 function DetallePedido({ pedido }: { pedido: PedidoFila }) {
+  const desglose = desglosePedido(pedido);
   return (
     <div className="py-2 space-y-2">
       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1287,18 +1289,20 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
           ))}
         </TableBody>
       </Table>
+      {/* Se suman de izquierda a derecha. El subtotal guardado ya lleva el
+          envío: enseñarlo junto al envío lo contaba dos veces. */}
       <div className="grid grid-cols-4 gap-4 pt-2 text-sm max-md:grid-cols-2 max-md:gap-2">
         <div>
-          <span className="text-muted-foreground">Subtotal:</span>{" "}
-          <span className="font-medium">{eur(pedido.subtotal)}</span>
+          <span className="text-muted-foreground">Productos (sin IVA):</span>{" "}
+          <span className="font-medium">{eur(desglose.productos)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Envío (sin IVA):</span>{" "}
+          <span className="font-medium">{eur(desglose.envio)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">IVA:</span>{" "}
-          <span className="font-medium">{eur(pedido.iva)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Envío:</span>{" "}
-          <span className="font-medium">{eur(pedido.envio)}</span>
+          <span className="font-medium">{eur(desglose.iva)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Total:</span>{" "}
