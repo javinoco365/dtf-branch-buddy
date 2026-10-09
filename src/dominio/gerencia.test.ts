@@ -29,7 +29,7 @@ import {
 import { TIENDA_TEXTIL } from "./cobros";
 import { redondear } from "./importes";
 import type { PedidoPendiente } from "./pendientes";
-import type { CobroConsolidado } from "./facturacion";
+import { consolidarCobro, type CobroConsolidado } from "./facturacion";
 
 const tienda = (p: Partial<Venta> = {}): Venta =>
   ventaDeTienda({
@@ -241,6 +241,40 @@ describe("diasMediosCobro", () => {
 
   it("sin cobros no hay media", () => {
     expect(diasMediosCobro([])).toBeNull();
+  });
+
+  it("un cobro web cuenta con 0 días aunque la base lo feche al día siguiente", () => {
+    // Pedido web de las 23:15 del 7: la web guarda su hora como si fuera UTC,
+    // así que es del día 7; cobro_web_al_dia() lo pasa a Madrid y fecha el
+    // cobro el 8.
+    const web = consolidarCobro(
+      {
+        id: "c",
+        fecha: "2026-10-08",
+        importe: 121,
+        propina: 0,
+        metodo: "web",
+        previo: false,
+        tienda_id: "t1",
+        pedido: {
+          id: "p",
+          numero: "W-1",
+          fecha: "2026-10-07T23:15:00+00:00",
+          origen: "woocommerce",
+          cliente_nombre: null,
+          total: 121,
+          iva: 21,
+          envio: 0,
+          metros: 1,
+        },
+      },
+      "pedido",
+    );
+    expect(web.fecha_pedido).toBe("2026-10-07");
+    expect(web.fecha_cobro).toBe("2026-10-08");
+    expect(diasMediosCobro([web])).toBe(0);
+    // Junto a uno manual de 100 € a 9 días: (121·0 + 100·9) / 221 = 4,07…
+    expect(diasMediosCobro([web, cobro({ importe: 100 })])).toBe(4.1);
   });
 });
 

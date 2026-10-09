@@ -310,13 +310,18 @@ export function antiguedadPendientes(
  * Cuántos días pasan de media del pedido al cobro, pesando cada cobro por su
  * importe (cobrar 1.000 € a 60 días pesa más que 10 € a 5). `null` sin
  * cobros. Los de la web cuentan con 0 días: se pagan al hacer el pedido.
+ *
+ * Y cuentan con 0 aunque su fecha diga otra cosa: la base fecha el cobro web
+ * pasando la hora del pedido a Madrid (cobro_web_al_dia()), y como la web
+ * guarda su hora como si fuera UTC, un pedido de las 23:15 lleva el cobro
+ * del día siguiente, mientras que el pedido es de su día (diaDelPedido).
  */
 export function diasMediosCobro(cobros: readonly CobroConsolidado[]): number | null {
   let peso = 0;
   let suma = 0;
   for (const c of cobros) {
     if (c.importe <= 0 || !c.fecha_pedido) continue;
-    const dias = diasEntre(c.fecha_pedido, c.fecha_cobro);
+    const dias = c.metodo === "web" ? 0 : diasEntre(c.fecha_pedido, c.fecha_cobro);
     peso += c.importe;
     suma += c.importe * dias;
   }
