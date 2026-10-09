@@ -1016,6 +1016,8 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
     referencia: factura.numero,
     // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
     titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
+    // Y en A4 sale como el de 80 mm: líneas sin IVA y Base / IVA / TOTAL.
+    simplificada: factura.tipo === "simplificada",
     logo: await descargarLogo(emisor.logo_url),
     fecha: factura.fecha ?? new Date().toISOString(),
     fecha_vencimiento: factura.vencimiento,

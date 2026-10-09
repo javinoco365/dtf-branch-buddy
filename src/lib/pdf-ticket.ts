@@ -2,14 +2,13 @@ import { eur, eurUnitario, fechaCorta, numeroJusto } from "@/lib/format";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
 import { importeLineaSinIva, pieDocumentoEmitido } from "@/dominio/importes";
 
-/** Una fila del desglose de IVA congelado en la factura. */
-export type DesgloseTicket = { tipo: number; base: number; cuota: number };
-
+/**
+ * Los mismos datos que el A4, desglose de IVA congelado incluido, y además el
+ * nombre comercial, que solo imprime el de 80 mm.
+ */
 export type TicketPDFData = FacturaPDFData & {
   /** El nombre de la tienda o de la marca, encima de la razón social. */
   nombre_comercial?: string | null;
-  /** El desglose de IVA que se congeló al emitir. Se imprime tal cual, sin recalcular. */
-  desglose?: DesgloseTicket[] | null;
 };
 
 const ANCHO = 80;
