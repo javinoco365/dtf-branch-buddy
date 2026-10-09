@@ -1010,8 +1010,10 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
   }
 
   // Las líneas salen de lineas_snapshot, que guarda la cuota, el total y la
-  // unidad de cada una. Esta tabla solo guarda la base: se usa con las
-  // facturas emitidas antes del motor, que no tienen snapshot.
+  // unidad de cada una. No guarda el orden en que se escribieron:
+  // factura_calcular las deja ordenadas por descripción, y así salen. Esta
+  // tabla solo guarda la base: se usa con las facturas emitidas antes del
+  // motor, que no tienen snapshot.
   const { data: items } = await supabaseAdmin
     .from("textil_factura_items")
     .select("descripcion, cantidad, precio_unitario, iva_rate:iva_pct, subtotal")

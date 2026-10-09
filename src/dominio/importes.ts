@@ -277,9 +277,11 @@ export function lineaImpresa(linea: LineaGuardada): LineaImpresa {
  * Las líneas de un documento ya emitido, para imprimirlo.
  *
  * Primero, las de `lineas_snapshot`: es lo que se congeló al emitir, con la
- * cuota, el total y la unidad de cada línea, y en su orden. Solo si el
- * documento no lo tiene (los emitidos antes del motor de facturación) salen de
- * la tabla de líneas, completadas con `lineaImpresa`.
+ * cuota, el total y la unidad de cada línea, y en el orden en que se
+ * congelaron. Ese no es el orden en que se escribieron: `factura_calcular`
+ * las ordena por descripción. Solo si el documento no lo tiene (los emitidos
+ * antes del motor de facturación) salen de la tabla de líneas, completadas
+ * con `lineaImpresa`.
  */
 export function lineasImpresas(
   snapshot: unknown,
