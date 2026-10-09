@@ -56,8 +56,9 @@ function ConciliacionPage() {
     queryKey: ["conciliacion-motor"],
     queryFn: () => verFn(),
   });
-  // Sin la migración del motor (20261017100000), la conciliación de antes.
-  if (motor && !motor.disponible) return <ConciliacionAntigua />;
+  // Sin las migraciones del motor (20261017100000 y 20261025100000), la
+  // conciliación de antes, diciendo cuál falta.
+  if (motor && !motor.disponible) return <ConciliacionAntigua falta={motor.falta} />;
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
@@ -81,8 +82,11 @@ function ConciliacionPage() {
   );
 }
 
-/** La conciliación de antes: ingresos contra facturas emitidas, uno a uno. */
-function ConciliacionAntigua() {
+/**
+ * La conciliación de antes: ingresos contra facturas emitidas, uno a uno.
+ * `falta`: la migración que necesita el motor, para decirlo.
+ */
+function ConciliacionAntigua({ falta }: { falta?: string }) {
   const qc = useQueryClient();
   const ficheroRef = useRef<HTMLInputElement>(null);
   const [elegidas, setElegidas] = useState<Record<string, string>>({});
@@ -176,6 +180,11 @@ function ConciliacionAntigua() {
           <p className="text-sm text-muted-foreground">
             Sube el extracto del banco y marca de una vez las facturas cobradas.
           </p>
+          {falta && (
+            <p className="text-xs text-muted-foreground">
+              El motor de conciliación necesita la migración <code>{falta}</code>.
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           {!conCuentas && (

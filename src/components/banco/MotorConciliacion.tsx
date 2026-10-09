@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
   ArrowLeftRight,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Lightbulb,
   Undo2,
   Wand2,
@@ -38,9 +40,11 @@ import {
   deshacerEnlace,
   desmarcarTraspaso,
   enlazarManual,
+  verEnlaces,
+  verTraspasos,
+  type Cuantos,
   type DocumentoConciliable,
   type EnlaceGuardado,
-  type MovimientoConciliable,
   type Recortado,
 } from "@/lib/conciliacion.functions";
 import {
@@ -49,25 +53,32 @@ import {
   ETIQUETA_MOTIVO,
   sugerencias,
   type Enlace,
+  type Movimiento,
   type Plan,
 } from "@/dominio/motor-conciliacion";
+import { tramoDePagina } from "@/dominio/paginacion";
 import { totalesConSigno } from "@/dominio/sumatorios";
 import { totalesEnlaces } from "@/dominio/sumatorios-banco";
 import { useCuentasBanco } from "./useCuentasBanco";
 
 export type DatosConciliacion = {
-  movimientos: MovimientoConciliable[];
+  /** Los movimientos sin conciliar (ni traspaso) de la ventana. */
+  movimientos: Movimiento[];
+  /** Los documentos por conciliar de la ventana: los que el motor puede proponer. */
   documentos: DocumentoConciliable[];
-  enlaces: EnlaceGuardado[];
-  libres: string[];
   plan: Plan;
-  /** Si quedaron movimientos o documentos fuera de lo que se mira. */
+  /** Si quedaron pendientes fuera de lo que se mira. */
   recortado?: Recortado;
   /** Cuántos de cada cosa se miran como mucho. */
   limite?: number;
+  /** Cuántos hay en las pestañas del historial. */
+  cuantos?: Cuantos;
 };
 
 const claveDoc = (d: { tipo: string; id: string }) => `${d.tipo}:${d.id}`;
+
+/** La clave de las páginas del historial: se refrescan juntas tras cada cambio. */
+const CLAVE_HISTORIAL = "conciliacion-historial";
 
 /**
  * Conciliación con el motor. Verde: importe, fecha y contraparte, sin duda de
@@ -83,7 +94,7 @@ export function MotorConciliacion({
 }) {
   const qc = useQueryClient();
   const { data: banco } = useCuentasBanco();
-  const [sugerir, setSugerir] = useState<MovimientoConciliable | null>(null);
+  const [sugerir, setSugerir] = useState<Movimiento | null>(null);
 
   const alias = useMemo(
     () =>
@@ -94,10 +105,6 @@ export function MotorConciliacion({
   );
   const docs = useMemo(() => new Map(datos.documentos.map((d) => [claveDoc(d), d])), [datos]);
   const movs = useMemo(() => new Map(datos.movimientos.map((m) => [m.id, m])), [datos]);
-  const libres = useMemo(
-    () => datos.libres.map((k) => docs.get(k)).filter((d): d is DocumentoConciliable => !!d),
-    [datos, docs],
-  );
 
   // La propuesta de cada movimiento libre, para pintarla en su fila.
   const propuestaDe = useMemo(() => {
@@ -115,21 +122,20 @@ export function MotorConciliacion({
     return m;
   }, [datos]);
 
-  const sinConciliar = datos.movimientos.filter((m) => !m.grupo && !m.traspaso_con);
-  const revisar = datos.enlaces.filter((e) => e.estado === "revisar");
-  const conciliados = datos.enlaces.filter((e) => e.estado === "conciliada");
-  const traspasos = datos.movimientos.filter((m) => m.traspaso_con && m.importe < 0);
+  // Solo llega lo que está por conciliar: los movimientos son todos «sin
+  // conciliar» y los documentos, todos libres.
+  const sinConciliar = datos.movimientos;
+  const libres = datos.documentos;
+  const cuantos = datos.cuantos ?? { revisar: 0, conciliados: 0, traspasos: 0 };
   // Abonos y cargos por separado: un neto solo esconde cuánto entra y cuánto sale.
   const totalSinConciliar = totalesConSigno(sinConciliar, (m) => m.importe);
-  // Los traspasos se listan desde el lado que sale, así que cada pareja cuenta
-  // una vez: lo movido entre cuentas propias son las salidas.
-  const totalTraspasos = totalesConSigno(traspasos, (m) => m.importe);
   const { verdes, ambares, traspasos: tp } = datos.plan;
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
   const recorte = avisoRecorte(datos.recortado, datos.limite);
 
   const refrescar = () => {
     alCambiar();
+    qc.invalidateQueries({ queryKey: [CLAVE_HISTORIAL] });
     qc.invalidateQueries({ queryKey: ["compras"] });
     qc.invalidateQueries({ queryKey: ["facturas"] });
   };
@@ -191,7 +197,7 @@ export function MotorConciliacion({
     onError: (e) => aviso(e, "No se pudo enlazar"),
   });
 
-  const cuentaDe = (m: MovimientoConciliable) =>
+  const cuentaDe = (m: Movimiento) =>
     m.cuenta_id ? (alias.get(m.cuenta_id) ?? "—") : "Sin cuenta";
 
   return (
@@ -225,9 +231,9 @@ export function MotorConciliacion({
       <Tabs defaultValue="pendientes">
         <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="pendientes">Sin conciliar ({sinConciliar.length})</TabsTrigger>
-          <TabsTrigger value="revisar">Por revisar ({revisar.length})</TabsTrigger>
-          <TabsTrigger value="conciliados">Conciliados ({conciliados.length})</TabsTrigger>
-          <TabsTrigger value="traspasos">Traspasos ({traspasos.length})</TabsTrigger>
+          <TabsTrigger value="revisar">Por revisar ({cuantos.revisar})</TabsTrigger>
+          <TabsTrigger value="conciliados">Conciliados ({cuantos.conciliados})</TabsTrigger>
+          <TabsTrigger value="traspasos">Traspasos ({cuantos.traspasos})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pendientes">
@@ -328,10 +334,8 @@ export function MotorConciliacion({
         </TabsContent>
 
         <TabsContent value="revisar">
-          <TablaEnlaces
-            enlaces={revisar}
-            movs={movs}
-            docs={docs}
+          <HistorialEnlaces
+            estado="revisar"
             cuentaDe={cuentaDe}
             vacio="No hay nada por revisar."
             acciones={(e) => (
@@ -359,10 +363,8 @@ export function MotorConciliacion({
         </TabsContent>
 
         <TabsContent value="conciliados">
-          <TablaEnlaces
-            enlaces={conciliados}
-            movs={movs}
-            docs={docs}
+          <HistorialEnlaces
+            estado="conciliada"
             cuentaDe={cuentaDe}
             vacio="Todavía no has conciliado nada."
             acciones={(e) => (
@@ -380,70 +382,11 @@ export function MotorConciliacion({
         </TabsContent>
 
         <TabsContent value="traspasos">
-          <Card>
-            <CardContent className="p-0">
-              <Table movil="tarjetas">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Sale de</TableHead>
-                    <TableHead>Entra en</TableHead>
-                    <TableHead className="text-right w-28">Importe</TableHead>
-                    <TableHead aria-label="Acciones" className="w-16" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {traspasos.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        No hay traspasos entre cuentas propias.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {traspasos.map((m) => {
-                    const otro = m.traspaso_con ? movs.get(m.traspaso_con) : undefined;
-                    return (
-                      <TableRow key={m.id}>
-                        <TableCell>
-                          {cuentaDe(m)} · {fechaCorta(m.fecha)}
-                        </TableCell>
-                        <TableCell>
-                          {otro ? `${cuentaDe(otro)} · ${fechaCorta(otro.fecha)}` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {eur(Math.abs(m.importe))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="No es un traspaso"
-                            disabled={desmarcar.isPending}
-                            onClick={() => desmarcar.mutate(m.id)}
-                          >
-                            <Undo2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-                {traspasos.length > 0 && (
-                  <TableFooter>
-                    <TableRow>
-                      <TableCell colSpan={2} className="font-semibold">
-                        Total · {traspasos.length}{" "}
-                        {traspasos.length === 1 ? "traspaso" : "traspasos"}
-                      </TableCell>
-                      <TableCell className="text-right font-bold tabular-nums">
-                        {eur(totalTraspasos.salidas)}
-                      </TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableFooter>
-                )}
-              </Table>
-            </CardContent>
-          </Card>
+          <HistorialTraspasos
+            cuentaDe={cuentaDe}
+            ocupado={desmarcar.isPending}
+            alDesmarcar={(id) => desmarcar.mutate(id)}
+          />
         </TabsContent>
       </Tabs>
 
@@ -480,15 +423,18 @@ export function MotorConciliacion({
 }
 
 /**
- * El aviso cuando la conciliación no mira todo: el servidor lee como mucho
- * `limite` movimientos y `limite` documentos de cada clase, los más recientes.
+ * El aviso cuando la conciliación no mira todo lo pendiente: el servidor lee
+ * como mucho `limite` movimientos sin conciliar y `limite` documentos por
+ * conciliar de cada clase, los más recientes. Solo sale si queda algo
+ * pendiente fuera.
  */
 function avisoRecorte(r: Recortado | undefined, limite: number | undefined): string | null {
   if (!r || !limite || (!r.movimientos && !r.documentos)) return null;
   const n = numeroJusto(limite, 0);
   const que = [
-    r.movimientos && `los ${n} movimientos más recientes`,
-    r.documentos && `las ${n} facturas más recientes de cada clase (recibidas, de tienda y textil)`,
+    r.movimientos && `los ${n} movimientos sin conciliar más recientes`,
+    r.documentos &&
+      `las ${n} facturas por conciliar más recientes de cada clase (recibidas, de tienda y textil)`,
   ]
     .filter(Boolean)
     .join(" y ");
@@ -526,24 +472,97 @@ function Propuesta({ enlace, docs }: { enlace: Enlace; docs: Map<string, Documen
   );
 }
 
-function TablaEnlaces({
-  enlaces,
-  movs,
-  docs,
+/**
+ * Una página de una pestaña del historial: la pedida y, si el servidor dice
+ * que ya no existe (se deshizo lo último de la última), la que manda.
+ */
+function usePaginaHistorial<T extends { pagina: number }>(
+  pestana: string,
+  leer: (pagina: number) => Promise<T>,
+) {
+  const qc = useQueryClient();
+  const [pedida, setPedida] = useState(0);
+  const consulta = useQuery({
+    queryKey: [CLAVE_HISTORIAL, pestana, pedida],
+    queryFn: () => leer(pedida),
+    placeholderData: keepPreviousData,
+  });
+  const { data, isPlaceholderData } = consulta;
+  useEffect(() => {
+    if (data && !isPlaceholderData && data.pagina !== pedida) {
+      qc.setQueryData([CLAVE_HISTORIAL, pestana, data.pagina], data);
+      setPedida(data.pagina);
+    }
+  }, [data, isPlaceholderData, pedida, qc, pestana]);
+  return { ...consulta, setPedida };
+}
+
+function HistorialEnlaces({
+  estado,
   cuentaDe,
   vacio,
   acciones,
 }: {
-  enlaces: EnlaceGuardado[];
-  movs: Map<string, MovimientoConciliable>;
-  docs: Map<string, DocumentoConciliable>;
-  cuentaDe: (m: MovimientoConciliable) => string;
+  estado: EnlaceGuardado["estado"];
+  cuentaDe: (m: Movimiento) => string;
   vacio: string;
   acciones: (e: EnlaceGuardado) => React.ReactNode;
 }) {
+  const verFn = useServerFn(verEnlaces);
+  const { data, error, isPending, isFetching, setPedida } = usePaginaHistorial(estado, (pagina) =>
+    verFn({ data: { estado, pagina } }),
+  );
+  return (
+    <TablaEnlaces
+      enlaces={data?.enlaces ?? []}
+      cuentaDe={cuentaDe}
+      vacio={error ? `No se pudo leer: ${error.message}` : isPending ? "Cargando…" : vacio}
+      acciones={acciones}
+      parcial={!!data && data.total > data.porPagina}
+      paginas={
+        data && (
+          <Paginas
+            pagina={data.pagina}
+            porPagina={data.porPagina}
+            total={data.total}
+            ocupado={isFetching}
+            alCambiar={setPedida}
+          />
+        )
+      }
+    />
+  );
+}
+
+function TablaEnlaces({
+  enlaces,
+  cuentaDe,
+  vacio,
+  acciones,
+  parcial,
+  paginas,
+}: {
+  enlaces: EnlaceGuardado[];
+  cuentaDe: (m: Movimiento) => string;
+  vacio: string;
+  acciones: (e: EnlaceGuardado) => React.ReactNode;
+  /** Si hay más páginas: el pie suma solo esta. */
+  parcial: boolean;
+  paginas: React.ReactNode;
+}) {
   // Se suma el lado banco, sin repetir movimientos. La columna de facturas no
   // se suma: va en valor absoluto y mezcla cobros con pagos.
-  const total = totalesEnlaces(enlaces, movs);
+  const total = useMemo(
+    () =>
+      totalesEnlaces(
+        enlaces.map((e) => ({
+          movimientos: e.movimientos.map((m) => m.id),
+          diferencia: e.diferencia,
+        })),
+        new Map(enlaces.flatMap((e) => e.movimientos.map((m) => [m.id, m] as const))),
+      ),
+    [enlaces],
+  );
   return (
     <Card>
       <CardContent className="p-0">
@@ -567,27 +586,18 @@ function TablaEnlaces({
             {enlaces.map((e) => (
               <TableRow key={e.grupo}>
                 <TableCell className="text-sm">
-                  {e.movimientos.map((id) => {
-                    const m = movs.get(id);
-                    return (
-                      <div key={id}>
-                        {m
-                          ? `${fechaCorta(m.fecha)} · ${cuentaDe(m)} · ${m.concepto || "—"} · ${eur(m.importe)}`
-                          : "Movimiento antiguo"}
-                      </div>
-                    );
-                  })}
+                  {e.movimientos.map((m) => (
+                    <div key={m.id}>
+                      {`${fechaCorta(m.fecha)} · ${cuentaDe(m)} · ${m.concepto || "—"} · ${eur(m.importe)}`}
+                    </div>
+                  ))}
                 </TableCell>
                 <TableCell className="text-sm">
-                  {e.documentos.map((d) => {
-                    const doc = docs.get(claveDoc(d));
-                    return (
-                      <div key={claveDoc(d)}>
-                        {etiquetaDoc(doc)}
-                        {doc && ` · ${eur(Math.abs(doc.esperado))}`}
-                      </div>
-                    );
-                  })}
+                  {e.documentos.map((d) => (
+                    <div key={claveDoc(d)}>
+                      {etiquetaDoc(d)} · {eur(Math.abs(d.esperado))}
+                    </div>
+                  ))}
                 </TableCell>
                 <TableCell>
                   <div className="text-xs">
@@ -631,8 +641,9 @@ function TablaEnlaces({
               <TableRow>
                 <TableCell className="text-sm">
                   <span className="font-semibold">
-                    Total · {total.enlaces} {total.enlaces === 1 ? "enlace" : "enlaces"} ·{" "}
-                    {total.movimientos} {total.movimientos === 1 ? "movimiento" : "movimientos"}
+                    {parcial ? "Total de la página" : "Total"} · {total.enlaces}{" "}
+                    {total.enlaces === 1 ? "enlace" : "enlaces"} · {total.movimientos}{" "}
+                    {total.movimientos === 1 ? "movimiento" : "movimientos"}
                   </span>{" "}
                   ·{" "}
                   <span
@@ -640,15 +651,6 @@ function TablaEnlaces({
                   >
                     {eur(total.neto)}
                   </span>
-                  {total.sinImporte > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Total parcial: {total.sinImporte}{" "}
-                      {total.sinImporte === 1
-                        ? "movimiento antiguo no está cargado y no suma"
-                        : "movimientos antiguos no están cargados y no suman"}
-                      .
-                    </div>
-                  )}
                 </TableCell>
                 <TableCell />
                 <TableCell>
@@ -661,8 +663,156 @@ function TablaEnlaces({
             </TableFooter>
           )}
         </Table>
+        {paginas}
       </CardContent>
     </Card>
+  );
+}
+
+function HistorialTraspasos({
+  cuentaDe,
+  ocupado,
+  alDesmarcar,
+}: {
+  cuentaDe: (m: Movimiento) => string;
+  ocupado: boolean;
+  alDesmarcar: (movimientoId: string) => void;
+}) {
+  const verFn = useServerFn(verTraspasos);
+  const { data, error, isPending, isFetching, setPedida } = usePaginaHistorial(
+    "traspasos",
+    (pagina) => verFn({ data: { pagina } }),
+  );
+  const traspasos = data?.traspasos ?? [];
+  const parcial = !!data && data.total > data.porPagina;
+  // Cada traspaso se lista desde el lado que sale, así que cada pareja cuenta
+  // una vez: lo movido entre cuentas propias son las salidas.
+  const total = totalesConSigno(
+    traspasos.map((t) => t.sale),
+    (m) => m.importe,
+  );
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <Table movil="tarjetas">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Sale de</TableHead>
+              <TableHead>Entra en</TableHead>
+              <TableHead className="text-right w-28">Importe</TableHead>
+              <TableHead aria-label="Acciones" className="w-16" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {traspasos.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  {error
+                    ? `No se pudo leer: ${error.message}`
+                    : isPending
+                      ? "Cargando…"
+                      : "No hay traspasos entre cuentas propias."}
+                </TableCell>
+              </TableRow>
+            )}
+            {traspasos.map(({ sale, entra }) => (
+              <TableRow key={sale.id}>
+                <TableCell>
+                  {cuentaDe(sale)} · {fechaCorta(sale.fecha)}
+                </TableCell>
+                <TableCell>
+                  {entra ? `${cuentaDe(entra)} · ${fechaCorta(entra.fecha)}` : "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {eur(Math.abs(sale.importe))}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="No es un traspaso"
+                    disabled={ocupado}
+                    onClick={() => alDesmarcar(sale.id)}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          {traspasos.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={2} className="font-semibold">
+                  {parcial ? "Total de la página" : "Total"} · {traspasos.length}{" "}
+                  {traspasos.length === 1 ? "traspaso" : "traspasos"}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(total.salidas)}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
+        {data && (
+          <Paginas
+            pagina={data.pagina}
+            porPagina={data.porPagina}
+            total={data.total}
+            ocupado={isFetching}
+            alCambiar={setPedida}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** «101–200 de 340» y los botones para ir a los más recientes o a los anteriores. */
+function Paginas({
+  pagina,
+  porPagina,
+  total,
+  ocupado,
+  alCambiar,
+}: {
+  pagina: number;
+  porPagina: number;
+  total: number;
+  ocupado: boolean;
+  alCambiar: (pagina: number) => void;
+}) {
+  if (total <= porPagina) return null;
+  const t = tramoDePagina(pagina, porPagina, total);
+  const hayAnteriores = t.ultima < total;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-sm text-muted-foreground">
+      <span className="tabular-nums">
+        {numeroJusto(t.primera, 0)}–{numeroJusto(t.ultima, 0)} de {numeroJusto(total, 0)}, los más
+        recientes primero
+      </span>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={t.pagina === 0 || ocupado}
+          onClick={() => alCambiar(t.pagina - 1)}
+        >
+          <ChevronLeft className="h-4 w-4 mr-1" />
+          Más recientes
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!hayAnteriores || ocupado}
+          onClick={() => alCambiar(t.pagina + 1)}
+        >
+          Anteriores
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -672,7 +822,7 @@ function ListaSugerencias({
   ocupado,
   alEnlazar,
 }: {
-  movimiento: MovimientoConciliable;
+  movimiento: Movimiento;
   libres: DocumentoConciliable[];
   ocupado: boolean;
   alEnlazar: (d: DocumentoConciliable) => void;
