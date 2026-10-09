@@ -36,6 +36,7 @@ describe("totalesCliente", () => {
         { id: "f1", estado: "emitida", total: 121, sustituye_a_id: "t1" },
         { id: "b1", estado: "borrador", total: 999 },
       ],
+      facturasTextil: [],
     });
     expect(t.tienda).toMatchObject({ pedidos: 1, cancelados: 1, total: 100.1 });
     expect(t.textil).toMatchObject({ pedidos: 1, cancelados: 1, total: 0.2 });
@@ -44,8 +45,42 @@ describe("totalesCliente", () => {
     expect(t.facturas).toMatchObject({ documentos: 1, total: 121, borradores: 1, canjeados: 1 });
   });
 
+  it("las facturas del textil suman en la misma tabla y con las mismas reglas", () => {
+    const t = totalesCliente({
+      pedidos: [],
+      pedidosTextil: [],
+      facturas: [{ id: "f1", estado: "emitida", base: 100, iva: 21, total: 121 }],
+      facturasTextil: [
+        // Un ticket canjeado por factura: solo cuenta la factura.
+        { id: "tt1", estado: "emitida", base: 50, iva: 10.5, total: 60.5 },
+        {
+          id: "tf1",
+          estado: "emitida",
+          base: 50,
+          iva: 10.5,
+          total: "60.50",
+          sustituye_a_id: "tt1",
+        },
+        // Una factura anulada por su rectificativa: suman cero.
+        { id: "tf2", estado: "emitida", base: 10, iva: 2.1, total: 12.1 },
+        { id: "tr2", estado: "emitida", base: -10, iva: -2.1, total: -12.1, rectifica_a_id: "tf2" },
+        { id: "tb1", estado: "borrador", total: 999 },
+      ],
+    });
+    expect(t.facturas).toEqual({
+      documentos: 4,
+      base: 150,
+      iva: 31.5,
+      total: 181.5,
+      borradores: 1,
+      canjeados: 1,
+    });
+    // Las facturas no cambian lo pedido.
+    expect(t.totalPedidos).toBe(0);
+  });
+
   it("sin historial, todo a cero", () => {
-    const t = totalesCliente({ pedidos: [], pedidosTextil: [], facturas: [] });
+    const t = totalesCliente({ pedidos: [], pedidosTextil: [], facturas: [], facturasTextil: [] });
     expect(t.totalPedidos).toBe(0);
     expect(t.facturas.total).toBe(0);
   });

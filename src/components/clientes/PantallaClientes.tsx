@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { tabla } from "@/lib/rpc";
+import { leerTodas } from "@/lib/paginar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -49,7 +50,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
 import {
   etiquetaOrigen,
   filtrarClientes,
@@ -614,13 +615,16 @@ function ClienteDetalle({
       // un ticket canjeado por factura y lo vuelva a contar si esa factura se
       // anula. tabla(): types.ts todavía no conoce la columna.
       const { data, error } = await tabla(supabase, "facturas")
-        .select("id, serie, numero, fecha, estado, total, sustituye_a_id, rectifica_a_id")
+        .select(
+          "id, serie, ejercicio, numero, fecha, estado, total, sustituye_a_id, rectifica_a_id",
+        )
         .eq("cliente_id", clienteId)
         .order("fecha", { ascending: false });
       if (error) throw error;
       return (data ?? []) as {
         id: string;
         serie: string;
+        ejercicio: number | null;
         numero: number;
         fecha: string;
         estado: string;
@@ -631,12 +635,55 @@ function ClienteDetalle({
     },
   });
 
+  // Sus facturas y tickets del textil, con los mismos enlaces de canje y
+  // rectificación: suman en la misma tabla y con las mismas reglas.
+  const { data: facturasTextil = [] } = useQuery({
+    queryKey: ["cliente-facturas-textil", clienteId],
+    queryFn: async () => {
+      const { data, error } = await leerTodas<{
+        id: string;
+        numero: string;
+        fecha: string;
+        estado: string;
+        total: number;
+        sustituye_a_id: string | null;
+        rectifica_a_id: string | null;
+      }>((a, b) =>
+        tabla(supabase, "textil_facturas")
+          .select("id, numero, fecha, estado, total, sustituye_a_id, rectifica_a_id")
+          .eq("cliente_id", clienteId)
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      );
+      if (error) throw error;
+      return data;
+    },
+  });
+
   if (!cliente) return null;
 
   // Los pies de las tres tablas y la tarjeta «Total pedidos», con las mismas
   // reglas: los cancelados no suman, y de las facturas, los borradores y los
   // tickets canjeados tampoco.
-  const totales = totalesCliente({ pedidos, pedidosTextil, facturas });
+  const totales = totalesCliente({ pedidos, pedidosTextil, facturas, facturasTextil });
+  // Las de las tiendas y las del textil, juntas y de la más reciente a la más antigua.
+  const filasFacturas = [
+    ...facturas.map((f) => ({
+      id: f.id,
+      ref: referenciaFactura(f.serie, f.ejercicio, f.numero),
+      fecha: f.fecha,
+      estado: f.estado,
+      total: Number(f.total),
+    })),
+    ...facturasTextil.map((f) => ({
+      id: f.id,
+      ref: f.numero,
+      fecha: f.fecha,
+      estado: f.estado,
+      total: Number(f.total),
+    })),
+  ].sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -688,7 +735,7 @@ function ClienteDetalle({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Resumen titulo="Pedidos tiendas" valor={String(pedidos.length)} />
           <Resumen titulo="Pedidos textil" valor={String(pedidosTextil.length)} />
-          <Resumen titulo="Facturas" valor={String(facturas.length)} />
+          <Resumen titulo="Facturas" valor={String(filasFacturas.length)} />
           <Resumen titulo="Total pedidos" valor={eur(totales.totalPedidos)} />
         </div>
 
@@ -732,13 +779,7 @@ function ClienteDetalle({
             texto: describirDocumentos(totales.facturas),
             total: totales.facturas.total,
           }}
-          filas={facturas.map((f) => ({
-            id: f.id,
-            ref: `${f.serie}-${String(f.numero).padStart(4, "0")}`,
-            fecha: f.fecha,
-            estado: f.estado,
-            total: Number(f.total),
-          }))}
+          filas={filasFacturas}
         />
 
         <DialogFooter>
