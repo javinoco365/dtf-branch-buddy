@@ -170,7 +170,7 @@ export const LEEME_ANALISIS = {
   },
   reglas: [
     "Los pedidos cancelados no cuentan en ventas, metros, costes ni pendiente: van aparte (cancelados, importe_cancelados, devuelto_cancelados, cobrado_cancelados).",
-    "Los importes y costes de cada pedido son los que se guardaron con él; no se recalculan con los precios de hoy. Excepción: cada sincronización vuelve a escribir los últimos 100 pedidos web, y sus metros estimados se recalculan con el precio por metro de Ajustes de ese momento.",
+    "Los importes y costes de cada pedido son los que se guardaron con él; no se recalculan con los precios de hoy. Excepción: cada sincronización vuelve a escribir los pedidos web que han cambiado en WooCommerce desde la anterior, y sus metros estimados se recalculan con el precio por metro de Ajustes de ese momento.",
     "No hay datos de contacto de los clientes (ni email, ni teléfono, ni dirección): solo su id y su nombre.",
   ],
   diferencias_con_las_pantallas: [

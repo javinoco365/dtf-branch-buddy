@@ -32,7 +32,8 @@ import {
   diagnosticoLineasWoo,
   recuperarEnviosWoo,
 } from "@/lib/woocommerce.functions";
-import { eur, metros as fmtMetros } from "@/lib/format";
+import { eur, metros as fmtMetros, numero } from "@/lib/format";
+import { seguirConOtraTanda, type CursorWoo } from "@/dominio/cursor-woo";
 import {
   RefreshCw,
   KeyRound,
@@ -78,6 +79,10 @@ function Ajustes() {
   const sync = useServerFn(sincronizarWoo);
   const syncClientes = useServerFn(sincronizarClientesWoo);
   const [sincronizandoClientes, setSincronizandoClientes] = useState(false);
+  const [progresoSync, setProgresoSync] = useState<{
+    pedidos: number;
+    quedan: number | null;
+  } | null>(null);
 
   const { data: tienda } = useQuery({
     queryKey: ["tienda", tiendaId],
@@ -168,6 +173,90 @@ function Ajustes() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Por tandas: cada llamada trae lo que cabe en el tiempo de una función y
+  // dice por dónde seguir; se repite hasta que no queda nada. Lo traído se
+  // queda guardado aunque una tanda falle.
+  async function sincronizarAhora() {
+    const suma = {
+      pedidos: 0,
+      clientes: 0,
+      productos: 0,
+      devoluciones: 0,
+      borrados: 0,
+      protegidos: 0,
+    };
+    const avisos = new Set<string>();
+    let continuar: CursorWoo | undefined;
+    let quedan: number | null = null;
+    setProgresoSync({ pedidos: 0, quedan: null });
+    try {
+      for (let tanda = 1; ; tanda++) {
+        const r = await sync({ data: { tienda_id: tiendaId, continuar } });
+        suma.pedidos += r.pedidos;
+        suma.clientes += r.clientes;
+        suma.productos += r.productos;
+        suma.devoluciones += r.devoluciones_actualizadas;
+        suma.borrados += r.pedidos_borrados;
+        suma.protegidos += r.protegidos_por_factura;
+        r.avisos.forEach((a) => avisos.add(a));
+        quedan = r.quedan;
+        setProgresoSync({ pedidos: suma.pedidos, quedan });
+
+        const decision = seguirConOtraTanda(tanda, continuar, r.siguiente);
+        if (decision === "seguir" && r.siguiente) {
+          continuar = r.siguiente;
+          continue;
+        }
+        if (decision === "sin_avance") {
+          avisos.add(
+            "La sincronización no avanzaba y se ha parado. Vuelve a intentarlo más tarde.",
+          );
+        }
+        if (decision === "tope") {
+          avisos.add(
+            `Se ha parado después de ${numero(tanda, 0)} tandas` +
+              (quedan ? `; quedan unos ${numero(quedan, 0)} pedidos` : "") +
+              ". Vuelve a pulsar «Sincronizar ahora» para seguir donde se quedó.",
+          );
+        }
+        break;
+      }
+
+      const detalles = [
+        `${numero(suma.pedidos, 0)} pedidos`,
+        `${numero(suma.clientes, 0)} clientes`,
+        `${numero(suma.productos, 0)} productos`,
+      ];
+      if (suma.devoluciones > 0) {
+        detalles.push(`${numero(suma.devoluciones, 0)} con devolución`);
+      }
+      if (suma.borrados > 0) {
+        detalles.push(`${numero(suma.borrados, 0)} borrados (ya no están en WooCommerce)`);
+      }
+      toast.success(`Sincronizado: ${detalles.join(", ")}`);
+      if (suma.protegidos > 0) {
+        toast.warning(
+          `${numero(suma.protegidos, 0)} ${
+            suma.protegidos === 1
+              ? "pedido ha desaparecido de WooCommerce pero no se ha borrado"
+              : "pedidos han desaparecido de WooCommerce pero no se han borrado"
+          }: tienen una factura emitida.`,
+        );
+      }
+      avisos.forEach((a) => toast.warning(a));
+    } catch (e) {
+      toast.error(
+        `${(e as Error).message}` +
+          (suma.pedidos
+            ? ` (antes de fallar se guardaron ${numero(suma.pedidos, 0)} pedidos)`
+            : ""),
+      );
+    } finally {
+      setProgresoSync(null);
+      qc.invalidateQueries();
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -264,39 +353,14 @@ function Ajustes() {
             </Button>
             <Button
               variant="secondary"
-              onClick={async () => {
-                try {
-                  const r = await sync({ data: { tienda_id: tiendaId } });
-                  const detalles = [
-                    `${r.pedidos} pedidos`,
-                    `${r.clientes} clientes`,
-                    `${r.productos} productos`,
-                  ];
-                  if (r.devoluciones_actualizadas > 0) {
-                    detalles.push(`${r.devoluciones_actualizadas} con devolución`);
-                  }
-                  if (r.pedidos_borrados > 0) {
-                    detalles.push(`${r.pedidos_borrados} borrados (ya no están en WooCommerce)`);
-                  }
-                  toast.success(`Sincronizado: ${detalles.join(", ")}`);
-                  if (r.protegidos_por_factura > 0) {
-                    toast.warning(
-                      `${r.protegidos_por_factura} ${
-                        r.protegidos_por_factura === 1
-                          ? "pedido ha desaparecido de WooCommerce pero no se ha borrado"
-                          : "pedidos han desaparecido de WooCommerce pero no se han borrado"
-                      }: tienen una factura emitida.`,
-                    );
-                  }
-                  qc.invalidateQueries();
-                } catch (e) {
-                  toast.error((e as Error).message);
-                }
-              }}
-              disabled={!form.sync_enabled || !creds?.tiene}
+              onClick={sincronizarAhora}
+              disabled={!form.sync_enabled || !creds?.tiene || !!progresoSync}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sincronizar ahora
+              <RefreshCw className={`h-4 w-4 mr-2 ${progresoSync ? "animate-spin" : ""}`} />
+              {progresoSync
+                ? `Sincronizando… ${numero(progresoSync.pedidos, 0)} pedidos` +
+                  (progresoSync.quedan ? `, quedan unos ${numero(progresoSync.quedan, 0)}` : "")
+                : "Sincronizar ahora"}
             </Button>
             <Button
               variant="outline"
@@ -321,10 +385,12 @@ function Ajustes() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            «Sincronizar ahora» solo mira los últimos 100 pedidos y clientes, para ser rápida.
-            «Sincronizar clientes» recorre todo el historial de la tienda en WooCommerce: úsala si
-            sospechas que algún cliente —con cuenta o de invitado— nunca ha llegado a tener ficha
-            aquí. Puede tardar más si la tienda tiene mucho historial.
+            «Sincronizar ahora» trae todo lo que ha cambiado en WooCommerce desde la última vez:
+            pedidos nuevos o modificados, clientes nuevos y productos. Si hay mucho, va por tandas y
+            dice cuántos pedidos quedan. «Sincronizar clientes» recorre todo el historial de la
+            tienda en WooCommerce: úsala si sospechas que algún cliente —con cuenta o de invitado—
+            nunca ha llegado a tener ficha aquí. Puede tardar más si la tienda tiene mucho
+            historial.
           </p>
         </TabsContent>
 
