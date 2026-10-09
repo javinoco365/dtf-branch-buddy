@@ -22,7 +22,7 @@ import {
   type PedidoResumen,
 } from "./kpis";
 import { resumenCobros } from "./cobros";
-import { fechaDocumentoDePedido } from "./fecha-documento";
+import { diaDelPedido } from "./dia-pedido";
 import { redondear } from "./importes";
 import { esEstimado } from "./metros-woo";
 import { documentoVigente } from "./tickets";
@@ -233,8 +233,8 @@ export function construirExportAnalisis(d: {
   const cobrosDe = agrupar(d.cobros);
   const documentosDe = agrupar(d.documentos);
 
-  const fechaDe = (p: PedidoExport) =>
-    fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" });
+  // El día del pedido, el de su ticket y el de las pantallas (ver dia-pedido.ts).
+  const fechaDe = (p: PedidoExport) => diaDelPedido(p);
 
   const pedidos = [...d.pedidos]
     .map((p) => ({ p, fecha: fechaDe(p) }))

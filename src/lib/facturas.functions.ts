@@ -15,8 +15,14 @@ import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
-import { diaEnEspana, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
-import { diaDelPedido, ordenarPedidos, pedidoEnDias, tramoDeConsulta } from "@/dominio/dia-pedido";
+import { diaEnEspana } from "@/dominio/fecha-documento";
+import {
+  diaDelPedido,
+  ordenarPedidos,
+  pedidoEnDias,
+  tramoDeConsulta,
+  type FechaPedido,
+} from "@/dominio/dia-pedido";
 import { calcularTotales } from "@/dominio/importes";
 import {
   LIMITES_TICKET,
@@ -416,8 +422,9 @@ async function fechaDelPedido(sb: Sb, tiendaId: string, pedidoId: string): Promi
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Pedido no encontrado en esta tienda");
-  return fechaDocumentoDePedido(data.fecha_pedido as string | null, {
-    horaDeLaWeb: data.origen === "woocommerce",
+  return diaDelPedido({
+    fecha_pedido: data.fecha_pedido as string | null,
+    origen: data.origen as string | null,
   });
 }
 
@@ -638,8 +645,9 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
 
     const limites = await leerLimitesTicket(supabaseAdmin, pedido.empresa_id ?? null);
     const total = calcularTotales(lineas).total;
-    const fechaPedido = fechaDocumentoDePedido(pedido.fecha_pedido as string | null, {
-      horaDeLaWeb: pedido.origen === "woocommerce",
+    const fechaPedido = diaDelPedido({
+      fecha_pedido: pedido.fecha_pedido as string | null,
+      origen: pedido.origen as string | null,
     });
 
     return {
@@ -992,9 +1000,7 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
           id: p.id,
           numero: p.numero ?? p.id,
           tienda_id: p.tienda_id,
-          fecha: fechaDocumentoDePedido(p.fecha_pedido, {
-            horaDeLaWeb: p.origen === "woocommerce",
-          }),
+          fecha: diaDelPedido(p as FechaPedido),
           total,
           cobrado: cobrado.get(p.id) ?? 0,
           cliente_nombre: receptor.nombre || null,
@@ -1060,12 +1066,7 @@ async function emitirEnBloque(
     .select("id, fecha_pedido, origen")
     .in("id", pedidoIds);
   const fechaDe = new Map<string, string>(
-    ((fechas ?? []) as { id: string; fecha_pedido: string | null; origen: string | null }[]).map(
-      (p) => [
-        p.id,
-        fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: p.origen === "woocommerce" }),
-      ],
-    ),
+    ((fechas ?? []) as (FechaPedido & { id: string })[]).map((p) => [p.id, diaDelPedido(p)]),
   );
   const hoy = diaEnEspana(new Date());
   const enOrden = [...pedidoIds].sort((a, b) =>
