@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
+import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
 import {
   esperadoDe,
@@ -41,41 +42,92 @@ export type MovimientoConciliable = Movimiento & {
   grupo: string | null;
 };
 
-const LIMITE = 2000;
+/** Si quedaron movimientos o documentos fuera de la ventana de LIMITE_CONCILIACION. */
+export type Recortado = { movimientos: boolean; documentos: boolean };
+
+/**
+ * La conciliación mira lo más reciente: los 2000 movimientos más recientes y
+ * los 2000 documentos más recientes de cada clase (recibidas, facturas y
+ * textil). Es a propósito: el motor compara cada movimiento libre con cada
+ * documento libre, y los movimientos entre sí para los traspasos; con toda la
+ * historia, la pantalla tardaría cada vez más. Lo ya enlazado sí se lee
+ * entero.
+ *
+ * Antes se pedía con limit(), pero Supabase corta en 1000 filas sin avisar
+ * (ver paginar.ts): de cada cosa llegaban como mucho 1000, también de los
+ * enlaces. Ahora se lee por páginas hasta el límite de verdad, y si queda algo
+ * fuera, la pantalla lo dice (`recortado`).
+ */
+const LIMITE_CONCILIACION = 2000;
+
+type Pagina<T> = { data: T[] | null; error: { code?: string; message: string } | null };
+
+/**
+ * Las LIMITE_CONCILIACION primeras filas de una consulta ordenada, por
+ * páginas, y si había más. Pide una de más para saberlo.
+ */
+async function recientes<T>(consulta: (desde: number, hasta: number) => PromiseLike<Pagina<T>>) {
+  const r = await leerTodas<T>((desde, hasta) =>
+    consulta(desde, Math.min(hasta, LIMITE_CONCILIACION)),
+  );
+  return {
+    data: r.data.slice(0, LIMITE_CONCILIACION),
+    error: r.error,
+    recortado: r.data.length > LIMITE_CONCILIACION,
+  };
+}
 
 async function leer(supabase: unknown) {
-  const movs = await tabla(supabase, "banco_movimientos")
-    .select("id, fecha, concepto, importe, cuenta_id, traspaso_con")
-    .order("fecha", { ascending: false })
-    .limit(LIMITE);
+  const movs = await recientes<any>((a, b) =>
+    tabla(supabase, "banco_movimientos")
+      .select("id, fecha, concepto, importe, cuenta_id, traspaso_con")
+      .order("fecha", { ascending: false })
+      .order("id")
+      .range(a, b),
+  );
   if (faltaLaColumna(movs.error)) return null;
   if (movs.error) throw new Error(movs.error.message);
 
-  const enl = await tabla(supabase, "banco_conciliaciones")
-    .select(
-      "movimiento_id, factura_id, compra_id, textil_factura_id, estado, grupo, motivo, diferencia",
-    )
-    .limit(LIMITE * 2);
+  // Todos los enlaces, no solo los de lo reciente: un documento de la ventana
+  // pagado con un movimiento más antiguo tiene que salir como enlazado, o el
+  // motor lo volvería a proponer.
+  const enl = await leerTodas<any>((a, b) =>
+    tabla(supabase, "banco_conciliaciones")
+      .select(
+        "movimiento_id, factura_id, compra_id, textil_factura_id, estado, grupo, motivo, diferencia",
+      )
+      .order("id")
+      .range(a, b),
+  );
   if (faltaLaColumna(enl.error)) return null;
   if (enl.error) throw new Error(enl.error.message);
 
   const [compras, facturas, textil] = await Promise.all([
-    tabla(supabase, "textil_compras")
-      .select("id, fecha, proveedor, nif_proveedor, numero, liquido")
-      .eq("estado", "registrada")
-      .is("borrada_en", null)
-      .order("fecha", { ascending: false })
-      .limit(LIMITE),
-    tabla(supabase, "facturas")
-      .select("id, serie, ejercicio, numero, fecha, total, cliente_nombre, cliente_nif, estado")
-      .in("estado", ["emitida", "vencida", "pagada"])
-      .order("fecha", { ascending: false })
-      .limit(LIMITE),
-    tabla(supabase, "textil_facturas")
-      .select("id, serie, numero, fecha, total, cliente_nombre, cliente_nif, estado")
-      .not("estado", "in", "(borrador,anulada)")
-      .order("fecha", { ascending: false })
-      .limit(LIMITE),
+    recientes<any>((a, b) =>
+      tabla(supabase, "textil_compras")
+        .select("id, fecha, proveedor, nif_proveedor, numero, liquido")
+        .eq("estado", "registrada")
+        .is("borrada_en", null)
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    ),
+    recientes<any>((a, b) =>
+      tabla(supabase, "facturas")
+        .select("id, serie, ejercicio, numero, fecha, total, cliente_nombre, cliente_nif, estado")
+        .in("estado", ["emitida", "vencida", "pagada"])
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    ),
+    recientes<any>((a, b) =>
+      tabla(supabase, "textil_facturas")
+        .select("id, serie, numero, fecha, total, cliente_nombre, cliente_nif, estado")
+        .not("estado", "in", "(borrador,anulada)")
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    ),
   ]);
   for (const r of [compras, facturas, textil]) if (r.error) throw new Error(r.error.message);
 
@@ -152,7 +204,18 @@ async function leer(supabase: unknown) {
 
   const movsLibres = movimientos.filter((m) => !m.grupo && !m.traspaso_con);
   const docsLibres = documentos.filter((d) => !d.pagada && !enlazados.has(`${d.tipo}:${d.id}`));
-  return { movimientos, documentos, enlaces: [...porGrupo.values()], movsLibres, docsLibres };
+  const recortado: Recortado = {
+    movimientos: movs.recortado,
+    documentos: [compras, facturas, textil].some((r) => r.recortado),
+  };
+  return {
+    movimientos,
+    documentos,
+    enlaces: [...porGrupo.values()],
+    movsLibres,
+    docsLibres,
+    recortado,
+  };
 }
 
 /** Movimientos, documentos, lo ya enlazado y el plan del motor. No escribe nada. */
@@ -168,6 +231,8 @@ export const verConciliacion = createServerFn({ method: "GET" })
       enlaces: datos.enlaces,
       libres: datos.docsLibres.map((d) => `${d.tipo}:${d.id}`),
       plan: planConciliacion(datos.movsLibres, datos.docsLibres),
+      recortado: datos.recortado,
+      limite: LIMITE_CONCILIACION,
     };
   });
 

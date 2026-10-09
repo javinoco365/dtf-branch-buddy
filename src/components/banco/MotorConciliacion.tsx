@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeftRight, Check, CheckCircle2, Lightbulb, Undo2, Wand2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  Check,
+  CheckCircle2,
+  Lightbulb,
+  Undo2,
+  Wand2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, fechaCorta, numeroJusto } from "@/lib/format";
 import {
   aplicarPlan,
   confirmarEnlace,
@@ -33,6 +41,7 @@ import {
   type DocumentoConciliable,
   type EnlaceGuardado,
   type MovimientoConciliable,
+  type Recortado,
 } from "@/lib/conciliacion.functions";
 import {
   DIAS_ANTES,
@@ -52,6 +61,10 @@ export type DatosConciliacion = {
   enlaces: EnlaceGuardado[];
   libres: string[];
   plan: Plan;
+  /** Si quedaron movimientos o documentos fuera de lo que se mira. */
+  recortado?: Recortado;
+  /** Cuántos de cada cosa se miran como mucho. */
+  limite?: number;
 };
 
 const claveDoc = (d: { tipo: string; id: string }) => `${d.tipo}:${d.id}`;
@@ -113,6 +126,7 @@ export function MotorConciliacion({
   const totalTraspasos = totalesConSigno(traspasos, (m) => m.importe);
   const { verdes, ambares, traspasos: tp } = datos.plan;
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
+  const recorte = avisoRecorte(datos.recortado, datos.limite);
 
   const refrescar = () => {
     alCambiar();
@@ -200,6 +214,13 @@ export function MotorConciliacion({
           </Button>
         </CardContent>
       </Card>
+
+      {recorte && (
+        <p className="flex gap-2 text-sm text-muted-foreground">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          {recorte}
+        </p>
+      )}
 
       <Tabs defaultValue="pendientes">
         <TabsList className="flex h-auto flex-wrap justify-start">
@@ -456,6 +477,22 @@ export function MotorConciliacion({
       </Dialog>
     </div>
   );
+}
+
+/**
+ * El aviso cuando la conciliación no mira todo: el servidor lee como mucho
+ * `limite` movimientos y `limite` documentos de cada clase, los más recientes.
+ */
+function avisoRecorte(r: Recortado | undefined, limite: number | undefined): string | null {
+  if (!r || !limite || (!r.movimientos && !r.documentos)) return null;
+  const n = numeroJusto(limite, 0);
+  const que = [
+    r.movimientos && `los ${n} movimientos más recientes`,
+    r.documentos && `las ${n} facturas más recientes de cada clase (recibidas, de tienda y textil)`,
+  ]
+    .filter(Boolean)
+    .join(" y ");
+  return `Solo se miran ${que}. Lo anterior no sale como pendiente ni entra en la propuesta.`;
 }
 
 function etiquetaDoc(d: DocumentoConciliable | undefined): string {
