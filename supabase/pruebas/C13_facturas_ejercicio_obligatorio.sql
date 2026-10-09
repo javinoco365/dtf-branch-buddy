@@ -3,6 +3,11 @@
 -- ============================================================================
 -- Prueba 20261023120000_facturas_ejercicio_obligatorio.sql.
 --
+-- Todo va dentro de una transacción que se deshace al final: las tiendas, el
+-- autor y el ticket T2037/0001 que escribe la prueba no se quedan en la base.
+-- El punto 6 comprueba, ya deshecha, que no ha quedado rastro.
+BEGIN;
+
 -- 0. Se deja la columna como estaba en producción (admitiendo NULL) y se
 --    aplica la migración dos veces: tiene que poder repetirse.
 ALTER TABLE public.facturas ALTER COLUMN ejercicio DROP NOT NULL;
@@ -38,8 +43,8 @@ EXCEPTION
 END $$;
 
 -- 3. Si hay facturas sin ejercicio, la migración avisa, no falla y no toca
---    nada. Se prueba dentro de una transacción que se deshace.
-BEGIN;
+--    nada. Se prueba en un punto de guardado que se deshace.
+SAVEPOINT c13_sin_ejercicio;
 ALTER TABLE public.facturas ALTER COLUMN ejercicio DROP NOT NULL;
 INSERT INTO public.tiendas (nombre, slug) VALUES ('Tienda C13 vieja', 'tienda-c13-vieja');
 INSERT INTO public.facturas (tienda_id, serie, numero, ejercicio, fecha, estado)
@@ -55,7 +60,7 @@ SELECT CASE WHEN NOT pg_temp.ejercicio_obligatorio()
                    WHERE t.slug = 'tienda-c13-vieja' AND f.ejercicio IS NULL) = 2
             THEN 'BIEN  3. con dos facturas sin ejercicio, la migración no falla, no pone NOT NULL y no las toca'
             ELSE 'MAL   3. con facturas sin ejercicio la migración cambió la columna o las filas' END;
-ROLLBACK;
+ROLLBACK TO SAVEPOINT c13_sin_ejercicio;
 
 SELECT CASE WHEN pg_temp.ejercicio_obligatorio()
             THEN 'BIEN  4. deshecha la prueba anterior, la columna vuelve a ser NOT NULL'
@@ -88,3 +93,18 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RAISE WARNING 'MAL   5. la emisión falló: %', SQLERRM;
 END $$;
+
+ROLLBACK;
+
+-- 6. Deshecha la transacción, no queda nada de la prueba y la columna sigue
+--    siendo NOT NULL (como la dejó la migración en el banco). La función
+--    temporal del punto 1 se ha deshecho con lo demás: se consulta aquí.
+SELECT CASE WHEN (SELECT a.attnotnull FROM pg_attribute a
+                   WHERE a.attrelid = 'public.facturas'::regclass AND a.attname = 'ejercicio'
+                     AND NOT a.attisdropped)
+             AND NOT EXISTS (SELECT 1 FROM public.tiendas WHERE slug LIKE 'tienda-c13%')
+             AND NOT EXISTS (SELECT 1 FROM auth.users WHERE id = 'c1300000-0000-4000-8000-000000000001')
+             AND NOT EXISTS (SELECT 1 FROM public.facturas WHERE ejercicio = 2037 OR serie = 'C13')
+             AND NOT EXISTS (SELECT 1 FROM public.series_facturacion WHERE ejercicio = 2037)
+            THEN 'BIEN  6. deshecha la prueba, no quedan las tiendas C13, ni el autor, ni el ticket de 2037; la columna sigue NOT NULL'
+            ELSE 'MAL   6. la prueba ha dejado datos en la base, o la columna ha vuelto a admitir NULL' END;

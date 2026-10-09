@@ -4,9 +4,12 @@
 -- Prueba 20261023110000_auditoria_tablas_pendientes.sql. Se aplica otra vez,
 -- dos veces (tiene que poder repetirse sin duplicar triggers).
 --
--- A diferencia de C11, aquí los cambios se confirman: las filas de auditoría
--- que escriben estas pruebas quedan en la cadena, y la verificación final de
--- probar-migraciones.sh (auditoria_verificar) las recorre también.
+-- Todo va dentro de una transacción que se deshace al final: la tienda, el
+-- pedido, el autor y el ticket T2036/0001 que escribe la prueba no se quedan
+-- en la base. Las filas de auditoría que generan sí se comprueban, antes de
+-- deshacer: el punto 8 recorre la cadena entera con ellas dentro. El 9
+-- comprueba, ya deshecha, que no ha quedado rastro.
+BEGIN;
 SET client_min_messages = warning;
 \ir ../migrations/20261023110000_auditoria_tablas_pendientes.sql
 \ir ../migrations/20261023110000_auditoria_tablas_pendientes.sql
@@ -48,7 +51,6 @@ ON CONFLICT (id) DO NOTHING;
 SELECT set_config('c12.autor', 'c1200000-0000-4000-8000-000000000001', false);
 SELECT set_config('c12.desde', (SELECT COALESCE(max(id), 0)::TEXT FROM public.auditoria), false);
 
-BEGIN;
 SELECT set_config('app.usuario_id', current_setting('c12.autor'), true);
 DO $$
 DECLARE
@@ -96,7 +98,9 @@ BEGIN
   PERFORM set_config('c12.enlace', v_enlace::TEXT, false);
   PERFORM set_config('c12.config', v_config::TEXT, false);
 END $$;
-COMMIT;
+-- Fin de las escrituras con autor. Sin el COMMIT que lo soltaba, se quita a
+-- mano: el punto 7 tiene que ver el autor que pone emitir_factura(), no este.
+SELECT set_config('app.usuario_id', '', true);
 
 -- Las tres operaciones de una fila, registradas y con el autor de la escritura.
 CREATE OR REPLACE FUNCTION pg_temp.tres_operaciones(_tabla TEXT, _registro TEXT)
@@ -199,3 +203,19 @@ SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM public.auditoria_verificar())
             THEN 'BIEN  8. la cadena de auditoría sigue intacta'
             ELSE 'MAL   8. la cadena de auditoría está rota: '
                  || (SELECT string_agg(id || ' ' || motivo, '; ') FROM public.auditoria_verificar()) END;
+
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------
+-- 9. Deshecha la transacción, no queda nada de la prueba
+-- ---------------------------------------------------------------------------
+SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM public.tiendas WHERE slug = 'tienda-c12')
+             AND NOT EXISTS (SELECT 1 FROM public.clientes WHERE nombre = 'Cliente C12')
+             AND NOT EXISTS (SELECT 1 FROM auth.users WHERE id = 'c1200000-0000-4000-8000-000000000001')
+             AND NOT EXISTS (SELECT 1 FROM public.facturas WHERE ejercicio = 2036)
+             AND NOT EXISTS (SELECT 1 FROM public.series_facturacion WHERE ejercicio = 2036)
+             AND NOT EXISTS (SELECT 1 FROM public.auditoria
+                              WHERE datos_despues ->> 'slug' = 'tienda-c12'
+                                 OR datos_despues ->> 'codigo_cuenta' = 'C12-CUENTA')
+            THEN 'BIEN  9. deshecha la prueba, no queda ni la tienda C12, ni el autor, ni el ticket de 2036, ni su auditoría'
+            ELSE 'MAL   9. la prueba ha dejado datos en la base' END;
