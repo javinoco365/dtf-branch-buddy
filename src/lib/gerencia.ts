@@ -660,6 +660,34 @@ export function useFiscal(rango: RangoFechas) {
   });
 }
 
+/**
+ * El día del primer documento de venta emitido del CRM: factura o ticket,
+ * de tienda o del textil, sin borradores. Desde su trimestre el CRM sabe lo
+ * que se vende, y desde ahí se compensa el 303 (ver `inicioHistorial303`).
+ * Nulo si todavía no hay ninguno.
+ */
+export function usePrimeraVenta() {
+  return useQuery({
+    queryKey: ["gerencia-primera-venta"],
+    queryFn: async (): Promise<string | null> => {
+      const primera = async (nombre: "facturas" | "textil_facturas") => {
+        // Un estado vacío (textil antiguo) es un documento emitido, como en resumenIva.
+        const r = await tabla(supabase, nombre)
+          .select("fecha")
+          .or("estado.is.null,estado.neq.borrador")
+          .order("fecha", { ascending: true })
+          .limit(1);
+        if (r.error) throw new Error(r.error.message);
+        return ((r.data ?? []) as { fecha: string | null }[])[0]?.fecha ?? null;
+      };
+      const fechas = (await Promise.all([primera("facturas"), primera("textil_facturas")])).filter(
+        (x): x is string => !!x,
+      );
+      return fechas.length ? fechas.map((x) => x.slice(0, 10)).sort()[0] : null;
+    },
+  });
+}
+
 /** Lee los documentos de unos pedidos y las rectificativas que los corrigen. */
 async function documentosDe(
   nombre: "facturas" | "textil_facturas",

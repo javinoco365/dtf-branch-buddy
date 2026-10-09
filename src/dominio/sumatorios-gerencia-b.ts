@@ -12,7 +12,8 @@
  * - En los impuestos, lo que sale a compensar (un 303 negativo) no resta de
  *   lo que hay que ingresar en el 111 ni en el 115: se compensa en los 303
  *   siguientes, que ya llegan compensados (`compensar303`). Lo que queda
- *   por compensar va en su propia fila, como en `ImpuestosTrimestre.aPagar`.
+ *   por compensar al final va aparte, como en `ImpuestosTrimestre.aPagar`,
+ *   y no se cuenta en modelos: puede venir de trimestres que no se ven.
  *
  * Lógica pura: recibe las filas que se ven y devuelve cifras redondeadas.
  */
@@ -111,8 +112,8 @@ export type TotalImpuestos = {
    * descontado, también lo de antes del periodo.
    */
   aCompensar: number;
-  /** Los 303 negativos de los que queda algo por compensar. */
-  modelosACompensar: number;
+  /** Si parte de `aCompensar` viene de trimestres anteriores al primero que se ve. */
+  aCompensarDeAntes: boolean;
 };
 
 /**
@@ -120,15 +121,21 @@ export type TotalImpuestos = {
  * ven. Lo que se ingresa es la suma de `aPagar` de cada trimestre, la misma
  * cifra que la tarjeta «A Hacienda este trimestre». Lo que queda a compensar
  * es lo pendiente al final, no la suma de los negativos: lo que ya se
- * descontó de un 303 posterior no se vuelve a contar.
+ * descontó de un 303 posterior no se vuelve a contar. No se cuenta en
+ * modelos: parte puede ser de trimestres anteriores al periodo, que no se ven.
  */
 export function totalImpuestos(impuestos: readonly ImpuestosTrimestre[]): TotalImpuestos {
   const lineas = impuestos.flatMap((t) => t.lineas);
+  const primero = impuestos.length ? impuestos[0].trimestre : null;
   const ultimo = impuestos.length ? impuestos[impuestos.length - 1].compensacion : null;
+  const desde = ultimo?.pendienteDesde ?? null;
   return {
     aIngresar: sumarImportes(impuestos, (t) => t.aPagar),
     modelosAIngresar: lineas.filter((l) => l.importe > 0).length,
     aCompensar: ultimo?.pendiente ?? 0,
-    modelosACompensar: ultimo?.trimestresPendientes ?? 0,
+    aCompensarDeAntes:
+      !!desde &&
+      !!primero &&
+      (desde.anio < primero.anio || (desde.anio === primero.anio && desde.numero < primero.numero)),
   };
 }

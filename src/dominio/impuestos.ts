@@ -397,9 +397,15 @@ export type Compensacion303 = {
   pendiente: number;
   /** Cuántos 303 negativos, este incluido, tienen algo pendiente al cerrar. */
   trimestresPendientes: number;
+  /** El trimestre del 303 negativo más antiguo del que queda algo; nulo si no queda nada. */
+  pendienteDesde: Pick<Trimestre, "anio" | "numero"> | null;
 };
 
 const ordinal = (t: Pick<Trimestre, "anio" | "numero">) => t.anio * 4 + t.numero - 1;
+const deOrdinal = (n: number): Pick<Trimestre, "anio" | "numero"> => ({
+  anio: Math.floor(n / 4),
+  numero: ((n % 4) + 1) as Trimestre["numero"],
+});
 
 /**
  * Compensa los 303 de unos trimestres, en orden. Lo negativo de un trimestre
@@ -440,6 +446,7 @@ export function compensar303(
       aIngresar: r > 0 ? redondear(r - compensado) : 0,
       pendiente: redondear(pendientes.reduce((s, p) => s + p.importe, 0)),
       trimestresPendientes: pendientes.length,
+      pendienteDesde: pendientes.length ? deOrdinal(pendientes[0].origen) : null,
     };
   });
 }
@@ -459,6 +466,12 @@ export type ImpuestosTrimestre = {
   lineas: LineaCalendario[];
   /** El 303: su resultado, lo que compensa de antes y lo que queda a compensar. */
   compensacion: Compensacion303;
+  /**
+   * De antes del trimestre de la primera venta documentada del CRM: no se
+   * sabe lo que se vendió, así que su 303 no se calcula (va a 0) ni deja
+   * nada a compensar. El 111 y el 115 sí: salen de los gastos.
+   */
+  sinVentas: boolean;
   /**
    * Lo que hay que pagar en total, con el 303 ya compensado. Un 303 a
    * compensar no resta de los demás modelos.
@@ -482,16 +495,69 @@ export function trimestresDelRango(r: { desde: Date; hasta: Date }): Trimestre[]
   let t = trimestreDe(r.desde);
   while (t.desde <= r.hasta) {
     lista.push(t);
-    t = trimestreDe(new Date(t.hasta.getFullYear(), t.hasta.getMonth() + 1, 1));
+    t = siguiente(t);
   }
   return lista;
 }
+
+const siguiente = (t: Trimestre) =>
+  trimestreDe(new Date(t.hasta.getFullYear(), t.hasta.getMonth() + 1, 1));
 
 const enTrimestre = (fecha: string | undefined, t: Trimestre) => {
   if (!fecha) return false;
   const f = dia(fecha);
   return f >= t.desde && f <= t.hasta;
 };
+
+/**
+ * El primer trimestre con datos enteros: el de `datosDesde` si empieza ese
+ * mismo día, o el siguiente (un trimestre a medias no se arrastra: no se
+ * sabe lo que falta). Sin `datosDesde`, el primero del rango. Nunca más
+ * tarde que el primero del rango.
+ */
+function primerTrimestreConDatos(rango: { desde: Date }, datosDesde?: Date): Trimestre {
+  const primero = trimestreDe(rango.desde);
+  if (!datosDesde) return primero;
+  let t = trimestreDe(datosDesde);
+  if (t.desde < datosDesde) t = siguiente(t);
+  return t.desde < primero.desde ? t : primero;
+}
+
+/** Desde qué trimestre se compensa el 303 y por qué. */
+export type InicioHistorial303 = {
+  trimestre: Trimestre;
+  /**
+   * «primera_venta»: el de la primera venta documentada del CRM; lo de antes
+   * no se sabe. «datos»: el primero que se lee (cuatro años antes del
+   * periodo); lo de antes ya habría caducado.
+   */
+  motivo: "primera_venta" | "datos";
+};
+
+/**
+ * El primer trimestre cuyo 303 cuenta para compensar: el más tardío entre el
+ * primero con datos leídos y el de la primera venta documentada del CRM
+ * (factura o ticket emitido, de tienda o del textil).
+ *
+ * Antes de la primera venta el CRM no sabe lo que se vendió: lo soportado de
+ * entonces daría unos 303 negativos que nadie presentó así, y compensarlos
+ * rebajaría lo que hay que pagar con un saldo inventado.
+ *
+ * Nulo si el CRM no tiene ninguna venta documentada: no hay 303 que calcular.
+ */
+export function inicioHistorial303(d: {
+  rango: { desde: Date };
+  datosDesde?: Date;
+  /** `yyyy-MM-dd` del primer documento de venta emitido del CRM; nulo si no hay ninguno. */
+  primeraVenta: string | null;
+}): InicioHistorial303 | null {
+  if (!d.primeraVenta) return null;
+  const ventas = trimestreDe(dia(d.primeraVenta));
+  const datos = primerTrimestreConDatos(d.rango, d.datosDesde);
+  return ventas.desde >= datos.desde
+    ? { trimestre: ventas, motivo: "primera_venta" }
+    : { trimestre: datos, motivo: "datos" };
+}
 
 /**
  * Lo que se presenta por cada trimestre que toca el rango, con todo el
@@ -509,6 +575,10 @@ const enTrimestre = (fecha: string | undefined, t: Trimestre) => {
  * `datosDesde` dice desde cuándo están en `documentos` y `compras` (ver
  * `inicioCompensacion`). Se usan los trimestres enteros desde esa fecha. Sin
  * ella, solo se compensa dentro del rango.
+ *
+ * Y solo desde el trimestre de `primeraVenta` (`inicioHistorial303`): los
+ * trimestres de antes salen sin 303 (`sinVentas`) y no dejan nada a
+ * compensar.
  */
 export function impuestosPorTrimestre(d: {
   rango: { desde: Date; hasta: Date };
@@ -518,21 +588,17 @@ export function impuestosPorTrimestre(d: {
   gastos: readonly GastoFijo[];
   cuotaIsAnterior: number | null | undefined;
   datosDesde?: Date;
+  /** `yyyy-MM-dd` del primer documento de venta emitido del CRM; nulo si no hay ninguno. */
+  primeraVenta: string | null;
 }): ImpuestosTrimestre[] {
   const absorbidas = comprasAbsorbidas(d.gastos);
   // Para casar un canje vale cualquier documento conocido, sea del trimestre o no.
   const conocidos = [...d.documentos, ...(d.referencias ?? [])];
-  const visibles = trimestresDelRango(d.rango);
-  const primero = visibles[0];
-  // Un trimestre a medias no se arrastra: empieza en el primero entero.
-  let desde = d.datosDesde ? trimestreDe(d.datosDesde) : primero;
-  if (d.datosDesde && desde.desde < d.datosDesde) {
-    desde = trimestreDe(new Date(desde.hasta.getFullYear(), desde.hasta.getMonth() + 1, 1));
-  }
-  const todos =
-    desde.desde < primero.desde
-      ? trimestresDelRango({ desde: desde.desde, hasta: d.rango.hasta })
-      : visibles;
+  const primero = trimestreDe(d.rango.desde);
+  const desde = primerTrimestreConDatos(d.rango, d.datosDesde);
+  const todos = trimestresDelRango({ desde: desde.desde, hasta: d.rango.hasta });
+  const inicio = inicioHistorial303(d);
+  const sinVentas = (t: Trimestre) => !inicio || t.desde < inicio.trimestre.desde;
 
   const calculados = todos.map((t) => {
     const repercutido = resumenIva(
@@ -563,27 +629,38 @@ export function impuestosPorTrimestre(d: {
       irpf111,
       irpf115: gastos.irpf115,
       lineas,
+      sinVentas: sinVentas(t),
     };
   });
 
-  const compensaciones = compensar303(
-    calculados.map((c) => ({
-      trimestre: c.trimestre,
-      resultado: redondear(c.ivaRepercutido - c.ivaSoportado),
-    })),
+  // Solo se compensa desde la primera venta: lo de antes no deja nada.
+  const conVentas = calculados.filter((c) => !c.sinVentas);
+  const compensaciones = new Map(
+    compensar303(
+      conVentas.map((c) => ({
+        trimestre: c.trimestre,
+        resultado: redondear(c.ivaRepercutido - c.ivaSoportado),
+      })),
+    ).map((x, i) => [conVentas[i], x]),
   );
   return calculados
-    .map((c, i): ImpuestosTrimestre => {
-      const compensacion = compensaciones[i];
+    .map((c): ImpuestosTrimestre => {
+      const compensacion: Compensacion303 = compensaciones.get(c) ?? {
+        resultado: redondear(c.ivaRepercutido - c.ivaSoportado),
+        compensado: 0,
+        aIngresar: 0,
+        pendiente: 0,
+        trimestresPendientes: 0,
+        pendienteDesde: null,
+      };
       // Solo el 303 se compensa; lo negativo sigue saliendo «a compensar».
-      const lineas = c.lineas.map((l) =>
-        l.modelo === "303"
-          ? {
-              ...l,
-              importe: compensacion.resultado < 0 ? compensacion.resultado : compensacion.aIngresar,
-            }
-          : l,
-      );
+      // Sin ventas en el CRM, el 303 no se calcula: 0.
+      const importe303 = c.sinVentas
+        ? 0
+        : compensacion.resultado < 0
+          ? compensacion.resultado
+          : compensacion.aIngresar;
+      const lineas = c.lineas.map((l) => (l.modelo === "303" ? { ...l, importe: importe303 } : l));
       return {
         ...c,
         lineas,

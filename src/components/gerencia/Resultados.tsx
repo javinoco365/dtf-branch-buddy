@@ -13,8 +13,8 @@ import {
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
-import { useFiscal } from "@/lib/gerencia";
-import { DEFINICIONES } from "@/dominio/definiciones";
+import { useFiscal, usePrimeraVenta } from "@/lib/gerencia";
+import { DEFINICIONES, definicionImpuestosTrimestre } from "@/dominio/definiciones";
 import { enRango } from "@/dominio/periodos";
 import {
   facturadoSinPedido,
@@ -26,6 +26,7 @@ import {
 import {
   impuestosPorTrimestre,
   inicioCompensacion,
+  inicioHistorial303,
   trimestreDe,
   trimestresDelRango,
 } from "@/dominio/impuestos";
@@ -46,6 +47,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     [trimestres],
   );
   const fiscal = useFiscal(rangoLectura);
+  // Solo se compensa desde la primera venta documentada del CRM.
+  const primeraVenta = usePrimeraVenta();
   // Para casar canjes vale cualquier documento leído, sea del periodo o no.
   const referencias = useMemo(
     () => (fiscal.data ? [...fiscal.data.documentos, ...fiscal.data.referencias] : []),
@@ -96,7 +99,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   );
   const impuestos = useMemo(
     () =>
-      fiscal.data
+      fiscal.data && primeraVenta.data !== undefined
         ? impuestosPorTrimestre({
             rango: d.rango,
             documentos: fiscal.data.documentos,
@@ -105,9 +108,31 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             gastos: d.gastos,
             cuotaIsAnterior: d.ajustes.cuota_is_anterior,
             datosDesde: rangoLectura.desde,
+            primeraVenta: primeraVenta.data,
           })
         : null,
-    [fiscal.data, d.rango, d.gastos, d.ajustes.cuota_is_anterior, rangoLectura.desde],
+    [
+      fiscal.data,
+      primeraVenta.data,
+      d.rango,
+      d.gastos,
+      d.ajustes.cuota_is_anterior,
+      rangoLectura.desde,
+    ],
+  );
+  // El ⓘ dice desde qué trimestre se compensa.
+  const definicionImpuestos = useMemo(
+    () =>
+      primeraVenta.data !== undefined
+        ? definicionImpuestosTrimestre(
+            inicioHistorial303({
+              rango: d.rango,
+              datosDesde: rangoLectura.desde,
+              primeraVenta: primeraVenta.data,
+            }),
+          )
+        : DEFINICIONES.g_impuestos_trimestre,
+    [primeraVenta.data, d.rango, rangoLectura.desde],
   );
 
   if (d.filtro.tienda !== "todas" || d.filtro.canal !== "todos") {
@@ -119,6 +144,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     );
   }
   if (fiscal.error) return <ErrorPestana que="las facturas" error={fiscal.error} />;
+  if (primeraVenta.error) return <ErrorPestana que="las facturas" error={primeraVenta.error} />;
   if (!impuestos || !cuentas) return <CargandoPestana />;
 
   const actual = trimestreDe(d.hoy);
@@ -153,6 +179,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   const totalCompras = totalComparacion(filasCompras);
   const totalModelos = totalImpuestos(impuestos);
   const modelos = (n: number) => `${numero(n, 0)} ${n === 1 ? "modelo" : "modelos"}`;
+  const ultimo = impuestos[impuestos.length - 1].trimestre;
 
   return (
     <div className="space-y-4">
@@ -203,7 +230,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         />
         <TarjetaKpi
           titulo="A Hacienda este trimestre"
-          explicacion="g_impuestos_trimestre"
+          explicacion={definicionImpuestos}
           valor={esteTrimestre ? eur(esteTrimestre.aPagar) : "—"}
           delta={null}
           icon={CalendarClock}
@@ -341,10 +368,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-1.5 text-base">
               Impuestos por trimestre
-              <Explicacion
-                titulo="Impuestos por trimestre"
-                definicion={DEFINICIONES.g_impuestos_trimestre}
-              />
+              <Explicacion titulo="Impuestos por trimestre" definicion={definicionImpuestos} />
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               Orientativo, con lo que hay en el CRM. Los presenta la gestoría.
@@ -370,6 +394,11 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                       <TableCell>
                         {l.modelo}
                         <span className="block text-xs text-muted-foreground">{l.concepto}</span>
+                        {l.modelo === "303" && t.sinVentas && (
+                          <span className="block text-xs text-muted-foreground">
+                            Sin ventas en el CRM todavía: no se calcula ni deja nada a compensar
+                          </span>
+                        )}
                         {l.modelo === "303" && t.compensacion.compensado > 0 && (
                           <span className="block text-xs text-muted-foreground">
                             Resultado {eur(t.compensacion.resultado)} −{" "}
@@ -387,15 +416,18 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                       <TableCell
                         className={`text-right tabular-nums ${l.importe < 0 ? "text-status-completado" : ""}`}
                       >
-                        {l.importe < 0 ? `${eur(-l.importe)} a compensar` : eur(l.importe)}
+                        {l.modelo === "303" && t.sinVentas
+                          ? "—"
+                          : l.importe < 0
+                            ? `${eur(-l.importe)} a compensar`
+                            : eur(l.importe)}
                       </TableCell>
                       <TableCell>Hasta el {fechaCorta(l.plazo)}</TableCell>
                     </TableRow>
                   )),
                 )}
               </TableBody>
-              {/* Los 303 ya llegan compensados; lo que queda a compensar al final no
-                  resta de los otros modelos: va en su propia fila. */}
+              {/* Los 303 ya llegan compensados. */}
               <TableFooter>
                 <TableRow>
                   <TableCell colSpan={2} className="font-bold">
@@ -406,19 +438,20 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                   </TableCell>
                   <TableCell />
                 </TableRow>
-                {totalModelos.modelosACompensar > 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="font-bold">
-                      A compensar · {modelos(totalModelos.modelosACompensar)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold tabular-nums text-status-completado">
-                      {eur(totalModelos.aCompensar)}
-                    </TableCell>
-                    <TableCell />
-                  </TableRow>
-                )}
               </TableFooter>
             </Table>
+            {/* Lo que queda a compensar no es una fila: no resta de los otros
+                modelos y puede venir de trimestres que no se ven. */}
+            {totalModelos.aCompensar > 0 && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Al cerrar el {ultimo.numero}.º trimestre de {ultimo.anio} quedan{" "}
+                <span className="font-medium tabular-nums text-status-completado">
+                  {eur(totalModelos.aCompensar)}
+                </span>{" "}
+                de IVA a compensar en los próximos 303
+                {totalModelos.aCompensarDeAntes ? ", de trimestres anteriores incluidos" : ""}.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

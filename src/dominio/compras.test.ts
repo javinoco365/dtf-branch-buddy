@@ -96,6 +96,7 @@ describe("factura enlazada a un gasto fijo", () => {
       compras,
       gastos,
       cuotaIsAnterior: null,
+      primeraVenta: null,
     });
     // Tres alquileres de 210 de IVA y 190 de retención: la factura es uno de ellos.
     expect(q1).toMatchObject({ ivaSoportado: 630, irpf115: 570, irpf111: 0 });
@@ -164,6 +165,7 @@ describe("compras que cuestan como un gasto", () => {
       compras: [...compras, compra("abog", { categoria: "servicios", irpf: 15 })],
       gastos,
       cuotaIsAnterior: null,
+      primeraVenta: null,
     });
     // IVA de las 6 registradas (21 cada una) y la retención del abogado al 111.
     expect(q1).toMatchObject({ ivaSoportado: 126, irpf111: 15 });
