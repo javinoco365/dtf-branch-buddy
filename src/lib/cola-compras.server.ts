@@ -10,7 +10,7 @@
 import { tabla } from "./rpc";
 import { leerFactura } from "./lector-facturas.server";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
-import { tipoIrpfProbable, tipoProbable } from "@/dominio/compras";
+import { TIPO_IVA_GENERAL, tipoIrpfProbable, tipoProbable } from "@/dominio/compras";
 import {
   avisosQueImportan,
   claveProveedor,
@@ -133,7 +133,7 @@ export async function procesarFactura(
         iva: compra.iva,
         irpf: compra.irpf,
         total: compra.total,
-        tipo_iva: tipoIva ?? 0.21,
+        tipo_iva: tipoIva ?? TIPO_IVA_GENERAL,
         tipo_irpf: tipoIrpf,
         confianza: Math.round(r.lectura.confianza * 100) / 100,
         revision: "pendiente",
