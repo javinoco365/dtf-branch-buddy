@@ -254,6 +254,11 @@ $PSQL -f "$RAIZ/supabase/pruebas/C9_fecha_del_pedido.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
 
 echo
+echo "== Número de factura único por ejercicio =="
+$PSQL -f "$RAIZ/supabase/pruebas/C10_numero_por_ejercicio.sql" 2>&1 \
+  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
+
+echo
 echo "== Credenciales de WooCommerce en Vault =="
 $PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
   | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
