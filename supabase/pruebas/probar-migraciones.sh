@@ -152,6 +152,7 @@ seccion "Reponer factura_comprobar_fecha" B6_reponer_comprobar_fecha.sql
 seccion "Tickets y facturas con la fecha del pedido" C9_fecha_del_pedido.sql
 seccion "Número de factura único por ejercicio" C10_numero_por_ejercicio.sql
 seccion "Credenciales de WooCommerce en Vault" 30_credenciales_vault.sql
+seccion "Políticas por operación: el mismo acceso que los FOR ALL" C11_politicas_por_operacion.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto
