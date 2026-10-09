@@ -60,8 +60,9 @@ const antes = (a: DocumentoConFecha, b: DocumentoConFecha) =>
  * factura de canje y la factura que corrige una rectificativa. Si el ticket
  * de un canje no se conoce, no hay qué restar y la factura cuenta entera.
  *
- * Si varias rectificativas corrigen la misma factura de canje (la base solo
- * deja emitir una), el ticket vuelve una sola vez: con la primera.
+ * Si varias rectificativas corrigen la misma factura de canje (emitir_factura
+ * admite una segunda; solo anular_factura se niega si ya hay una), el ticket
+ * vuelve una sola vez: con la primera.
  */
 export function apuntesDeVenta<D extends DocumentoConFecha>(
   docs: readonly D[],
