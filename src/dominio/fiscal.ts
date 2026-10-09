@@ -10,6 +10,7 @@
  */
 
 import { redondear } from "./importes";
+import { ticketsCanjeados } from "./sumatorios";
 import type { DocumentoPedido } from "./tickets";
 import { pedidosDocumentados, pendienteDocumentar } from "./grupos";
 import type { Venta } from "./gerencia";
@@ -26,6 +27,8 @@ export type DocumentoFiscal = {
   pedido_id?: string | null;
   /** Solo rectificativas: el documento que corrigen. */
   rectifica_a_id?: string | null;
+  /** Solo facturas de canje: el ticket al que sustituyen. */
+  sustituye_a_id?: string | null;
   tipo: TipoDocumento;
   estado: string | null;
   /** `yyyy-MM-dd`. */
@@ -41,13 +44,18 @@ export type DocumentoFiscal = {
 export type CuentaFiscal = { documentos: number; base: number; iva: number; total: number };
 
 export type ResumenIva = {
-  /** Ordinarias, tickets y rectificativas emitidos (las rectificativas restan). */
+  /**
+   * Ordinarias, tickets y rectificativas emitidos (las rectificativas restan),
+   * sin los tickets canjeados por factura.
+   */
   repercutido: CuentaFiscal;
   porTipoDocumento: { tipo: TipoDocumento; etiqueta: string; cuenta: CuentaFiscal }[];
   /** Por tipo de IVA (21, 10, 4…), de mayor a menor. */
   porTipoIva: { tipo: number; base: number; cuota: number }[];
   /** Borradores: no son facturas todavía y no cuentan. */
   borradores: number;
+  /** Tickets canjeados por una factura: los cuenta la factura y no cuentan. */
+  canjeados: number;
 };
 
 const ETIQUETAS: Record<TipoDocumento, string> = {
@@ -75,18 +83,35 @@ const cerrar = (c: CuentaFiscal): CuentaFiscal => ({
  * Las rectificativas llevan importes negativos y restan solas. Sin desglose
  * guardado, el documento cuenta entero en su IVA total, bajo el tipo 0 «sin
  * desglose».
+ *
+ * Un ticket canjeado por factura no cuenta: la venta ya la cuenta la factura,
+ * y contar los dos sería pagar su IVA dos veces. Es la regla de los totales de
+ * las listas (`ticketsCanjeados`): si la factura del canje se anula o la
+ * corrige una rectificativa, el ticket vuelve a contar.
+ *
+ * `canjeados` se pasa cuando `docs` es un trozo de una lista mayor (un
+ * trimestre del rango): así el canje se decide con la lista entera, aunque la
+ * rectificativa de la factura caiga en otro trimestre.
  */
-export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
+export function resumenIva(
+  docs: readonly DocumentoFiscal[],
+  canjeados: ReadonlySet<string> = ticketsCanjeados(docs),
+): ResumenIva {
   const total = vacia();
   const porTipo = new Map<TipoDocumento, CuentaFiscal>(
     (["ordinaria", "simplificada", "rectificativa"] as const).map((t) => [t, vacia()]),
   );
   const porIva = new Map<number, { base: number; cuota: number }>();
   let borradores = 0;
+  let deCanje = 0;
 
   for (const d of docs) {
     if (d.estado === "borrador") {
       borradores += 1;
+      continue;
+    }
+    if (canjeados.has(d.id)) {
+      deCanje += 1;
       continue;
     }
     sumar(total, d);
@@ -114,6 +139,7 @@ export function resumenIva(docs: readonly DocumentoFiscal[]): ResumenIva {
       .map(([tipo, a]) => ({ tipo, base: redondear(a.base), cuota: redondear(a.cuota) }))
       .sort((a, b) => b.tipo - a.tipo),
     borradores,
+    canjeados: deCanje,
   };
 }
 

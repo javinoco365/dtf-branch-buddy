@@ -533,9 +533,10 @@ export function useFiscal(rango: RangoFechas) {
       const [f, t0, c] = await Promise.all([
         enRango(
           "facturas",
-          "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id",
+          "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id, sustituye_a_id",
         ),
-        enRango("textil_facturas", `${camposTextil}, textil_pedido_id`),
+        // El pedido y el canje llegaron con la misma migración (tickets).
+        enRango("textil_facturas", `${camposTextil}, textil_pedido_id, sustituye_a_id`),
         leerCompras(
           (campos) =>
             enRango("textil_compras", campos) as Promise<{
@@ -544,7 +545,8 @@ export function useFiscal(rango: RangoFechas) {
             }>,
         ),
       ]);
-      // Antes de la migración de tickets la factura textil no sabe su pedido.
+      // Antes de la migración de tickets la factura textil no sabe su pedido
+      // ni canjea tickets.
       const t = faltaLaColumna(t0.error) ? await enRango("textil_facturas", camposTextil) : t0;
       if (f.error) throw new Error(f.error.message);
       if (t.error) throw new Error(t.error.message);
@@ -571,6 +573,7 @@ export function useFiscal(rango: RangoFechas) {
           desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
           pedido_id: (x.pedido_id as string | null) ?? null,
           rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
+          sustituye_a_id: (x.sustituye_a_id as string | null) ?? null,
         })),
         ...t.data.map((x) => ({
           id: x.id as string,
@@ -584,6 +587,7 @@ export function useFiscal(rango: RangoFechas) {
           desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
           pedido_id: (x.textil_pedido_id as string | null) ?? null,
           rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
+          sustituye_a_id: (x.sustituye_a_id as string | null) ?? null,
         })),
       ];
       return {

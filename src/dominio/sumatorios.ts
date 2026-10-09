@@ -85,6 +85,41 @@ export type TotalesDocumentos = {
   canjeados: number;
 };
 
+/** Lo justo de un documento para saber si canjea un ticket o lo corrige una rectificativa. */
+export type DocumentoCanjeable = {
+  id: string;
+  estado?: string | null;
+  sustituye_a_id?: string | null;
+  rectifica_a_id?: string | null;
+};
+
+/**
+ * Los tickets de la lista que no cuentan porque los cuenta la factura que los
+ * canjea. La regla de `totalesDocumentos`, aparte para que la use también el
+ * IVA de Gerencia:
+ *
+ * - Solo canjea una factura emitida de la lista: un borrador no.
+ * - Si esa factura está anulada (estado «anulada») o una rectificativa de la
+ *   lista la corrige (`rectifica_a_id`), el ticket vuelve a contar, como en
+ *   `documentoDelPedido`: la factura y su rectificativa suman cero.
+ * - Si la factura del canje no está en la lista (otro periodo, otro filtro),
+ *   el ticket cuenta.
+ */
+export function ticketsCanjeados(docs: readonly DocumentoCanjeable[]): Set<string> {
+  const emitidos = docs.filter((d) => d.estado !== "borrador");
+  // Una factura se anula con una rectificativa nueva, no cambiándole el estado.
+  const rectificados = new Set(
+    emitidos.flatMap((d) => (d.rectifica_a_id ? [d.rectifica_a_id] : [])),
+  );
+  return new Set(
+    emitidos.flatMap((d) =>
+      d.sustituye_a_id && d.estado !== "anulada" && !rectificados.has(d.id)
+        ? [d.sustituye_a_id]
+        : [],
+    ),
+  );
+}
+
 /**
  * El pie de una lista de documentos emitidos.
  *
@@ -96,30 +131,18 @@ export type TotalesDocumentos = {
  * - Si la factura del canje está anulada, es decir, una rectificativa de la
  *   lista la corrige (`rectifica_a_id`), el ticket vuelve a contar, como en
  *   `documentoDelPedido`: la factura y su rectificativa suman cero.
+ *
+ * Los canjes los decide `ticketsCanjeados`.
  */
 export function totalesDocumentos(
-  docs: readonly {
-    id: string;
-    estado?: string | null;
+  docs: readonly (DocumentoCanjeable & {
     base?: Valor;
     iva?: Valor;
     total: Valor;
-    sustituye_a_id?: string | null;
-    rectifica_a_id?: string | null;
-  }[],
+  })[],
 ): TotalesDocumentos {
   const emitidos = docs.filter((d) => d.estado !== "borrador");
-  // Una factura se anula con una rectificativa nueva, no cambiándole el estado.
-  const rectificados = new Set(
-    emitidos.flatMap((d) => (d.rectifica_a_id ? [d.rectifica_a_id] : [])),
-  );
-  const canjeados = new Set(
-    emitidos.flatMap((d) =>
-      d.sustituye_a_id && d.estado !== "anulada" && !rectificados.has(d.id)
-        ? [d.sustituye_a_id]
-        : [],
-    ),
-  );
+  const canjeados = ticketsCanjeados(docs);
   const cuentan = emitidos.filter((d) => !canjeados.has(d.id));
   return {
     documentos: cuentan.length,

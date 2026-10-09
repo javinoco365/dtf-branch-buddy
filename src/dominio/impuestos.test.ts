@@ -244,4 +244,46 @@ describe("impuestos por trimestre", () => {
     ]);
     expect(q.aPagar).toBe(1830);
   });
+
+  it("un ticket canjeado por factura no paga su IVA dos veces", () => {
+    const doc = (
+      id: string,
+      tipo: "ordinaria" | "simplificada" | "rectificativa",
+      fecha: string,
+      base: number,
+      extra: { sustituye_a_id?: string; rectifica_a_id?: string } = {},
+    ) => ({
+      id,
+      tipo,
+      estado: "emitida",
+      fecha,
+      tienda_id: "t",
+      base,
+      iva: base * 0.21,
+      total: base * 1.21,
+      ...extra,
+    });
+    const repercutido = (documentos: ReturnType<typeof doc>[]) =>
+      impuestosPorTrimestre({
+        rango: { desde: d(2026, 1, 1), hasta: new Date(2026, 5, 30, 23, 59, 59) },
+        documentos,
+        compras: [],
+        gastos: [],
+        cuotaIsAnterior: null,
+      }).map((t) => t.ivaRepercutido);
+
+    const ticket = doc("t1", "simplificada", "2026-02-10", 1000);
+    const canje = doc("f1", "ordinaria", "2026-02-10", 1000, { sustituye_a_id: "t1" });
+    // Ticket y factura en el primer trimestre: 210, no 420.
+    expect(repercutido([ticket, canje])).toEqual([210, 0]);
+    // Si una rectificativa anula la factura en el trimestre siguiente, el
+    // ticket vuelve a contar en el suyo y la rectificativa resta en el suyo.
+    expect(
+      repercutido([
+        ticket,
+        canje,
+        doc("r1", "rectificativa", "2026-04-02", -1000, { rectifica_a_id: "f1" }),
+      ]),
+    ).toEqual([420, -210]);
+  });
 });

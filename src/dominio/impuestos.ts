@@ -31,6 +31,7 @@ import {
   type Periodicidad,
 } from "./gerencia";
 import { ivaSoportado, resumenIva, type CompraResumen, type DocumentoFiscal } from "./fiscal";
+import { ticketsCanjeados } from "./sumatorios";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -411,9 +412,15 @@ export function impuestosPorTrimestre(d: {
   cuotaIsAnterior: number | null | undefined;
 }): ImpuestosTrimestre[] {
   const absorbidas = comprasAbsorbidas(d.gastos);
+  // Los canjes se deciden con todos los documentos y no trimestre a trimestre:
+  // si la rectificativa que anula la factura del canje cae en otro trimestre,
+  // el ticket vuelve a contar igual.
+  const canjeados = ticketsCanjeados(d.documentos);
   return trimestresDelRango(d.rango).map((t) => {
-    const repercutido = resumenIva(d.documentos.filter((x) => enTrimestre(x.fecha, t))).repercutido
-      .iva;
+    const repercutido = resumenIva(
+      d.documentos.filter((x) => enTrimestre(x.fecha, t)),
+      canjeados,
+    ).repercutido.iva;
     // Las compras que son la factura de un gasto fijo ya van en su cargo.
     const comprasDelTrimestre = d.compras.filter(
       (x) => enTrimestre(x.fecha, t) && !(x.id && absorbidas.has(x.id)),

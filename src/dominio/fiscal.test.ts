@@ -7,6 +7,7 @@ import {
   type DocumentoFiscal,
 } from "./fiscal";
 import { ventaDeTienda, type Venta } from "./gerencia";
+import { ticketsCanjeados } from "./sumatorios";
 
 const doc = (
   tipo: DocumentoFiscal["tipo"],
@@ -54,6 +55,64 @@ describe("IVA repercutido", () => {
   it("sin desglose guardado, el IVA va entero al tipo 0", () => {
     const r = resumenIva([doc("ordinaria", 100, { desglose_iva: null })]);
     expect(r.porTipoIva).toEqual([{ tipo: 0, base: 100, cuota: 21 }]);
+  });
+});
+
+describe("IVA repercutido con tickets canjeados por factura", () => {
+  // Un ticket de 100 € de base y la factura que lo canjea, por lo mismo.
+  const ticket = doc("simplificada", 100, { id: "t1" });
+  const factura = doc("ordinaria", 100, { id: "f1", sustituye_a_id: "t1" });
+  const rectificativa = doc("rectificativa", -100, { id: "r1", rectifica_a_id: "f1" });
+
+  it("el ticket canjeado no cuenta: su IVA lo cuenta la factura una sola vez", () => {
+    const r = resumenIva([ticket, factura]);
+    expect(r.repercutido).toEqual({ documentos: 1, base: 100, iva: 21, total: 121 });
+    expect(r.canjeados).toBe(1);
+    expect(r.porTipoDocumento.find((x) => x.tipo === "simplificada")?.cuenta.documentos).toBe(0);
+    expect(r.porTipoDocumento.find((x) => x.tipo === "ordinaria")?.cuenta.iva).toBe(21);
+    expect(r.porTipoIva).toEqual([{ tipo: 21, base: 100, cuota: 21 }]);
+  });
+
+  it("si la factura del canje no está en la lista, el ticket cuenta", () => {
+    const r = resumenIva([ticket]);
+    expect(r.repercutido.iva).toBe(21);
+    expect(r.canjeados).toBe(0);
+  });
+
+  it("si una rectificativa corrige la factura del canje, el ticket vuelve a contar", () => {
+    const r = resumenIva([ticket, factura, rectificativa]);
+    // Ticket 21 + factura 21 − rectificativa 21: el IVA del ticket, una vez.
+    expect(r.repercutido).toMatchObject({ documentos: 3, iva: 21 });
+    expect(r.canjeados).toBe(0);
+  });
+
+  it("si la factura del canje está anulada, el ticket vuelve a contar", () => {
+    const r = resumenIva([ticket, { ...factura, estado: "anulada" }]);
+    expect(r.canjeados).toBe(0);
+    expect(r.repercutido.documentos).toBe(2);
+  });
+
+  it("una factura de canje en borrador no canjea nada", () => {
+    const r = resumenIva([ticket, { ...factura, estado: "borrador" }]);
+    expect(r.repercutido).toMatchObject({ documentos: 1, iva: 21 });
+    expect(r).toMatchObject({ borradores: 1, canjeados: 0 });
+  });
+
+  it("vale igual para el textil: la misma regla con sus documentos", () => {
+    const r = resumenIva([
+      { ...ticket, tienda_id: "textil-personalizado" },
+      { ...factura, tienda_id: "textil-personalizado" },
+    ]);
+    expect(r.repercutido.iva).toBe(21);
+    expect(r.canjeados).toBe(1);
+  });
+
+  it("con los canjes de una lista mayor, decide con esa lista y no con el trozo", () => {
+    // La rectificativa de la factura cae fuera del trozo: el ticket cuenta.
+    const todos = [ticket, factura, rectificativa];
+    const r = resumenIva([ticket, factura], ticketsCanjeados(todos));
+    expect(r.canjeados).toBe(0);
+    expect(r.repercutido.iva).toBe(42);
   });
 });
 

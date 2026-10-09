@@ -180,13 +180,16 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                 ))}
               </TableBody>
               {/* El IVA repercutido de la tarjeta de arriba: los tres tipos, con
-                  las rectificativas ya en negativo, y sin los borradores. */}
+                  las rectificativas ya en negativo, sin los borradores y sin
+                  los tickets canjeados. */}
               <TableFooter>
                 <TableRow>
                   <TableCell>
                     Total
                     {iva.borradores > 0 &&
                       ` · sin ${iva.borradores} ${iva.borradores === 1 ? "borrador" : "borradores"}`}
+                    {iva.canjeados > 0 &&
+                      ` · sin ${iva.canjeados} ticket${iva.canjeados === 1 ? "" : "s"} canjeado${iva.canjeados === 1 ? "" : "s"} (cuenta su factura)`}
                   </TableCell>
                   <TableCell className="text-right font-bold tabular-nums">
                     {numero(iva.repercutido.documentos, 0)}

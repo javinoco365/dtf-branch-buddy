@@ -305,7 +305,7 @@ export const DEFINICIONES = {
   g_iva_repercutido: {
     que: "El IVA de las facturas y tickets emitidos en el periodo.",
     calculo:
-      "Suma del IVA de facturas, tickets y rectificativas con fecha en el periodo; las rectificativas restan. Los borradores no cuentan.",
+      "Suma del IVA de facturas, tickets y rectificativas con fecha en el periodo; las rectificativas restan. Los borradores no cuentan. Un ticket canjeado por factura tampoco: lo cuenta su factura (si esa factura se anula o se rectifica, vuelve a contar el ticket).",
     fuente:
       "Facturas de las tiendas y del textil. Con el filtro de tienda, solo esa tienda; el filtro de canal no se aplica a las facturas.",
   },
@@ -370,7 +370,7 @@ export const DEFINICIONES = {
   g_impuestos_trimestre: {
     que: "Lo que se presenta a Hacienda por cada trimestre del periodo.",
     calculo:
-      "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
+      "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura lo cuenta su factura) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
     fuente:
       "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
   },
