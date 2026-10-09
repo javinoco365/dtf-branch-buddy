@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { llamarRpc, tabla } from "./rpc";
+import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { leerTodas, trozos } from "./paginar";
+import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
@@ -722,6 +724,21 @@ export type PedidoParaTicket = {
 };
 
 /**
+ * leerDocumentosDePedidos para muchos pedidos: por trozos de ids, para que la
+ * lista no reviente la dirección de la petición.
+ */
+async function leerDocumentosPorTrozos(sb: Sb, pedidoIds: string[]) {
+  const docs: DocumentoLeido[] = [];
+  const rectificados: string[] = [];
+  for (const trozo of trozos(pedidoIds)) {
+    const r = await leerDocumentosDePedidos(sb, trozo);
+    docs.push(...r.docs);
+    rectificados.push(...r.rectificados);
+  }
+  return { docs, rectificados };
+}
+
+/**
  * Los pedidos de una tienda cobrados enteros y sin ticket ni factura, en un
  * periodo, y qué toca a cada uno. Solo lee: es la vista previa del botón de
  * emitir en bloque.
@@ -749,30 +766,39 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
     // guardado: un pedido web guarda su hora local como si fuera UTC y uno
     // del CRM el instante de verdad (ver dia-pedido.ts). Se pide un día más
     // por cada lado y se filtra aquí.
+    //
+    // Todos los del periodo, por páginas: antes se cortaba en 500 sin avisar
+    // y los que pasaban de ahí no salían ni se emitían. Lo que cuelga de ellos
+    // se lee por trozos de ids (ver leer-por-ids.ts).
     const tramo = tramoDeConsulta(data.desde, data.hasta);
-    const { data: pedidos, error } = await tabla(sb, "pedidos")
-      .select("id, numero, empresa_id, fecha_pedido, origen, total, cliente_id, cliente_nombre")
-      .eq("tienda_id", data.tienda_id)
-      .is("cancelado_en", null)
-      .gte("fecha_pedido", tramo.desde)
-      .lt("fecha_pedido", tramo.hasta)
-      .order("fecha_pedido")
-      .limit(500);
+    type Fila = {
+      id: string;
+      numero: string;
+      empresa_id: string | null;
+      fecha_pedido: string;
+      origen: string | null;
+      total: number;
+      cliente_id: string | null;
+      cliente_nombre: string | null;
+    };
+    const { data: pedidos, error } = await leerTodas<Fila>((a, b) =>
+      tabla(sb, "pedidos")
+        .select("id, numero, empresa_id, fecha_pedido, origen, total, cliente_id, cliente_nombre")
+        .eq("tienda_id", data.tienda_id)
+        .is("cancelado_en", null)
+        .gte("fecha_pedido", tramo.desde)
+        .lt("fecha_pedido", tramo.hasta)
+        .order("fecha_pedido")
+        .order("id")
+        .range(a, b),
+    );
     if (error) throw new Error(error.message);
-    // Del más antiguo al más reciente, como se emitirán.
+    // Del más antiguo al más reciente, como se emitirán. Una vez cada uno: si
+    // entra un pedido mientras se leen las páginas, una fila puede repetirse.
     const lista = ordenarPedidos(
-      (
-        (pedidos ?? []) as {
-          id: string;
-          numero: string;
-          empresa_id: string | null;
-          fecha_pedido: string;
-          origen: string | null;
-          total: number;
-          cliente_id: string | null;
-          cliente_nombre: string | null;
-        }[]
-      ).filter((p) => pedidoEnDias(p, data.desde, data.hasta)),
+      [...new Map(pedidos.map((p) => [p.id, p])).values()].filter((p) =>
+        pedidoEnDias(p, data.desde, data.hasta),
+      ),
       "antiguo",
     );
     const limites = await leerLimitesTicket(sb, lista[0]?.empresa_id ?? null);
@@ -780,16 +806,35 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
 
     const ids = lista.map((p) => p.id);
     const clienteIds = [...new Set(lista.map((p) => p.cliente_id).filter(Boolean))] as string[];
-    const [{ data: cobros }, documentos, { data: clientes }] = await Promise.all([
-      tabla(sb, "cobros").select("pedido_id, importe").in("pedido_id", ids),
-      leerDocumentosDePedidos(sb, ids),
-      clienteIds.length
-        ? tabla(sb, "clientes").select("id, nombre, nif, tipo_fiscal").in("id", clienteIds)
-        : Promise.resolve({ data: [] }),
-    ]);
+    const [{ data: cobros, error: errCobros }, documentos, { data: clientes, error: errClientes }] =
+      await Promise.all([
+        leerPorIds<{ pedido_id: string; importe: number }>(ids, (trozo, a, b) =>
+          tabla(sb, "cobros")
+            .select("pedido_id, importe")
+            .in("pedido_id", trozo)
+            .order("id")
+            .range(a, b),
+        ),
+        leerDocumentosPorTrozos(sb, ids),
+        leerPorIds<{ id: string; nombre: string; nif: string | null; tipo_fiscal: string | null }>(
+          clienteIds,
+          (trozo, a, b) =>
+            tabla(sb, "clientes")
+              .select("id, nombre, nif, tipo_fiscal")
+              .in("id", trozo)
+              .order("id")
+              .range(a, b),
+        ),
+      ]);
+
+    // Leídos por trozos, un error a medias dejaría la lista a medias sin
+    // decirlo: un pedido parecería sin cobrar, o un cliente con NIF iría a
+    // ticket. Mejor que la pantalla diga que no ha podido leer.
+    if (errCobros && !faltaLaTabla(errCobros)) throw new Error(errCobros.message);
+    if (errClientes) throw new Error(errClientes.message);
 
     const cobrado = new Map<string, number>();
-    for (const c of (cobros ?? []) as { pedido_id: string; importe: number }[]) {
+    for (const c of cobros) {
       cobrado.set(c.pedido_id, (cobrado.get(c.pedido_id) ?? 0) + Number(c.importe));
     }
     const docsPorPedido = new Map<string, DocumentoLeido[]>();

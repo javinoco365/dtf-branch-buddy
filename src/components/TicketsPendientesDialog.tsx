@@ -28,6 +28,9 @@ import {
   type PedidoParaTicket,
 } from "@/lib/facturas.functions";
 
+/** De cuántos en cuántos se emite, como en «Facturar» de Pedidos. */
+const TANDA = 20;
+
 /**
  * Emitir de una vez los tickets de los pedidos cobrados que no tienen
  * documento.
@@ -46,7 +49,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
   const [abierto, setAbierto] = useState(false);
   const [desde, setDesde] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [hasta, setHasta] = useState(() => format(endOfMonth(new Date()), "yyyy-MM-dd"));
-  const [emitiendo, setEmitiendo] = useState(false);
+  const [emitiendo, setEmitiendo] = useState<{ hechos: number; total: number } | null>(null);
   // El PDF de cada ticket se guarda después de emitirlos, de diez en diez.
   const [pdfs, setPdfs] = useState<{ hechos: number; total: number; fallidos: number } | null>(
     null,
@@ -63,22 +66,38 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     enabled: abierto && desde <= hasta,
   });
 
+  /**
+   * Por tandas, del más antiguo al más reciente (la lista ya viene así): todos
+   * de una vez se pasarían del tiempo de una función, y el servidor no admite
+   * más de 200 por petición. Si una tanda falla, lo emitido hasta ahí se
+   * enseña igual y guarda su PDF.
+   */
   async function emitir() {
     if (!data?.tickets.length) return;
-    setEmitiendo(true);
+    const ids = data.tickets.map((p) => p.id);
+    const acumulado: NonNullable<typeof resultado> = { emitidos: [], omitidos: [] };
+    setEmitiendo({ hechos: 0, total: ids.length });
     try {
-      const r = await emitirFn({ data: { pedido_ids: data.tickets.map((p) => p.id) } });
-      setResultado(r);
-      if (r.emitidos.length) toast.success(`${r.emitidos.length} ticket(s) emitido(s)`);
-      if (r.omitidos.length) toast.warning(`${r.omitidos.length} pedido(s) no se han emitido`);
-      qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
-      await guardarPdfs(r.emitidos.map((e) => e.id));
-      qc.invalidateQueries({ queryKey: ["facturas"] });
+      for (let i = 0; i < ids.length; i += TANDA) {
+        const r = await emitirFn({ data: { pedido_ids: ids.slice(i, i + TANDA) } });
+        acumulado.emitidos.push(...r.emitidos);
+        acumulado.omitidos.push(...r.omitidos);
+        setEmitiendo({ hechos: Math.min(i + TANDA, ids.length), total: ids.length });
+      }
     } catch (e: any) {
       toast.error(e?.message ?? "No se pudieron emitir los tickets");
-    } finally {
-      setEmitiendo(false);
     }
+    setEmitiendo(null);
+    const { emitidos, omitidos } = acumulado;
+    // Si falló la primera tanda no hay nada que enseñar: sigue la lista, para
+    // volver a intentarlo.
+    if (!emitidos.length && !omitidos.length) return;
+    setResultado(acumulado);
+    if (emitidos.length) toast.success(`${emitidos.length} ticket(s) emitido(s)`);
+    if (omitidos.length) toast.warning(`${omitidos.length} pedido(s) no se han emitido`);
+    qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+    await guardarPdfs(emitidos.map((e) => e.id));
+    qc.invalidateQueries({ queryKey: ["facturas"] });
   }
 
   /**
@@ -109,6 +128,8 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     <Dialog
       open={abierto}
       onOpenChange={(o) => {
+        // Mientras emite por tandas no se cierra: el resultado se perdería.
+        if (emitiendo) return;
         setAbierto(o);
         if (!o) {
           setResultado(null);
@@ -197,12 +218,14 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setAbierto(false)}>
+          <Button variant="outline" onClick={() => setAbierto(false)} disabled={!!emitiendo}>
             Cerrar
           </Button>
           {data && !resultado && (
-            <Button onClick={emitir} disabled={emitiendo || data.tickets.length === 0}>
-              {emitiendo ? "Emitiendo…" : `Emitir ${data.tickets.length} ticket(s)`}
+            <Button onClick={emitir} disabled={!!emitiendo || data.tickets.length === 0}>
+              {emitiendo
+                ? `Emitiendo… ${emitiendo.hechos} de ${emitiendo.total}`
+                : `Emitir ${data.tickets.length} ticket(s)`}
             </Button>
           )}
         </DialogFooter>
