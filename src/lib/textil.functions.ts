@@ -126,7 +126,10 @@ export const setMarcaPredeterminada = createServerFn({ method: "POST" })
 export const listStock = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase.from("textil_stock").select("*").order("nombre");
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data, error } = await leerTodas((a, b) =>
+      context.supabase.from("textil_stock").select("*").order("nombre").order("id").range(a, b),
+    );
     if (error) throw error;
     return data ?? [];
   });
@@ -309,10 +312,16 @@ export const listPresupuestos = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const campos = "*, items:textil_presupuesto_items(*), marca:textil_marcas(id,nombre,color)";
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const leer = (select: string) =>
-      context.supabase.from("textil_presupuestos").select(select).order("fecha", {
-        ascending: false,
-      });
+      leerTodas((a, b) =>
+        context.supabase
+          .from("textil_presupuestos")
+          .select(select)
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      );
     // Con el pedido que salió de cada uno. Sin la migración que añade
     // pedido_id, PostgREST no encuentra la relación (PGRST200): se lee sin él.
     let { data, error } = await leer(`${campos}, pedido:textil_pedidos(numero)`);
@@ -750,10 +759,15 @@ export const deleteTextilFactura = createServerFn({ method: "POST" })
 export const listTextilPedidos = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("textil_pedidos")
-      .select("*, items:textil_pedido_items(*), marca:textil_marcas(id,nombre,color)")
-      .order("fecha", { ascending: false });
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data, error } = await leerTodas((a, b) =>
+      context.supabase
+        .from("textil_pedidos")
+        .select("*, items:textil_pedido_items(*), marca:textil_marcas(id,nombre,color)")
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (error) throw error;
     return data ?? [];
   });
