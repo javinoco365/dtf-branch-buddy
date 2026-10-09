@@ -73,6 +73,11 @@ export type DatosConciliacion = {
   limite?: number;
   /** Cuántos hay en las pestañas del historial. */
   cuantos?: Cuantos;
+  /**
+   * La migración que falta para mirar solo lo pendiente. Sin ella, la ventana
+   * se lee de las tablas como antes: lo más reciente, pendiente o no.
+   */
+  falta?: string;
 };
 
 const claveDoc = (d: { tipo: string; id: string }) => `${d.tipo}:${d.id}`;
@@ -131,7 +136,7 @@ export function MotorConciliacion({
   const totalSinConciliar = totalesConSigno(sinConciliar, (m) => m.importe);
   const { verdes, ambares, traspasos: tp } = datos.plan;
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
-  const recorte = avisoRecorte(datos.recortado, datos.limite);
+  const recorte = avisoRecorte(datos.recortado, datos.limite, !datos.falta);
 
   const refrescar = () => {
     alCambiar();
@@ -220,6 +225,17 @@ export function MotorConciliacion({
           </Button>
         </CardContent>
       </Card>
+
+      {datos.falta && (
+        <p className="flex gap-2 text-sm text-muted-foreground">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <span>
+            Falta aplicar la migración <code>{datos.falta}</code>. Mientras, la conciliación mira lo
+            más reciente de cada cosa, cobrado o no, como antes: con muchos tickets, una factura
+            pendiente más antigua puede quedarse fuera. Con ella, mira solo lo pendiente.
+          </span>
+        </p>
+      )}
 
       {recorte && (
         <p className="flex gap-2 text-sm text-muted-foreground">
@@ -426,15 +442,26 @@ export function MotorConciliacion({
  * El aviso cuando la conciliación no mira todo lo pendiente: el servidor lee
  * como mucho `limite` movimientos sin conciliar y `limite` documentos por
  * conciliar de cada clase, los más recientes. Solo sale si queda algo
- * pendiente fuera.
+ * pendiente fuera. Sin la migración que lee solo lo pendiente
+ * (`soloPendiente` falso), la ventana cuenta también lo ya conciliado o
+ * cobrado, y el aviso lo dice así.
  */
-function avisoRecorte(r: Recortado | undefined, limite: number | undefined): string | null {
+function avisoRecorte(
+  r: Recortado | undefined,
+  limite: number | undefined,
+  soloPendiente: boolean,
+): string | null {
   if (!r || !limite || (!r.movimientos && !r.documentos)) return null;
   const n = numeroJusto(limite, 0);
   const que = [
-    r.movimientos && `los ${n} movimientos sin conciliar más recientes`,
+    r.movimientos &&
+      (soloPendiente
+        ? `los ${n} movimientos sin conciliar más recientes`
+        : `los ${n} movimientos más recientes`),
     r.documentos &&
-      `las ${n} facturas por conciliar más recientes de cada clase (recibidas, de tienda y textil)`,
+      (soloPendiente
+        ? `las ${n} facturas por conciliar más recientes de cada clase (recibidas, de tienda y textil)`
+        : `las ${n} facturas más recientes de cada clase (recibidas, de tienda y textil)`),
   ]
     .filter(Boolean)
     .join(" y ");

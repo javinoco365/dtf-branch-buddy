@@ -56,8 +56,9 @@ function ConciliacionPage() {
     queryKey: ["conciliacion-motor"],
     queryFn: () => verFn(),
   });
-  // Sin las migraciones del motor (20261017100000 y 20261025100000), la
-  // conciliación de antes, diciendo cuál falta.
+  // Sin la migración del motor (20261017100000), la conciliación de antes,
+  // diciendo cuál falta. Sin 20261025100000, el motor sigue (leyendo de las
+  // tablas) y él mismo avisa de que falta para mirar solo lo pendiente.
   if (motor && !motor.disponible) return <ConciliacionAntigua falta={motor.falta} />;
 
   const refrescar = () => {

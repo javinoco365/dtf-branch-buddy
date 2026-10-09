@@ -40,3 +40,18 @@ export function tramoDePagina(
   const p = Math.min(normal(pagina), ultimaPagina(total, porPagina));
   return { pagina: p, primera: p * porPagina + 1, ultima: Math.min(total, (p + 1) * porPagina) };
 }
+
+/**
+ * Una página de una lista que ya está entera en memoria, con el total. Si la
+ * pedida ya no existe (se han quitado filas), la última que quede, igual que
+ * cuando se pide a la base.
+ */
+export function paginaDeLista<T>(
+  lista: readonly T[],
+  pagina: number,
+  porPagina: number,
+): { filas: T[]; pagina: number; total: number } {
+  const p = Math.min(normal(pagina), ultimaPagina(lista.length, porPagina));
+  const { desde, hasta } = filasDePagina(p, porPagina);
+  return { filas: lista.slice(desde, hasta + 1), pagina: p, total: lista.length };
+}
