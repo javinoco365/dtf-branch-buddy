@@ -39,9 +39,7 @@ import {
   ShieldCheck,
   Building2,
   Receipt,
-  Truck,
   ShoppingBag,
-  Construction,
   Mail,
   Users,
 } from "lucide-react";
@@ -186,12 +184,12 @@ function Ajustes() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ajustes de la tienda</h1>
         <p className="text-sm text-muted-foreground">
-          Configuración de WooCommerce, datos fiscales, facturación y seguimiento.
+          Configuración de WooCommerce, datos fiscales, facturación y correos.
         </p>
       </div>
 
       <Tabs defaultValue="woo">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full md:w-auto max-md:h-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto max-md:h-auto">
           <TabsTrigger value="woo" className="gap-2">
             <ShoppingBag className="h-4 w-4" />
             WooCommerce
@@ -207,10 +205,6 @@ function Ajustes() {
           <TabsTrigger value="correos" className="gap-2">
             <Mail className="h-4 w-4" />
             <span className="hidden sm:inline">Correos</span>
-          </TabsTrigger>
-          <TabsTrigger value="seguimiento" className="gap-2">
-            <Truck className="h-4 w-4" />
-            Seguimiento
           </TabsTrigger>
         </TabsList>
 
@@ -455,44 +449,8 @@ function Ajustes() {
           </Button>
         </TabsContent>
 
-        {/* === SEGUIMIENTO === */}
+        {/* === CORREOS === */}
         <PlantillasCorreo tiendaId={tiendaId} isAdmin={isAdmin} />
-
-        <TabsContent value="seguimiento" className="space-y-4 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Seguimiento de envíos
-                <Badge variant="outline">Próximamente</Badge>
-              </CardTitle>
-              <CardDescription>
-                Generador de enlaces de seguimiento para los pedidos. Aún no disponible.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Alert>
-                <Construction className="h-4 w-4" />
-                <AlertDescription>
-                  Esta sección está preparada como placeholder. Cuando definas qué empresas de
-                  transporte (Correos Express, SEUR, GLS, MRW, …) usaréis, configuraremos la
-                  generación automática de URLs de tracking para incluir en emails y facturas.
-                </AlertDescription>
-              </Alert>
-              <div className="grid gap-4 md:grid-cols-2 opacity-50 pointer-events-none">
-                <Field label="Transportista" v="" on={() => {}} placeholder="Próximamente" />
-                <Field
-                  label="Plantilla URL de tracking"
-                  v=""
-                  on={() => {}}
-                  placeholder="https://transportista.com/track/{codigo}"
-                />
-                <Field label="Código de cuenta" v="" on={() => {}} placeholder="—" />
-                <Field label="API key" v="" on={() => {}} placeholder="—" />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
