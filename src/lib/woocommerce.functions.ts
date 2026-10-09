@@ -27,11 +27,13 @@ import {
   estadoDeFilaWoo,
   fechaGmtWoo,
   filtroDeFechaIgnorado,
+  otraPaginaDePedidos,
   otraPaginaEnEstaTanda,
   parametrosPaginaWoo,
+  parametrosPasadaClientes,
   parametrosUltimosWoo,
-  pasadaDesdeEstado,
   quedanTrasPagina,
+  reanudableTrasTanda,
   siguientePasadaClientes,
   sinGuardarTodavia,
   totalDeCabecera,
@@ -267,8 +269,18 @@ async function leerEstadoGuardado(ctx: ContextoSync): Promise<EstadoGuardadoWoo 
 /**
  * Deja guardado por dónde va cada parte. Si no se puede, no se para nada: la
  * siguiente sincronización empezará algo antes y lo repetido se guarda igual.
+ *
+ * Salvo `alEmpezar`: lo primero que se guarda, desde dónde empiezan los
+ * pedidos y los clientes, antes de traer nada. Sin eso la siguiente lo
+ * calcularía otra vez desde lo que haya aquí, ya con los 100 últimos dentro, y
+ * se saltaría lo de entre medias. Si no se puede guardar, se para antes de
+ * traer nada.
  */
-async function guardarEstado(ctx: ContextoSync, cambio: CambioEstadoWoo): Promise<void> {
+async function guardarEstado(
+  ctx: ContextoSync,
+  cambio: CambioEstadoWoo,
+  alEmpezar = false,
+): Promise<void> {
   if (ctx.esquema === "sin_tabla") return;
   const columnas = columnasEstadoWoo(cambio, ctx.esquema === "completo");
   const nuevas = Object.entries(columnas).filter(([k, v]) => ctx.escrito[k] !== v);
@@ -277,6 +289,12 @@ async function guardarEstado(ctx: ContextoSync, cambio: CambioEstadoWoo): Promis
     { tienda_id: ctx.tiendaId, empresa_id: ctx.empresaId, ...Object.fromEntries(nuevas) },
     { onConflict: "tienda_id" },
   );
+  if (error && alEmpezar) {
+    throw new Error(
+      `No se pudo guardar desde dónde empieza la sincronización (${error.message}). No se ha ` +
+        "traído nada, para no saltarse pedidos ni clientes.",
+    );
+  }
   if (error) {
     ctx.avisos.push(
       `No se pudo guardar por dónde va la sincronización (${error.message}). ` +
@@ -303,7 +321,10 @@ async function cursorDesdeLosPedidos(ctx: ContextoSync): Promise<string | null> 
   return cursorDesdeUltimoPedido(data?.fecha_pedido ?? null, new Date());
 }
 
-/** El id de WooCommerce más alto de los clientes de esta tienda que ya están aquí. */
+/**
+ * El id de WooCommerce más alto de los clientes de esta tienda que ya están
+ * aquí; `null` si no hay ninguno.
+ */
 async function ultimoClienteWoo(ctx: ContextoSync): Promise<number | null> {
   const { data, error } = await tabla(ctx.sb, "clientes")
     .select("woo_customer_id")
@@ -388,7 +409,7 @@ async function paginaDeProductos(
     );
     return { guardados, siguiente: null };
   }
-  if (avance.siguiente.desde) await guardarEstado(ctx, { productos: avance.siguiente });
+  await guardarEstado(ctx, { productos: avance.siguiente });
   return { guardados, siguiente: avance.fin ? null : avance.siguiente };
 }
 
@@ -411,43 +432,57 @@ async function productosRecientes(ctx: ContextoSync): Promise<number> {
 }
 
 /**
- * Una página de la pasada por los clientes que se han dado de alta en
- * WooCommerce desde la última vez (ver PasadaClientesWoo). Se guardan igual
- * que siempre (upsert por tienda_id + woo_customer_id).
+ * Una petición de la pasada por los clientes que se han dado de alta en
+ * WooCommerce desde la última vez (ver PasadaClientesWoo: la primera es la
+ * página 1 por id; las siguientes, los 100 ids que siguen por debajo).
+ *
+ * Solo da de alta a los que no están aquí (`ignoreDuplicates`: ON CONFLICT
+ * DO NOTHING). Una ficha que ya existe no se toca: puede haber entrado por su
+ * pedido y haberse corregido aquí después (un teléfono, un nombre), y esta
+ * pasada no es quién para pisarlo. Refrescar las fichas con lo de WooCommerce
+ * es cosa de «Sincronizar clientes», como hasta ahora.
  */
 async function paginaDeClientes(
   ctx: ContextoSync,
   pasada: PasadaClientesWoo,
-): Promise<{ guardados: number; siguiente: PasadaClientesWoo | null }> {
-  const { items } = await paginaWoo(
-    urlWoo(ctx.base, "customers", {
-      orderby: "id",
-      order: "desc",
-      per_page: String(POR_PAGINA_WOO),
-      page: String(pasada.pagina),
-      _fields: CAMPOS_CLIENTE_WOO,
-    }),
-    ctx.headers,
-    "los clientes",
-  );
+): Promise<{ altas: number; siguiente: PasadaClientesWoo | null }> {
+  const parametros = parametrosPasadaClientes(pasada);
+  const items = parametros
+    ? (
+        await paginaWoo(
+          urlWoo(ctx.base, "customers", { ...parametros, _fields: CAMPOS_CLIENTE_WOO }),
+          ctx.headers,
+          "los clientes",
+        )
+      ).items
+    : [];
   await renovarTurno(ctx);
-  const { nuevos, siguiente, estado, tope } = siguientePasadaClientes(pasada, items);
+  const { nuevos, siguiente, estado, aviso } = siguientePasadaClientes(pasada, items);
+  let altas = 0;
   if (nuevos.length) {
-    const { error } = await tabla(ctx.sb, "clientes").upsert(
-      nuevos.map((c) => filaClienteRegistrado(c, ctx.tiendaId)),
-      { onConflict: "tienda_id,woo_customer_id" },
-    );
-    if (error) throw new Error(`No se pudieron guardar los clientes: ${error.message}`);
+    const { data, error } = await tabla(ctx.sb, "clientes")
+      .upsert(
+        nuevos.map((c) => filaClienteRegistrado(c, ctx.tiendaId)),
+        { onConflict: "tienda_id,woo_customer_id", ignoreDuplicates: true },
+      )
+      .select("id");
+    if (error) throw new Error(`No se pudieron dar de alta los clientes: ${error.message}`);
+    altas = data?.length ?? 0;
   }
-  if (tope) {
+  if (aviso === "limite") {
     ctx.avisos.push(
-      `Hay más de ${numero(PAGINA_MAXIMA_WOO * POR_PAGINA_WOO, 0)} clientes nuevos en ` +
-        "WooCommerce: han llegado los más recientes. Para traer el resto, «Sincronizar " +
-        "clientes» en los ajustes de la tienda.",
+      `Hay más de ${numero(PAGINA_MAXIMA_WOO * POR_PAGINA_WOO, 0)} cuentas nuevas en ` +
+        "WooCommerce desde la última vez: han llegado los clientes más recientes. Para traer " +
+        "el resto, «Sincronizar clientes» en los ajustes de la tienda.",
+    );
+  } else if (aviso === "sin_filtro") {
+    ctx.avisos.push(
+      "WooCommerce no ha filtrado los clientes por id y la pasada de clientes nuevos se ha " +
+        "parado. Para traer los que falten, «Sincronizar clientes» en los ajustes de la tienda.",
     );
   }
   await guardarEstado(ctx, { clientes: estado });
-  return { guardados: nuevos.length, siguiente };
+  return { altas, siguiente };
 }
 
 /**
@@ -802,9 +837,9 @@ const esquemaCursorWoo = z.object({
 const esquemaContinuacionWoo = z.object({
   clientes: z
     .object({
-      hasta_id: z.number().int().nonnegative().nullable(),
-      tope_id: z.number().int().nonnegative().nullable(),
-      pagina: z.number().int().min(1).max(PAGINA_MAXIMA_WOO),
+      hasta_id: z.number().int().nonnegative(),
+      tope_id: z.number().int().positive().nullable(),
+      bajo_id: z.number().int().positive().nullable(),
     })
     .nullable(),
   pedidos: esquemaCursorWoo.nullable(),
@@ -821,8 +856,9 @@ function cursorDePantalla(c: CursorWoo | null): CursorWoo | null {
  *
  * Al empezar trae siempre los 100 últimos pedidos por fecha (y mira con ellos
  * cuáles se han borrado en WooCommerce). Después, TODO lo que ha cambiado desde
- * la última sincronización: clientes nuevos, pedidos nuevos o modificados y
- * productos modificados (ver src/dominio/cursor-woo.ts).
+ * la última sincronización: pedidos nuevos o modificados, clientes nuevos y
+ * productos modificados (ver src/dominio/cursor-woo.ts). Cada llamada hace al
+ * menos una página de pedidos cambiados.
  *
  * Por tandas, para no pasarse del tiempo de una función: si queda algo,
  * devuelve cuántos pedidos (`quedan`) y por dónde seguir (`siguiente`), y la
@@ -910,9 +946,10 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
   });
 
 /**
- * Una tanda de la sincronización: lo que cabe en TANDA_WOO, en este orden: los
- * 100 últimos pedidos (solo al empezar), clientes nuevos, pedidos cambiados y
- * productos cambiados.
+ * Una tanda de la sincronización. Siempre, aunque se pasen de TANDA_WOO: los
+ * 100 últimos pedidos (solo al empezar) y una página de pedidos cambiados. Con
+ * lo que quede de TANDA_WOO: más pedidos cambiados, clientes nuevos y
+ * productos cambiados, por ese orden.
  */
 async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, inicio: number) {
   const primera = !continuar;
@@ -956,21 +993,28 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
     };
   } else {
     // Los clientes, desde donde se quedó la pasada anterior; la primera vez,
-    // desde el último que hay aquí.
-    const clientes: PasadaClientesWoo = estado?.clientes
-      ? pasadaDesdeEstado(estado.clientes)
-      : { hasta_id: await ultimoClienteWoo(ctx), tope_id: null, pagina: 1 };
+    // desde el último que hay aquí (0 si no hay ninguno: todos son nuevos).
+    const clientes: PasadaClientesWoo = estado?.clientes ?? {
+      hasta_id: (await ultimoClienteWoo(ctx)) ?? 0,
+      tope_id: null,
+      bajo_id: null,
+    };
+    const pedidos: CursorWoo | null = estado
+      ? (estado.pedidos ?? { desde: await cursorDesdeLosPedidos(ctx), pagina: 1 })
+      : null;
     pendiente = {
       clientes,
-      pedidos: estado
-        ? (estado.pedidos ?? { desde: await cursorDesdeLosPedidos(ctx), pagina: 1 })
-        : null,
+      pedidos,
       productos: estado ? (estado.productos ?? { desde: null, pagina: 1 }) : null,
     };
-    // La primera vez, ese «hasta» se guarda desde ya: los 100 últimos pueden
-    // dar de alta clientes con ids más altos, y si esta llamada no llegara a
-    // los clientes, la siguiente lo calcularía mal.
-    if (!estado?.clientes) await guardarEstado(ctx, { clientes });
+    // La primera vez, los dos puntos de partida se guardan desde ya, antes de
+    // traer nada. Si esta llamada se quedara sin tiempo (o fallara) antes de
+    // guardar una página de cada, la siguiente los calcularía otra vez, ya con
+    // los 100 últimos y sus clientes aquí, y se saltaría lo de entre medias.
+    const inicial: CambioEstadoWoo = {};
+    if (!estado?.clientes) inicial.clientes = clientes;
+    if (estado && !estado.pedidos && pedidos) inicial.pedidos = pedidos;
+    await guardarEstado(ctx, inicial, true);
   }
 
   let paginas = 0;
@@ -1005,7 +1049,8 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
   };
 
   // --- Los 100 últimos, y los borrados en WooCommerce ----------------------
-  if (primera && otraPagina()) {
+  // Siempre, al empezar.
+  if (primera) {
     const ultimos = await ultimosPedidosWoo(ctx);
     paginas++;
     await guardarPagina(ultimos);
@@ -1017,24 +1062,11 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
     }
   }
 
-  // --- Clientes nuevos ------------------------------------------------------
-  // Un fallo aquí no para los pedidos, pero se avisa.
-  while (pendiente.clientes && otraPagina()) {
-    try {
-      const r = await paginaDeClientes(ctx, pendiente.clientes);
-      clientes += r.guardados;
-      pendiente.clientes = r.siguiente;
-    } catch (e) {
-      if (e instanceof TurnoPerdido) throw e;
-      // Lo guardado se queda como estaba: la próxima vez se reintenta desde ahí.
-      ctx.avisos.push(`Clientes nuevos sin sincronizar: ${(e as Error).message}`);
-      pendiente.clientes = null;
-    }
-    paginas++;
-  }
-
   // --- Pedidos cambiados desde el cursor -----------------------------------
-  while (pendiente.pedidos && otraPagina()) {
+  // La primera página va siempre, aunque los 100 últimos hayan gastado el
+  // presupuesto (ver otraPaginaDePedidos). Las siguientes, con lo que quede.
+  let paginasDePedidos = 0;
+  while (pendiente.pedidos && otraPaginaDePedidos(paginasDePedidos, paginas, Date.now() - inicio)) {
     const cursor = pendiente.pedidos;
     const { items: orders, total } = await paginaWoo(
       urlWoo(ctx.base, "orders", parametrosPaginaWoo(cursor)),
@@ -1042,6 +1074,7 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
       "los pedidos",
     );
     paginas++;
+    paginasDePedidos++;
     if (filtroDeFechaIgnorado(cursor, orders)) {
       // Lo de antes (los 100 últimos) ya está hecho; esto no se puede.
       ctx.avisos.push(
@@ -1066,8 +1099,24 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
       pendiente.pedidos = null;
       break;
     }
-    if (avance.siguiente.desde) await guardarEstado(ctx, { pedidos: avance.siguiente });
+    await guardarEstado(ctx, { pedidos: avance.siguiente });
     pendiente.pedidos = avance.fin ? null : avance.siguiente;
+  }
+
+  // --- Clientes nuevos ------------------------------------------------------
+  // Un fallo aquí no para lo demás, pero se avisa.
+  while (pendiente.clientes && otraPagina()) {
+    try {
+      const r = await paginaDeClientes(ctx, pendiente.clientes);
+      clientes += r.altas;
+      pendiente.clientes = r.siguiente;
+    } catch (e) {
+      if (e instanceof TurnoPerdido) throw e;
+      // Lo guardado se queda como estaba: la próxima vez se reintenta desde ahí.
+      ctx.avisos.push(`Clientes nuevos sin sincronizar: ${(e as Error).message}`);
+      pendiente.clientes = null;
+    }
+    paginas++;
   }
 
   // --- Productos ------------------------------------------------------------
@@ -1103,8 +1152,7 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
     devoluciones_actualizadas: devoluciones,
     /**
      * Pedidos que quedan por traer (aproximado): 0 si ya no queda ninguno,
-     * `null` si no se sabe (WooCommerce no lo ha dicho, o esta tanda no ha
-     * llegado a los pedidos).
+     * `null` si WooCommerce no ha dicho cuántos son.
      */
     quedan: pendiente.pedidos ? quedan : 0,
     /** Para la tanda siguiente; `null` si ya no queda nada. */
@@ -1112,9 +1160,10 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
     /**
      * Si lo que queda lo retoma también una sincronización nueva (por ejemplo,
      * volver a pulsar el botón de Pedidos), porque está guardado. Sin la
-     * migración 20261024110000 la pasada de clientes nuevos no se guarda.
+     * migración 20261024110000 no se guardan ni la pasada de clientes nuevos
+     * ni la página dentro de un mismo segundo (ver reanudableTrasTanda).
      */
-    reanudable: !siguiente?.clientes || ctx.esquema === "completo",
+    reanudable: reanudableTrasTanda(siguiente, ctx.esquema === "completo"),
     avisos: ctx.avisos,
   };
 }

@@ -24,9 +24,15 @@
 --   Añade columnas a public.woo_sincronizacion:
 --     pedidos_pagina, productos_pagina   la página dentro del mismo segundo.
 --     clientes_hasta_id                  hasta qué id de WooCommerce están ya
---                                        todos los clientes de la tienda.
---     clientes_tope_id, clientes_pagina  la pasada de clientes que va a medias
---                                        (NULL si no hay ninguna).
+--                                        todos los clientes de la tienda (0:
+--                                        ninguno todavía).
+--     clientes_tope_id, clientes_bajo_id la pasada de clientes que va a medias:
+--                                        de qué id empezó y hasta cuál ha bajado
+--                                        (NULL si no hay ninguna). Va por ids y
+--                                        no por número de página: si se borra un
+--                                        cliente en WooCommerce entre dos
+--                                        peticiones, una página siguiente se
+--                                        correría un puesto y se saltaría a uno.
 --     bloqueado_hasta, bloqueo_id        el turno: quién sincroniza ahora y
 --                                        hasta cuándo.
 --   Y tres funciones, solo para la clave de servicio:
@@ -63,7 +69,7 @@
 --     ALTER TABLE public.woo_sincronizacion
 --       DROP COLUMN pedidos_pagina, DROP COLUMN productos_pagina,
 --       DROP COLUMN clientes_hasta_id, DROP COLUMN clientes_tope_id,
---       DROP COLUMN clientes_pagina, DROP COLUMN bloqueado_hasta,
+--       DROP COLUMN clientes_bajo_id, DROP COLUMN bloqueado_hasta,
 --       DROP COLUMN bloqueo_id;
 --   Solo se pierde por dónde iba la sincronización; la aplicación vuelve a lo
 --   de la 20261024100000.
@@ -74,10 +80,12 @@ ALTER TABLE public.woo_sincronizacion
     CHECK (pedidos_pagina >= 1),
   ADD COLUMN IF NOT EXISTS productos_pagina INTEGER NOT NULL DEFAULT 1
     CHECK (productos_pagina >= 1),
-  ADD COLUMN IF NOT EXISTS clientes_hasta_id BIGINT,
-  ADD COLUMN IF NOT EXISTS clientes_tope_id BIGINT,
-  ADD COLUMN IF NOT EXISTS clientes_pagina INTEGER
-    CHECK (clientes_pagina >= 1),
+  ADD COLUMN IF NOT EXISTS clientes_hasta_id BIGINT
+    CHECK (clientes_hasta_id >= 0),
+  ADD COLUMN IF NOT EXISTS clientes_tope_id BIGINT
+    CHECK (clientes_tope_id >= 1),
+  ADD COLUMN IF NOT EXISTS clientes_bajo_id BIGINT
+    CHECK (clientes_bajo_id >= 1),
   ADD COLUMN IF NOT EXISTS bloqueado_hasta TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS bloqueo_id UUID;
 
@@ -88,11 +96,13 @@ COMMENT ON COLUMN public.woo_sincronizacion.productos_pagina IS
   'Página de la consulta desde productos_hasta (como pedidos_pagina).';
 COMMENT ON COLUMN public.woo_sincronizacion.clientes_hasta_id IS
   'Los clientes de WooCommerce con id menor o igual que este ya están todos aquí. '
-  'NULL: ninguno todavía.';
+  '0: ninguno todavía. NULL: nunca se ha guardado.';
 COMMENT ON COLUMN public.woo_sincronizacion.clientes_tope_id IS
   'El id más alto de la pasada de clientes en curso; al terminarla pasa a clientes_hasta_id.';
-COMMENT ON COLUMN public.woo_sincronizacion.clientes_pagina IS
-  'Página siguiente de la pasada de clientes en curso (de id mayor a menor). NULL: no hay.';
+COMMENT ON COLUMN public.woo_sincronizacion.clientes_bajo_id IS
+  'Hasta dónde ha bajado la pasada de clientes en curso: los de id entre este y '
+  'clientes_tope_id ya se han visto. La siguiente petición pide los 100 ids de debajo. '
+  'NULL: no hay pasada en curso.';
 COMMENT ON COLUMN public.woo_sincronizacion.bloqueado_hasta IS
   'Hasta cuándo tiene el turno la sincronización en marcha. NULL o pasado: libre.';
 COMMENT ON COLUMN public.woo_sincronizacion.bloqueo_id IS

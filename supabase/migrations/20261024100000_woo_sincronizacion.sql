@@ -21,6 +21,13 @@
 --   después de cada página. Si una tanda se corta, la siguiente sigue desde
 --   ahí.
 --
+--   La primera vez, el cursor de pedidos (un día antes del último pedido de
+--   WooCommerce que ya hay aquí) se guarda ANTES de traer nada: si se
+--   calculara otra vez en la llamada siguiente, ya con los 100 últimos
+--   dentro, se saltaría los pedidos de entre medias. NULL es «nunca se ha
+--   guardado»; «desde el principio» (ningún pedido aquí todavía) se guarda
+--   como 1970-01-01 00:00 UTC.
+--
 --   Los clientes no necesitan columna: WooCommerce no deja filtrarlos por
 --   fecha, y el cursor de clientes es el woo_customer_id más alto que ya está
 --   en public.clientes para esa tienda.
@@ -67,9 +74,11 @@ COMMENT ON TABLE public.woo_sincronizacion IS
   'sincronizarWoo con la clave de servicio. No es un dato de negocio y no se audita.';
 COMMENT ON COLUMN public.woo_sincronizacion.pedidos_hasta IS
   'Fecha de modificación (GMT) del último pedido de WooCommerce traído. La siguiente '
-  'sincronización pide lo modificado desde un segundo antes.';
+  'sincronización pide lo modificado desde un segundo antes. 1970-01-01 00:00 UTC: desde '
+  'el principio. NULL: nunca se ha guardado.';
 COMMENT ON COLUMN public.woo_sincronizacion.productos_hasta IS
-  'Fecha de modificación (GMT) del último producto de WooCommerce traído.';
+  'Fecha de modificación (GMT) del último producto de WooCommerce traído. 1970-01-01 '
+  '00:00 UTC: desde el principio. NULL: nunca se ha guardado.';
 
 DROP TRIGGER IF EXISTS woo_sincronizacion_touch ON public.woo_sincronizacion;
 CREATE TRIGGER woo_sincronizacion_touch BEFORE UPDATE ON public.woo_sincronizacion

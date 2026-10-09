@@ -28,8 +28,11 @@ LANGUAGE sql AS $$ SELECT id FROM public.tiendas WHERE slug = _slug $$;
 SELECT CASE WHEN (SELECT count(*) FROM information_schema.columns
                    WHERE table_schema = 'public' AND table_name = 'woo_sincronizacion'
                      AND column_name IN ('pedidos_pagina', 'productos_pagina', 'clientes_hasta_id',
-                                         'clientes_tope_id', 'clientes_pagina', 'bloqueado_hasta',
+                                         'clientes_tope_id', 'clientes_bajo_id', 'bloqueado_hasta',
                                          'bloqueo_id')) = 7
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                              WHERE table_schema = 'public' AND table_name = 'woo_sincronizacion'
+                                AND column_name = 'clientes_pagina')
             THEN 'BIEN  1. woo_sincronizacion tiene la página, los clientes y el turno'
             ELSE 'MAL   1. faltan columnas en woo_sincronizacion' END;
 
@@ -45,7 +48,7 @@ SELECT set_config('c14.turno', public.woo_sincronizacion_tomar(pg_temp.tienda('t
 SELECT CASE WHEN current_setting('c14.turno') <> ''
              AND (SELECT bloqueado_hasta > now() + interval '110 seconds'
                      AND bloqueo_id::TEXT = current_setting('c14.turno')
-                     AND pedidos_pagina = 1 AND productos_pagina = 1 AND clientes_pagina IS NULL
+                     AND pedidos_pagina = 1 AND productos_pagina = 1 AND clientes_bajo_id IS NULL
                     FROM public.woo_sincronizacion WHERE tienda_id = pg_temp.tienda('tienda-c14-a'))
             THEN 'BIEN  2. sin fila, tomar el turno la crea con el turno puesto y la página 1'
             ELSE 'MAL   2. tomar el turno no ha dejado la fila como debía' END;
@@ -164,16 +167,52 @@ EXCEPTION
     RAISE WARNING 'MAL   12. la rechazó otra cosa: %', SQLERRM;
 END $$;
 
+-- 12b. «Ninguno todavía» (clientes_hasta_id = 0) y «desde el principio»
+--      (1970-01-01 UTC) se guardan: la aplicación los escribe al empezar, antes
+--      de traer nada. Un id negativo o un tope 0 no tienen sentido.
+UPDATE public.woo_sincronizacion
+   SET clientes_hasta_id = 0, pedidos_hasta = TIMESTAMPTZ '1970-01-01 00:00:00+00'
+ WHERE tienda_id = pg_temp.tienda('tienda-c14-b');
+SELECT CASE WHEN (SELECT clientes_hasta_id = 0
+                     AND pedidos_hasta = TIMESTAMPTZ '1970-01-01 00:00:00+00'
+                    FROM public.woo_sincronizacion WHERE tienda_id = pg_temp.tienda('tienda-c14-b'))
+            THEN 'BIEN  12b. se guardan «ningún cliente todavía» (0) y «desde el principio» (1970)'
+            ELSE 'MAL   12b. no se han guardado el 0 de clientes o la fecha de 1970' END;
+
+DO $$
+DECLARE
+  v_tienda UUID := (SELECT id FROM public.tiendas WHERE slug = 'tienda-c14-b');
+  v_rechazos INTEGER := 0;
+BEGIN
+  BEGIN
+    UPDATE public.woo_sincronizacion SET clientes_hasta_id = -1 WHERE tienda_id = v_tienda;
+  EXCEPTION WHEN check_violation THEN v_rechazos := v_rechazos + 1;
+  END;
+  BEGIN
+    UPDATE public.woo_sincronizacion SET clientes_tope_id = 0 WHERE tienda_id = v_tienda;
+  EXCEPTION WHEN check_violation THEN v_rechazos := v_rechazos + 1;
+  END;
+  BEGIN
+    UPDATE public.woo_sincronizacion SET clientes_bajo_id = 0 WHERE tienda_id = v_tienda;
+  EXCEPTION WHEN check_violation THEN v_rechazos := v_rechazos + 1;
+  END;
+  IF v_rechazos = 3 THEN
+    RAISE NOTICE 'BIEN  12c. un hasta negativo, o un tope o un «hasta dónde ha bajado» 0, se rechazan';
+  ELSE
+    RAISE WARNING 'MAL   12c. solo se han rechazado % de 3 ids de clientes sin sentido', v_rechazos;
+  END IF;
+END $$;
+
 -- 13. La aplicación guarda el estado con un upsert como este: no toca el turno.
 INSERT INTO public.woo_sincronizacion AS w (tienda_id, empresa_id, pedidos_hasta, pedidos_pagina,
-                                            clientes_hasta_id, clientes_tope_id, clientes_pagina)
-SELECT id, empresa_id, TIMESTAMPTZ '2026-10-09 09:00:00+00', 4, 300, 1000, 3
+                                            clientes_hasta_id, clientes_tope_id, clientes_bajo_id)
+SELECT id, empresa_id, TIMESTAMPTZ '2026-10-09 09:00:00+00', 4, 300, 1000, 801
   FROM public.tiendas WHERE slug = 'tienda-c14-a'
 ON CONFLICT (tienda_id) DO UPDATE
    SET pedidos_hasta = EXCLUDED.pedidos_hasta, pedidos_pagina = EXCLUDED.pedidos_pagina,
        clientes_hasta_id = EXCLUDED.clientes_hasta_id, clientes_tope_id = EXCLUDED.clientes_tope_id,
-       clientes_pagina = EXCLUDED.clientes_pagina;
-SELECT CASE WHEN (SELECT pedidos_pagina = 4 AND clientes_pagina = 3
+       clientes_bajo_id = EXCLUDED.clientes_bajo_id;
+SELECT CASE WHEN (SELECT pedidos_pagina = 4 AND clientes_bajo_id = 801
                      AND bloqueo_id::TEXT = current_setting('c14.otro')
                     FROM public.woo_sincronizacion WHERE tienda_id = pg_temp.tienda('tienda-c14-a'))
             THEN 'BIEN  13. guardar por dónde va no toca el turno'

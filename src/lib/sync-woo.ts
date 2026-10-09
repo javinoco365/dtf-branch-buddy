@@ -7,7 +7,7 @@
  * y en sincronizarWoo (src/lib/woocommerce.functions.ts).
  */
 import { numero } from "./format";
-import type { ContinuacionWoo } from "@/dominio/cursor-woo";
+import { comoSeguirWoo, type ContinuacionWoo } from "@/dominio/cursor-woo";
 
 /** Lo que devuelve una tanda de sincronizarWoo y hace falta para contarlo. */
 export type TandaSyncWoo = {
@@ -79,7 +79,10 @@ export function textoProtegidos(s: SumaSyncWoo): string | null {
 
 /**
  * Lo que ha quedado por traer después de UNA llamada, y cómo seguir. Para el
- * botón de Pedidos, que hace una sola tanda; `null` si no queda nada.
+ * botón de Pedidos, que hace una sola tanda; `null` si no queda nada. Cada
+ * llamada mueve los pedidos al menos una página, así que «volver a pulsar»
+ * siempre avanza; cuando no seguiría por donde se quedó (sin la migración
+ * 20261024110000), se dice qué hacer en su lugar (ver comoSeguirWoo).
  */
 export function textoQuedan(r: Pick<TandaSyncWoo, "quedan" | "siguiente" | "reanudable">) {
   const s = r.siguiente;
@@ -90,11 +93,20 @@ export function textoQuedan(r: Pick<TandaSyncWoo, "quedan" | "siguiente" | "rean
   if (s.productos) partes.push("productos");
   const queda = `Queda por traer: ${partes.join(", ")}.`;
   if (r.reanudable) return `${queda} Vuelve a pulsar «Sincronizar» para seguir donde se quedó.`;
-  // Sin la migración 20261024110000 la pasada de clientes no se guarda: volver
-  // a pulsar empezaría otra y se saltaría los que faltan.
-  return (
-    `${queda} ` +
-    (s.pedidos || s.productos ? "Vuelve a pulsar «Sincronizar» para seguir con el resto. " : "") +
-    "Los clientes nuevos que falten llegan con «Sincronizar clientes», en los ajustes de la tienda."
-  );
+  const como = comoSeguirWoo(s, r.reanudable);
+  const frases = [queda];
+  if (como.pulsar) frases.push("Vuelve a pulsar «Sincronizar» para seguir con el resto.");
+  if (como.ajustes) {
+    frases.push(
+      "Para el resto, «Sincronizar ahora» en los ajustes de la tienda: sigue tanda tras tanda " +
+        "hasta el final.",
+    );
+  }
+  if (como.clientes) {
+    frases.push(
+      "Los clientes nuevos que falten llegan con «Sincronizar clientes», en los ajustes de la " +
+        "tienda.",
+    );
+  }
+  return frases.join(" ");
 }
