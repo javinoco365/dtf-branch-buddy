@@ -23,6 +23,10 @@
 --       cuántas son. Rellenarlas sería modificar documentos fiscales ya
 --       emitidos, y eso no lo hace una migración: hay que mirarlas antes. La
 --       consulta para verlas va en el propio aviso.
+--       Aunque no ponga el NOT NULL, la CLI de Supabase la anota como
+--       aplicada y no la vuelve a ejecutar. Por eso, cuando esas facturas
+--       tengan su ejercicio, hay que ejecutar a mano otra vez el SQL de este
+--       fichero (en el editor SQL o con psql).
 --
 --   No toca ninguna fila. Se puede aplicar dos veces: si la columna ya es
 --   NOT NULL, no hace nada.
@@ -66,7 +70,9 @@ BEGIN
   ELSE
     RAISE NOTICE 'facturas.ejercicio se queda admitiendo NULL: hay % factura(s) sin ejercicio. '
       'No se han tocado. Revísalas con: SELECT id, serie, numero, fecha, estado FROM public.facturas '
-      'WHERE ejercicio IS NULL; y vuelve a aplicar esta migración cuando estén resueltas.',
+      'WHERE ejercicio IS NULL; Cuando tengan su ejercicio, ejecuta a mano otra vez el SQL de '
+      '20261023120000_facturas_ejercicio_obligatorio.sql (editor SQL o psql): la CLI ya da esta '
+      'migración por aplicada y no la repetirá.',
       v_sin_ejercicio;
   END IF;
 END $$;
