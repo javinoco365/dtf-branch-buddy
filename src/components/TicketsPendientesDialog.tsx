@@ -21,6 +21,7 @@ import { diaLegible } from "@/dominio/fecha-documento";
 import { explicarDecision } from "@/dominio/tickets";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
+import { emitirPorTandas, type ResultadoTandas } from "@/dominio/emision-tandas";
 import {
   emitirTicketsPedidos,
   pedidosSinDocumento,
@@ -30,6 +31,13 @@ import {
 
 /** De cuántos en cuántos se emite, como en «Facturar» de Pedidos. */
 const TANDA = 20;
+
+/**
+ * Si una tanda no responde, alguno de sus pedidos puede haberse emitido sin
+ * que llegara la respuesta: tiene ticket, pero no PDF.
+ */
+const AVISO_PDF_QUE_FALTEN =
+  "Si alguno llegó a emitirse sin respuesta, ya no sale como pendiente y puede faltarle el PDF: genéralo con «Generar los que faltan», en esta pantalla.";
 
 /**
  * Emitir de una vez los tickets de los pedidos cobrados que no tienen
@@ -54,10 +62,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
   const [pdfs, setPdfs] = useState<{ hechos: number; total: number; fallidos: number } | null>(
     null,
   );
-  const [resultado, setResultado] = useState<{
-    emitidos: { pedido: string; referencia: string; id: string }[];
-    omitidos: { pedido: string; motivo: string }[];
-  } | null>(null);
+  const [resultado, setResultado] = useState<ResultadoTandas | null>(null);
 
   const clave = ["pedidos-sin-documento", tiendaId, desde, hasta] as const;
   const { data, isLoading, error } = useQuery({
@@ -70,33 +75,39 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
    * Por tandas, del más antiguo al más reciente (la lista ya viene así): todos
    * de una vez se pasarían del tiempo de una función, y el servidor no admite
    * más de 200 por petición. Si una tanda falla, lo emitido hasta ahí se
-   * enseña igual y guarda su PDF.
+   * enseña igual y guarda su PDF, y los pedidos de esa tanda y de las
+   * siguientes salen para revisarlos (ver emision-tandas.ts).
    */
   async function emitir() {
     if (!data?.tickets.length) return;
-    const ids = data.tickets.map((p) => p.id);
-    const acumulado: NonNullable<typeof resultado> = { emitidos: [], omitidos: [] };
-    setEmitiendo({ hechos: 0, total: ids.length });
-    try {
-      for (let i = 0; i < ids.length; i += TANDA) {
-        const r = await emitirFn({ data: { pedido_ids: ids.slice(i, i + TANDA) } });
-        acumulado.emitidos.push(...r.emitidos);
-        acumulado.omitidos.push(...r.omitidos);
-        setEmitiendo({ hechos: Math.min(i + TANDA, ids.length), total: ids.length });
-      }
-    } catch (e: any) {
-      toast.error(e?.message ?? "No se pudieron emitir los tickets");
-    }
+    const total = data.tickets.length;
+    setEmitiendo({ hechos: 0, total });
+    const r = await emitirPorTandas(
+      data.tickets,
+      TANDA,
+      (ids) => emitirFn({ data: { pedido_ids: ids } }),
+      (hechos) => setEmitiendo({ hechos, total }),
+    );
     setEmitiendo(null);
-    const { emitidos, omitidos } = acumulado;
-    // Si falló la primera tanda no hay nada que enseñar: sigue la lista, para
-    // volver a intentarlo.
-    if (!emitidos.length && !omitidos.length) return;
-    setResultado(acumulado);
-    if (emitidos.length) toast.success(`${emitidos.length} ticket(s) emitido(s)`);
-    if (omitidos.length) toast.warning(`${omitidos.length} pedido(s) no se han emitido`);
+    // También si se cortó: lo que llegó a emitirse ya no está pendiente.
     qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
-    await guardarPdfs(emitidos.map((e) => e.id));
+    if (r.corte?.enLaPrimera) {
+      // No respondió ni la primera tanda: sigue la lista, ya al día, para
+      // volver a intentarlo; y el aviso de PDF que faltan, recontado.
+      qc.invalidateQueries({ queryKey: ["facturas"] });
+      toast.error(`No se pudieron emitir los tickets: ${r.corte.motivo}`, {
+        description: AVISO_PDF_QUE_FALTEN,
+      });
+      return;
+    }
+    setResultado(r);
+    const saltados = r.omitidos.length - (r.corte?.pedidos ?? 0);
+    if (r.emitidos.length) toast.success(`${r.emitidos.length} ticket(s) emitido(s)`);
+    if (saltados) toast.warning(`${saltados} pedido(s) no se han emitido`);
+    if (r.corte) {
+      toast.error(`La emisión se cortó: ${r.corte.pedidos} pedido(s) sin emitir. Revísalos.`);
+    }
+    await guardarPdfs(r.emitidos.map((e) => e.id));
     qc.invalidateQueries({ queryKey: ["facturas"] });
   }
 
@@ -191,6 +202,14 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
                 {o.pedido}: {o.motivo}
               </p>
             ))}
+            {/* Una tanda no respondió: sus pedidos y los de detrás están
+                arriba como «no se pudo emitir». */}
+            {resultado.corte && (
+              <p className="text-destructive">
+                La emisión se cortó ({resultado.corte.motivo}): {resultado.corte.pedidos} pedido(s)
+                no se pudieron emitir: revísalos. {AVISO_PDF_QUE_FALTEN}
+              </p>
+            )}
           </div>
         )}
 
