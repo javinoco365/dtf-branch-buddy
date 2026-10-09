@@ -154,6 +154,7 @@ seccion "Número de factura único por ejercicio" C10_numero_por_ejercicio.sql
 seccion "Credenciales de WooCommerce en Vault" 30_credenciales_vault.sql
 seccion "Políticas por operación: el mismo acceso que los FOR ALL" C11_politicas_por_operacion.sql
 seccion "Auditoría en las tablas que faltaban" C12_auditoria_tablas_pendientes.sql
+seccion "El ejercicio de la factura es obligatorio" C13_facturas_ejercicio_obligatorio.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto
