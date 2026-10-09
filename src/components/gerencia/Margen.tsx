@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -24,6 +25,7 @@ import {
   porcentajeMargen,
   type FilaMargen,
 } from "@/dominio/margen";
+import { totalMargen, totalTramosMargen, type TotalMargen } from "@/dominio/sumatorios-gerencia-a";
 import type { DatosGerencia } from "./destinos";
 import { Nota } from "./comun";
 
@@ -59,6 +61,13 @@ export function Margen({ d }: { d: DatosGerencia }) {
     return { por, filas: margenPorTramos(d.ventas, tramos, d.costeMetro, d.gastosDelGrupo, d.hoy) };
   }, [d.rango, d.ventas, d.costeMetro, d.gastosDelGrupo, d.hoy]);
   const metro = useMemo(() => margenPorMetro(d.ventas, d.costeMetro), [d.ventas, d.costeMetro]);
+  // Los pies dan las cifras de las tarjetas, no la suma de filas redondeadas:
+  // así el pie y la tarjeta nunca se contradicen por un céntimo.
+  const total = useMemo(() => totalMargen(c), [c]);
+  const totalTramos = useMemo(
+    () => totalTramosMargen(c, d.gastosDelGrupo, d.rango, d.hoy),
+    [c, d.gastosDelGrupo, d.rango, d.hoy],
+  );
 
   const sinCosteMetro = d.costeMetro === 0 && c.costeDtf === 0 && c.metros > 0;
   const porcentaje = porcentajeMargen(c.margen, c.bruta);
@@ -131,8 +140,20 @@ export function Margen({ d }: { d: DatosGerencia }) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <TablaMargen titulo="Por tienda" columna="Tienda" filas={porTienda} />
-        <TablaMargen titulo="Por canal" columna="Canal" filas={porCanal} />
+        <TablaMargen
+          titulo="Por tienda"
+          columna="Tienda"
+          unidad={["tienda", "tiendas"]}
+          filas={porTienda}
+          total={total}
+        />
+        <TablaMargen
+          titulo="Por canal"
+          columna="Canal"
+          unidad={["canal", "canales"]}
+          filas={porCanal}
+          total={total}
+        />
       </div>
 
       <Card>
@@ -183,6 +204,45 @@ export function Margen({ d }: { d: DatosGerencia }) {
                 </TableRow>
               ))}
             </TableBody>
+            {tramos.filas.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell>
+                    Total · {tramos.filas.length}{" "}
+                    {tramos.por === "dia"
+                      ? tramos.filas.length === 1
+                        ? "día"
+                        : "días"
+                      : tramos.filas.length === 1
+                        ? "mes"
+                        : "meses"}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalTramos.bruta)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalTramos.coste)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalTramos.margen)}
+                  </TableCell>
+                  {conGastos && (
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalTramos.gastos)}
+                    </TableCell>
+                  )}
+                  {conGastos && (
+                    <TableCell
+                      className={`text-right font-bold tabular-nums ${
+                        totalTramos.beneficio < 0 ? "text-status-cancelado" : ""
+                      }`}
+                    >
+                      {eur(totalTramos.beneficio)}
+                    </TableCell>
+                  )}
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -223,11 +283,17 @@ export function Margen({ d }: { d: DatosGerencia }) {
 function TablaMargen({
   titulo,
   columna,
+  unidad,
   filas,
+  total,
 }: {
   titulo: string;
   columna: string;
+  /** Cómo se dice una fila y varias, para el pie: «tienda», «tiendas». */
+  unidad: [string, string];
   filas: FilaMargen[];
+  /** Las cifras de todas las filas juntas, las de las tarjetas de arriba. */
+  total: TotalMargen;
 }) {
   return (
     <Card>
@@ -260,6 +326,26 @@ function TablaMargen({
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell>
+                  Total · {filas.length} {filas.length === 1 ? unidad[0] : unidad[1]}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(total.bruta)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(total.coste)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(total.margen)}
+                </TableCell>
+                {/* El % del total (margen ÷ bruta), no la suma de los de arriba. */}
+                <TableCell className="text-right font-bold tabular-nums">
+                  {pct(total.porcentaje)}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         )}
       </CardContent>

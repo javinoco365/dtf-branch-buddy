@@ -23,6 +23,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -32,6 +33,7 @@ import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { porSocio, totalesCaja } from "@/dominio/caja";
+import { totalPuestoSocios } from "@/dominio/sumatorios-banco";
 import {
   borrarMovimientoCaja,
   listarCatalogosCaja,
@@ -100,6 +102,7 @@ function CajaPage() {
   // Los totales salen del módulo de dominio, no de una suma escrita aquí.
   const totales = useMemo(() => totalesCaja(visibles), [visibles]);
   const socios = useMemo(() => porSocio(visibles), [visibles]);
+  const puestoSocios = useMemo(() => totalPuestoSocios(socios), [socios]);
 
   const mutBorrar = useMutation({
     mutationFn: (id: string) => borrar({ data: { id } }),
@@ -236,6 +239,15 @@ function CajaPage() {
                   </span>
                 </span>
               ))}
+              {/* Con un solo socio, el total sería su misma cifra repetida. */}
+              {socios.length > 1 && (
+                <span className="font-semibold">
+                  Total: <span className="tabular-nums">{eur(puestoSocios.puesto)}</span>{" "}
+                  <span className="text-muted-foreground text-xs font-normal">
+                    ({puestoSocios.apuntes} {puestoSocios.apuntes === 1 ? "apunte" : "apuntes"})
+                  </span>
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -328,6 +340,48 @@ function CajaPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {!isLoading && !error && visibles.length > 0 && (
+              <TableFooter>
+                {/*
+                  Las mismas cifras que las tarjetas de arriba (totalesCaja de
+                  los apuntes que se ven). Ingresos y gastos por separado solo
+                  si hay de los dos: con uno solo, el total ya lo dice todo.
+                */}
+                {totales.ingresos > 0 && totales.gastos > 0 && (
+                  <>
+                    <TableRow>
+                      <TableCell colSpan={4}>Ingresos</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums text-status-completado">
+                        +{eur(totales.ingresos)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={4}>Gastos</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums text-status-cancelado">
+                        −{eur(totales.gastos)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
+                  </>
+                )}
+                <TableRow>
+                  <TableCell colSpan={4} className="font-semibold">
+                    Total · {totales.apuntes} {totales.apuntes === 1 ? "apunte" : "apuntes"}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-bold tabular-nums ${
+                      totales.saldo < 0 ? "text-status-cancelado" : "text-status-completado"
+                    }`}
+                  >
+                    {/* El signo como en las filas: «−» delante del importe en positivo. */}
+                    {totales.saldo < 0 ? "−" : "+"}
+                    {eur(Math.abs(totales.saldo))}
+                  </TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>

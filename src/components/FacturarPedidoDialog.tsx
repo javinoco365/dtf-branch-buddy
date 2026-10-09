@@ -49,13 +49,11 @@ export function FacturarPedidoDialog({
             data: {
               tienda_id: prep.tienda_id,
               lineas: prep.lineas,
-              fecha: p.fecha,
               cliente_id: prep.cliente_id,
               pedido_id: pedidoId,
               nombre: p.nombre || null,
               tipo_fiscal: p.tipo_fiscal,
               notas: p.notas,
-              ajustar_fecha: true,
             },
           });
         }
@@ -69,11 +67,9 @@ export function FacturarPedidoDialog({
               direccion: p.direccion || null,
             },
             lineas: prep.lineas,
-            fecha: p.fecha,
             cliente_id: prep.cliente_id,
             pedido_id: pedidoId,
             notas: p.notas,
-            ajustar_fecha: true,
           },
         });
       }}

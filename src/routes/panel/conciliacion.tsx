@@ -16,6 +16,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -24,6 +25,7 @@ import { Check, FileUp, Loader2, Undo2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { esSegura, type Propuesta } from "@/dominio/conciliacion";
+import { totalesConSigno } from "@/dominio/sumatorios";
 import {
   conciliar,
   desconciliar,
@@ -104,6 +106,8 @@ function ConciliacionAntigua() {
   const facturaPorId = useMemo(() => new Map(pendientes.map((f: any) => [f.id, f])), [pendientes]);
 
   const seguras = propuestas.filter(esSegura);
+  // Solo ingresos: el servidor no trae cargos (importe > 0).
+  const totalSinCasar = totalesConSigno(movimientos, (m) => m.importe);
   // Con la migración de cuentas, el extracto se sube a una cuenta y se revisa antes.
   const { data: banco } = useCuentasBanco();
   const conCuentas = banco?.disponible === true;
@@ -324,6 +328,20 @@ function ConciliacionAntigua() {
                 );
               })}
             </TableBody>
+            {!isLoading && movimientos.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={2} className="font-semibold">
+                    Total · {totalSinCasar.n} {totalSinCasar.n === 1 ? "ingreso" : "ingresos"}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalSinCasar.neto)}
+                  </TableCell>
+                  {/* Las facturas del desplegable son una elección, no una cifra de la fila. */}
+                  <TableCell colSpan={3} />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -370,6 +388,9 @@ function ConciliadosTabla({
   casados: any[];
   onDeshacer: (id: string) => void;
 }) {
+  // Con signo: esta lista sale de todos los movimientos del banco, no solo de
+  // los ingresos. Hoy un cargo no se puede casar, pero si lo hubiera restaría.
+  const total = totalesConSigno(casados, (m) => m.importe);
   return (
     <Table movil="tarjetas" className="mt-2">
       <TableHeader>
@@ -394,6 +415,33 @@ function ConciliadosTabla({
           </TableRow>
         ))}
       </TableBody>
+      <TableFooter>
+        {total.entradas > 0 && total.salidas > 0 && (
+          <>
+            <TableRow>
+              <TableCell colSpan={2}>Abonos</TableCell>
+              <TableCell className="text-right font-bold tabular-nums">
+                {eur(total.entradas)}
+              </TableCell>
+              <TableCell />
+            </TableRow>
+            <TableRow>
+              <TableCell colSpan={2}>Cargos</TableCell>
+              <TableCell className="text-right font-bold tabular-nums">
+                {eur(-total.salidas)}
+              </TableCell>
+              <TableCell />
+            </TableRow>
+          </>
+        )}
+        <TableRow>
+          <TableCell colSpan={2} className="font-semibold">
+            Total · {total.n} {total.n === 1 ? "movimiento" : "movimientos"}
+          </TableCell>
+          <TableCell className="text-right font-bold tabular-nums">{eur(total.neto)}</TableCell>
+          <TableCell />
+        </TableRow>
+      </TableFooter>
     </Table>
   );
 }

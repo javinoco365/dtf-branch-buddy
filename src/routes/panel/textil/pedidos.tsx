@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -53,6 +54,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { DocumentoTextilDialog } from "@/components/textil/DocumentoTextilDialog";
 import { resumenCobros } from "@/dominio/cobros";
+import { totalesPedidos } from "@/dominio/sumatorios";
 import { normalizarTexto } from "@/dominio/clientes";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -133,6 +135,21 @@ function PedidosPage() {
       );
     });
   }, [data, filtros.q, filtros.estado, filtros.cobro, cobrosPorPedido, periodo.rango]);
+  // El pie suma lo filtrado, sin los cancelados (se cuentan aparte).
+  const totales = useMemo(
+    () =>
+      totalesPedidos(
+        (filtrados as any[]).map((p) => ({
+          total: p.total,
+          estado: p.estado,
+          cobros: cobrosPorPedido.get(p.id) ?? [],
+        })),
+      ),
+    [filtrados, cobrosPorPedido],
+  );
+  // Cobrado y pendiente solo con los cobros leídos: mientras cargan, si fallan
+  // o si falta la migración, lo cobrado saldría a cero y el pendiente igual al total.
+  const cobrosLeidos = datosCobros?.disponible === true;
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
@@ -325,6 +342,33 @@ function PedidosPage() {
                 );
               })}
             </TableBody>
+            {filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    Total · {totales.pedidos} pedido{totales.pedidos === 1 ? "" : "s"}
+                    {totales.cancelados > 0 &&
+                      ` · ${totales.cancelados} cancelado${totales.cancelados === 1 ? "" : "s"} aparte`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.total)}
+                  </TableCell>
+                  {cobrosLeidos ? (
+                    <>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.cobrado)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totales.pendiente)}
+                      </TableCell>
+                    </>
+                  ) : (
+                    <TableCell colSpan={2} />
+                  )}
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>

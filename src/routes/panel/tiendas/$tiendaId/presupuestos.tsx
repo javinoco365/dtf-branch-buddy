@@ -20,6 +20,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -65,6 +66,7 @@ import {
   type EstadoVisiblePresupuesto,
   type FiltroPresupuestos,
 } from "@/dominio/presupuestos";
+import { totalesPresupuestos } from "@/dominio/sumatorios-facturas";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/presupuestos")({
   component: PresupuestosTienda,
@@ -122,7 +124,9 @@ function PresupuestosTienda() {
       ),
     [data, filtro, hoy, periodo.rango],
   );
-  const totalFiltrado = filtrados.reduce((s, p) => s + Number(p.total), 0);
+  // La misma cifra en la barra de filtros y en el pie: los rechazados y los
+  // caducados no suman, que ya no son ofertas vivas.
+  const totales = useMemo(() => totalesPresupuestos(filtrados, hoy), [filtrados, hoy]);
   const hayFiltro = hay();
 
   const refrescar = () => qc.invalidateQueries({ queryKey: ["presupuestos", tiendaId] });
@@ -222,9 +226,14 @@ function PresupuestosTienda() {
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
+          {/* Lo mismo que el pie: el importe no suma rechazados ni caducados, y el número tampoco. */}
           <div className="text-xs text-muted-foreground ml-auto">
-            {filtrados.length} presupuesto{filtrados.length === 1 ? "" : "s"} ·{" "}
-            <span className="font-semibold text-foreground">{eur(totalFiltrado)}</span>
+            {totales.presupuestos} presupuesto{totales.presupuestos === 1 ? "" : "s"}
+            {totales.rechazados > 0 &&
+              ` · sin ${totales.rechazados} rechazado${totales.rechazados === 1 ? "" : "s"}`}
+            {totales.caducados > 0 &&
+              ` · sin ${totales.caducados} caducado${totales.caducados === 1 ? "" : "s"}`}{" "}
+            · <span className="font-semibold text-foreground">{eur(totales.total)}</span>
           </div>
         </CardContent>
       </Card>
@@ -330,6 +339,24 @@ function PresupuestosTienda() {
                   );
                 })}
               </TableBody>
+              {!isLoading && filtrados.length > 0 && (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={5} className="font-semibold">
+                      Total · {totales.presupuestos} presupuesto
+                      {totales.presupuestos === 1 ? "" : "s"}
+                      {totales.rechazados > 0 &&
+                        ` · sin ${totales.rechazados} rechazado${totales.rechazados === 1 ? "" : "s"}`}
+                      {totales.caducados > 0 &&
+                        ` · sin ${totales.caducados} caducado${totales.caducados === 1 ? "" : "s"}`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totales.total)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           </CardContent>
         </Card>

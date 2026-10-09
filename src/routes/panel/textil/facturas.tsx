@@ -19,6 +19,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -44,6 +45,7 @@ import { eur, fechaCorta } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { contadoresDeSerie } from "@/lib/facturas.functions";
 import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
+import { totalesDocumentos } from "@/dominio/sumatorios";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -91,11 +93,31 @@ function FacturasPage() {
           normalizarTexto(f.marca?.nombre).includes(q)),
     );
   }, [data, filtros.q, filtros.estado, periodo.rango]);
+  // El pie suma lo filtrado: sin borradores, las rectificativas con su signo y,
+  // si un ticket y la factura que lo canjeó están los dos, solo la factura.
+  const totales = useMemo(
+    () =>
+      totalesDocumentos(
+        (filtrados as any[]).map((f) => ({
+          id: f.id as string,
+          estado: f.estado as string,
+          base: f.subtotal,
+          iva: f.iva,
+          total: f.total,
+          sustituye_a_id: (f.sustituye_a_id as string | null) ?? null,
+          rectifica_a_id: (f.rectifica_a_id as string | null) ?? null,
+        })),
+      ),
+    [filtrados],
+  );
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
       qc.invalidateQueries({ queryKey: ["series-contadores"] });
+      // El pedido vuelve a quedar sin documento: que el diálogo no lo recuerde.
+      qc.invalidateQueries({ queryKey: ["textil-pedidos"] });
+      qc.removeQueries({ queryKey: ["preparar-documento-textil"] });
       toast.success("Borrada. Su número lo cogerá la siguiente.");
     },
     onError: (e: any) => toast.error(e.message),
@@ -345,6 +367,23 @@ function FacturasPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    Total · {totales.documentos} documento{totales.documentos === 1 ? "" : "s"}
+                    {totales.borradores > 0 &&
+                      ` · sin ${totales.borradores} borrador${totales.borradores === 1 ? "" : "es"}`}
+                    {totales.canjeados > 0 &&
+                      ` · sin ${totales.canjeados} ticket${totales.canjeados === 1 ? "" : "s"} canjeado${totales.canjeados === 1 ? "" : "s"}: ya ${totales.canjeados === 1 ? "lo" : "los"} cuenta su factura`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.total)}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>

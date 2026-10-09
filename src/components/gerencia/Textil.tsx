@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -20,6 +21,7 @@ import { cifrasGerencia, desglose } from "@/dominio/gerencia";
 import { porcentajeMargen } from "@/dominio/margen";
 import { ivaSoportado } from "@/dominio/fiscal";
 import { productosTextil, resumenStock } from "@/dominio/textil";
+import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
 
@@ -52,9 +54,22 @@ export function Textil({ d }: { d: DatosGerencia }) {
     return desglose(ventas, (v) => v.marca_id ?? SIN_MARCA, nombres);
   }, [ventas, datos.data]);
   const productos = useMemo(() => productosTextil(datos.data?.lineas ?? [], FILAS), [datos.data]);
+  // Solo las prendas que se ven: productosTextil ya llega recortada a FILAS.
+  const totalProductos = useMemo(
+    () => ({
+      unidades: sumarCantidades(productos, (x) => x.unidades),
+      importe: sumarImportes(productos, (x) => x.importe),
+    }),
+    [productos],
+  );
   const stock = useMemo(
     () => (datos.data?.stock ? resumenStock(datos.data.stock) : null),
     [datos.data],
+  );
+  // De toda la lista bajo mínimo, no solo de las FILAS que se pintan.
+  const faltanTotal = useMemo(
+    () => (stock ? sumarCantidades(stock.bajoMinimo, (a) => a.faltan) : 0),
+    [stock],
   );
   const compras = useMemo(
     () => (datos.data?.compras ? ivaSoportado(datos.data.compras) : null),
@@ -162,6 +177,26 @@ export function Textil({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                {/* Las mismas cifras que las tarjetas «Vendido textil» y «Pedidos». */}
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">
+                      Total
+                      {c.cancelados > 0 &&
+                        ` · ${numero(c.cancelados, 0)} ${
+                          c.cancelados === 1 ? "cancelado" : "cancelados"
+                        } aparte`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(c.pedidos, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(c.total)}
+                    </TableCell>
+                    {/* El peso es una parte del total: no se suma. */}
+                    <TableCell />
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
@@ -197,6 +232,22 @@ export function Textil({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                {/* Con la lista llena puede haber más prendas: la etiqueta dice que es el top. */}
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">
+                      {productos.length < FILAS
+                        ? `Total · ${productos.length} ${productos.length === 1 ? "prenda" : "prendas"}`
+                        : `Total de las ${FILAS} primeras`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(totalProductos.unidades, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalProductos.importe)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
@@ -264,6 +315,23 @@ export function Textil({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              {/* Quedan y mínimo mezclan tallas y colores: solo se suma lo que falta. */}
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="font-bold">
+                    {stock.bajoMinimo.length > FILAS
+                      ? `Total de los ${numero(stock.bajoMinimo.length, 0)} artículos (se ven ${FILAS})`
+                      : `Total · ${stock.bajoMinimo.length} ${
+                          stock.bajoMinimo.length === 1 ? "artículo" : "artículos"
+                        }`}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell className="text-right font-bold tabular-nums text-status-cancelado">
+                    {numero(faltanTotal, 0)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           )}
         </CardContent>

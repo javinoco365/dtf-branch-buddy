@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -17,6 +18,7 @@ import { desglosePorMetodo, totalizar } from "@/dominio/facturacion";
 import { totalesCaja } from "@/dominio/caja";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { antiguedadPendientes, diasMediosCobro, resumenBanco } from "@/dominio/gerencia";
+import { sumarImportes } from "@/dominio/sumatorios";
 import {
   destinoCaja,
   destinoCobros,
@@ -34,6 +36,11 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
   const diasPrev = diasMediosCobro(d.cobrosPrevios);
   const pendienteHoy = d.pendientes.reduce((s, x) => s + Number(x.pendiente ?? 0), 0);
   const tramos = useMemo(() => antiguedadPendientes(d.pendientes, d.hoy), [d.pendientes, d.hoy]);
+  // El pie suma los mismos pedidos que la tarjeta «Pendiente de cobro».
+  const totalPendiente = useMemo(
+    () => sumarImportes(d.pendientes, (x) => x.pendiente),
+    [d.pendientes],
+  );
   const metodos = useMemo(() => desglosePorMetodo(d.cobros), [d.cobros]);
   const caja = useMemo(() => (d.caja ? totalesCaja(d.caja) : null), [d.caja]);
   const banco = useMemo(() => (d.banco ? resumenBanco(d.banco) : null), [d.banco]);
@@ -116,6 +123,20 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              {/* Sin los pendientes leídos, la tarjeta dice «—»: el pie no se pinta. */}
+              {d.pendientesDisponibles && (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total pendiente</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(d.pendientes.length, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalPendiente)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           </CardContent>
         </Card>
@@ -150,6 +171,22 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                {/* La misma cifra que la tarjeta «Cobrado», sin propinas. */}
+                {d.cobrosDisponibles && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-bold">Total</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {numero(t.cobros, 0)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(t.cobrado)}
+                      </TableCell>
+                      {/* El peso es una parte del total: no se suma. */}
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             )}
           </CardContent>

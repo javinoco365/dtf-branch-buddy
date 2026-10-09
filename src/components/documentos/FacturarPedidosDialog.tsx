@@ -28,15 +28,14 @@ type Modo = "ticket" | "factura";
 const TANDA = 20;
 
 type Resultado = {
-  emitidos: { pedido: string; referencia: string; id: string; nota?: string }[];
+  emitidos: { pedido: string; referencia: string; id: string }[];
   omitidos: { pedido: string; motivo: string }[];
 };
 
 /**
  * «Facturar» desde la lista de pedidos: se elige ticket o factura, se marcan
  * los pedidos y se emiten del más antiguo al más nuevo, cada uno con la fecha
- * de su pedido (si la serie ya va por delante, con la del último documento y
- * la del pedido como fecha de la operación).
+ * de su pedido.
  *
  * Lo que se enseña es una vista previa; al emitir, el servidor vuelve a
  * comprobarlo todo pedido a pedido.
@@ -113,7 +112,7 @@ export function FacturarPedidosDialog({
   }
 
   async function emitir() {
-    // En orden de fecha: la numeración no puede ir hacia atrás.
+    // Del más antiguo al más nuevo: así los números siguen el orden de los pedidos.
     const ids = seleccion.map((p) => p.id);
     if (!ids.length) return;
     const acumulado: Resultado = { emitidos: [], omitidos: [] };
@@ -229,13 +228,6 @@ export function FacturarPedidosDialog({
                 {resultado.emitidos.map((e) => `${e.referencia} (${e.pedido})`).join(", ")}
               </p>
             )}
-            {resultado.emitidos
-              .filter((e) => e.nota)
-              .map((e) => (
-                <p key={`nota-${e.id}`} className="text-muted-foreground">
-                  {e.referencia} ({e.pedido}): {e.nota}
-                </p>
-              ))}
             {pdfs && (
               <p className="text-muted-foreground">
                 {pdfs.hechos < pdfs.total

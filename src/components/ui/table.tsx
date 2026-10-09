@@ -134,6 +134,8 @@ export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableC
  * Copia el texto de cada cabecera a `data-etiqueta` en las celdas de su
  * columna, para que la tarjeta del móvil diga qué es cada dato. Una celda que
  * ocupa varias columnas, o cuya cabecera está vacía, se queda sin etiqueta.
+ * Una celda con `data-etiqueta-fija` lleva esa en vez de la de su cabecera
+ * (en un pie, cuando el dato no es lo que dice la columna).
  * Solo escribe si el valor cambia, para no despertar al MutationObserver en
  * bucle.
  */
@@ -151,7 +153,8 @@ function ponerEtiquetas(tabla: HTMLTableElement) {
   for (const fila of filas) {
     let columna = 0;
     for (const td of Array.from(fila.cells)) {
-      const etiqueta = td.colSpan > 1 ? "" : (nombres[columna] ?? "");
+      const etiqueta =
+        td.getAttribute("data-etiqueta-fija") ?? (td.colSpan > 1 ? "" : (nombres[columna] ?? ""));
       if (td.getAttribute("data-etiqueta") !== etiqueta) td.setAttribute("data-etiqueta", etiqueta);
       columna += td.colSpan;
     }

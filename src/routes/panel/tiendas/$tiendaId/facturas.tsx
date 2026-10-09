@@ -18,6 +18,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -44,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
+import { totalesDocumentos } from "@/dominio/sumatorios";
 import {
   anularFactura,
   borrarUltimaFactura,
@@ -158,6 +160,24 @@ function Facturas() {
     );
   }, [facturas, filtros.q, filtros.estado, periodo.rango]);
 
+  // El pie suma lo que se ve, con las reglas de siempre: los borradores no
+  // suman, las rectificativas restan y un ticket canjeado lo cuenta su factura.
+  const totales = useMemo(
+    () =>
+      totalesDocumentos(
+        filtrados.map((f: any) => ({
+          id: f.id,
+          estado: f.estado,
+          base: f.base_imponible,
+          iva: f.iva_total,
+          total: f.total,
+          sustituye_a_id: f.sustituye_a_id,
+          rectifica_a_id: f.rectifica_a_id,
+        })),
+      ),
+    [filtrados],
+  );
+
   // Los que se están viendo, para descargarlos en un ZIP.
   const docsFiltrados = useMemo(
     () =>
@@ -204,6 +224,12 @@ function Facturas() {
       );
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
       qc.invalidateQueries({ queryKey: ["series-contadores"] });
+      // El pedido vuelve a quedar sin documento: que ninguna pantalla se
+      // quede con el borrado en la memoria (el botón verde, el diálogo).
+      qc.invalidateQueries({ queryKey: ["pedidos"] });
+      qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
+      qc.invalidateQueries({ queryKey: ["pedidos-para-facturar"] });
+      qc.removeQueries({ queryKey: ["preparar-factura-pedido"] });
     },
     onError: (e: any) => toast.error(e.message ?? "No se pudo borrar"),
   });
@@ -483,6 +509,29 @@ function Facturas() {
                 </TableRow>
               )}
             </TableBody>
+            {!isLoading && filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={4} className="font-semibold">
+                    Total · {totales.documentos} documento{totales.documentos === 1 ? "" : "s"}
+                    {totales.borradores > 0 &&
+                      ` · sin ${totales.borradores} borrador${totales.borradores === 1 ? "" : "es"}`}
+                    {totales.canjeados > 0 &&
+                      ` · sin ${totales.canjeados} ticket${totales.canjeados === 1 ? "" : "s"} canjeado${totales.canjeados === 1 ? "" : "s"} (cuenta su factura)`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.base)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.iva)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totales.total)}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -704,9 +753,6 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
           <div className="space-y-1.5">
             <Label>Fecha de emisión</Label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            <p className="text-xs text-muted-foreground">
-              No puede ser anterior a la última factura emitida.
-            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Vencimiento</Label>

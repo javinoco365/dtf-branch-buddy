@@ -18,6 +18,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -41,6 +42,8 @@ import {
   type Enlace,
   type Plan,
 } from "@/dominio/motor-conciliacion";
+import { totalesConSigno } from "@/dominio/sumatorios";
+import { totalesEnlaces } from "@/dominio/sumatorios-banco";
 import { useCuentasBanco } from "./useCuentasBanco";
 
 export type DatosConciliacion = {
@@ -103,6 +106,11 @@ export function MotorConciliacion({
   const revisar = datos.enlaces.filter((e) => e.estado === "revisar");
   const conciliados = datos.enlaces.filter((e) => e.estado === "conciliada");
   const traspasos = datos.movimientos.filter((m) => m.traspaso_con && m.importe < 0);
+  // Abonos y cargos por separado: un neto solo esconde cuánto entra y cuánto sale.
+  const totalSinConciliar = totalesConSigno(sinConciliar, (m) => m.importe);
+  // Los traspasos se listan desde el lado que sale, así que cada pareja cuenta
+  // una vez: lo movido entre cuentas propias son las salidas.
+  const totalTraspasos = totalesConSigno(traspasos, (m) => m.importe);
   const { verdes, ambares, traspasos: tp } = datos.plan;
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
 
@@ -259,6 +267,40 @@ export function MotorConciliacion({
                     );
                   })}
                 </TableBody>
+                {sinConciliar.length > 0 && (
+                  <TableFooter>
+                    {totalSinConciliar.entradas > 0 && totalSinConciliar.salidas > 0 && (
+                      <>
+                        <TableRow>
+                          <TableCell colSpan={3}>Abonos</TableCell>
+                          <TableCell className="text-right font-bold tabular-nums">
+                            {eur(totalSinConciliar.entradas)}
+                          </TableCell>
+                          <TableCell colSpan={2} />
+                        </TableRow>
+                        <TableRow>
+                          <TableCell colSpan={3}>Cargos</TableCell>
+                          <TableCell className="text-right font-bold tabular-nums text-destructive">
+                            {eur(-totalSinConciliar.salidas)}
+                          </TableCell>
+                          <TableCell colSpan={2} />
+                        </TableRow>
+                      </>
+                    )}
+                    <TableRow>
+                      <TableCell colSpan={3} className="font-semibold">
+                        Total · {totalSinConciliar.n}{" "}
+                        {totalSinConciliar.n === 1 ? "movimiento" : "movimientos"}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right font-bold tabular-nums ${totalSinConciliar.neto < 0 ? "text-destructive" : ""}`}
+                      >
+                        {eur(totalSinConciliar.neto)}
+                      </TableCell>
+                      <TableCell colSpan={2} />
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             </CardContent>
           </Card>
@@ -364,6 +406,20 @@ export function MotorConciliacion({
                     );
                   })}
                 </TableBody>
+                {traspasos.length > 0 && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-semibold">
+                        Total · {traspasos.length}{" "}
+                        {traspasos.length === 1 ? "traspaso" : "traspasos"}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totalTraspasos.salidas)}
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             </CardContent>
           </Card>
@@ -448,6 +504,9 @@ function TablaEnlaces({
   vacio: string;
   acciones: (e: EnlaceGuardado) => React.ReactNode;
 }) {
+  // Se suma el lado banco, sin repetir movimientos. La columna de facturas no
+  // se suma: va en valor absoluto y mezcla cobros con pagos.
+  const total = totalesEnlaces(enlaces, movs);
   return (
     <Card>
       <CardContent className="p-0">
@@ -507,6 +566,63 @@ function TablaEnlaces({
               </TableRow>
             ))}
           </TableBody>
+          {enlaces.length > 0 && (
+            <TableFooter>
+              {/*
+                La columna Banco es texto y el importe va al final de cada línea:
+                el pie sigue la misma forma, «etiqueta · importe».
+              */}
+              {total.entradas > 0 && total.salidas > 0 && (
+                <>
+                  <TableRow>
+                    <TableCell className="text-sm">
+                      Abonos · <span className="font-bold tabular-nums">{eur(total.entradas)}</span>
+                    </TableCell>
+                    <TableCell colSpan={3} />
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-sm">
+                      Cargos ·{" "}
+                      <span className="font-bold tabular-nums text-destructive">
+                        {eur(-total.salidas)}
+                      </span>
+                    </TableCell>
+                    <TableCell colSpan={3} />
+                  </TableRow>
+                </>
+              )}
+              <TableRow>
+                <TableCell className="text-sm">
+                  <span className="font-semibold">
+                    Total · {total.enlaces} {total.enlaces === 1 ? "enlace" : "enlaces"} ·{" "}
+                    {total.movimientos} {total.movimientos === 1 ? "movimiento" : "movimientos"}
+                  </span>{" "}
+                  ·{" "}
+                  <span
+                    className={`font-bold tabular-nums ${total.neto < 0 ? "text-destructive" : ""}`}
+                  >
+                    {eur(total.neto)}
+                  </span>
+                  {total.sinImporte > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Total parcial: {total.sinImporte}{" "}
+                      {total.sinImporte === 1
+                        ? "movimiento antiguo no está cargado y no suma"
+                        : "movimientos antiguos no están cargados y no suman"}
+                      .
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell />
+                <TableCell>
+                  {total.diferencia !== 0 && (
+                    <div className="text-xs text-amber-600">Difiere {eur(total.diferencia)}</div>
+                  )}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </CardContent>
     </Card>

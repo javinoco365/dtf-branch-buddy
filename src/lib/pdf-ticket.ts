@@ -1,5 +1,6 @@
-import { eur, fechaCorta } from "@/lib/format";
+import { eur, eurUnitario, fechaCorta, numeroJusto } from "@/lib/format";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
+import { importeLineaSinIva, pieDocumentoEmitido } from "@/dominio/importes";
 
 /** Una fila del desglose de IVA congelado en la factura. */
 export type DesgloseTicket = { tipo: number; base: number; cuota: number };
@@ -14,6 +15,10 @@ export type TicketPDFData = FacturaPDFData & {
 const ANCHO = 80;
 const MARGEN = 4;
 const UTIL = ANCHO - MARGEN * 2;
+/** Milímetros que mide un punto tipográfico. */
+const MM_POR_PUNTO = 25.4 / 72;
+/** Lo que sube una mayúscula de Helvetica sobre su línea base, en cuerpos. */
+const ALTURA_MAYUSCULA = 0.72;
 
 /**
  * El ticket para la impresora térmica: 80 mm de ancho y el largo que haga
@@ -21,9 +26,13 @@ const UTIL = ANCHO - MARGEN * 2;
  *
  * Lleva lo que el RD 1619/2012 art. 7 pide a una factura simplificada: número
  * y serie, fecha, razón social y NIF del emisor, qué se vende, el tipo de IVA
- * y el total. Si el cliente dio su nombre, también. El desglose de IVA va
+ * y el total. Si el cliente dio su nombre, también.
+ *
+ * Cada línea lleva su importe sin IVA, su base. Debajo, la suma: la base del
+ * documento, una cuota por cada tipo de IVA y el total. El desglose va
  * siempre: al cliente profesional que lo quiera deducir le hace falta y a los
- * demás no les estorba.
+ * demás no les estorba. Todas las cifras son las congeladas al emitir; aquí no
+ * se recalcula ninguna.
  */
 export async function generarTicketPDF(d: TicketPDFData): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
@@ -48,6 +57,14 @@ function pintar(doc: Doc, d: TicketPDFData): number {
   let y = MARGEN + 3;
   const centro = ANCHO / 2;
   const derecha = ANCHO - MARGEN;
+  // El cuerpo de la última línea escrita. El texto se escribe sobre su línea
+  // base y crece hacia arriba: una línea más grande que la anterior necesita
+  // bajar lo que crece de más, o se monta sobre ella (le pasaba al TOTAL).
+  let cuerpoAnterior = Number.POSITIVE_INFINITY;
+  const hacerSitio = (tam: number) => {
+    if (tam > cuerpoAnterior) y += (tam - cuerpoAnterior) * MM_POR_PUNTO * ALTURA_MAYUSCULA;
+    cuerpoAnterior = tam;
+  };
 
   const linea = (
     texto: string,
@@ -59,6 +76,7 @@ function pintar(doc: Doc, d: TicketPDFData): number {
     doc.setFontSize(tam);
     const partes = doc.splitTextToSize(texto, UTIL) as string[];
     for (const p of partes) {
+      hacerSitio(tam);
       doc.text(p, alinear === "center" ? centro : MARGEN, y, { align: alinear });
       y += tam * 0.42;
     }
@@ -70,10 +88,13 @@ function pintar(doc: Doc, d: TicketPDFData): number {
     doc.line(MARGEN, y, derecha, y);
     doc.setLineDashPattern([], 0);
     y += 4;
+    // Los 4 mm de debajo de la raya ya dejan sitio a la línea que siga.
+    cuerpoAnterior = Number.POSITIVE_INFINITY;
   };
   const par = (izq: string, der: string, tam = 8, negrita = false) => {
     doc.setFont("helvetica", negrita ? "bold" : "normal");
     doc.setFontSize(tam);
+    hacerSitio(tam);
     doc.text(izq, MARGEN, y);
     doc.text(der, derecha, y, { align: "right" });
     y += tam * 0.45;
@@ -95,24 +116,26 @@ function pintar(doc: Doc, d: TicketPDFData): number {
   }
   separador();
 
+  // Cada línea, con su importe sin IVA: la base congelada al emitir.
   for (const it of d.items) {
     linea(it.descripcion, 8, false, "left");
     par(
-      `  ${it.cantidad} ${it.unidad} x ${eur(it.precio_unitario)} (${it.iva_rate} %)`,
-      eur(it.total),
+      `  ${numeroJusto(it.cantidad)} ${it.unidad} x ${eurUnitario(it.precio_unitario)} (${numeroJusto(it.iva_rate, 2)} %)`,
+      eur(importeLineaSinIva(it)),
       7,
     );
     y += 0.5;
   }
   separador();
 
-  for (const r of d.desglose ?? []) {
-    par(`Base ${r.tipo} %: ${eur(r.base)}`, `IVA ${eur(r.cuota)}`, 7);
+  // La suma: base, el IVA de cada tipo y el total, como se congelaron.
+  const pie = pieDocumentoEmitido(d);
+  par("Base =", eur(pie.base), 8);
+  for (const r of pie.iva) {
+    par(r.tipo == null ? "IVA =" : `IVA ${numeroJusto(r.tipo, 2)} % =`, eur(r.cuota), 8);
   }
-  y += 1;
-  par("TOTAL", eur(d.total), 11, true);
-  y += 1;
-  linea("IVA incluido", 7);
+  y += 1.5;
+  par("TOTAL =", eur(pie.total), 11, true);
 
   if (d.notas) {
     separador();

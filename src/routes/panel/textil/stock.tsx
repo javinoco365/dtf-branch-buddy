@@ -26,6 +26,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -40,7 +41,12 @@ import {
   listMovimientosStock,
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
-import { eur as fmtEUR } from "@/lib/format";
+import { eur as fmtEUR, numero } from "@/lib/format";
+import {
+  EXPLICACION_VALOR_STOCK,
+  totalesMovimientosStock,
+  totalesStock,
+} from "@/dominio/sumatorios-textil";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -74,6 +80,8 @@ function StockPage() {
       );
     });
   }, [data, filtros.q, filtros.bajo]);
+  // El pie suma las mismas variantes que se ven, desactivadas incluidas.
+  const totales = useMemo(() => totalesStock(filtrados), [filtrados]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [entrada, setEntrada] = useState<Item | null>(null);
@@ -276,6 +284,35 @@ function StockPage() {
                 );
               })}
             </TableBody>
+            {!isLoading && filtrados.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    Total · {totales.variantes} variante{totales.variantes === 1 ? "" : "s"}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(totales.fisico, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(totales.reservado, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(totales.disponible, 0)}
+                  </TableCell>
+                  <TableCell />
+                  {/* El coste es por unidad y no se suma: aquí va lo que vale el stock a coste. */}
+                  <TableCell
+                    className="text-right font-bold tabular-nums"
+                    title={EXPLICACION_VALOR_STOCK}
+                    data-etiqueta-fija="Valor del stock"
+                  >
+                    {fmtEUR(totales.valor)}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>
@@ -635,6 +672,15 @@ const MOTIVO_TEXTO: Record<string, string> = {
   merma: "Merma",
 };
 
+/** Los movimientos que devuelve listMovimientosStock como mucho (su `.limit(200)`). */
+const LIMITE_MOVIMIENTOS = 200;
+
+/**
+ * Unas unidades con su signo delante, como en las filas del libro. `|| 0`
+ * porque un −0 (sin salidas) se pintaría «-0».
+ */
+const conSigno = (n: number) => `${n > 0 ? "+" : ""}${numero(n || 0, 0)}`;
+
 /** El libro de una variante: de dónde sale cada unidad que tiene o tuvo. */
 function HistorialDialog({ item, onClose }: any) {
   const listFn = useServerFn(listMovimientosStock);
@@ -643,6 +689,8 @@ function HistorialDialog({ item, onClose }: any) {
     queryFn: () => listFn({ data: { stock_id: item.id } }),
     enabled: !!item,
   });
+  // Si la lista llega cortada, su saldo no es el «saldo actual» de arriba: se dice.
+  const totales = useMemo(() => totalesMovimientosStock(data, LIMITE_MOVIMIENTOS), [data]);
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
@@ -692,6 +740,33 @@ function HistorialDialog({ item, onClose }: any) {
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={2}>Entradas</TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {conSigno(totales.entradas)}
+                </TableCell>
+                <TableCell colSpan={2} />
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={2}>Salidas</TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {conSigno(-totales.salidas)}
+                </TableCell>
+                <TableCell colSpan={2} />
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={2}>
+                  {totales.recortada
+                    ? `Saldo de los últimos ${totales.movimientos} movimientos · puede haber otros más antiguos que no se ven: no es el saldo actual`
+                    : `Saldo · ${totales.movimientos} movimiento${totales.movimientos === 1 ? "" : "s"}`}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {conSigno(totales.saldo)}
+                </TableCell>
+                <TableCell colSpan={2} />
+              </TableRow>
+            </TableFooter>
           </Table>
         )}
       </DialogContent>

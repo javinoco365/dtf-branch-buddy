@@ -9,6 +9,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -26,6 +27,7 @@ import { listarArchivo } from "@/lib/archivo.functions";
 import { eur, fechaCorta } from "@/lib/format";
 import { normalizarTexto } from "@/dominio/clientes";
 import { CLASES_ARCHIVO, nombreZip, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
+import { totalesArchivo } from "@/dominio/sumatorios-facturas";
 
 export const Route = createFileRoute("/panel/archivo")({
   head: () => ({ meta: [{ title: "Archivo · DTF Culture" }] }),
@@ -86,6 +88,11 @@ function ArchivoPage() {
     );
   }, [docs, filtros.q, filtros.clase, filtros.procedencia, filtros.fichero]);
   const resumen = useMemo(() => resumenArchivo(filtrados), [filtrados]);
+  // El pie suma todos los filtrados, también los que no se pintan, y separa
+  // ventas de compras: sumarlas juntas no significa nada.
+  const totales = useMemo(() => totalesArchivo(filtrados), [filtrados]);
+  const recortada = filtrados.length > FILAS_VISIBLES;
+  const hayVentas = resumen.total > resumen.porClase.compra;
   const etiquetaClase = (c: string) => CLASES_ARCHIVO.find((x) => x.valor === c)?.etiqueta ?? c;
 
   return (
@@ -213,6 +220,40 @@ function ArchivoPage() {
                 </TableRow>
               ))}
             </TableBody>
+            {!isLoading && !error && filtrados.length > 0 && (
+              <TableFooter>
+                {hayVentas && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="font-semibold">
+                      Total ventas ·{" "}
+                      {recortada
+                        ? `los ${totales.ventas.documentos} documentos, no solo los que se ven`
+                        : `${totales.ventas.documentos} documento${totales.ventas.documentos === 1 ? "" : "s"}`}
+                      {totales.ventas.canjeados > 0 &&
+                        ` · sin ${totales.ventas.canjeados} ticket${totales.ventas.canjeados === 1 ? "" : "s"} canjeado${totales.ventas.canjeados === 1 ? "" : "s"}`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totales.ventas.total)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
+                {totales.compras.documentos > 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="font-semibold">
+                      Total compras (líquido) ·{" "}
+                      {recortada
+                        ? `las ${totales.compras.documentos} facturas, no solo las que se ven`
+                        : `${totales.compras.documentos} factura${totales.compras.documentos === 1 ? "" : "s"}`}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totales.compras.total)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
+              </TableFooter>
+            )}
           </Table>
         </CardContent>
       </Card>

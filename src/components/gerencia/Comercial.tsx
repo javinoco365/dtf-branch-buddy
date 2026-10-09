@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -22,6 +23,7 @@ import {
   presupuestosPendientes,
   type PresupuestoResumen,
 } from "@/dominio/comercial";
+import { totalEsperandoRespuesta } from "@/dominio/sumatorios-gerencia-a";
 import { destinoPresupuestos, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, NotaGrupo, VerDetalle } from "./comun";
 
@@ -65,6 +67,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
     () => presupuestosPendientes(filtrar(actual.data?.enviados ?? [], d.filtro), d.hoy),
     [actual.data, d.filtro, d.hoy],
   );
+  const esperando = useMemo(() => totalEsperandoRespuesta(pend), [pend]);
 
   if (d.filtro.canal === "web") {
     return (
@@ -215,6 +218,10 @@ export function Comercial({ d }: { d: DatosGerencia }) {
               </span>
               <span className="tabular-nums">{eur(pend.caducados.importe)}</span>
             </div>
+            <div className="flex justify-between gap-4 border-t pt-1.5 font-semibold">
+              <span>Total esperando respuesta ({esperando.n})</span>
+              <span className="tabular-nums">{eur(esperando.importe)}</span>
+            </div>
             <p className="pt-2 text-xs text-muted-foreground">
               Un presupuesto caducado sigue «enviado» en su pantalla: márcalo como aceptado o
               rechazado para que deje de contar aquí.
@@ -271,6 +278,20 @@ export function Comercial({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 ))}
               </TableBody>
+              {/* Todos los que siguen en plazo, no solo los FILAS de arriba: la
+                  misma cifra que «En plazo» de «Esperando respuesta». */}
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    {pend.lista.length > FILAS
+                      ? `Total de los ${pend.vigentes.n} presupuestos en plazo`
+                      : `Total · ${pend.vigentes.n} ${pend.vigentes.n === 1 ? "presupuesto" : "presupuestos"} en plazo`}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(pend.vigentes.importe)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           )}
         </CardContent>

@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -24,6 +25,7 @@ import {
 } from "@/dominio/grupos";
 import { impuestosPorTrimestre, trimestreDe, trimestresDelRango } from "@/dominio/impuestos";
 import { comparacionCompras, comprasParaComparar } from "@/dominio/compras";
+import { totalComparacion, totalImpuestos } from "@/dominio/sumatorios-gerencia-b";
 import { DESTINO_AJUSTES, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
 
@@ -129,6 +131,10 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     { clave: "b", titulo: "B · Sin documento" },
     { clave: "total", titulo: "Total" },
   ] as const;
+  const filasCompras = comparadas ? comparacionCompras(comparadas, cuentas.total) : [];
+  const totalCompras = totalComparacion(filasCompras);
+  const totalModelos = totalImpuestos(impuestos);
+  const modelos = (n: number) => `${numero(n, 0)} ${n === 1 ? "modelo" : "modelos"}`;
 
   return (
     <div className="space-y-4">
@@ -278,7 +284,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {comparacionCompras(comparadas, cuentas.total).map((f) => (
+                  {filasCompras.map((f) => (
                     <TableRow key={f.concepto}>
                       <TableCell className="font-medium">{f.concepto}</TableCell>
                       <TableCell className="text-right tabular-nums">{eur(f.comprado)}</TableCell>
@@ -290,6 +296,21 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                     </TableRow>
                   ))}
                 </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalCompras.comprado)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalCompras.estimado)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {totalCompras.diferencia > 0 ? "+" : ""}
+                      {eur(totalCompras.diferencia)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             </CardContent>
           </Card>
@@ -339,6 +360,29 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                   )),
                 )}
               </TableBody>
+              {/* Lo que sale a compensar no resta de lo que se ingresa: va en su propia fila. */}
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={2} className="font-bold">
+                    Total a ingresar · {modelos(totalModelos.modelosAIngresar)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(totalModelos.aIngresar)}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+                {totalModelos.modelosACompensar > 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-bold">
+                      A compensar · {modelos(totalModelos.modelosACompensar)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums text-status-completado">
+                      {eur(totalModelos.aCompensar)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
+              </TableFooter>
             </Table>
           </CardContent>
         </Card>
