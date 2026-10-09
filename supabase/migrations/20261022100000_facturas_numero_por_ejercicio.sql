@@ -108,7 +108,9 @@ END $$;
 -- 3. Que no quede un índice único suelto con las mismas columnas
 -- ---------------------------------------------------------------------------
 -- Un CREATE UNIQUE INDEX hecho a mano no aparece en pg_constraint y seguiría
--- haciendo chocar el T2026/0011 con el T2027/0011.
+-- haciendo chocar el T2026/0011 con el T2027/0011. Se miran solo las columnas
+-- de la clave (las de un INCLUDE no cuentan para la unicidad) y se dejan fuera
+-- los índices con expresiones, que no son este.
 DO $$
 DECLARE v_indice TEXT;
 BEGIN
@@ -116,10 +118,12 @@ BEGIN
     FROM pg_index i
    WHERE i.indrelid = 'public.facturas'::regclass
      AND i.indisunique
+     AND i.indexprs IS NULL
      AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid)
      AND (SELECT array_agg(a.attname::TEXT ORDER BY a.attname::TEXT)
             FROM pg_attribute a
-           WHERE a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey::INT2[]))
+           WHERE a.attrelid = i.indrelid
+             AND a.attnum = ANY ((i.indkey::INT2[])[0:i.indnkeyatts - 1]))
          = ARRAY['numero', 'serie', 'tienda_id']
    LIMIT 1;
 
