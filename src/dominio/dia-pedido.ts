@@ -68,23 +68,59 @@ const reloj = new Intl.DateTimeFormat("en-CA", {
   hourCycle: "h23",
 });
 
+const MS_MINUTO = 60_000;
+const MS_DIA = 86_400_000;
+
+/**
+ * Cuántos minutos va el reloj de España por delante de UTC en un instante
+ * (60 en invierno, 120 en verano): la hora de `reloj` leída como UTC, menos
+ * el instante. Pasa por Intl, que es lo que cuesta.
+ */
+function desfaseEn(ms: number): number {
+  const p = Object.fromEntries(reloj.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  const comoUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((comoUtc - Math.floor(ms / 1000) * 1000) / MS_MINUTO);
+}
+
+/**
+ * El desfase de cada día UTC ya consultado: un número si es el mismo todo el
+ * día, o nulo si ese día cambia la hora (dos domingos al año, a la 01:00
+ * UTC). Así la lista de pedidos, Facturación y Gerencia (decenas de miles de
+ * pedidos) no pasan por Intl con cada pedido, sino un par de veces por día.
+ */
+const desfasePorDia = new Map<number, number | null>();
+
+function desfaseDeEspana(ms: number): number {
+  const dia = Math.floor(ms / MS_DIA);
+  let fijo = desfasePorDia.get(dia);
+  if (fijo === undefined) {
+    // En España la hora cambia como mucho una vez al día: si al empezar y al
+    // acabar el día UTC el desfase es el mismo, lo es todo el día.
+    const alEmpezar = desfaseEn(dia * MS_DIA);
+    fijo = alEmpezar === desfaseEn((dia + 1) * MS_DIA - 1) ? alEmpezar : null;
+    desfasePorDia.set(dia, fijo);
+  }
+  return fijo ?? desfaseEn(ms);
+}
+
 /**
  * El día y la hora del pedido en el reloj de España, 'yyyy-mm-ddThh:mm:ss',
  * para ordenar los pedidos de un día: comparar `fecha_pedido` tal cual pone
  * un pedido web de las 9:00 después de uno del CRM de las 10:00 (el web lleva
  * su hora local como UTC, dos horas «más tarde»). Un pedido con solo el día,
- * o sin fecha, va a las 00:00 de su día.
+ * o sin fecha, va a las 00:00 de su día. Su día, `.slice(0, 10)`, es siempre
+ * el de diaDelPedido.
  */
 export function momentoDelPedido(p: FechaPedido): string {
-  const dia = diaDelPedido(p);
   const texto = String(p.fecha_pedido ?? "").trim();
   const sinZona = HORA_DE_RELOJ.exec(texto);
   if (sinZona) return `${sinZona[1]}T${sinZona[2]}${sinZona[3] ?? ":00"}`;
   const instante = new Date(texto);
-  if (texto.length <= 10 || Number.isNaN(instante.getTime())) return `${dia}T00:00:00`;
+  const ms = instante.getTime();
+  if (texto.length <= 10 || Number.isNaN(ms)) return `${diaDelPedido(p)}T00:00:00`;
   if (horaDeLaWeb(p)) return instante.toISOString().slice(0, 19);
-  const partes = Object.fromEntries(reloj.formatToParts(instante).map((x) => [x.type, x.value]));
-  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}`;
+  // La hora de España es la UTC más el desfase de ese momento.
+  return new Date(ms + desfaseDeEspana(ms) * MS_MINUTO).toISOString().slice(0, 19);
 }
 
 /**

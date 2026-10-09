@@ -85,6 +85,44 @@ describe("momentoDelPedido", () => {
   it("un pedido con solo el día va a las 00:00", () => {
     expect(momentoDelPedido({ fecha_pedido: "2026-10-07" })).toBe("2026-10-07T00:00:00");
   });
+
+  it("en los cambios de hora, la hora que marca el reloj de España", () => {
+    // 29-3-2026: a la 01:00 UTC, las 02:00 pasan a ser las 03:00.
+    expect(momentoDelPedido(crm("2026-03-29T00:59:59Z"))).toBe("2026-03-29T01:59:59");
+    expect(momentoDelPedido(crm("2026-03-29T01:00:00Z"))).toBe("2026-03-29T03:00:00");
+    // 25-10-2026: a la 01:00 UTC, las 03:00 vuelven a ser las 02:00.
+    expect(momentoDelPedido(crm("2026-10-25T00:59:59Z"))).toBe("2026-10-25T02:59:59");
+    expect(momentoDelPedido(crm("2026-10-25T01:00:00Z"))).toBe("2026-10-25T02:00:00");
+    // Los milisegundos no redondean el segundo.
+    expect(momentoDelPedido(crm("2026-10-07T08:00:00.999Z"))).toBe("2026-10-07T10:00:00");
+  });
+
+  it("da lo mismo que pasar cada instante por Intl, cambios de hora incluidos", () => {
+    const reloj = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Madrid",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    const conIntl = (d: Date) => {
+      const p = Object.fromEntries(reloj.formatToParts(d).map((x) => [x.type, x.value]));
+      return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
+    };
+    const comprobar = (desde: string, hasta: string, pasoMs: number) => {
+      for (let t = Date.parse(desde); t <= Date.parse(hasta); t += pasoMs) {
+        const d = new Date(t);
+        expect(momentoDelPedido(crm(d.toISOString()))).toBe(conIntl(d));
+      }
+    };
+    // Los dos días de cambio de hora, cada 7 min 13 s; y dos años, cada 5 h 17 min.
+    comprobar("2026-03-28T20:00:00Z", "2026-03-29T06:00:00Z", 433_000);
+    comprobar("2026-10-24T20:00:00Z", "2026-10-25T06:00:00Z", 433_000);
+    comprobar("2025-01-01T00:00:00Z", "2027-01-01T00:00:00Z", 19_020_000);
+  });
 });
 
 describe("ordenarPedidos", () => {

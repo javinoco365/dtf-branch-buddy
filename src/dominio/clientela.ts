@@ -11,7 +11,7 @@
 import { redondear } from "./importes";
 import { ESTADO_CANCELADO, totalNeto } from "./kpis";
 import { diasDelRango } from "./periodos";
-import { momentoDelPedido, pedidoEnRango } from "./dia-pedido";
+import { momentoDelPedido } from "./dia-pedido";
 import { diasDesde } from "./pendientes";
 import { diaLocal } from "./facturacion";
 import type { Canal, Venta } from "./gerencia";
@@ -54,15 +54,33 @@ type Acumulado = {
 
 const vendida = (v: Venta) => v.estado !== ESTADO_CANCELADO;
 
+/**
+ * Un pedido con su momento en el reloj de España (ver momentoDelPedido), que
+ * se calcula una sola vez por pedido: sacarlo pide pasar la hora a Madrid, y
+ * con el historial entero (decenas de miles de pedidos) repetirlo en cada
+ * paso se nota. Su día, `momento.slice(0, 10)`, es el del pedido
+ * (diaDelPedido): el de su ticket.
+ */
+type ConMomento = { v: VentaCliente; momento: string };
+
+const conMomento = (ventas: readonly VentaCliente[]): ConMomento[] =>
+  ventas.map((v) => ({ v, momento: momentoDelPedido(v) }));
+
+/** Si el día de un momento cae entre `desde` y `hasta` ('yyyy-mm-dd', incluidos). */
+function enDias(momento: string, dias: { desde: string; hasta: string } | null): boolean {
+  if (!dias) return false;
+  const dia = momento.slice(0, 10);
+  return dia >= dias.desde && dia <= dias.hasta;
+}
+
 /** Suma por cliente los pedidos no cancelados. */
-function porCliente(ventas: readonly VentaCliente[]): Map<string, Acumulado> {
+function porCliente(ventas: readonly ConMomento[]): Map<string, Acumulado> {
   const mapa = new Map<string, Acumulado>();
-  for (const v of ventas) {
+  for (const { v, momento } of ventas) {
     const clave = claveCliente(v);
     if (!clave || !vendida(v)) continue;
     const a = mapa.get(clave);
     const nombre = v.cliente_nombre?.trim() || "Sin nombre";
-    const momento = momentoDelPedido(v);
     if (!a) {
       mapa.set(clave, {
         clave,
@@ -127,17 +145,19 @@ export type ResumenClientes = {
  * entero, no solo el periodo: si no, todos parecerían nuevos.
  */
 export function resumenClientes(historial: readonly VentaCliente[], r: Rango): ResumenClientes {
-  const historia = porCliente(historial);
-  // Por el día del pedido, como el resto de Gerencia (ver dia-pedido.ts).
-  const delPeriodo = historial.filter((v) => pedidoEnRango(v, r));
+  const todos = conMomento(historial);
+  const historia = porCliente(todos);
+  // Por el día del pedido, como el resto de Gerencia (ver dia-pedido.ts). Los
+  // días del rango se calculan una vez, no con cada pedido.
   const dias = diasDelRango(r);
+  const delPeriodo = todos.filter((x) => enDias(x.momento, dias));
   const periodo = porCliente(delPeriodo);
 
   let vendidoNuevos = 0;
   let vendidoRecurrentes = 0;
   let nuevos = 0;
   const sinCliente = { pedidos: 0, vendido: 0 };
-  for (const v of delPeriodo) {
+  for (const { v } of delPeriodo) {
     if (!claveCliente(v) && vendida(v)) {
       sinCliente.pedidos += 1;
       sinCliente.vendido += totalNeto(v);
@@ -151,8 +171,7 @@ export function resumenClientes(historial: readonly VentaCliente[], r: Rango): R
   let acumulado = 0;
   const ranking: ClientePeriodo[] = ordenados.map((c) => {
     const primera = historia.get(c.clave)?.primera ?? c.primera;
-    const nuevo =
-      dias !== null && primera.slice(0, 10) >= dias.desde && primera.slice(0, 10) <= dias.hasta;
+    const nuevo = enDias(primera, dias);
     if (nuevo) {
       nuevos += 1;
       vendidoNuevos += c.vendido;
@@ -222,7 +241,7 @@ export function clientesDormidos(
   hoy: Date,
   dias: number = DIAS_DORMIDO,
 ): ClienteDormido[] {
-  return [...porCliente(historial).values()]
+  return [...porCliente(conMomento(historial)).values()]
     .map((c) => ({
       clave: c.clave,
       cliente_id: c.cliente_id,
