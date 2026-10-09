@@ -5,11 +5,16 @@ import { gastosFijosPorGrupo } from "./grupos";
 import type { CompraResumen } from "./fiscal";
 import {
   calcularCompra,
+  cambiarLineaCompra,
   categoriaCompra,
   comparacionCompras,
   comprasQueCuentan,
   descuadreLiquido,
+  importeLineaCompra,
   importesDeCompra,
+  lineaCompraNueva,
+  TIPO_IVA_GENERAL,
+  TIPOS_IVA,
   tipoIrpfProbable,
   tipoProbable,
   comprasParaComparar,
@@ -226,5 +231,42 @@ describe("importes de una factura recibida", () => {
     expect(comprasQueCuentan([fila, { ...fila, id: "b", borrada_en: "2026-10-07" }])).toHaveLength(
       1,
     );
+  });
+});
+
+describe("líneas de una factura recibida", () => {
+  const linea = { descripcion: "Camiseta", cantidad: 3, precio_unitario: 2.5, importe: 7.5 };
+
+  it("el importe es cantidad por coste, al céntimo", () => {
+    expect(importeLineaCompra({ cantidad: 3, precio_unitario: 1.115 })).toBe(3.35);
+    expect(importeLineaCompra({ cantidad: "2", precio_unitario: "0.1" })).toBe(0.2);
+    expect(importeLineaCompra({ cantidad: null, precio_unitario: 4 })).toBe(0);
+  });
+
+  it("cambiar la cantidad o el coste recalcula el importe", () => {
+    expect(cambiarLineaCompra(linea, { cantidad: 4 })).toMatchObject({ cantidad: 4, importe: 10 });
+    expect(cambiarLineaCompra(linea, { precio_unitario: 3.333 })).toMatchObject({
+      precio_unitario: 3.333,
+      importe: 10,
+    });
+  });
+
+  it("cambiar solo el concepto deja el importe leído, aunque no cuadre", () => {
+    const leida = { ...linea, importe: 7 }; // un descuento que no se leyó
+    expect(cambiarLineaCompra(leida, { descripcion: "Polo" })).toEqual({
+      ...leida,
+      descripcion: "Polo",
+    });
+  });
+
+  it("una línea nueva cuadra desde el principio", () => {
+    const nueva = lineaCompraNueva();
+    expect(nueva).toMatchObject({ cantidad: 1, precio_unitario: 0, importe: 0 });
+    expect(cambiarLineaCompra(nueva, { precio_unitario: 12.4 }).importe).toBe(12.4);
+  });
+
+  it("una factura a mano empieza con el IVA general, que es uno de los tipos", () => {
+    expect(TIPO_IVA_GENERAL).toBe(0.21);
+    expect(TIPOS_IVA).toContain(TIPO_IVA_GENERAL);
   });
 });
