@@ -94,10 +94,10 @@ export function DocumentoPedidoDialog({
   /** El servidor emite con la fecha del pedido, siempre: no se le manda ninguna. */
   emitir: (p: PeticionDocumento) => Promise<{ id: string; referencia: string }>;
   /**
-   * Genera el PDF y devuelve una URL para abrirlo, si la hay. Un ticket sale en
-   * 80 mm, para la impresora de tickets; una factura, en A4.
+   * Genera el PDF y devuelve una URL para abrirlo, si la hay. Siempre en A4: un
+   * ticket sale como factura simplificada.
    */
-  abrirPdf: (id: string, documento: "ticket" | "factura") => Promise<string | null>;
+  abrirPdf: (id: string) => Promise<string | null>;
   alEmitir: () => void;
 }) {
   const qc = useQueryClient();
@@ -181,7 +181,7 @@ export function DocumentoPedidoDialog({
           ? `Ticket ${r.referencia} emitido`
           : `Factura ${r.referencia} emitida`;
       try {
-        const url = await abrirPdf(r.id, documento);
+        const url = await abrirPdf(r.id);
         if (url && ventana) ventana.location.href = url;
         else ventana?.close();
         toast.success(emitido);

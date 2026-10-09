@@ -4,7 +4,6 @@ import { DocumentoPedidoDialog } from "@/components/documentos/DocumentoPedidoDi
 import {
   emitirDocumentoTextil,
   generarPdfFacturaTextil,
-  generarTicket80Textil,
   prepararDocumentoTextil,
   urlFacturaTextil,
 } from "@/lib/textil.functions";
@@ -29,7 +28,6 @@ export function DocumentoTextilDialog({
   const emitirFn = useServerFn(emitirDocumentoTextil);
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
-  const ticket80Fn = useServerFn(generarTicket80Textil);
 
   return (
     <DocumentoPedidoDialog
@@ -51,10 +49,10 @@ export function DocumentoTextilDialog({
           },
         })
       }
-      abrirPdf={async (id, documento) => {
-        // El A4 se genera siempre: es el que se guarda y el que enseña la lista de facturas.
+      abrirPdf={async (id) => {
+        // Ticket o factura, siempre en A4: el ticket sale como factura
+        // simplificada. Es el que se guarda y el que enseña la lista de facturas.
         await generarFn({ data: { factura_id: id } });
-        if (documento === "ticket") return (await ticket80Fn({ data: { factura_id: id } })).url;
         return (await urlFn({ data: { factura_id: id } })).url;
       }}
       alEmitir={() => {
