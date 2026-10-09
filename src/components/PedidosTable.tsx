@@ -248,7 +248,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey,
     // Los días del periodo, no los instantes: el servidor filtra por el día
     // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
@@ -528,10 +528,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
-          <div className="text-xs text-muted-foreground ml-auto">
-            {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
-            <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
-          </div>
+          {/* Sin lista porque la lectura ha fallado, «0 pedidos · 0,00 €» sería
+              una cifra inventada: no se enseña. */}
+          {!(error && !data) && (
+            <div className="text-xs text-muted-foreground ml-auto">
+              {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
+              <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -552,7 +556,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </CardContent>
           </Card>
         )}
-        {!isLoading && grupos.length === 0 && (
+        {/* Si la lectura falla se dice, en vez de «Sin pedidos en este
+            periodo», que parecería que no hay ventas. */}
+        {error && (
+          <Card>
+            <CardContent className="py-6 text-sm text-destructive">
+              {data ? "No se han podido actualizar" : "No se han podido cargar"} los pedidos:{" "}
+              {error.message}
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && !error && grupos.length === 0 && (
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
               Sin pedidos en este periodo.
