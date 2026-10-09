@@ -131,6 +131,18 @@ describe("desglose", () => {
 });
 
 describe("porDiaSemana", () => {
+  it("por el día del pedido: un web del domingo a las 23:15 es del domingo", () => {
+    // Domingo 4 de octubre de 2026; la web guarda su hora como si fuera UTC.
+    const dias = porDiaSemana([tienda({ fecha_pedido: "2026-10-04T23:15:00+00:00" })]);
+    expect(dias[6].vendido).toBe(121);
+    expect(dias[0].vendido).toBe(0);
+    // Uno del CRM de las 22:30 UTC del domingo son las 00:30 del lunes en Madrid.
+    const crm = porDiaSemana([
+      tienda({ fecha_pedido: "2026-10-04T22:30:00+00:00", origen: "manual" }),
+    ]);
+    expect(crm[0].vendido).toBe(121);
+  });
+
   it("de lunes a domingo, con los días sin ventas a cero", () => {
     // 5 de octubre de 2026, lunes; 3 de octubre, sábado.
     const dias = porDiaSemana([tienda(), textil()]);

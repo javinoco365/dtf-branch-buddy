@@ -11,6 +11,8 @@
  */
 
 import { redondear } from "./importes";
+import { diaDelPedido } from "./dia-pedido";
+import { diaDeFecha, diasDelRango } from "./periodos";
 
 /**
  * Una fila de `pedidos` con lo mínimo para agregar. Los importes llegan de
@@ -213,7 +215,9 @@ export function variacion(actual: number, anterior: number): number | null {
  * Total facturado por día, sobre el esqueleto de días que se le pase.
  *
  * Recibe los días en lugar de deducirlos para que los días sin ventas aparezcan
- * a cero y la gráfica no se colapse.
+ * a cero y la gráfica no se colapse. Cada pedido va en su día, el de su
+ * ticket (ver dia-pedido.ts), no en el de su instante en la hora del
+ * navegador: un pedido web de las 23:15 es de ese día.
  */
 export function agruparPorDia(
   pedidos: readonly PedidoResumen[],
@@ -222,17 +226,13 @@ export function agruparPorDia(
   const porDia = new Map<string, number>();
   for (const p of pedidos) {
     if (p.estado === ESTADO_CANCELADO) continue;
-    const clave = claveDia(new Date(p.fecha_pedido));
+    const clave = diaDelPedido(p);
     porDia.set(clave, (porDia.get(clave) ?? 0) + totalNeto(p));
   }
   return dias.map((dia) => ({
     dia,
-    total: redondear(porDia.get(claveDia(dia)) ?? 0),
+    total: redondear(porDia.get(diaDeFecha(dia)) ?? 0),
   }));
-}
-
-function claveDia(d: Date) {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 /**
@@ -240,22 +240,25 @@ function claveDia(d: Date) {
  *
  * Sirve para las series temporales (por semana, por mes) sin lanzar una
  * consulta por cada punto de la gráfica: se lee el periodo completo una vez y
- * se reparte aquí.
+ * se reparte aquí. Por el día del pedido, como el filtro del periodo (ver
+ * dia-pedido.ts): si no, el pedido web de las 23:15 del último día del mes
+ * estaría en el total del mes y en la barra del mes siguiente.
  */
 export function agruparPorRangos(
   pedidos: readonly PedidoResumen[],
   rangos: readonly { desde: Date; hasta: Date }[],
 ): { desde: Date; hasta: Date; total: number }[] {
-  const validos = pedidos.filter((p) => p.estado !== ESTADO_CANCELADO);
+  // El día de cada pedido, una vez: luego se compara con cada rango.
+  const validos = pedidos
+    .filter((p) => p.estado !== ESTADO_CANCELADO)
+    .map((p) => ({ dia: diaDelPedido(p), neto: totalNeto(p) }));
   return rangos.map((r) => {
-    const desde = r.desde.getTime();
-    const hasta = r.hasta.getTime();
-    const total = validos
-      .filter((p) => {
-        const t = new Date(p.fecha_pedido).getTime();
-        return t >= desde && t <= hasta;
-      })
-      .reduce((s, p) => s + totalNeto(p), 0);
+    const dias = diasDelRango(r);
+    const total = dias
+      ? validos
+          .filter((p) => p.dia >= dias.desde && p.dia <= dias.hasta)
+          .reduce((s, p) => s + p.neto, 0)
+      : 0;
     return { desde: r.desde, hasta: r.hasta, total: redondear(total) };
   });
 }

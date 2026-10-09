@@ -17,10 +17,12 @@
  * El ticket ya lo tenía en cuenta, pero la lista agrupaba con la hora del
  * navegador: un pedido web de las 23:15 salía en el día siguiente, en otro
  * total del día y, a fin de mes, fuera del periodo, mientras su ticket
- * llevaba el día bueno.
+ * llevaba el día bueno. Lo mismo el Dashboard, la Facturación y Gerencia, que
+ * cortaban el periodo por instantes: ahora todos van por este día.
  */
 
 import { fechaDocumentoDePedido } from "./fecha-documento";
+import { diasDelRango, type Rango } from "./periodos";
 
 const ZONA = "Europe/Madrid";
 
@@ -37,10 +39,21 @@ function horaDeLaWeb(p: FechaPedido): boolean {
 }
 
 /**
+ * Una hora sin zona ('2026-10-03T12:00:00'): una hora del reloj de España,
+ * no un instante. Así fecha Gerencia los pedidos textil, que solo guardan el
+ * día (ver ventaDeTextil). De la base, `fecha_pedido` llega siempre con zona.
+ */
+const HORA_DE_RELOJ = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?(\.\d+)?$/;
+
+/**
  * El día del pedido ('yyyy-mm-dd'), en hora de España: el mismo con el que
- * sale su ticket o su factura.
+ * sale su ticket o su factura. Una hora sin zona es de su día en cualquier
+ * navegador: leída como hora del navegador y pasada a Madrid, en un navegador
+ * con otra hora podía cambiar de día.
  */
 export function diaDelPedido(p: FechaPedido): string {
+  const sinZona = HORA_DE_RELOJ.exec(String(p.fecha_pedido ?? "").trim());
+  if (sinZona) return sinZona[1];
   return fechaDocumentoDePedido(p.fecha_pedido, { horaDeLaWeb: horaDeLaWeb(p) });
 }
 
@@ -65,6 +78,8 @@ const reloj = new Intl.DateTimeFormat("en-CA", {
 export function momentoDelPedido(p: FechaPedido): string {
   const dia = diaDelPedido(p);
   const texto = String(p.fecha_pedido ?? "").trim();
+  const sinZona = HORA_DE_RELOJ.exec(texto);
+  if (sinZona) return `${sinZona[1]}T${sinZona[2]}${sinZona[3] ?? ":00"}`;
   const instante = new Date(texto);
   if (texto.length <= 10 || Number.isNaN(instante.getTime())) return `${dia}T00:00:00`;
   if (horaDeLaWeb(p)) return instante.toISOString().slice(0, 19);
@@ -119,4 +134,15 @@ export function tramoDeConsulta(desde: string, hasta: string): { desde: string; 
 export function pedidoEnDias(p: FechaPedido, desde: string, hasta: string): boolean {
   const dia = diaDelPedido(p);
   return dia >= desde && dia <= hasta;
+}
+
+/**
+ * Si el día del pedido cae en un rango del selector de periodo (ver
+ * periodos.ts): del día de `desde` al de `hasta`, los dos incluidos. Así las
+ * pantallas que filtran por periodo, o que reparten en días o en meses,
+ * cuentan cada pedido en el día de su ticket, como la lista de pedidos.
+ */
+export function pedidoEnRango(p: FechaPedido, r: Rango): boolean {
+  const dias = diasDelRango(r);
+  return dias !== null && pedidoEnDias(p, dias.desde, dias.hasta);
 }

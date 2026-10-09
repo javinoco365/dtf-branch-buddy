@@ -19,6 +19,7 @@ import {
   type PedidoResumen,
 } from "./kpis";
 import { TIENDA_TEXTIL } from "./cobros";
+import { diaDelPedido } from "./dia-pedido";
 import { diasDesde, type PedidoPendiente } from "./pendientes";
 import type { CobroConsolidado } from "./facturacion";
 
@@ -253,12 +254,23 @@ export function desglose(
 
 const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
-/** Lo vendido según el día de la semana del pedido, de lunes a domingo. */
+/** 0 el lunes, 6 el domingo, de un día 'yyyy-mm-dd'. */
+function diaDeLaSemana(dia: string): number {
+  const [a, m, d] = dia.split("-").map(Number);
+  return (new Date(Date.UTC(a, m - 1, d)).getUTCDay() + 6) % 7;
+}
+
+/**
+ * Lo vendido según el día de la semana del pedido, de lunes a domingo. El día
+ * del pedido, el de su ticket (ver dia-pedido.ts): un pedido web del domingo a
+ * las 23:15 es del domingo, no del lunes.
+ */
 export function porDiaSemana(
   ventas: readonly Venta[],
 ): { dia: string; pedidos: number; vendido: number }[] {
+  const semana = ventas.map((v) => diaDeLaSemana(diaDelPedido(v)));
   return DIAS_SEMANA.map((dia, i) => {
-    const delDia = ventas.filter((v) => (new Date(v.fecha_pedido).getDay() + 6) % 7 === i);
+    const delDia = ventas.filter((_, j) => semana[j] === i);
     const k = calcularKpis(delDia);
     return { dia, pedidos: k.pedidos, vendido: k.total };
   });

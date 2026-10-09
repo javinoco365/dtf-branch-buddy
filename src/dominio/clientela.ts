@@ -10,7 +10,8 @@
 
 import { redondear } from "./importes";
 import { ESTADO_CANCELADO, totalNeto } from "./kpis";
-import { enRango } from "./periodos";
+import { diasDelRango } from "./periodos";
+import { momentoDelPedido, pedidoEnRango } from "./dia-pedido";
 import { diasDesde } from "./pendientes";
 import { diaLocal } from "./facturacion";
 import type { Canal, Venta } from "./gerencia";
@@ -42,7 +43,11 @@ type Acumulado = {
   cliente_id: string;
   vendido: number;
   pedidos: number;
-  /** `fecha_pedido` del primero y del último. */
+  /**
+   * El momento del primero y del último en el reloj de España
+   * ('yyyy-mm-ddThh:mm:ss', ver momentoDelPedido): así se comparan bien un
+   * pedido web, uno del CRM y uno textil, y su día es el de su ticket.
+   */
   primera: string;
   ultima: string;
 };
@@ -57,6 +62,7 @@ function porCliente(ventas: readonly VentaCliente[]): Map<string, Acumulado> {
     if (!clave || !vendida(v)) continue;
     const a = mapa.get(clave);
     const nombre = v.cliente_nombre?.trim() || "Sin nombre";
+    const momento = momentoDelPedido(v);
     if (!a) {
       mapa.set(clave, {
         clave,
@@ -65,16 +71,16 @@ function porCliente(ventas: readonly VentaCliente[]): Map<string, Acumulado> {
         cliente_id: v.cliente_id!,
         vendido: totalNeto(v),
         pedidos: 1,
-        primera: v.fecha_pedido,
-        ultima: v.fecha_pedido,
+        primera: momento,
+        ultima: momento,
       });
       continue;
     }
     a.vendido += totalNeto(v);
     a.pedidos += 1;
-    if (v.fecha_pedido < a.primera) a.primera = v.fecha_pedido;
-    if (v.fecha_pedido >= a.ultima) {
-      a.ultima = v.fecha_pedido;
+    if (momento < a.primera) a.primera = momento;
+    if (momento >= a.ultima) {
+      a.ultima = momento;
       // El nombre del pedido más reciente: si se corrigió, el bueno.
       a.nombre = nombre;
       a.canal = v.canal;
@@ -90,7 +96,7 @@ export type ClientePeriodo = {
   nombre: string;
   vendido: number;
   pedidos: number;
-  /** Primer pedido de su historia, no del periodo. */
+  /** Primer pedido de su historia, no del periodo: su momento en el reloj de España. */
   primera: string;
   /** Si su primer pedido cae en el periodo. */
   nuevo: boolean;
@@ -122,7 +128,9 @@ export type ResumenClientes = {
  */
 export function resumenClientes(historial: readonly VentaCliente[], r: Rango): ResumenClientes {
   const historia = porCliente(historial);
-  const delPeriodo = historial.filter((v) => enRango(v.fecha_pedido, r));
+  // Por el día del pedido, como el resto de Gerencia (ver dia-pedido.ts).
+  const delPeriodo = historial.filter((v) => pedidoEnRango(v, r));
+  const dias = diasDelRango(r);
   const periodo = porCliente(delPeriodo);
 
   let vendidoNuevos = 0;
@@ -143,7 +151,8 @@ export function resumenClientes(historial: readonly VentaCliente[], r: Rango): R
   let acumulado = 0;
   const ranking: ClientePeriodo[] = ordenados.map((c) => {
     const primera = historia.get(c.clave)?.primera ?? c.primera;
-    const nuevo = enRango(primera, r);
+    const nuevo =
+      dias !== null && primera.slice(0, 10) >= dias.desde && primera.slice(0, 10) <= dias.hasta;
     if (nuevo) {
       nuevos += 1;
       vendidoNuevos += c.vendido;
