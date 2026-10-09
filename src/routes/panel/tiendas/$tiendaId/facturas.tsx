@@ -53,7 +53,6 @@ import {
   contadoresDeSerie,
   canjearTicket,
   emitirFactura,
-  generarTicket80,
   generarYSubirFacturaPDF,
   rellenarPdfsTienda,
 } from "@/lib/facturas.functions";
@@ -77,7 +76,6 @@ import {
   FileCheck2,
   Loader2,
   Mail,
-  Printer,
   Undo2,
 } from "lucide-react";
 
@@ -100,7 +98,6 @@ function Facturas() {
   const [generandoId, setGenerandoId] = useState<string | null>(null);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const rellenarFn = useServerFn(rellenarPdfsTienda);
-  const ticket80Fn = useServerFn(generarTicket80);
   const [porCorreo, setPorCorreo] = useState<any>(null);
   const [canjeando, setCanjeando] = useState<any>(null);
   const canjearFn = useServerFn(canjearTicket);
@@ -409,30 +406,6 @@ function Facturas() {
                           <Download className="h-4 w-4" />
                         )}
                       </Button>
-                      {f.tipo === "simplificada" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="Ticket en 80 mm"
-                          aria-label="Ticket en 80 mm"
-                          onClick={async () => {
-                            // La pestaña se abre antes de la llamada: al volver de
-                            // la red el navegador ya no deja abrir ventanas.
-                            const ventana = window.open("", "_blank");
-                            try {
-                              const r = await ticket80Fn({ data: { factura_id: f.id } });
-                              if (!r.url) throw new Error("No se pudo obtener el ticket");
-                              if (ventana) ventana.location.href = r.url;
-                              else window.location.href = r.url;
-                            } catch (e: any) {
-                              ventana?.close();
-                              toast.error(e?.message ?? "No se pudo generar el ticket");
-                            }
-                          }}
-                        >
-                          <Printer className="h-4 w-4" />
-                        </Button>
-                      )}
                       <Button
                         size="sm"
                         variant="ghost"

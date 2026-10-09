@@ -24,12 +24,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, FileCheck2, FileText, Loader2, Printer, Trash2, Undo2 } from "lucide-react";
+import { Download, FileCheck2, FileText, Loader2, Trash2, Undo2 } from "lucide-react";
 import {
   listTextilFacturas,
   deleteTextilFactura,
   generarPdfFacturaTextil,
-  generarTicket80Textil,
   urlFacturaTextil,
   rellenarPdfsTextil,
   canjearTicketTextil,
@@ -127,7 +126,6 @@ function FacturasPage() {
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
   const rellenarFn = useServerFn(rellenarPdfsTextil);
-  const ticket80Fn = useServerFn(generarTicket80Textil);
   const canjearFn = useServerFn(canjearTicketTextil);
   const anularFn = useServerFn(anularTicketTextil);
   const [canjeando, setCanjeando] = useState<any>(null);
@@ -157,20 +155,6 @@ function FacturasPage() {
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo anular"),
   });
-
-  /** El ticket en 80 mm, con la pestaña abierta antes de la llamada por lo mismo que abajo. */
-  async function abrirTicket80(factura: any) {
-    const ventana = window.open("", "_blank");
-    try {
-      const { url } = await ticket80Fn({ data: { factura_id: factura.id } });
-      if (!url) throw new Error("No se pudo obtener el ticket");
-      if (ventana) ventana.location.href = url;
-      else window.location.href = url;
-    } catch (e: any) {
-      ventana?.close();
-      toast.error(e?.message ?? "No se pudo generar el ticket");
-    }
-  }
 
   /**
    * Genera el PDF si hace falta y lo abre.
@@ -318,17 +302,6 @@ function FacturasPage() {
                         <FileText className="h-4 w-4" />
                       )}
                     </Button>
-                    {f.tipo === "simplificada" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Ticket en 80 mm"
-                        aria-label="Ticket en 80 mm"
-                        onClick={() => abrirTicket80(f)}
-                      >
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                    )}
                     {situaciones.get(f.id)?.admite_cambios && (
                       <>
                         <Button

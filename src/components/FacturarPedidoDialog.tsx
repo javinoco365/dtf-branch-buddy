@@ -4,7 +4,6 @@ import { DocumentoPedidoDialog } from "@/components/documentos/DocumentoPedidoDi
 import {
   emitirFactura,
   emitirTicket,
-  generarTicket80,
   generarYSubirFacturaPDF,
   prepararFacturaPedido,
 } from "@/lib/facturas.functions";
@@ -28,7 +27,6 @@ export function FacturarPedidoDialog({
   const emitirFacturaFn = useServerFn(emitirFactura);
   const emitirTicketFn = useServerFn(emitirTicket);
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
-  const ticket80Fn = useServerFn(generarTicket80);
 
   return (
     <DocumentoPedidoDialog
@@ -73,11 +71,8 @@ export function FacturarPedidoDialog({
           },
         });
       }}
-      abrirPdf={async (id, documento) =>
-        documento === "ticket"
-          ? (await ticket80Fn({ data: { factura_id: id } })).url
-          : ((await generarPDFFn({ data: { factura_id: id } }))?.url ?? null)
-      }
+      // Ticket o factura, siempre en A4: el ticket sale como factura simplificada.
+      abrirPdf={async (id) => (await generarPDFFn({ data: { factura_id: id } }))?.url ?? null}
       alEmitir={() => {
         qc.invalidateQueries({ queryKey: ["facturas"] });
         qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });

@@ -56,9 +56,10 @@ export type FacturaPDFData = {
  * La factura o el ticket en A4: el PDF que se guarda como definitivo, el que
  * va en el ZIP del archivo y el que se manda por correo.
  *
- * Un ticket (`simplificada`) sale como el de 80 mm: cada línea con su importe
- * sin IVA, su base congelada, y debajo la suma: «Base =», una línea «IVA X %
- * =» por cada tipo del desglose congelado y «TOTAL =». Todas las cifras son
+ * Un ticket (`simplificada`) sale como FACTURA SIMPLIFICADA, siempre en A4:
+ * cada línea con su importe sin IVA, su base congelada, y debajo la suma:
+ * «Base =», una línea «IVA X % =» por cada tipo del desglose congelado y
+ * «TOTAL =». Todas las cifras son
  * las congeladas al emitir; aquí no se recalcula ninguna. Una factura
  * ordinaria o rectificativa sale como siempre.
  */
@@ -174,8 +175,8 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
   const xR = W - 15;
   doc.setFont("helvetica", "normal");
   if (pie) {
-    // La suma del ticket, como la del de 80 mm: base, el IVA de cada tipo y
-    // el total, como se congelaron.
+    // La suma del ticket: base, el IVA de cada tipo y el total, como se
+    // congelaron.
     doc.text("Base =", xR - 50, finalY);
     doc.text(eur(pie.base), xR, finalY, { align: "right" });
     pie.iva.forEach((r, i) => {

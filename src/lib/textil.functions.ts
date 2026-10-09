@@ -5,7 +5,7 @@ import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import type { Cobro } from "./cobros.functions";
-import type { TicketPDFData } from "@/lib/pdf-ticket";
+import type { FacturaPDFData } from "@/lib/pdf-factura";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
@@ -741,6 +741,7 @@ export const deleteTextilFactura = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     await adminComoUsuario(context.userId)
       .storage.from("facturas")
+      // También el de 80 mm que se generaba antes, si lo hay.
       .remove([`textil/${data.id}.pdf`, `textil/${data.id}-80mm.pdf`]);
     return { ok: true, referencia: r.referencia };
   });
@@ -1004,8 +1005,7 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
   const emisor = (factura.emisor_snapshot ?? {}) as Record<string, string | null>;
   const receptor = (factura.receptor_snapshot ?? {}) as Record<string, string | null>;
 
-  const pdfData: TicketPDFData = {
-    nombre_comercial: emisor.nombre_comercial ?? null,
+  const pdfData: FacturaPDFData = {
     desglose: Array.isArray(factura.desglose_iva)
       ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
           tipo: Number(r.tipo),
@@ -1016,7 +1016,7 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
     referencia: factura.numero,
     // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
     titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
-    // Y en A4 sale como el de 80 mm: líneas sin IVA y Base / IVA / TOTAL.
+    // Y lleva las líneas sin IVA y la suma Base / IVA / TOTAL.
     simplificada: factura.tipo === "simplificada",
     logo: await descargarLogo(emisor.logo_url),
     fecha: factura.fecha ?? new Date().toISOString(),
@@ -1388,35 +1388,6 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
       fecha,
       pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id),
     };
-  });
-
-/** El ticket textil en 80 mm, para la impresora térmica. URL de un rato. */
-export const generarTicket80Textil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { generarTicketPDF } = await import("@/lib/pdf-ticket");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { factura, pdfData } = await leerDatosPdfTextil(
-      supabaseAdmin,
-      data.factura_id,
-      context.userId,
-    );
-
-    const blob = await generarTicketPDF(pdfData);
-    const ruta = `textil/${factura.id}-80mm.pdf`;
-    const { error } = await supabaseAdmin.storage
-      .from("facturas")
-      .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (error) throw new Error(`No se pudo guardar el ticket: ${error.message}`);
-    const { data: firmada } = await supabaseAdmin.storage
-      .from("facturas")
-      .createSignedUrl(ruta, 60 * 10);
-    return { url: (firmada?.signedUrl as string | undefined) ?? null };
   });
 
 // ============ CANJE Y ANULACIÓN DE TICKETS ============

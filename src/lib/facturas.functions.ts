@@ -2,8 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { llamarRpc, tabla } from "./rpc";
-import { generarFacturaPDF } from "@/lib/pdf-factura";
-import type { TicketPDFData } from "@/lib/pdf-ticket";
+import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 import { descargarLogo } from "@/lib/logo-descarga";
 import { referenciaFactura } from "@/lib/format";
 import { rutaPdfTienda } from "@/lib/rutas-pdf";
@@ -95,9 +94,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   // aunque la tienda cambie de logo después.
   const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
 
-  const emisorSnapshot = (factura.emisor_snapshot ?? {}) as { nombre_comercial?: string };
-  const pdfData: TicketPDFData = {
-    nombre_comercial: emisorSnapshot.nombre_comercial ?? null,
+  const pdfData: FacturaPDFData = {
     desglose: Array.isArray(factura.desglose_iva)
       ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
           tipo: Number(r.tipo),
@@ -108,7 +105,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     referencia: referenciaFactura(factura.serie, factura.ejercicio, factura.numero),
     // Un ticket dice lo que es: factura simplificada (RD 1619/2012 art. 7.2).
     titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
-    // Y en A4 sale como el de 80 mm: líneas sin IVA y Base / IVA / TOTAL.
+    // Y lleva las líneas sin IVA y la suma Base / IVA / TOTAL.
     simplificada: factura.tipo === "simplificada",
     logo: await descargarLogo(logoUrl),
     fecha: factura.fecha ?? new Date().toISOString(),
@@ -292,39 +289,6 @@ export const rellenarPdfsTienda = createServerFn({ method: "POST" })
       fallidos,
       quedan: Math.max(0, (count ?? 0) - generados - fallidos.length),
     };
-  });
-
-/**
- * El ticket en 80 mm, para la impresora térmica. Se genera cada vez desde lo
- * congelado en la factura y se devuelve una URL de un rato para abrirlo.
- */
-export const generarTicket80 = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const { generarTicketPDF } = await import("@/lib/pdf-ticket");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { factura, pdfData } = await leerDatosPdfFactura(
-      supabaseAdmin,
-      data.factura_id,
-      context.userId,
-    );
-
-    const blob = await generarTicketPDF(pdfData);
-    const path = `${factura.tienda_id}/${factura.id}-80mm.pdf`;
-    const { error: upErr } = await supabaseAdmin.storage
-      .from("facturas")
-      .upload(path, new Uint8Array(await blob.arrayBuffer()), {
-        contentType: "application/pdf",
-        upsert: true,
-      });
-    if (upErr) throw new Error(`Error subiendo el ticket: ${upErr.message}`);
-
-    const { data: firmada } = await supabaseAdmin.storage
-      .from("facturas")
-      .createSignedUrl(path, 60 * 10);
-    return { url: (firmada?.signedUrl as string | undefined) ?? null };
   });
 
 /**
@@ -1207,6 +1171,7 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
         .storage.from("facturas")
         .remove([
           `${carpeta}/${data.factura_id}.pdf`,
+          // El de 80 mm que se generaba antes, si lo hay.
           `${carpeta}/${data.factura_id}-80mm.pdf`,
           `${carpeta}/borradores/${data.factura_id}.pdf`,
         ]);
