@@ -963,7 +963,8 @@ function RevisarCompra({
   const set = (cambios: Partial<CompraLeida>) =>
     onCambiar({ ...estado, compra: { ...compra, ...cambios } });
 
-  // Al cambiar la cantidad o el coste, el importe de la línea se recalcula.
+  // Al cambiar la cantidad o el coste, el importe de la línea se recalcula;
+  // al cambiar el importe (uno con descuento), el coste unitario.
   const setLinea = (i: number, cambios: Partial<CompraLeida["lineas"][number]>) =>
     set({ lineas: compra.lineas.map((l, j) => (i === j ? cambiarLineaCompra(l, cambios) : l)) });
 
@@ -1189,8 +1190,14 @@ function RevisarCompra({
                   onChange={(e) => setLinea(i, { precio_unitario: Number(e.target.value) })}
                 />
               </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {eur(Number(l.importe))}
+              <TableCell>
+                <Input
+                  type="number"
+                  step="any"
+                  className="text-right"
+                  value={l.importe}
+                  onChange={(e) => setLinea(i, { importe: Number(e.target.value) })}
+                />
               </TableCell>
               {esTextil && (
                 <TableCell>

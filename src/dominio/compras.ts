@@ -257,14 +257,52 @@ export function importeLineaCompra(l: { cantidad: Numerico; precio_unitario: Num
 }
 
 /**
- * Una línea después de que la corrija quien revisa la factura. Si cambia la
- * cantidad o el coste unitario, el importe se calcula otra vez; si solo cambia
- * el concepto, se queda el que tenía (el leído del papel, aunque no cuadre:
- * eso ya lo avisa revisarCompra).
+ * Decimales del coste unitario que sale de dividir un importe: los mismos con
+ * que normalizarCompra (factura-compra.ts) deduce el coste de una lectura.
+ */
+export const DECIMALES_COSTE_UNITARIO = 4;
+
+/**
+ * El coste unitario que explica el importe de una línea: importe / cantidad,
+ * a cuatro decimales. Un importe con descuento (27 € por 3 unidades de 10 €)
+ * da 9 €. Sin cantidad no se puede dividir: nulo.
+ *
+ * Con muchas unidades, cuatro decimales pueden no devolver el importe exacto
+ * (1.234,56 € / 1.000 = 1,2346; × 1.000 = 1.234,60): revisarCompra lo avisa,
+ * y la línea se queda con el importe escrito.
+ */
+export function costeUnitarioDeImporte(l: {
+  cantidad: Numerico;
+  importe: Numerico;
+}): number | null {
+  const cantidad = num(l.cantidad);
+  if (cantidad === 0) return null;
+  return redondear(num(l.importe) / cantidad, DECIMALES_COSTE_UNITARIO);
+}
+
+/**
+ * Una línea después de que la corrija quien revisa la factura:
+ *
+ * - Si cambia el importe, se queda el escrito y el coste unitario se calcula
+ *   otra vez (importe / cantidad). Así cabe el importe del papel aunque lleve
+ *   descuento. Con cantidad 0 el coste se queda como estaba (revisarCompra ya
+ *   avisa de la cantidad).
+ * - Si cambia la cantidad o el coste unitario, el importe se calcula otra vez
+ *   (cantidad × coste).
+ * - Si solo cambia el concepto, se queda el importe que tenía (el leído del
+ *   papel, aunque no cuadre: eso ya lo avisa revisarCompra).
+ *
+ * Si llegan a la vez el importe y el coste, se quedan los dos como vienen.
  */
 export function cambiarLineaCompra<L extends LineaLeida>(linea: L, cambios: Partial<L>): L {
   const nueva = { ...linea, ...cambios };
-  return "cantidad" in cambios || "precio_unitario" in cambios
+  const cambiaImporte = "importe" in cambios;
+  const cambiaCoste = "precio_unitario" in cambios;
+  if (cambiaImporte && !cambiaCoste) {
+    return { ...nueva, precio_unitario: costeUnitarioDeImporte(nueva) ?? nueva.precio_unitario };
+  }
+  if (cambiaImporte) return nueva;
+  return "cantidad" in cambios || cambiaCoste
     ? { ...nueva, importe: importeLineaCompra(nueva) }
     : nueva;
 }
