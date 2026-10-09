@@ -579,6 +579,11 @@ export function inicioHistorial303(d: {
  * Y solo desde el trimestre de `primeraVenta` (`inicioHistorial303`): los
  * trimestres de antes salen sin 303 (`sinVentas`) y no dejan nada a
  * compensar.
+ *
+ * Con `compensar: false` (no se ha podido leer la primera venta, así que no
+ * se sabe desde cuándo compensar) no se compensa nada: cada 303 sale tal
+ * cual, repercutido − soportado, sin descontar lo de antes ni dejar nada
+ * pendiente, y `primeraVenta` no se mira.
  */
 export function impuestosPorTrimestre(d: {
   rango: { desde: Date; hasta: Date };
@@ -590,6 +595,8 @@ export function impuestosPorTrimestre(d: {
   datosDesde?: Date;
   /** `yyyy-MM-dd` del primer documento de venta emitido del CRM; nulo si no hay ninguno. */
   primeraVenta: string | null;
+  /** Falso si no se sabe desde cuándo compensar: el 303 sale sin compensar. */
+  compensar?: boolean;
 }): ImpuestosTrimestre[] {
   const absorbidas = comprasAbsorbidas(d.gastos);
   // Para casar un canje vale cualquier documento conocido, sea del trimestre o no.
@@ -597,8 +604,10 @@ export function impuestosPorTrimestre(d: {
   const primero = trimestreDe(d.rango.desde);
   const desde = primerTrimestreConDatos(d.rango, d.datosDesde);
   const todos = trimestresDelRango({ desde: desde.desde, hasta: d.rango.hasta });
+  const compensar = d.compensar !== false;
   const inicio = inicioHistorial303(d);
-  const sinVentas = (t: Trimestre) => !inicio || t.desde < inicio.trimestre.desde;
+  // Sin saber cuál fue la primera venta, ningún trimestre se da por «sin ventas».
+  const sinVentas = (t: Trimestre) => compensar && (!inicio || t.desde < inicio.trimestre.desde);
 
   const calculados = todos.map((t) => {
     const repercutido = resumenIva(
@@ -633,8 +642,9 @@ export function impuestosPorTrimestre(d: {
     };
   });
 
-  // Solo se compensa desde la primera venta: lo de antes no deja nada.
-  const conVentas = calculados.filter((c) => !c.sinVentas);
+  // Solo se compensa desde la primera venta: lo de antes no deja nada. Y
+  // sin saber desde cuándo, nada.
+  const conVentas = compensar ? calculados.filter((c) => !c.sinVentas) : [];
   const compensaciones = new Map(
     compensar303(
       conVentas.map((c) => ({
@@ -645,10 +655,12 @@ export function impuestosPorTrimestre(d: {
   );
   return calculados
     .map((c): ImpuestosTrimestre => {
+      const resultado = redondear(c.ivaRepercutido - c.ivaSoportado);
+      // Sin compensar: el 303 tal cual, sin descontar nada ni dejar nada pendiente.
       const compensacion: Compensacion303 = compensaciones.get(c) ?? {
-        resultado: redondear(c.ivaRepercutido - c.ivaSoportado),
+        resultado,
         compensado: 0,
-        aIngresar: 0,
+        aIngresar: !c.sinVentas && resultado > 0 ? resultado : 0,
         pendiente: 0,
         trimestresPendientes: 0,
         pendienteDesde: null,

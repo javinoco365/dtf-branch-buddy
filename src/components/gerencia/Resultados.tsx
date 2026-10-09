@@ -14,7 +14,11 @@ import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
 import { useFiscal, usePrimeraVenta } from "@/lib/gerencia";
-import { DEFINICIONES, definicionImpuestosTrimestre } from "@/dominio/definiciones";
+import {
+  DEFINICIONES,
+  definicionImpuestosTrimestre,
+  TEXTO_SIN_PRIMERA_VENTA,
+} from "@/dominio/definiciones";
 import { enRango } from "@/dominio/periodos";
 import {
   facturadoSinPedido,
@@ -47,8 +51,10 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     [trimestres],
   );
   const fiscal = useFiscal(rangoLectura);
-  // Solo se compensa desde la primera venta documentada del CRM.
+  // Solo se compensa desde la primera venta documentada del CRM. Si no se
+  // puede leer, la pestaña se ve igual: el 303 sale sin compensar y se dice.
   const primeraVenta = usePrimeraVenta();
+  const sinPrimeraVenta = primeraVenta.data === undefined && primeraVenta.isError;
   // Para casar canjes vale cualquier documento leído, sea del periodo o no.
   const referencias = useMemo(
     () => (fiscal.data ? [...fiscal.data.documentos, ...fiscal.data.referencias] : []),
@@ -99,7 +105,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   );
   const impuestos = useMemo(
     () =>
-      fiscal.data && primeraVenta.data !== undefined
+      fiscal.data && (primeraVenta.data !== undefined || sinPrimeraVenta)
         ? impuestosPorTrimestre({
             rango: d.rango,
             documentos: fiscal.data.documentos,
@@ -108,12 +114,14 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             gastos: d.gastos,
             cuotaIsAnterior: d.ajustes.cuota_is_anterior,
             datosDesde: rangoLectura.desde,
-            primeraVenta: primeraVenta.data,
+            primeraVenta: primeraVenta.data ?? null,
+            compensar: !sinPrimeraVenta,
           })
         : null,
     [
       fiscal.data,
       primeraVenta.data,
+      sinPrimeraVenta,
       d.rango,
       d.gastos,
       d.ajustes.cuota_is_anterior,
@@ -123,16 +131,18 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   // El ⓘ dice desde qué trimestre se compensa.
   const definicionImpuestos = useMemo(
     () =>
-      primeraVenta.data !== undefined
-        ? definicionImpuestosTrimestre(
-            inicioHistorial303({
-              rango: d.rango,
-              datosDesde: rangoLectura.desde,
-              primeraVenta: primeraVenta.data,
-            }),
-          )
-        : DEFINICIONES.g_impuestos_trimestre,
-    [primeraVenta.data, d.rango, rangoLectura.desde],
+      sinPrimeraVenta
+        ? definicionImpuestosTrimestre("desconocido")
+        : primeraVenta.data !== undefined
+          ? definicionImpuestosTrimestre(
+              inicioHistorial303({
+                rango: d.rango,
+                datosDesde: rangoLectura.desde,
+                primeraVenta: primeraVenta.data,
+              }),
+            )
+          : DEFINICIONES.g_impuestos_trimestre,
+    [sinPrimeraVenta, primeraVenta.data, d.rango, rangoLectura.desde],
   );
 
   if (d.filtro.tienda !== "todas" || d.filtro.canal !== "todos") {
@@ -144,7 +154,6 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     );
   }
   if (fiscal.error) return <ErrorPestana que="las facturas" error={fiscal.error} />;
-  if (primeraVenta.error) return <ErrorPestana que="las facturas" error={primeraVenta.error} />;
   if (!impuestos || !cuentas) return <CargandoPestana />;
 
   const actual = trimestreDe(d.hoy);
@@ -237,6 +246,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
           pie={
             <span className="text-muted-foreground">
               {actual.numero}.º trimestre de {actual.anio}
+              {sinPrimeraVenta && " · 303 sin compensar"}
               {esteTrimestre &&
                 esteTrimestre.compensacion.pendiente > 0 &&
                 ` · quedan ${eur(esteTrimestre.compensacion.pendiente)} de IVA a compensar`}
@@ -373,6 +383,12 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             <p className="text-xs text-muted-foreground">
               Orientativo, con lo que hay en el CRM. Los presenta la gestoría.
             </p>
+            {sinPrimeraVenta && (
+              <p className="text-xs text-status-pendiente">
+                {TEXTO_SIN_PRIMERA_VENTA}
+                {primeraVenta.error ? ` (${primeraVenta.error.message})` : ""}.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <Table movil="tarjetas">

@@ -557,6 +557,40 @@ describe("el 303 solo se compensa desde la primera venta del CRM", () => {
     expect(anio.map((t) => t.aPagar)).toEqual([570, 570, 570, 570]);
   });
 
+  it("sin saber la primera venta, cada 303 sale tal cual, sin compensar", () => {
+    const sinCompensar = (rango: { desde: Date; hasta: Date }, primeraVenta: string | null) =>
+      impuestosPorTrimestre({
+        rango,
+        documentos: [venta],
+        compras: [],
+        gastos: [local],
+        cuotaIsAnterior: null,
+        datosDesde: inicioCompensacion(rango),
+        primeraVenta,
+        compensar: false,
+      });
+    // El cuarto: 2.000 − 630 = 1.370, sin descontar los alquileres de antes
+    // (con ventas desde 2025 se habría compensado entero, ver arriba).
+    const [t] = sinCompensar(q4, "2025-01-01");
+    expect(t.compensacion).toMatchObject({
+      resultado: 1370,
+      compensado: 0,
+      aIngresar: 1370,
+      pendiente: 0,
+      pendienteDesde: null,
+    });
+    expect(t.sinVentas).toBe(false);
+    expect(t.aPagar).toBe(1940);
+    // Todo el año: ningún trimestre se da por «sin ventas», los negativos salen
+    // a compensar y no se descuentan del cuarto ni dejan nada pendiente.
+    const anio = sinCompensar(anio2026, null);
+    expect(anio.map((x) => x.sinVentas)).toEqual([false, false, false, false]);
+    expect(anio.map(linea303)).toEqual([-630, -630, -630, 1370]);
+    expect(anio.map((x) => x.compensacion.compensado)).toEqual([0, 0, 0, 0]);
+    expect(anio.map((x) => x.compensacion.pendiente)).toEqual([0, 0, 0, 0]);
+    expect(anio.map((x) => x.aPagar)).toEqual([570, 570, 570, 1940]);
+  });
+
   it("desde qué trimestre se compensa, y por qué", () => {
     const datosDesde = inicioCompensacion(q4);
     expect(inicioHistorial303({ rango: q4, datosDesde, primeraVenta: null })).toBeNull();

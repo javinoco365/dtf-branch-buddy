@@ -379,23 +379,38 @@ export const DEFINICIONES = {
 export type ClaveDefinicion = keyof typeof DEFINICIONES;
 
 /**
+ * Lo que pasa con el 303 cuando no se ha podido leer la primera factura o
+ * ticket emitido del CRM. Sin punto final, para poder seguir la frase.
+ */
+export const TEXTO_SIN_PRIMERA_VENTA =
+  "No se ha podido leer la primera factura o ticket emitido del CRM, así que no se sabe desde cuándo compensar el IVA: cada 303 sale tal cual, repercutido − soportado, sin descontar lo que quedara a compensar de trimestres anteriores";
+
+/**
  * La definición de los impuestos por trimestre con lo de este caso: desde
  * qué trimestre se compensa el 303 y por qué (ver `inicioHistorial303`).
  * Nulo, si el CRM aún no tiene ninguna factura ni ticket emitido.
+ * «desconocido», si no se ha podido leer cuál fue la primera: entonces el
+ * 303 sale sin compensar (ver `impuestosPorTrimestre`).
  */
 export function definicionImpuestosTrimestre(
-  inicio: {
-    trimestre: { anio: number; numero: number };
-    motivo: "primera_venta" | "datos";
-  } | null,
+  inicio:
+    | {
+        trimestre: { anio: number; numero: number };
+        motivo: "primera_venta" | "datos";
+      }
+    | null
+    | "desconocido",
 ): Definicion {
   const base = DEFINICIONES.g_impuestos_trimestre;
-  const desde = inicio
-    ? `Aquí se compensa desde el ${inicio.trimestre.numero}.º trimestre de ${inicio.trimestre.anio}: ${
-        inicio.motivo === "primera_venta"
-          ? "el de la primera factura o ticket emitido en el CRM."
-          : "lo de antes ya habría caducado."
-      }`
-    : "El CRM aún no tiene ninguna factura ni ticket emitido: el 303 no se calcula y no hay nada a compensar.";
+  const desde =
+    inicio === "desconocido"
+      ? `${TEXTO_SIN_PRIMERA_VENTA}.`
+      : inicio
+        ? `Aquí se compensa desde el ${inicio.trimestre.numero}.º trimestre de ${inicio.trimestre.anio}: ${
+            inicio.motivo === "primera_venta"
+              ? "el de la primera factura o ticket emitido en el CRM."
+              : "lo de antes ya habría caducado."
+          }`
+        : "El CRM aún no tiene ninguna factura ni ticket emitido: el 303 no se calcula y no hay nada a compensar.";
   return { ...base, calculo: `${base.calculo} ${desde}` };
 }
