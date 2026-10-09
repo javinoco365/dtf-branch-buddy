@@ -28,9 +28,8 @@
 --   guardado»; «desde el principio» (ningún pedido aquí todavía) se guarda
 --   como 1970-01-01 00:00 UTC.
 --
---   Los clientes no necesitan columna: WooCommerce no deja filtrarlos por
---   fecha, y el cursor de clientes es el woo_customer_id más alto que ya está
---   en public.clientes para esa tienda.
+--   Los clientes no se pueden filtrar por fecha en WooCommerce: su cursor (por
+--   ids) lo añade 20261024110000 en esta misma tabla.
 --
 -- POR QUÉ UNA TABLA Y NO COLUMNAS EN tiendas
 --   tiendas está en la auditoría: cada página sincronizada escribiría una fila
@@ -44,11 +43,10 @@
 --   la RLS.
 --
 -- SIN ESTA MIGRACIÓN
---   La aplicación funciona igual: sin cursor guardado, empieza un día antes
---   del pedido de WooCommerce más reciente que ya hay aquí, y la pantalla de
---   Ajustes lleva el cursor de una tanda a la siguiente. Lo único que se
---   pierde es poder cortar una sincronización muy larga y seguirla otro día
---   desde el botón de Pedidos.
+--   La aplicación hace lo de antes: trae los 100 últimos pedidos, que nunca se
+--   atasca, y avisa de que falta esta migración. Lo que se pierde es traer
+--   todo lo cambiado desde la última vez (si entran más de 100 pedidos entre
+--   dos sincronizaciones, los más antiguos no llegan).
 --
 -- NO TOCA NINGUNA FILA EXISTENTE. Se puede aplicar dos veces.
 --

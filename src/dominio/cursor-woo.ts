@@ -303,9 +303,10 @@ export function otraPaginaDePedidos(
 }
 
 /**
- * Desde dónde empezar cuando no hay cursor guardado (la primera vez, o sin la
- * migración 20261024100000): un día antes del pedido más reciente que ya está
- * aquí.
+ * Desde dónde empezar la primera vez que hay dónde guardar el cursor (con la
+ * migración 20261024100000 aplicada y nada guardado todavía): un día antes del
+ * pedido más reciente que ya está aquí. Sin la migración no se usa: se traen
+ * los 100 últimos, como antes.
  *
  * `fecha_pedido` guarda la hora de la tienda como si fuera UTC, así que puede
  * ir unas horas por delante o por detrás de la GMT; el día de margen lo cubre.

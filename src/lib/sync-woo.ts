@@ -81,8 +81,11 @@ export function textoProtegidos(s: SumaSyncWoo): string | null {
  * Lo que ha quedado por traer después de UNA llamada, y cómo seguir. Para el
  * botón de Pedidos, que hace una sola tanda; `null` si no queda nada. Cada
  * llamada mueve los pedidos al menos una página, así que «volver a pulsar»
- * siempre avanza; cuando no seguiría por donde se quedó (sin la migración
- * 20261024110000), se dice qué hacer en su lugar (ver comoSeguirWoo).
+ * siempre avanza en los pedidos. Los clientes y los productos solo avanzan
+ * con el tiempo que sobre, que en una tienda lenta puede ser ninguno: para
+ * ellos se remite a «Sincronizar ahora» de los ajustes, que sigue tanda tras
+ * tanda. Cuando ni los pedidos seguirían por donde se quedaron (sin la
+ * migración 20261024110000), se dice qué hacer en su lugar (ver comoSeguirWoo).
  */
 export function textoQuedan(r: Pick<TandaSyncWoo, "quedan" | "siguiente" | "reanudable">) {
   const s = r.siguiente;
@@ -92,7 +95,17 @@ export function textoQuedan(r: Pick<TandaSyncWoo, "quedan" | "siguiente" | "rean
   if (s.clientes) partes.push("clientes nuevos");
   if (s.productos) partes.push("productos");
   const queda = `Queda por traer: ${partes.join(", ")}.`;
-  if (r.reanudable) return `${queda} Vuelve a pulsar «Sincronizar» para seguir donde se quedó.`;
+  if (r.reanudable) {
+    const frases = [queda];
+    if (s.pedidos) frases.push("Vuelve a pulsar «Sincronizar» para seguir con los pedidos.");
+    if (s.clientes || s.productos) {
+      frases.push(
+        "Los clientes nuevos y los productos que falten se completan con «Sincronizar ahora», " +
+          "en los ajustes de la tienda: sigue tanda tras tanda hasta el final.",
+      );
+    }
+    return frases.join(" ");
+  }
   const como = comoSeguirWoo(s, r.reanudable);
   const frases = [queda];
   if (como.pulsar) frases.push("Vuelve a pulsar «Sincronizar» para seguir con el resto.");
