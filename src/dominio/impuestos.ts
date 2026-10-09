@@ -7,7 +7,8 @@
  * nóminas) y entrega a Hacienda en su nombre:
  *
  *   - 303, IVA: el repercutido en facturas menos el soportado en compras y
- *     gastos. Positivo, a ingresar; negativo, a compensar.
+ *     gastos. Positivo, a ingresar; negativo, a compensar en los siguientes
+ *     (ver `compensar303`).
  *   - 111, retenciones de profesionales y nóminas.
  *   - 115, retenciones del alquiler del local.
  *   - 202, pagos fraccionados de Sociedades: 18 % de la cuota del último
@@ -268,7 +269,11 @@ export function pagoFraccionado(cuotaAnterior: number | null | undefined): numbe
 export type LineaCalendario = {
   modelo: "303" | "111" | "115" | "202";
   concepto: string;
-  /** Positivo: a pagar. Negativo (303): a compensar en el siguiente. */
+  /**
+   * Positivo: a pagar. Negativo (303): a compensar en los siguientes. En
+   * `impuestosPorTrimestre`, el 303 positivo ya descuenta lo que quedaba
+   * pendiente de compensar.
+   */
   importe: number;
   plazo: Date;
 };
@@ -276,6 +281,9 @@ export type LineaCalendario = {
 /**
  * Lo que se presenta por un trimestre. El 202 sale en el trimestre en que se
  * paga: el de abril en el segundo, los de octubre y diciembre en el cuarto.
+ *
+ * El 303 sale tal cual, repercutido − soportado, sin compensar lo de
+ * trimestres anteriores: eso lo hace `impuestosPorTrimestre`.
  */
 export function calendarioTrimestre(d: {
   trimestre: Trimestre;
@@ -368,6 +376,76 @@ export function cuentaResultados(d: {
 }
 
 // ---------------------------------------------------------------------------
+// Compensación del 303
+// ---------------------------------------------------------------------------
+
+/**
+ * Un 303 negativo no se cobra: se descuenta de los siguientes, del mismo año
+ * o de los siguientes, mientras no pasen cuatro años desde que se presentó
+ * (art. 99.Cinco de la Ley del IVA). Cuatro años son dieciséis trimestres.
+ */
+export const TRIMESTRES_PARA_COMPENSAR = 16;
+
+/** El 303 de un trimestre con lo que arrastra de los anteriores. */
+export type Compensacion303 = {
+  /** Repercutido − soportado del trimestre, sin compensar nada. */
+  resultado: number;
+  /** Lo pendiente de trimestres anteriores que se descuenta en este. */
+  compensado: number;
+  /** Lo que se ingresa: resultado − compensado. 0 si el resultado no es positivo. */
+  aIngresar: number;
+  /** Lo que queda por compensar al cerrar el trimestre, con lo de este. */
+  pendiente: number;
+  /** Cuántos 303 negativos, este incluido, tienen algo pendiente al cerrar. */
+  trimestresPendientes: number;
+};
+
+const ordinal = (t: Pick<Trimestre, "anio" | "numero">) => t.anio * 4 + t.numero - 1;
+
+/**
+ * Compensa los 303 de unos trimestres, en orden. Lo negativo de un trimestre
+ * queda pendiente y se descuenta de lo positivo de los siguientes, primero lo
+ * más antiguo. Lo que lleva más de `TRIMESTRES_PARA_COMPENSAR` trimestres
+ * pendiente caduca y ya no se descuenta.
+ *
+ * Solo el 303: el 111, el 115 y el 202 no se compensan con el IVA.
+ */
+export function compensar303(
+  trimestres: readonly { trimestre: Pick<Trimestre, "anio" | "numero">; resultado: number }[],
+): Compensacion303[] {
+  // Lo pendiente, del más antiguo al más nuevo.
+  const pendientes: { origen: number; importe: number }[] = [];
+  return trimestres.map(({ trimestre, resultado }) => {
+    const n = ordinal(trimestre);
+    while (pendientes.length && n - pendientes[0].origen > TRIMESTRES_PARA_COMPENSAR) {
+      pendientes.shift();
+    }
+    const r = redondear(resultado);
+    let compensado = 0;
+    if (r > 0) {
+      let falta = r;
+      while (falta > 0 && pendientes.length) {
+        const p = pendientes[0];
+        const usa = Math.min(p.importe, falta);
+        p.importe = redondear(p.importe - usa);
+        falta = redondear(falta - usa);
+        compensado = redondear(compensado + usa);
+        if (p.importe <= 0) pendientes.shift();
+      }
+    } else if (r < 0) {
+      pendientes.push({ origen: n, importe: -r });
+    }
+    return {
+      resultado: r,
+      compensado,
+      aIngresar: r > 0 ? redondear(r - compensado) : 0,
+      pendiente: redondear(pendientes.reduce((s, p) => s + p.importe, 0)),
+      trimestresPendientes: pendientes.length,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Impuestos por trimestre
 // ---------------------------------------------------------------------------
 
@@ -378,10 +456,26 @@ export type ImpuestosTrimestre = {
   ivaSoportado: number;
   irpf111: number;
   irpf115: number;
+  /** Las del calendario, con el 303 ya compensado. */
   lineas: LineaCalendario[];
-  /** Lo que hay que pagar en total (un 303 a compensar no resta de los demás). */
+  /** El 303: su resultado, lo que compensa de antes y lo que queda a compensar. */
+  compensacion: Compensacion303;
+  /**
+   * Lo que hay que pagar en total, con el 303 ya compensado. Un 303 a
+   * compensar no resta de los demás modelos.
+   */
   aPagar: number;
 };
+
+/**
+ * Desde cuándo hay que leer documentos y compras para compensar el 303 de un
+ * rango: el principio del trimestre que queda `TRIMESTRES_PARA_COMPENSAR`
+ * antes del primero del rango. Lo anterior ya habría caducado.
+ */
+export function inicioCompensacion(r: { desde: Date }): Date {
+  const t = trimestreDe(r.desde);
+  return new Date(t.anio, (t.numero - 1) * 3 - TRIMESTRES_PARA_COMPENSAR * 3, 1);
+}
 
 /** Los trimestres naturales que toca un rango, en orden. */
 export function trimestresDelRango(r: { desde: Date; hasta: Date }): Trimestre[] {
@@ -403,6 +497,13 @@ const enTrimestre = (fecha: string | undefined, t: Trimestre) => {
 /**
  * Lo que se presenta por cada trimestre que toca el rango, con todo el
  * trimestre aunque el rango corte a mitad: los modelos son trimestrales.
+ *
+ * El 303 se compensa: lo negativo de un trimestre se descuenta de lo
+ * positivo de los siguientes (`compensar303`). Para lo que viene de antes
+ * del rango hacen falta los documentos y las compras de esos trimestres:
+ * `datosDesde` dice desde cuándo están en `documentos` y `compras` (ver
+ * `inicioCompensacion`). Se usan los trimestres enteros desde esa fecha. Sin
+ * ella, solo se compensa dentro del rango.
  */
 export function impuestosPorTrimestre(d: {
   rango: { desde: Date; hasta: Date };
@@ -410,13 +511,26 @@ export function impuestosPorTrimestre(d: {
   compras: readonly CompraResumen[];
   gastos: readonly GastoFijo[];
   cuotaIsAnterior: number | null | undefined;
+  datosDesde?: Date;
 }): ImpuestosTrimestre[] {
   const absorbidas = comprasAbsorbidas(d.gastos);
   // Los canjes se deciden con todos los documentos y no trimestre a trimestre:
   // si la rectificativa que anula la factura del canje cae en otro trimestre,
   // el ticket vuelve a contar igual.
   const canjeados = ticketsCanjeados(d.documentos);
-  return trimestresDelRango(d.rango).map((t) => {
+  const visibles = trimestresDelRango(d.rango);
+  const primero = visibles[0];
+  // Un trimestre a medias no se arrastra: empieza en el primero entero.
+  let desde = d.datosDesde ? trimestreDe(d.datosDesde) : primero;
+  if (d.datosDesde && desde.desde < d.datosDesde) {
+    desde = trimestreDe(new Date(desde.hasta.getFullYear(), desde.hasta.getMonth() + 1, 1));
+  }
+  const todos =
+    desde.desde < primero.desde
+      ? trimestresDelRango({ desde: desde.desde, hasta: d.rango.hasta })
+      : visibles;
+
+  const calculados = todos.map((t) => {
     const repercutido = resumenIva(
       d.documentos.filter((x) => enTrimestre(x.fecha, t)),
       canjeados,
@@ -445,7 +559,33 @@ export function impuestosPorTrimestre(d: {
       irpf111,
       irpf115: gastos.irpf115,
       lineas,
-      aPagar: redondear(lineas.reduce((s, l) => s + Math.max(0, l.importe), 0)),
     };
   });
+
+  const compensaciones = compensar303(
+    calculados.map((c) => ({
+      trimestre: c.trimestre,
+      resultado: redondear(c.ivaRepercutido - c.ivaSoportado),
+    })),
+  );
+  return calculados
+    .map((c, i): ImpuestosTrimestre => {
+      const compensacion = compensaciones[i];
+      // Solo el 303 se compensa; lo negativo sigue saliendo «a compensar».
+      const lineas = c.lineas.map((l) =>
+        l.modelo === "303"
+          ? {
+              ...l,
+              importe: compensacion.resultado < 0 ? compensacion.resultado : compensacion.aIngresar,
+            }
+          : l,
+      );
+      return {
+        ...c,
+        lineas,
+        compensacion,
+        aPagar: redondear(lineas.reduce((s, l) => s + Math.max(0, l.importe), 0)),
+      };
+    })
+    .filter((t) => t.trimestre.desde >= primero.desde);
 }

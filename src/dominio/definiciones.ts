@@ -370,9 +370,9 @@ export const DEFINICIONES = {
   g_impuestos_trimestre: {
     que: "Lo que se presenta a Hacienda por cada trimestre del periodo.",
     calculo:
-      "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura lo cuenta su factura) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
+      "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura lo cuenta su factura) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: queda a compensar y se descuenta de los 303 positivos siguientes, también de otros años, durante cuatro años; el importe de cada 303 ya lleva descontado lo pendiente, y lo que queda a compensar sale aparte. Solo se compensa el IVA: el 111, el 115 y el 202 se pagan enteros. (En el cuarto trimestre la gestoría puede pedir la devolución en vez de compensar; aquí se supone que se compensa.)",
     fuente:
-      "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
+      "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero; para lo que queda a compensar, también los de los cuatro años anteriores. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
   },
 } as const satisfies Record<string, Definicion>;
 

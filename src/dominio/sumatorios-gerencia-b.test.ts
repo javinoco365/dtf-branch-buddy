@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { pedidosPorEstado, type PedidoTaller } from "./produccion";
 import { comparacionCompras } from "./compras";
-import { trimestreDe, type ImpuestosTrimestre, type LineaCalendario } from "./impuestos";
+import {
+  trimestreDe,
+  type Compensacion303,
+  type ImpuestosTrimestre,
+  type LineaCalendario,
+} from "./impuestos";
 import {
   totalComparacion,
   totalImpuestos,
@@ -107,31 +112,74 @@ describe("totalImpuestos", () => {
     importe,
     plazo: new Date(2026, 9, 20),
   });
-  const trimestre = (mes: number, lineas: LineaCalendario[]): ImpuestosTrimestre => ({
+  const trimestre = (
+    mes: number,
+    lineas: LineaCalendario[],
+    compensacion: Partial<Compensacion303> = {},
+  ): ImpuestosTrimestre => ({
     trimestre: trimestreDe(new Date(2026, mes, 1)),
     ivaRepercutido: 0,
     ivaSoportado: 0,
     irpf111: 0,
     irpf115: 0,
     lineas,
+    compensacion: {
+      resultado: 0,
+      compensado: 0,
+      aIngresar: 0,
+      pendiente: 0,
+      trimestresPendientes: 0,
+      ...compensacion,
+    },
     aPagar: Math.round(lineas.reduce((s, l) => s + Math.max(0, l.importe), 0) * 100) / 100,
   });
 
-  it("lo que sale a compensar no resta de lo que hay que ingresar", () => {
+  it("lo que sale a compensar no resta de los otros modelos", () => {
     const t = totalImpuestos([
-      trimestre(6, [linea("303", -200), linea("111", 150), linea("115", 0)]),
-      trimestre(9, [linea("303", 300.1), linea("111", 50), linea("202", 18)]),
+      trimestre(6, [linea("303", -200), linea("111", 150), linea("115", 0)], {
+        resultado: -200,
+        pendiente: 200,
+        trimestresPendientes: 1,
+      }),
+      trimestre(9, [linea("303", 0), linea("111", 50), linea("202", 18)], {
+        resultado: 100,
+        compensado: 100,
+        pendiente: 100,
+        trimestresPendientes: 1,
+      }),
     ]);
+    // El 303 del cuarto ya llega compensado: 100 − 100 = 0, y quedan 100.
     expect(t).toEqual({
-      aIngresar: 518.1,
-      modelosAIngresar: 4,
-      aCompensar: 200,
+      aIngresar: 218,
+      modelosAIngresar: 3,
+      aCompensar: 100,
       modelosACompensar: 1,
     });
+  });
+
+  it("lo ya compensado no se cuenta como pendiente", () => {
+    const t = totalImpuestos([
+      trimestre(0, [linea("303", -300)], {
+        resultado: -300,
+        pendiente: 300,
+        trimestresPendientes: 1,
+      }),
+      trimestre(3, [linea("303", 200)], { resultado: 500, compensado: 300, aIngresar: 200 }),
+    ]);
+    expect(t).toEqual({ aIngresar: 200, modelosAIngresar: 1, aCompensar: 0, modelosACompensar: 0 });
   });
 
   it("sin nada negativo, no hay nada a compensar", () => {
     const t = totalImpuestos([trimestre(0, [linea("303", 10), linea("111", 0)])]);
     expect(t).toEqual({ aIngresar: 10, modelosAIngresar: 1, aCompensar: 0, modelosACompensar: 0 });
+  });
+
+  it("sin trimestres, todo a cero", () => {
+    expect(totalImpuestos([])).toEqual({
+      aIngresar: 0,
+      modelosAIngresar: 0,
+      aCompensar: 0,
+      modelosACompensar: 0,
+    });
   });
 });

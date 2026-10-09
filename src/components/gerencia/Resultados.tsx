@@ -23,20 +23,29 @@ import {
   resultadosPorGrupo,
   type ColumnaResultados,
 } from "@/dominio/grupos";
-import { impuestosPorTrimestre, trimestreDe, trimestresDelRango } from "@/dominio/impuestos";
+import {
+  impuestosPorTrimestre,
+  inicioCompensacion,
+  trimestreDe,
+  trimestresDelRango,
+} from "@/dominio/impuestos";
 import { comparacionCompras, comprasParaComparar } from "@/dominio/compras";
 import { totalComparacion, totalImpuestos } from "@/dominio/sumatorios-gerencia-b";
 import { DESTINO_AJUSTES, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
 
 export function Resultados({ d }: { d: DatosGerencia }) {
-  // Los modelos son trimestrales: se leen los trimestres enteros que toca el periodo.
+  // Los modelos son trimestrales: se leen los trimestres enteros que toca el
+  // periodo, y los cuatro años de antes para compensar los 303 negativos.
   const trimestres = useMemo(() => trimestresDelRango(d.rango), [d.rango]);
-  const rangoTrimestres = useMemo(
-    () => ({ desde: trimestres[0].desde, hasta: trimestres[trimestres.length - 1].hasta }),
+  const rangoLectura = useMemo(
+    () => ({
+      desde: inicioCompensacion(trimestres[0]),
+      hasta: trimestres[trimestres.length - 1].hasta,
+    }),
     [trimestres],
   );
-  const fiscal = useFiscal(rangoTrimestres);
+  const fiscal = useFiscal(rangoLectura);
 
   // Los gastos fijos del periodo, hasta hoy si está en curso: con
   // justificante van a A y sin él a B.
@@ -87,9 +96,10 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             compras: fiscal.data.compras ?? [],
             gastos: d.gastos,
             cuotaIsAnterior: d.ajustes.cuota_is_anterior,
+            datosDesde: rangoLectura.desde,
           })
         : null,
-    [fiscal.data, d.rango, d.gastos, d.ajustes.cuota_is_anterior],
+    [fiscal.data, d.rango, d.gastos, d.ajustes.cuota_is_anterior, rangoLectura.desde],
   );
 
   if (d.filtro.tienda !== "todas" || d.filtro.canal !== "todos") {
@@ -192,6 +202,9 @@ export function Resultados({ d }: { d: DatosGerencia }) {
           pie={
             <span className="text-muted-foreground">
               {actual.numero}.º trimestre de {actual.anio}
+              {esteTrimestre &&
+                esteTrimestre.compensacion.pendiente > 0 &&
+                ` · quedan ${eur(esteTrimestre.compensacion.pendiente)} de IVA a compensar`}
             </span>
           }
         />
@@ -349,6 +362,19 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                       <TableCell>
                         {l.modelo}
                         <span className="block text-xs text-muted-foreground">{l.concepto}</span>
+                        {l.modelo === "303" && t.compensacion.compensado > 0 && (
+                          <span className="block text-xs text-muted-foreground">
+                            Resultado {eur(t.compensacion.resultado)} −{" "}
+                            {eur(t.compensacion.compensado)} compensado de trimestres anteriores
+                          </span>
+                        )}
+                        {l.modelo === "303" &&
+                          t.compensacion.pendiente > 0 &&
+                          t.compensacion.pendiente !== -l.importe && (
+                            <span className="block text-xs text-muted-foreground">
+                              Quedan {eur(t.compensacion.pendiente)} a compensar
+                            </span>
+                          )}
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${l.importe < 0 ? "text-status-completado" : ""}`}
@@ -360,7 +386,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                   )),
                 )}
               </TableBody>
-              {/* Lo que sale a compensar no resta de lo que se ingresa: va en su propia fila. */}
+              {/* Los 303 ya llegan compensados; lo que queda a compensar al final no
+                  resta de los otros modelos: va en su propia fila. */}
               <TableFooter>
                 <TableRow>
                   <TableCell colSpan={2} className="font-bold">

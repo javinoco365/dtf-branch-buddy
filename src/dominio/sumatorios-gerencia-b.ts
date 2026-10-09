@@ -10,8 +10,9 @@
  * - Los pedidos cancelados no suman: se cuentan aparte, como en el resto de
  *   Gerencia (`calcularKpis`).
  * - En los impuestos, lo que sale a compensar (un 303 negativo) no resta de
- *   lo que hay que ingresar: se compensa en otro 303, no en el 111 ni en el
- *   115. Van por separado, como en `ImpuestosTrimestre.aPagar`.
+ *   lo que hay que ingresar en el 111 ni en el 115: se compensa en los 303
+ *   siguientes, que ya llegan compensados (`compensar303`). Lo que queda
+ *   por compensar va en su propia fila, como en `ImpuestosTrimestre.aPagar`.
  *
  * Lógica pura: recibe las filas que se ven y devuelve cifras redondeadas.
  */
@@ -100,28 +101,34 @@ export function totalComparacion(filas: readonly FilaComparada[]): TotalComparac
 
 /** El pie de «Impuestos por trimestre». */
 export type TotalImpuestos = {
-  /** Lo que hay que ingresar: la suma de lo positivo de cada modelo. */
+  /** Lo que hay que ingresar: la suma de lo positivo de cada modelo, con el 303 compensado. */
   aIngresar: number;
   /** Modelos con algo que ingresar. */
   modelosAIngresar: number;
-  /** Lo que sale a compensar (303 negativos), en positivo. */
+  /**
+   * Lo que queda a compensar al cerrar el último trimestre que se ve, en
+   * positivo: lo de los 303 negativos que los siguientes aún no han
+   * descontado, también lo de antes del periodo.
+   */
   aCompensar: number;
-  /** Modelos que salen a compensar. */
+  /** Los 303 negativos de los que queda algo por compensar. */
   modelosACompensar: number;
 };
 
 /**
  * Lo que hay que ingresar y lo que queda a compensar en los trimestres que se
  * ven. Lo que se ingresa es la suma de `aPagar` de cada trimestre, la misma
- * cifra que la tarjeta «A Hacienda este trimestre».
+ * cifra que la tarjeta «A Hacienda este trimestre». Lo que queda a compensar
+ * es lo pendiente al final, no la suma de los negativos: lo que ya se
+ * descontó de un 303 posterior no se vuelve a contar.
  */
 export function totalImpuestos(impuestos: readonly ImpuestosTrimestre[]): TotalImpuestos {
   const lineas = impuestos.flatMap((t) => t.lineas);
-  const negativas = lineas.filter((l) => l.importe < 0);
+  const ultimo = impuestos.length ? impuestos[impuestos.length - 1].compensacion : null;
   return {
     aIngresar: sumarImportes(impuestos, (t) => t.aPagar),
     modelosAIngresar: lineas.filter((l) => l.importe > 0).length,
-    aCompensar: sumarImportes(negativas, (l) => -l.importe),
-    modelosACompensar: negativas.length,
+    aCompensar: ultimo?.pendiente ?? 0,
+    modelosACompensar: ultimo?.trimestresPendientes ?? 0,
   };
 }

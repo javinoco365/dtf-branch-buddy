@@ -3,14 +3,17 @@ import { gastosFijosDelRango, type GastoFijo } from "./gerencia";
 import {
   calendarioTrimestre,
   cargosDelRango,
+  compensar303,
   cuentaResultados,
   impuestosDeCargos,
   impuestosPorTrimestre,
+  inicioCompensacion,
   trimestresDelRango,
   pagoFraccionado,
   plazoTrimestre,
   trimestreDe,
 } from "./impuestos";
+import type { CompraResumen, DocumentoFiscal } from "./fiscal";
 
 const d = (a: number, m: number, dia: number, h = 0) => new Date(a, m - 1, dia, h);
 const q4 = { desde: d(2026, 10, 1), hasta: new Date(2026, 11, 31, 23, 59, 59) };
@@ -285,5 +288,137 @@ describe("impuestos por trimestre", () => {
         doc("r1", "rectificativa", "2026-04-02", -1000, { rectifica_a_id: "f1" }),
       ]),
     ).toEqual([420, -210]);
+  });
+});
+
+describe("compensación del 303", () => {
+  const q = (anio: number, numero: 1 | 2 | 3 | 4) => ({ anio, numero });
+  const compensar = (...r: [ReturnType<typeof q>, number][]) =>
+    compensar303(r.map(([trimestre, resultado]) => ({ trimestre, resultado })));
+
+  it("T1 −300, T2 +500: el segundo paga 200", () => {
+    const [t1, t2] = compensar([q(2026, 1), -300], [q(2026, 2), 500]);
+    expect(t1).toEqual({
+      resultado: -300,
+      compensado: 0,
+      aIngresar: 0,
+      pendiente: 300,
+      trimestresPendientes: 1,
+    });
+    expect(t2).toEqual({
+      resultado: 500,
+      compensado: 300,
+      aIngresar: 200,
+      pendiente: 0,
+      trimestresPendientes: 0,
+    });
+  });
+
+  it("T1 −300, T2 +100, T3 +400: el segundo no paga y quedan 200; el tercero paga 200", () => {
+    const [, t2, t3] = compensar([q(2026, 1), -300], [q(2026, 2), 100], [q(2026, 3), 400]);
+    expect(t2).toMatchObject({ compensado: 100, aIngresar: 0, pendiente: 200 });
+    expect(t3).toMatchObject({ compensado: 200, aIngresar: 200, pendiente: 0 });
+  });
+
+  it("se arrastra al año siguiente", () => {
+    const [, t] = compensar([q(2026, 4), -300], [q(2027, 1), 100]);
+    expect(t).toMatchObject({ compensado: 100, aIngresar: 0, pendiente: 200 });
+  });
+
+  it("varios negativos se acumulan y se gasta primero el más antiguo", () => {
+    const [, t2, t3] = compensar([q(2026, 1), -100], [q(2026, 2), -50], [q(2026, 3), 120.5]);
+    expect(t2).toMatchObject({ aIngresar: 0, pendiente: 150, trimestresPendientes: 2 });
+    expect(t3).toMatchObject({
+      compensado: 120.5,
+      aIngresar: 0,
+      pendiente: 29.5,
+      trimestresPendientes: 1,
+    });
+  });
+
+  it("lo pendiente caduca a los cuatro años", () => {
+    const [, a, b] = compensar([q(2026, 1), -100], [q(2030, 1), 50], [q(2030, 2), 50]);
+    // El primero de 2030 aún está en plazo; el segundo, no.
+    expect(a).toMatchObject({ compensado: 50, aIngresar: 0, pendiente: 50 });
+    expect(b).toMatchObject({ compensado: 0, aIngresar: 50, pendiente: 0 });
+  });
+
+  it("un trimestre a cero no compensa ni deja nada", () => {
+    const [, t] = compensar([q(2026, 1), -10], [q(2026, 2), 0]);
+    expect(t).toMatchObject({ compensado: 0, aIngresar: 0, pendiente: 10 });
+  });
+});
+
+describe("impuestos por trimestre con el 303 compensado", () => {
+  const venta = (fecha: string, iva: number): DocumentoFiscal => ({
+    id: `v-${fecha}`,
+    tipo: "ordinaria",
+    estado: "emitida",
+    fecha,
+    tienda_id: "t",
+    base: iva / 0.21,
+    iva,
+    total: iva / 0.21 + iva,
+  });
+  // Una compra con IVA y una retención de profesional, que va al 111.
+  const compra = (fecha: string, iva: number, irpf = 0): CompraResumen => ({
+    id: `c-${fecha}`,
+    estado: "registrada",
+    fecha,
+    base: iva / 0.21,
+    iva,
+    irpf,
+    total: iva / 0.21 + iva - irpf,
+  });
+  const anio2026 = { desde: d(2026, 1, 1), hasta: new Date(2026, 11, 31, 23, 59, 59) };
+  const segundo = { desde: d(2026, 4, 1), hasta: new Date(2026, 5, 30, 23, 59, 59) };
+  const linea303 = (t: { lineas: { modelo: string; importe: number }[] }) =>
+    t.lineas.find((l) => l.modelo === "303")?.importe;
+
+  it("T1 −300, T2 +100, T3 +400: lo negativo se descuenta de los siguientes", () => {
+    const t = impuestosPorTrimestre({
+      rango: anio2026,
+      documentos: [venta("2026-05-10", 100), venta("2026-08-10", 400)],
+      compras: [compra("2026-02-10", 300, 50)],
+      gastos: [],
+      cuotaIsAnterior: null,
+    });
+    expect(t.map(linea303)).toEqual([-300, 0, 200, 0]);
+    expect(t.map((x) => x.compensacion.pendiente)).toEqual([300, 200, 0, 0]);
+    // El 111 del primero no se compensa con el IVA: se paga.
+    expect(t[0].lineas.find((l) => l.modelo === "111")?.importe).toBe(50);
+    expect(t.map((x) => x.aPagar)).toEqual([50, 0, 200, 0]);
+  });
+
+  it("lo de antes del rango cuenta si se pasan sus datos", () => {
+    const datos = {
+      documentos: [venta("2026-05-10", 500)],
+      compras: [compra("2026-02-10", 300)],
+      gastos: [],
+      cuotaIsAnterior: null,
+    };
+    const conHistoria = impuestosPorTrimestre({
+      ...datos,
+      rango: segundo,
+      datosDesde: inicioCompensacion(segundo),
+    });
+    // Solo sale el trimestre del rango, ya compensado: 500 − 300.
+    expect(conHistoria).toHaveLength(1);
+    expect(conHistoria[0].trimestre.numero).toBe(2);
+    expect(linea303(conHistoria[0])).toBe(200);
+    expect(conHistoria[0].compensacion).toMatchObject({ resultado: 500, compensado: 300 });
+    expect(conHistoria[0].aPagar).toBe(200);
+
+    // Sin decir desde cuándo hay datos, no se arrastra nada de fuera del rango.
+    expect(linea303(impuestosPorTrimestre({ ...datos, rango: segundo })[0])).toBe(500);
+    // Un trimestre a medias no se arrastra: no se sabe lo que falta.
+    expect(
+      linea303(impuestosPorTrimestre({ ...datos, rango: segundo, datosDesde: d(2026, 2, 15) })[0]),
+    ).toBe(500);
+  });
+
+  it("los datos se leen desde cuatro años antes del primer trimestre del rango", () => {
+    expect(inicioCompensacion({ desde: d(2026, 11, 5) })).toEqual(d(2022, 10, 1));
+    expect(inicioCompensacion({ desde: d(2026, 1, 1) })).toEqual(d(2022, 1, 1));
   });
 });
