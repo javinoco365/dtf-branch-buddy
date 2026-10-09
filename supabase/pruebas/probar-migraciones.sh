@@ -156,6 +156,7 @@ seccion "Políticas por operación: el mismo acceso que los FOR ALL" C11_politic
 seccion "Auditoría en las tablas que faltaban" C12_auditoria_tablas_pendientes.sql
 seccion "El ejercicio de la factura es obligatorio" C13_facturas_ejercicio_obligatorio.sql
 seccion "Conciliación: la ventana cuenta solo lo pendiente" C14_conciliacion_pendientes.sql
+seccion "WooCommerce: cursor y turno de la sincronización" C15_woo_sincronizacion_turno.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto
