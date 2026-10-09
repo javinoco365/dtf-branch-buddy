@@ -33,6 +33,9 @@ describe("fecha del documento de un pedido", () => {
 
   it("diaEnEspana", () => {
     expect(diaEnEspana(new Date("2026-12-31T23:30:00Z"))).toBe("2027-01-01");
+    // Un solo formateador para todas las llamadas: no arrastra nada de una a otra.
+    expect(diaEnEspana(new Date("2026-07-01T21:59:00Z"))).toBe("2026-07-01");
+    expect(diaEnEspana(new Date("2026-07-01T22:00:00Z"))).toBe("2026-07-02");
   });
 });
 
