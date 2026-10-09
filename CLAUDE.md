@@ -45,6 +45,11 @@ a añadir.**
 
 ## Reglas fiscales (críticas)
 
+**Decisión de Javier (9-10-2026):** por ahora el CRM no es el sistema de facturación ante
+Hacienda; las facturas que se declaran las hace la gestoría. Los documentos llevan la fecha del
+pedido (20261021100000). Si el CRM pasa a declarar, hay que integrar Verifactu y revisar esa
+fecha y el borrado de la última.
+
 DTI S.L. está sujeta a Verifactu desde el **1 de enero de 2027**. No son negociables:
 
 - **Una factura emitida no se edita ni se borra. Nunca.** Ni con `UPDATE`, ni desde la
@@ -119,19 +124,23 @@ así que **no uses bun**: `bun install` falla con 403. El fichero de bloqueo viv
 Las reglas de arriba son el objetivo, no una descripción del repositorio. A fecha de hoy
 **no existen** y no debes dar por hecho que puedes usarlas:
 
-| Regla                                       | Estado                                                    |
-| ------------------------------------------- | --------------------------------------------------------- |
-| `empresa_id` en las tablas                  | No existe. Ninguna de las 25 tablas lo lleva              |
-| Tabla `auditoria`, `auditoria_enmascarar()` | No existen                                                |
-| `rls_auto_enable()`                         | No existe                                                 |
-| Tres estados de pedido                      | No existe. Hay un enum único `pedido_estado` de 7 valores |
-| `coste_unit_snapshot`                       | No existe                                                 |
-| Credenciales en Vault                       | No. Están en claro en `tienda_credenciales`               |
-| Clientes globales                           | No. Son `UNIQUE (tienda_id, woo_customer_id)`             |
-| Numeración de factura con bloqueo           | No. Se asigna desde el navegador                          |
+| Regla                                       | Estado                                                                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `empresa_id` en las tablas                  | Hecho en las tablas raíz (33, `NOT NULL` y con FK a `empresas`). Las de línea y las de tienda lo heredan del padre |
+| Tabla `auditoria`, `auditoria_enmascarar()` | Hecho. Las cinco tablas que faltaban, desde 20261023110000. Sin trigger: `profiles`, `empresa_global`              |
+| Autor de cada cambio (`app.usuario_id`)     | Hecho, sin middleware en `src/start.ts`: `adminComoUsuario()` o funciones SQL que reciben `_usuario_id`            |
+| `rls_auto_enable()`                         | Hecho (20260902120200)                                                                                             |
+| Sin `FOR ALL` en tablas de negocio          | Hecho: los doce últimos pasan a políticas por operación, con el mismo acceso, en 20261023100000                    |
+| Tres estados de pedido                      | A medias: columnas y trigger que las sincroniza con el enum viejo; la app aún usa el `estado` único                |
+| `coste_unit_snapshot`                       | Hecho: lo congela un trigger al insertar en `pedido_items`                                                         |
+| Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                       |
+| Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                  |
+| Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                        |
 
-Sí existen ya: `src/dominio/` con `importes.ts` y sus pruebas, la integración continua, y el
-formateo en verde.
+Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
+trabajos: `npm run verify`, y las migraciones y pruebas SQL de
+`supabase/pruebas/probar-migraciones.sh` sobre PostgreSQL 16, que falla si sale alguna línea
+MAL), y el formateo en verde.
 
 El orden de trabajo para cerrar esa tabla está en la hoja de ruta del proyecto. **No
 empieces por las pantallas**: el alcance por empresa cambia las consultas, así que hacerlo al
