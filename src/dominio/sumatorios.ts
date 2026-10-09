@@ -95,8 +95,9 @@ export type DocumentoCanjeable = {
 
 /**
  * Los tickets de la lista que no cuentan porque los cuenta la factura que los
- * canjea. La regla de `totalesDocumentos`, aparte para que la use también el
- * IVA de Gerencia:
+ * canjea. La regla de `totalesDocumentos`, por lo que se ve en la lista. El
+ * IVA y los ingresos de Gerencia van por periodos y usan la de los canjes por
+ * fechas (`apuntesDeVenta`, canjes.ts):
  *
  * - Solo canjea una factura emitida de la lista: un borrador no.
  * - Si esa factura está anulada (estado «anulada») o una rectificativa de la

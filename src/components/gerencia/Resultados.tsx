@@ -46,6 +46,11 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     [trimestres],
   );
   const fiscal = useFiscal(rangoLectura);
+  // Para casar canjes vale cualquier documento leído, sea del periodo o no.
+  const referencias = useMemo(
+    () => (fiscal.data ? [...fiscal.data.documentos, ...fiscal.data.referencias] : []),
+    [fiscal.data],
+  );
 
   // Los gastos fijos del periodo, hasta hoy si está en curso: con
   // justificante van a A y sin él a B.
@@ -62,6 +67,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             costeActual: d.costeMetro,
             facturadoSinPedido: facturadoSinPedido(
               fiscal.data.documentos.filter((x) => enRango(x.fecha, d.rango)),
+              referencias,
             ),
             costesFijos: { a: fijos.a, b: fijos.b },
             compras: fijos.compras,
@@ -71,6 +77,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         : null,
     [
       fiscal.data,
+      referencias,
       d.documentados,
       d.ventasTodas,
       d.costeMetro,
@@ -93,6 +100,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         ? impuestosPorTrimestre({
             rango: d.rango,
             documentos: fiscal.data.documentos,
+            referencias: fiscal.data.referencias,
             compras: fiscal.data.compras ?? [],
             gastos: d.gastos,
             cuotaIsAnterior: d.ajustes.cuota_is_anterior,

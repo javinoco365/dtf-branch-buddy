@@ -13,7 +13,7 @@ import {
   plazoTrimestre,
   trimestreDe,
 } from "./impuestos";
-import type { CompraResumen, DocumentoFiscal } from "./fiscal";
+import { resumenIva, type CompraResumen, type DocumentoFiscal } from "./fiscal";
 
 const d = (a: number, m: number, dia: number, h = 0) => new Date(a, m - 1, dia, h);
 const q4 = { desde: d(2026, 10, 1), hasta: new Date(2026, 11, 31, 23, 59, 59) };
@@ -248,14 +248,14 @@ describe("impuestos por trimestre", () => {
     expect(q.aPagar).toBe(1830);
   });
 
-  it("un ticket canjeado por factura no paga su IVA dos veces", () => {
+  describe("canjes de ticket por factura, cada paso en su fecha", () => {
     const doc = (
       id: string,
       tipo: "ordinaria" | "simplificada" | "rectificativa",
       fecha: string,
       base: number,
-      extra: { sustituye_a_id?: string; rectifica_a_id?: string } = {},
-    ) => ({
+      extra: Partial<DocumentoFiscal> = {},
+    ): DocumentoFiscal => ({
       id,
       tipo,
       estado: "emitida",
@@ -266,9 +266,10 @@ describe("impuestos por trimestre", () => {
       total: base * 1.21,
       ...extra,
     });
-    const repercutido = (documentos: ReturnType<typeof doc>[]) =>
+    const primerSemestre = { desde: d(2026, 1, 1), hasta: new Date(2026, 5, 30, 23, 59, 59) };
+    const repercutido = (documentos: DocumentoFiscal[]) =>
       impuestosPorTrimestre({
-        rango: { desde: d(2026, 1, 1), hasta: new Date(2026, 5, 30, 23, 59, 59) },
+        rango: primerSemestre,
         documentos,
         compras: [],
         gastos: [],
@@ -277,17 +278,64 @@ describe("impuestos por trimestre", () => {
 
     const ticket = doc("t1", "simplificada", "2026-02-10", 1000);
     const canje = doc("f1", "ordinaria", "2026-02-10", 1000, { sustituye_a_id: "t1" });
-    // Ticket y factura en el primer trimestre: 210, no 420.
-    expect(repercutido([ticket, canje])).toEqual([210, 0]);
-    // Si una rectificativa anula la factura en el trimestre siguiente, el
-    // ticket vuelve a contar en el suyo y la rectificativa resta en el suyo.
-    expect(
-      repercutido([
+    const anulacion = doc("r1", "rectificativa", "2026-04-02", -1000, { rectifica_a_id: "f1" });
+
+    it("canje sin anular: 210 en el primer trimestre, no 420", () => {
+      expect(repercutido([ticket, canje])).toEqual([210, 0]);
+      // Con la factura en el trimestre siguiente: el ticket en el suyo y la
+      // factura, que lo sustituye, no suma en el suyo.
+      expect(repercutido([ticket, { ...canje, fecha: "2026-04-03" }])).toEqual([210, 0]);
+    });
+
+    it("el ejemplo: la rectificativa que anula el canje en el segundo trimestre deja T1 = 210 y T2 = 0", () => {
+      expect(repercutido([ticket, canje, anulacion])).toEqual([210, 0]);
+    });
+
+    it("lo mismo en el textil", () => {
+      const textil = (x: DocumentoFiscal) => ({ ...x, tienda_id: "textil-personalizado" });
+      expect(repercutido([ticket, canje, anulacion].map(textil))).toEqual([210, 0]);
+    });
+
+    it("Fiscal y Resultados dan lo mismo en cualquier periodo", () => {
+      const todos = [
         ticket,
         canje,
-        doc("r1", "rectificativa", "2026-04-02", -1000, { rectifica_a_id: "f1" }),
-      ]),
-    ).toEqual([420, -210]);
+        anulacion,
+        // Otro canje sin anular, con el ticket en marzo y la factura en mayo.
+        doc("t2", "simplificada", "2026-03-20", 500),
+        doc("f2", "ordinaria", "2026-05-04", 500, { sustituye_a_id: "t2" }),
+        doc("v", "ordinaria", "2026-06-01", 100),
+      ];
+      const porId = new Map(todos.map((x) => [x.id, x]));
+      // Fiscal lee los del periodo y, por id, el ticket de cada canje y la
+      // factura (y su ticket) de cada rectificativa.
+      const fiscal = (desde: string, hasta: string) => {
+        const delPeriodo = todos.filter((x) => x.fecha >= desde && x.fecha <= hasta);
+        const referencias: DocumentoFiscal[] = [];
+        let ultimos = delPeriodo;
+        while (ultimos.length) {
+          const nuevos = ultimos
+            .flatMap((x) => [x.sustituye_a_id, x.rectifica_a_id])
+            .flatMap((id) => (id && porId.has(id) ? [porId.get(id)!] : []))
+            .filter((x) => !delPeriodo.includes(x) && !referencias.includes(x));
+          referencias.push(...nuevos);
+          ultimos = nuevos;
+        }
+        return resumenIva(delPeriodo, referencias).repercutido.iva;
+      };
+      const [t1, t2] = repercutido(todos);
+      expect(fiscal("2026-01-01", "2026-03-31")).toBe(t1);
+      expect(fiscal("2026-04-01", "2026-06-30")).toBe(t2);
+      expect(t1).toBe(315);
+      expect(t2).toBe(21);
+      // Y un periodo cualquiera es la suma de sus partes.
+      expect(fiscal("2026-01-01", "2026-06-30")).toBe(t1 + t2);
+      expect(fiscal("2026-02-01", "2026-04-30")).toBe(
+        fiscal("2026-02-01", "2026-02-28") +
+          fiscal("2026-03-01", "2026-03-31") +
+          fiscal("2026-04-01", "2026-04-30"),
+      );
+    });
   });
 });
 

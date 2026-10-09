@@ -32,7 +32,6 @@ import {
   type Periodicidad,
 } from "./gerencia";
 import { ivaSoportado, resumenIva, type CompraResumen, type DocumentoFiscal } from "./fiscal";
-import { ticketsCanjeados } from "./sumatorios";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -498,6 +497,12 @@ const enTrimestre = (fecha: string | undefined, t: Trimestre) => {
  * Lo que se presenta por cada trimestre que toca el rango, con todo el
  * trimestre aunque el rango corte a mitad: los modelos son trimestrales.
  *
+ * El IVA repercutido de cada trimestre es el de `resumenIva`: los canjes de
+ * ticket por factura, cada paso en su fecha, igual que en Gerencia › Fiscal.
+ * `referencias` son documentos de fuera de `documentos` que solo hacen falta
+ * para casar canjes (el ticket de una factura de canje, la factura de una
+ * rectificativa); no cuentan por sí mismos.
+ *
  * El 303 se compensa: lo negativo de un trimestre se descuenta de lo
  * positivo de los siguientes (`compensar303`). Para lo que viene de antes
  * del rango hacen falta los documentos y las compras de esos trimestres:
@@ -508,16 +513,15 @@ const enTrimestre = (fecha: string | undefined, t: Trimestre) => {
 export function impuestosPorTrimestre(d: {
   rango: { desde: Date; hasta: Date };
   documentos: readonly DocumentoFiscal[];
+  referencias?: readonly DocumentoFiscal[];
   compras: readonly CompraResumen[];
   gastos: readonly GastoFijo[];
   cuotaIsAnterior: number | null | undefined;
   datosDesde?: Date;
 }): ImpuestosTrimestre[] {
   const absorbidas = comprasAbsorbidas(d.gastos);
-  // Los canjes se deciden con todos los documentos y no trimestre a trimestre:
-  // si la rectificativa que anula la factura del canje cae en otro trimestre,
-  // el ticket vuelve a contar igual.
-  const canjeados = ticketsCanjeados(d.documentos);
+  // Para casar un canje vale cualquier documento conocido, sea del trimestre o no.
+  const conocidos = [...d.documentos, ...(d.referencias ?? [])];
   const visibles = trimestresDelRango(d.rango);
   const primero = visibles[0];
   // Un trimestre a medias no se arrastra: empieza en el primero entero.
@@ -533,7 +537,7 @@ export function impuestosPorTrimestre(d: {
   const calculados = todos.map((t) => {
     const repercutido = resumenIva(
       d.documentos.filter((x) => enTrimestre(x.fecha, t)),
-      canjeados,
+      conocidos,
     ).repercutido.iva;
     // Las compras que son la factura de un gasto fijo ya van en su cargo.
     const comprasDelTrimestre = d.compras.filter(

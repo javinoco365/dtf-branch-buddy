@@ -35,15 +35,24 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
   const soloTextil = d.filtro.tienda === TIENDA_TEXTIL.id;
   const conCompras = d.filtro.tienda === "todas" || soloTextil;
 
+  // Para casar canjes vale cualquier documento leído, del periodo o de fuera
+  // y de cualquier tienda: solo se miran, cuentan los de la tienda elegida.
   const iva = useMemo(
-    () => resumenIva(deLaTienda(fiscal.data?.documentos ?? [], d.filtro.tienda)),
+    () =>
+      resumenIva(
+        deLaTienda(fiscal.data?.documentos ?? [], d.filtro.tienda),
+        fiscal.data ? [...fiscal.data.documentos, ...fiscal.data.referencias] : [],
+      ),
     [fiscal.data, d.filtro.tienda],
   );
   const totalIva = useMemo(() => totalTiposIva(iva.porTipoIva), [iva]);
   const ivaPrevio = useMemo(
     () =>
       d.comparacion && previo.data
-        ? resumenIva(deLaTienda(previo.data.documentos, d.filtro.tienda))
+        ? resumenIva(deLaTienda(previo.data.documentos, d.filtro.tienda), [
+            ...previo.data.documentos,
+            ...previo.data.referencias,
+          ])
         : null,
     [d.comparacion, previo.data, d.filtro.tienda],
   );
@@ -65,6 +74,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
   if (!fiscal.data) return <CargandoPestana />;
 
   const frente = d.comparacion?.etiqueta;
+  const conCanjes = iva.canjes.canjes + iva.canjes.anulados > 0;
   const resultado = resultadoIva(iva.repercutido.iva, soportado?.iva ?? 0);
   const huecos = fiscal.data.huecos;
 
@@ -178,18 +188,43 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                     <TableCell className="text-right tabular-nums">{eur(t.cuenta.total)}</TableCell>
                   </TableRow>
                 ))}
+                {/* No es un documento: lo del ticket que la factura del canje
+                    sustituye (resta) o que vuelve al anularse esa factura (suma). */}
+                {conCanjes && (
+                  <TableRow>
+                    <TableCell className="font-medium">
+                      Canjes de ticket por factura
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {[
+                          iva.canjes.canjes > 0 &&
+                            "Resta el ticket, que ya contó el día que se emitió",
+                          iva.canjes.anulados > 0 &&
+                            `${iva.canjes.anulados} ${iva.canjes.anulados === 1 ? "canje anulado" : "canjes anulados"}: vuelve a contar el ticket`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {eur(iva.canjes.base)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{eur(iva.canjes.iva)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {eur(iva.canjes.total)}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
-              {/* El IVA repercutido de la tarjeta de arriba: los tres tipos, con
-                  las rectificativas ya en negativo, sin los borradores y sin
-                  los tickets canjeados. */}
+              {/* El IVA repercutido de la tarjeta de arriba: las filas de
+                  encima, con las rectificativas y los canjes ya con su signo,
+                  sin los borradores. */}
               <TableFooter>
                 <TableRow>
                   <TableCell>
                     Total
                     {iva.borradores > 0 &&
                       ` · sin ${iva.borradores} ${iva.borradores === 1 ? "borrador" : "borradores"}`}
-                    {iva.canjeados > 0 &&
-                      ` · sin ${iva.canjeados} ticket${iva.canjeados === 1 ? "" : "s"} canjeado${iva.canjeados === 1 ? "" : "s"} (cuenta su factura)`}
                   </TableCell>
                   <TableCell className="text-right font-bold tabular-nums">
                     {numero(iva.repercutido.documentos, 0)}
