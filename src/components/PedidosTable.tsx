@@ -529,9 +529,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
-          {/* Sin lista porque la lectura ha fallado, «0 pedidos · 0,00 €» sería
-              una cifra inventada: no se enseña. */}
-          {!(error && !data) && (
+          {/* Sin lista, mientras se lee o porque la lectura ha fallado,
+              «0 pedidos · 0,00 €» sería una cifra inventada: no se enseña. */}
+          {data && (
             <div className="text-xs text-muted-foreground ml-auto">
               {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
               <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
