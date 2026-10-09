@@ -86,14 +86,6 @@ export function filasDeFuncion(
 }
 
 /**
- * La función todavía no existe: su migración no se ha aplicado. Postgres
- * responde 42883; PostgREST, PGRST202 si no está en su caché del esquema.
- */
-export function faltaLaFuncion(error: { code?: string } | null | undefined): boolean {
-  return !!error && (error.code === "42883" || error.code === "PGRST202");
-}
-
-/**
  * La tabla todavía no existe: su migración no se ha aplicado. Solo esos dos
  * códigos (Postgres y PostgREST); un error de permisos no es «falta la
  * migración» y tiene que verse.
