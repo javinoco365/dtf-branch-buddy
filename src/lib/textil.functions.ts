@@ -9,7 +9,7 @@ import type { FacturaPDFData } from "@/lib/pdf-factura";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
-  redondear as redondearImporte,
+  lineasImpresas,
 } from "@/dominio/importes";
 // El dominio se importa aquí arriba y no con await import() dentro de cada
 // función: un módulo que se carga de las dos formas obliga al empaquetador a
@@ -995,9 +995,12 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
     throw new Error("La factura todavía es un borrador: emítela antes de generar el PDF.");
   }
 
+  // Las líneas salen de lineas_snapshot, que guarda la cuota, el total y la
+  // unidad de cada una. Esta tabla solo guarda la base: se usa con las
+  // facturas emitidas antes del motor, que no tienen snapshot.
   const { data: items } = await supabaseAdmin
     .from("textil_factura_items")
-    .select("descripcion, cantidad, precio_unitario, iva_pct, subtotal")
+    .select("descripcion, cantidad, precio_unitario, iva_rate:iva_pct, subtotal")
     .eq("factura_id", factura.id);
 
   // El emisor sale del snapshot y solo de ahí: leerlo de empresas hoy sería
@@ -1031,20 +1034,7 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
       nif: receptor.nif ?? factura.cliente_nif,
       direccion: receptor.direccion ?? factura.cliente_direccion,
     },
-    items: (items ?? []).map((it: any) => {
-      const base = Number(it.subtotal ?? 0);
-      const iva = redondearImporte((base * Number(it.iva_pct ?? 0)) / 100);
-      return {
-        descripcion: it.descripcion ?? "",
-        cantidad: Number(it.cantidad ?? 0),
-        unidad: "ud",
-        precio_unitario: Number(it.precio_unitario ?? 0),
-        iva_rate: Number(it.iva_pct ?? 0),
-        subtotal: base,
-        iva,
-        total: redondearImporte(base + iva),
-      };
-    }),
+    items: lineasImpresas(factura.lineas_snapshot, items),
     base_imponible: Number(factura.subtotal ?? 0),
     iva_total: Number(factura.iva ?? 0),
     total: Number(factura.total ?? 0),

@@ -196,6 +196,101 @@ export function importeLineaSinIva(linea: LineaEmitida): number {
   return calcularLinea(linea).base;
 }
 
+/** Una cifra tal y como llega de la base: número, texto (numeric) o nada. */
+type CifraGuardada = number | string | null | undefined;
+
+/**
+ * Una línea de un documento ya emitido, tal y como se guardó. En
+ * `lineas_snapshot` y en `factura_items` van todas sus cifras; en
+ * `textil_factura_items`, solo la base (`subtotal`): ni la cuota, ni el total,
+ * ni la unidad.
+ */
+export type LineaGuardada = {
+  descripcion?: string | null;
+  cantidad?: CifraGuardada;
+  unidad?: string | null;
+  precio_unitario?: CifraGuardada;
+  iva_rate?: CifraGuardada;
+  subtotal?: CifraGuardada;
+  iva?: CifraGuardada;
+  total?: CifraGuardada;
+};
+
+/** Una línea lista para imprimir, con todas sus cifras. */
+export type LineaImpresa = {
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  precio_unitario: number;
+  iva_rate: number;
+  /** Base imponible. */
+  subtotal: number;
+  /** Cuota de IVA de la línea. */
+  iva: number;
+  total: number;
+};
+
+/** La unidad de una línea que no dice otra. Es la que pone `factura_calcular`. */
+export const UNIDAD_POR_DEFECTO = "ud";
+
+/** La cifra guardada como número, o nula si no hay ninguna. */
+function cifra(v: CifraGuardada): number | null {
+  if (v === null || v === undefined || (typeof v === "string" && v.trim() === "")) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Las cifras de una línea ya emitida, para imprimirla.
+ *
+ * Lo congelado manda: la base, la cuota y el total que se guardaron al emitir
+ * salen tal cual. Lo que la línea no guardó se calcula como lo calculó la base
+ * al emitir (`factura_calcular`): la cuota, la base por el tipo redondeada a
+ * céntimos; el total, base más cuota. Es lo que pasa con las líneas de
+ * `textil_factura_items`, que solo guardan la base.
+ */
+export function lineaImpresa(linea: LineaGuardada): LineaImpresa {
+  const cantidad = cifra(linea.cantidad) ?? 0;
+  const precio_unitario = cifra(linea.precio_unitario) ?? 0;
+  const iva_rate = cifra(linea.iva_rate) ?? 0;
+  const subtotal = importeLineaSinIva({
+    cantidad,
+    precio_unitario,
+    iva_rate,
+    subtotal: cifra(linea.subtotal),
+  });
+  const iva = cifra(linea.iva) ?? redondear(subtotal * (iva_rate / 100));
+  const total = cifra(linea.total) ?? redondear(subtotal + iva);
+  return {
+    descripcion: linea.descripcion ?? "",
+    cantidad,
+    unidad: linea.unidad?.trim() || UNIDAD_POR_DEFECTO,
+    precio_unitario,
+    iva_rate,
+    subtotal,
+    iva,
+    total,
+  };
+}
+
+/**
+ * Las líneas de un documento ya emitido, para imprimirlo.
+ *
+ * Primero, las de `lineas_snapshot`: es lo que se congeló al emitir, con la
+ * cuota, el total y la unidad de cada línea, y en su orden. Solo si el
+ * documento no lo tiene (los emitidos antes del motor de facturación) salen de
+ * la tabla de líneas, completadas con `lineaImpresa`.
+ */
+export function lineasImpresas(
+  snapshot: unknown,
+  lineas: readonly LineaGuardada[] | null | undefined,
+): LineaImpresa[] {
+  const congeladas = Array.isArray(snapshot)
+    ? (snapshot.filter((l) => l !== null && typeof l === "object") as LineaGuardada[])
+    : [];
+  return (congeladas.length > 0 ? congeladas : (lineas ?? [])).map(lineaImpresa);
+}
+
 /** Una cuota de IVA del pie de un documento impreso. */
 export type CuotaImpresa = {
   /**
