@@ -318,3 +318,11 @@ export function metrosPedidoWoo(
 /** ¿Es un metro estimado (no leído del montador)? */
 export const esEstimado = (origen: string | null | undefined) =>
   origen === "precio_linea" || origen === "precio_ajustes";
+
+/**
+ * ¿Lleva el pedido algún metro estimado? Basta una línea: si una está
+ * estimada, el total del pedido tampoco es exacto.
+ */
+export const pedidoConMetrosEstimados = (
+  items: readonly { metros_origen?: string | null }[] | null | undefined,
+) => (items ?? []).some((i) => esEstimado(i.metros_origen));

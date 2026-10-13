@@ -17,6 +17,7 @@
 
 import { redondear } from "./importes";
 import { resumenCobros } from "./cobros";
+import { pedidoConMetrosEstimados } from "./metros-woo";
 
 type Valor = number | string | null | undefined;
 
@@ -47,11 +48,15 @@ export type TotalesPedidos = {
   cobrado: number;
   /** Lo que falta por cobrar; un pedido cobrado de más cuenta como 0, como en su fila. */
   pendiente: number;
+  /** Los metros de los que cuentan (`metros_total`), a tres decimales. 0 en el textil. */
+  metros: number;
+  /** Si alguno de esos metros es estimado: la suma tampoco es exacta. */
+  metrosEstimados: boolean;
 };
 
 /**
  * El pie de una lista de pedidos (de tienda o textil). Los cancelados no
- * suman en nada: se cuentan aparte.
+ * suman en nada, tampoco en metros: se cuentan aparte.
  */
 export function totalesPedidos(
   pedidos: readonly {
@@ -59,6 +64,9 @@ export function totalesPedidos(
     estado?: string | null;
     cancelado?: boolean;
     cobros?: readonly { importe: Valor }[] | null;
+    metros_total?: Valor;
+    /** Sus líneas, para saber si algún metro es estimado. */
+    items?: readonly { metros_origen?: string | null }[] | null;
   }[],
 ): TotalesPedidos {
   const esCancelado = (p: (typeof pedidos)[number]) => p.cancelado ?? p.estado === "cancelado";
@@ -70,6 +78,8 @@ export function totalesPedidos(
     total: sumarImportes(validos, (p) => p.total),
     cobrado: sumarImportes(resumenes, (r) => r.cobrado),
     pendiente: sumarImportes(resumenes, (r) => Math.max(r.pendiente, 0)),
+    metros: sumarCantidades(validos, (p) => p.metros_total),
+    metrosEstimados: validos.some((p) => pedidoConMetrosEstimados(p.items)),
   };
 }
 
