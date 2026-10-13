@@ -34,7 +34,7 @@ export type TotalesEnlaces = TotalesConSigno & {
   /** Movimientos distintos entre todos los enlaces. */
   movimientos: number;
   /**
-   * De esos, los que no han llegado a la pantalla («Movimiento antiguo»): no
+   * De esos, los que no vienen en el mapa de movimientos: no
    * tienen importe que sumar, así que con alguno el total es parcial.
    */
   sinImporte: number;

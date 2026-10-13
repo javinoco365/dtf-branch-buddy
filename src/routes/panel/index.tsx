@@ -21,6 +21,7 @@ import {
   topPorMetros,
   variacion,
 } from "@/dominio/kpis";
+import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
@@ -114,8 +115,9 @@ function DashboardGlobal() {
   function exportar() {
     const filas: (string | number)[][] = [
       ["Fecha", "Tienda", "Estado", "Metros", "Base", "IVA", "Envío", "Total"],
+      // El día del pedido, el de su ticket y el de la lista de pedidos.
       ...pedidos.map((p) => [
-        format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+        diaDelPedido(p),
         p.tienda_id,
         p.estado,
         Number(p.metros_total ?? 0),

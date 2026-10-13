@@ -6,18 +6,7 @@ import {
   filtrarClientes,
   normalizarNif,
   normalizarTexto,
-  totalDePedidos,
 } from "./clientes";
-
-describe("totalDePedidos", () => {
-  it("suma tiendas y textil, sin arrastrar el error de coma flotante", () => {
-    expect(totalDePedidos([{ total: "0.10" }, { total: 0.2 }], [{ total: null }])).toBe(0.3);
-  });
-
-  it("sin pedidos, cero", () => {
-    expect(totalDePedidos([], [])).toBe(0);
-  });
-});
 
 const charanga = {
   nombre: "Peña La Charanga",

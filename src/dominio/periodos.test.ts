@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   compararCon,
+  diaDeFecha,
+  diasDelRango,
   enRango,
   escribirSeleccion,
   etiquetaPeriodo,
@@ -173,6 +175,25 @@ describe("enRango", () => {
   it("sin fecha, fuera; sin rango, todo dentro", () => {
     expect(enRango(null, octubre)).toBe(false);
     expect(enRango("2020-01-01", null)).toBe(true);
+  });
+});
+
+describe("diasDelRango", () => {
+  it("el primer y el último día, en la hora del navegador", () => {
+    expect(diasDelRango(rangoDe({ tipo: "mes", ref: HOY })!)).toEqual({
+      desde: "2026-10-01",
+      hasta: "2026-10-31",
+    });
+    expect(diasDelRango(rangoDe({ tipo: "hoy", ref: HOY })!)).toEqual({
+      desde: "2026-10-05",
+      hasta: "2026-10-05",
+    });
+    expect(diaDeFecha(new Date(2026, 0, 9, 23, 59))).toBe("2026-01-09");
+  });
+
+  it("un rango que empieza después de acabar está vacío, aunque sea de un día", () => {
+    const hoy = rangoDe({ tipo: "hoy", ref: HOY })!;
+    expect(diasDelRango({ desde: hoy.hasta, hasta: hoy.desde })).toBeNull();
   });
 });
 

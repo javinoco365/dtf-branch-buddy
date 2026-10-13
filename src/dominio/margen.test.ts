@@ -85,6 +85,22 @@ describe("margen por grupo, por tramo y por metro", () => {
     expect(t).toHaveLength(2);
   });
 
+  it("cada venta en el tramo del día de su pedido", () => {
+    // Un web de las 23:15 del 1 de octubre (hora de la web guardada como UTC)
+    // es del 1, no del 2.
+    const web = {
+      ...dtf("2026-10-01", 100, 10),
+      fecha_pedido: "2026-10-01T23:15:00+00:00",
+      origen: "woocommerce",
+    };
+    const tramos = [
+      { etiqueta: "1", desde: new Date(2026, 9, 1), hasta: new Date(2026, 9, 1, 23, 59, 59) },
+      { etiqueta: "2", desde: new Date(2026, 9, 2), hasta: new Date(2026, 9, 2, 23, 59, 59) },
+    ];
+    const t = margenPorTramos([web], tramos, 0, [], new Date(2026, 9, 5, 12));
+    expect(t.map((x) => x.bruta)).toEqual([100, 0]);
+  });
+
   it("precio, coste y margen del metro", () => {
     expect(margenPorMetro(ventas, 0)).toEqual({ precio: 10, coste: 2, margen: 8 });
     expect(margenPorMetro([textil("2026-10-03", 200, 1)], 0)).toBeNull();

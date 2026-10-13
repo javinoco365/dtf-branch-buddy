@@ -17,15 +17,19 @@
 
 const ZONA = "Europe/Madrid";
 
+// en-CA escribe las fechas como yyyy-mm-dd. Uno para todas las llamadas:
+// crear un Intl.DateTimeFormat cuesta, y esto se llama por cada pedido de una
+// lista (ver dia-pedido.ts).
+const DIA_EN_ESPANA = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ZONA,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /** El día ('yyyy-mm-dd') de un instante en hora de España. */
 export function diaEnEspana(instante: Date): string {
-  // en-CA escribe las fechas como yyyy-mm-dd.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: ZONA,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(instante);
+  return DIA_EN_ESPANA.format(instante);
 }
 
 /**

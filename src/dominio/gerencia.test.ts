@@ -29,7 +29,7 @@ import {
 import { TIENDA_TEXTIL } from "./cobros";
 import { redondear } from "./importes";
 import type { PedidoPendiente } from "./pendientes";
-import type { CobroConsolidado } from "./facturacion";
+import { consolidarCobro, type CobroConsolidado } from "./facturacion";
 
 const tienda = (p: Partial<Venta> = {}): Venta =>
   ventaDeTienda({
@@ -131,6 +131,18 @@ describe("desglose", () => {
 });
 
 describe("porDiaSemana", () => {
+  it("por el día del pedido: un web del domingo a las 23:15 es del domingo", () => {
+    // Domingo 4 de octubre de 2026; la web guarda su hora como si fuera UTC.
+    const dias = porDiaSemana([tienda({ fecha_pedido: "2026-10-04T23:15:00+00:00" })]);
+    expect(dias[6].vendido).toBe(121);
+    expect(dias[0].vendido).toBe(0);
+    // Uno del CRM de las 22:30 UTC del domingo son las 00:30 del lunes en Madrid.
+    const crm = porDiaSemana([
+      tienda({ fecha_pedido: "2026-10-04T22:30:00+00:00", origen: "manual" }),
+    ]);
+    expect(crm[0].vendido).toBe(121);
+  });
+
   it("de lunes a domingo, con los días sin ventas a cero", () => {
     // 5 de octubre de 2026, lunes; 3 de octubre, sábado.
     const dias = porDiaSemana([tienda(), textil()]);
@@ -229,6 +241,40 @@ describe("diasMediosCobro", () => {
 
   it("sin cobros no hay media", () => {
     expect(diasMediosCobro([])).toBeNull();
+  });
+
+  it("un cobro web cuenta con 0 días aunque la base lo feche al día siguiente", () => {
+    // Pedido web de las 23:15 del 7: la web guarda su hora como si fuera UTC,
+    // así que es del día 7; cobro_web_al_dia() lo pasa a Madrid y fecha el
+    // cobro el 8.
+    const web = consolidarCobro(
+      {
+        id: "c",
+        fecha: "2026-10-08",
+        importe: 121,
+        propina: 0,
+        metodo: "web",
+        previo: false,
+        tienda_id: "t1",
+        pedido: {
+          id: "p",
+          numero: "W-1",
+          fecha: "2026-10-07T23:15:00+00:00",
+          origen: "woocommerce",
+          cliente_nombre: null,
+          total: 121,
+          iva: 21,
+          envio: 0,
+          metros: 1,
+        },
+      },
+      "pedido",
+    );
+    expect(web.fecha_pedido).toBe("2026-10-07");
+    expect(web.fecha_cobro).toBe("2026-10-08");
+    expect(diasMediosCobro([web])).toBe(0);
+    // Junto a uno manual de 100 € a 9 días: (121·0 + 100·9) / 221 = 4,07…
+    expect(diasMediosCobro([web, cobro({ importe: 100 })])).toBe(4.1);
   });
 });
 

@@ -305,7 +305,7 @@ export const DEFINICIONES = {
   g_iva_repercutido: {
     que: "El IVA de las facturas y tickets emitidos en el periodo.",
     calculo:
-      "Suma del IVA de facturas, tickets y rectificativas con fecha en el periodo; las rectificativas restan. Los borradores no cuentan.",
+      "Suma del IVA de facturas, tickets y rectificativas con fecha en el periodo; las rectificativas restan. Los borradores no cuentan. Un ticket canjeado por factura cuenta una sola vez, cada paso en su fecha: el ticket suma el día que se emite, la factura del canje resta lo del ticket el día de la factura, y si una rectificativa anula esa factura, lo del ticket vuelve a sumar el día de la rectificativa. Así cualquier periodo da lo mismo aquí que en los trimestres de Resultados.",
     fuente:
       "Facturas de las tiendas y del textil. Con el filtro de tienda, solo esa tienda; el filtro de canal no se aplica a las facturas.",
   },
@@ -370,10 +370,47 @@ export const DEFINICIONES = {
   g_impuestos_trimestre: {
     que: "Lo que se presenta a Hacienda por cada trimestre del periodo.",
     calculo:
-      "303: IVA de las facturas y tickets emitidos − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: se compensa en el siguiente.",
+      "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura cuenta una vez, como en Fiscal) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: queda a compensar y se descuenta de los 303 positivos siguientes, también de otros años, durante cuatro años; el importe de cada 303 ya lleva descontado lo pendiente, y lo que queda a compensar sale aparte. Solo se compensa desde el trimestre de la primera factura o ticket emitido en el CRM: antes, el CRM no sabe lo que se vendió, así que el 303 de esos trimestres no se calcula y lo soportado entonces no queda a compensar. Solo se compensa el IVA: el 111, el 115 y el 202 se pagan enteros. Es orientativo: lo que de verdad queda a compensar es lo que diga el último 303 que presentó la gestoría. (En el cuarto trimestre la gestoría puede pedir la devolución en vez de compensar; aquí se supone que se compensa.)",
     fuente:
-      "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
+      "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero; para lo que queda a compensar, también los de los cuatro años anteriores, desde la primera venta documentada. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
   },
 } as const satisfies Record<string, Definicion>;
 
 export type ClaveDefinicion = keyof typeof DEFINICIONES;
+
+/**
+ * Lo que pasa con el 303 cuando no se ha podido leer la primera factura o
+ * ticket emitido del CRM. Sin punto final, para poder seguir la frase.
+ */
+export const TEXTO_SIN_PRIMERA_VENTA =
+  "No se ha podido leer la primera factura o ticket emitido del CRM, así que no se sabe desde cuándo compensar el IVA: cada 303 sale tal cual, repercutido − soportado, sin descontar lo que quedara a compensar de trimestres anteriores";
+
+/**
+ * La definición de los impuestos por trimestre con lo de este caso: desde
+ * qué trimestre se compensa el 303 y por qué (ver `inicioHistorial303`).
+ * Nulo, si el CRM aún no tiene ninguna factura ni ticket emitido.
+ * «desconocido», si no se ha podido leer cuál fue la primera: entonces el
+ * 303 sale sin compensar (ver `impuestosPorTrimestre`).
+ */
+export function definicionImpuestosTrimestre(
+  inicio:
+    | {
+        trimestre: { anio: number; numero: number };
+        motivo: "primera_venta" | "datos";
+      }
+    | null
+    | "desconocido",
+): Definicion {
+  const base = DEFINICIONES.g_impuestos_trimestre;
+  const desde =
+    inicio === "desconocido"
+      ? `${TEXTO_SIN_PRIMERA_VENTA}.`
+      : inicio
+        ? `Aquí se compensa desde el ${inicio.trimestre.numero}.º trimestre de ${inicio.trimestre.anio}: ${
+            inicio.motivo === "primera_venta"
+              ? "el de la primera factura o ticket emitido en el CRM."
+              : "lo de antes ya habría caducado."
+          }`
+        : "El CRM aún no tiene ninguna factura ni ticket emitido: el 303 no se calcula y no hay nada a compensar.";
+  return { ...base, calculo: `${base.calculo} ${desde}` };
+}

@@ -9,18 +9,6 @@
  * Lógica pura: no consulta nada y se prueba sin base de datos.
  */
 
-import { redondear } from "./importes";
-
-/**
- * Lo que suman los pedidos de un cliente, de las tiendas y del textil juntos.
- * Los importes llegan de Postgres como texto o número según el caso.
- */
-export function totalDePedidos(
-  ...listas: readonly (readonly { total: number | string | null }[])[]
-): number {
-  return redondear(listas.flat().reduce((s, p) => s + (Number(p.total ?? 0) || 0), 0));
-}
-
 export type OrigenCliente = "tienda" | "textil" | "general";
 
 export type ClienteFiltrable = {

@@ -83,6 +83,31 @@ describe("clientes del periodo", () => {
   });
 });
 
+describe("clientes del periodo por el día del pedido", () => {
+  it("un web de las 23:15 del 31 de octubre es de octubre; su cliente, nuevo en octubre", () => {
+    const web = pedido("w", "2026-10-31", 100, {
+      fecha_pedido: "2026-10-31T23:15:00+00:00",
+      origen: "woocommerce",
+      canal: "web",
+    });
+    const r = resumenClientes([web], octubre);
+    expect(r.activos).toBe(1);
+    expect(r.nuevos).toBe(1);
+    expect(r.ranking[0].primera).toBe("2026-10-31T23:15:00");
+    const noviembre = { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) };
+    expect(resumenClientes([web], noviembre).activos).toBe(0);
+  });
+
+  it("uno del CRM de las 00:30 del 1 de noviembre en Madrid es de noviembre", () => {
+    // 23:30 UTC del 31 de octubre.
+    const crm = pedido("m", "2026-10-31", 100, { fecha_pedido: "2026-10-31T23:30:00+00:00" });
+    expect(resumenClientes([crm], octubre).activos).toBe(0);
+    // Ya compraba en octubre según la hora UTC, pero su primer pedido es de noviembre.
+    const noviembre = { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) };
+    expect(resumenClientes([crm], noviembre)).toMatchObject({ activos: 1, nuevos: 1 });
+  });
+});
+
 describe("clientes dormidos", () => {
   it("más de 60 días sin pedir, de más a menos comprado en toda su historia", () => {
     const hoy = new Date(2026, 9, 7, 9);

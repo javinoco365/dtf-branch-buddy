@@ -21,6 +21,7 @@
 import { redondear } from "./importes";
 import { ESTADO_CANCELADO, totalNeto } from "./kpis";
 import { documentoVigente } from "./tickets";
+import { apuntesDeVenta } from "./canjes";
 import type { DocumentoDePedido, DocumentoFiscal } from "./fiscal";
 import { beneficioEstimado, cifrasGerencia, type GastoFijo, type Venta } from "./gerencia";
 
@@ -151,14 +152,33 @@ export function pendienteDocumentar(
  * es A, aunque no esté en las ventas. Las rectificativas de esas facturas
  * restan; las de facturas de pedidos no, porque ese pedido ya salió de A al
  * quedarse sin documento vigente.
+ *
+ * Un ticket sin pedido canjeado por factura cuenta una vez, con la regla de
+ * los canjes por fechas (`apuntesDeVenta`, la misma del IVA): el ticket
+ * suma en su fecha, la factura del canje resta lo del ticket en la suya, y
+ * la rectificativa que anula esa factura lo vuelve a sumar en la suya. Si el
+ * ticket tiene pedido, su venta ya está en las ventas y aquí no cuenta.
+ *
+ * `docs` son los del periodo; `referencias`, los de fuera que hacen falta
+ * para casar canjes y rectificativas. Solo se miran: no cuentan.
  */
-export function facturadoSinPedido(docs: readonly DocumentoFiscal[]): number {
+export function facturadoSinPedido(
+  docs: readonly DocumentoFiscal[],
+  referencias: readonly DocumentoFiscal[] = [],
+): number {
   const sinPedido = new Set(
-    docs.filter((d) => d.tipo !== "rectificativa" && !d.pedido_id).map((d) => d.id),
+    [...referencias, ...docs]
+      .filter((d) => d.tipo !== "rectificativa" && !d.pedido_id)
+      .map((d) => d.id),
   );
   let base = 0;
-  for (const d of docs) {
-    if (d.estado === "borrador") continue;
+  for (const a of apuntesDeVenta(docs, referencias)) {
+    const d = a.importes;
+    if (a.motivo !== "documento") {
+      // Lo del ticket canjeado: solo si el ticket no es de un pedido.
+      if (!d.pedido_id) base += a.signo * num(d.base);
+      continue;
+    }
     if (d.tipo === "rectificativa") {
       if (d.rectifica_a_id && sinPedido.has(d.rectifica_a_id)) base += num(d.base);
       continue;

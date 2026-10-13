@@ -28,6 +28,35 @@ export async function llamarRpc<T>(
 }
 
 /**
+ * Como `llamarRpc`, pero devuelve el error con su código en vez de lanzarlo:
+ * para decidir qué hacer si la función todavía no existe (`faltaLaFuncion`).
+ */
+export async function llamarRpcConError<T>(
+  cliente: unknown,
+  funcion: string,
+  argumentos: Record<string, unknown>,
+): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
+  const rpc = (
+    cliente as {
+      rpc: (
+        f: string,
+        a: Record<string, unknown>,
+      ) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>;
+    }
+  ).rpc;
+  return await rpc.call(cliente, funcion, argumentos);
+}
+
+/**
+ * La función todavía no existe: su migración no se ha aplicado. PostgREST
+ * responde PGRST202 si no la encuentra en su caché del esquema; Postgres,
+ * 42883.
+ */
+export function faltaLaFuncion(error: { code?: string } | null | undefined): boolean {
+  return !!error && (error.code === "PGRST202" || error.code === "42883");
+}
+
+/**
  * Acceso a una tabla que `types.ts` todavía no conoce.
  *
  * Mismo motivo que `llamarRpc`: el fichero de tipos está generado y se quedó en
@@ -40,6 +69,20 @@ export async function llamarRpc<T>(
  */
 export function tabla(cliente: unknown, nombre: string) {
   return (cliente as { from: (n: string) => any }).from(nombre);
+}
+
+/**
+ * Una función de la base que devuelve filas (RETURNS TABLE), para leerla como
+ * una tabla: con `select`, filtros, orden y `range`. Mismo motivo que `tabla`.
+ * Con `count: "exact"`, la respuesta trae además el total; con `head`, solo
+ * el total.
+ */
+export function filasDeFuncion(
+  cliente: unknown,
+  nombre: string,
+  opciones?: { count?: "exact"; head?: boolean },
+) {
+  return (cliente as { rpc: (n: string, a: object, o?: object) => any }).rpc(nombre, {}, opciones);
 }
 
 /**

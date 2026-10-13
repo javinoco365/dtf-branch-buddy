@@ -17,8 +17,18 @@
 # auth, storage y vault se sustituyen por lo mínimo (00_entorno_supabase.sql).
 # La extensión supabase_vault no existe fuera de Supabase y se omite.
 #
+# El veredicto final cuenta las líneas MAL de TODAS las secciones (y las HUECO
+# o ROTA del motor de facturación), las pruebas que se cortan con un error de
+# SQL, los huecos en la numeración y la cadena de auditoría. Si hay cualquiera
+# de esas cosas, dice cuáles y sale con código 1. Solo dice «TODO EN VERDE» y
+# sale con 0 si no hay ninguna.
+#
 # Uso:  ./supabase/pruebas/probar-migraciones.sh
-# Necesita: postgresql-16 instalado y un usuario sin privilegios (postgres).
+#       PG_BIN=/ruta/bin PG_DIR=/tmp/otra PG_PUERTO=55441 ./supabase/pruebas/probar-migraciones.sh
+# Necesita: PostgreSQL 16 (por defecto en /usr/lib/postgresql/16/bin; si no,
+# PG_BIN). Postgres no arranca como root: si se lanza como root, el script se
+# vuelve a ejecutar como el usuario postgres; si no, corre como el usuario
+# actual (así es en la integración continua).
 
 set -euo pipefail
 
@@ -62,217 +72,125 @@ for f in "$DIR"/sql/*.sql; do
   fi
 done
 
-echo
-echo "== Motor de facturación =="
-$PSQL -f "$RAIZ/supabase/pruebas/10_motor_facturacion.sql" 2>&1 \
-  | grep -E '^---|^factura|^serie|^base|^estado|^la |^rectificativa|^filas|^produccion|BIEN|MAL|^HUECO|^ROTA' \
-  | sed 's/^/  /'
+# ---------------------------------------------------------------------------
+# Las pruebas
+# ---------------------------------------------------------------------------
+# Cada sección ejecuta un fichero de supabase/pruebas, enseña sus líneas de
+# resultado y apunta las que fallan para el veredicto final.
 
-echo
-echo "== Auditoría: de quién es cada escritura =="
-$PSQL -f "$RAIZ/supabase/pruebas/20_auditoria_autor.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+# Una línea que falla: contiene MAL como palabra (no «NORMAL»), o es un HUECO o
+# una cadena ROTA de las que imprime el motor de facturación.
+FALLO='(^|[^[:alpha:]])MAL([^[:alpha:]]|$)|^[[:space:]]*(HUECO|ROTA)[: ]'
+MALES=()
+CORTADAS=()
 
-echo
-echo "== Serie única de la sociedad =="
-$PSQL -f "$RAIZ/supabase/pruebas/40_serie_unica.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+seccion() {
+  local titulo=$1 fichero=$2
+  local patron=${3:-'BIEN|MAL|ERROR|LINE [0-9]'}
+  local salida filtrado linea codigo=0
 
-echo
-echo "== Plantillas de correo =="
-$PSQL -f "$RAIZ/supabase/pruebas/50_plantillas_correo.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+  echo
+  echo "== $titulo =="
+  salida=$($PSQL -f "$RAIZ/supabase/pruebas/$fichero" 2>&1) || codigo=$?
+  filtrado=$(printf '%s\n' "$salida" | grep -E "$patron" \
+    | sed -E 's/^psql:[^ ]+ //; s/^(NOTICE|WARNING):  //' | sed 's/^/  /' || true)
+  if [ -n "$filtrado" ]; then
+    printf '%s\n' "$filtrado"
+  fi
 
-echo
-echo "== Stock textil: el libro de movimientos =="
-$PSQL -f "$RAIZ/supabase/pruebas/60_stock_movimientos.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+  if [ "$codigo" -ne 0 ]; then
+    CORTADAS+=("$titulo ($fichero): psql salió con código $codigo")
+  fi
 
-echo
-echo "== Stock textil: reservas =="
-$PSQL -f "$RAIZ/supabase/pruebas/70_stock_reservas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+  while IFS= read -r linea; do
+    if [ -n "$linea" ]; then
+      MALES+=("[$titulo] $(printf '%s' "$linea" | sed -E 's/^[[:space:]]+//')")
+    fi
+  done < <(printf '%s\n' "$filtrado" | grep -E "$FALLO" || true)
 
-echo
-echo "== Borrado de tiendas =="
-$PSQL -f "$RAIZ/supabase/pruebas/80_borrado_tiendas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+  return 0
+}
 
-echo
-echo "== Compras textil =="
-$PSQL -f "$RAIZ/supabase/pruebas/90_compras_textil.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
+seccion "Motor de facturación" 10_motor_facturacion.sql \
+  '^---|^factura|^serie|^base|^estado|^la |^rectificativa|^filas|^produccion|BIEN|MAL|^HUECO|^ROTA|ERROR|LINE [0-9]'
+seccion "Auditoría: de quién es cada escritura" 20_auditoria_autor.sql
+seccion "Serie única de la sociedad" 40_serie_unica.sql
+seccion "Plantillas de correo" 50_plantillas_correo.sql
+seccion "Stock textil: el libro de movimientos" 60_stock_movimientos.sql
+seccion "Stock textil: reservas" 70_stock_reservas.sql
+seccion "Borrado de tiendas" 80_borrado_tiendas.sql
+seccion "Compras textil" 90_compras_textil.sql
+seccion "Conciliación bancaria" 95_conciliacion_banco.sql
+seccion "Contadores de presupuestos y pedidos" 97_contadores.sql
+seccion "Rutas del bucket de facturas" 98_pdf_textil_storage.sql
+seccion "La sociedad no se borra" 99_empresa_no_se_borra.sql
+seccion "Origen de los pedidos" A1_origen_pedidos.sql
+seccion "SMTP configurable" A2_smtp_configurable.sql
+seccion "Inicio de la numeracion de facturas" A3_serie_inicio.sql
+seccion "Libro de caja" A4_caja.sql
+seccion "Inversion de los socios" A5_inversion.sql
+seccion "Clientes unicos por empresa" A7_clientes_unicos.sql
+seccion "Cobros de todos los pedidos" A8_cobros.sql
+seccion "Pedidos pendientes de cobro" A9_pedidos_pendientes_cobro.sql
+seccion "Presupuestos de las tiendas y productos genericos" B1_presupuestos_tiendas.sql
+seccion "Confirmar presupuesto: el pedido" B2_confirmar_presupuestos.sql
+seccion "Tickets: factura simplificada" B3_tickets.sql
+seccion "Cifras fiables: cobro web neto y coste congelado" B4_cifras_fiables.sql
+seccion "Ajustes de Gerencia" B5_gerencia_ajustes.sql
+seccion "Gastos con impuestos y periodicidad" B7_gastos_impuestos.sql
+seccion "Gastos con o sin justificante" B9_gastos_justificante.sql
+seccion "Facturas de compra de todo el negocio" C1_compras_generales.sql
+seccion "Facturas recibidas: importes calculados en la base" C2_compras_recibidas.sql
+seccion "Facturas recibidas: cola de revisión y duplicados" C3_compras_cola.sql
+seccion "Bancos: cuentas y extractos" C4_banco_cuentas.sql
+seccion "Conciliación: compras, grupos, revisar y traspasos" C5_conciliacion_motor.sql
+seccion "Clave del lector de facturas en Vault" C6_clave_lector.sql
+seccion "Borrar la última factura de la serie" C7_borrar_ultima_factura.sql
+seccion "De dónde salen los metros de una línea" C8_metros_origen.sql
+seccion "Bucket de los PDF de facturas" B8_bucket_facturas.sql
+seccion "Reponer factura_comprobar_fecha" B6_reponer_comprobar_fecha.sql
+seccion "Tickets y facturas con la fecha del pedido" C9_fecha_del_pedido.sql
+seccion "Número de factura único por ejercicio" C10_numero_por_ejercicio.sql
+seccion "Credenciales de WooCommerce en Vault" 30_credenciales_vault.sql
+seccion "Políticas por operación: el mismo acceso que los FOR ALL" C11_politicas_por_operacion.sql
+seccion "Auditoría en las tablas que faltaban" C12_auditoria_tablas_pendientes.sql
+seccion "El ejercicio de la factura es obligatorio" C13_facturas_ejercicio_obligatorio.sql
+seccion "Conciliación: la ventana cuenta solo lo pendiente" C14_conciliacion_pendientes.sql
+seccion "WooCommerce: cursor y turno de la sincronización" C15_woo_sincronizacion_turno.sql
 
-echo
-echo "== Conciliación bancaria =="
-$PSQL -f "$RAIZ/supabase/pruebas/95_conciliacion_banco.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Contadores de presupuestos y pedidos =="
-$PSQL -f "$RAIZ/supabase/pruebas/97_contadores.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Rutas del bucket de facturas =="
-$PSQL -f "$RAIZ/supabase/pruebas/98_pdf_textil_storage.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== La sociedad no se borra =="
-$PSQL -f "$RAIZ/supabase/pruebas/99_empresa_no_se_borra.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Origen de los pedidos =="
-$PSQL -f "$RAIZ/supabase/pruebas/A1_origen_pedidos.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== SMTP configurable =="
-$PSQL -f "$RAIZ/supabase/pruebas/A2_smtp_configurable.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Inicio de la numeracion de facturas =="
-$PSQL -f "$RAIZ/supabase/pruebas/A3_serie_inicio.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Libro de caja =="
-$PSQL -f "$RAIZ/supabase/pruebas/A4_caja.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Inversion de los socios =="
-$PSQL -f "$RAIZ/supabase/pruebas/A5_inversion.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Clientes unicos por empresa =="
-$PSQL -f "$RAIZ/supabase/pruebas/A7_clientes_unicos.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Cobros de todos los pedidos =="
-$PSQL -f "$RAIZ/supabase/pruebas/A8_cobros.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Pedidos pendientes de cobro =="
-$PSQL -f "$RAIZ/supabase/pruebas/A9_pedidos_pendientes_cobro.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Presupuestos de las tiendas y productos genericos =="
-$PSQL -f "$RAIZ/supabase/pruebas/B1_presupuestos_tiendas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Confirmar presupuesto: el pedido =="
-$PSQL -f "$RAIZ/supabase/pruebas/B2_confirmar_presupuestos.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Tickets: factura simplificada =="
-$PSQL -f "$RAIZ/supabase/pruebas/B3_tickets.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Cifras fiables: cobro web neto y coste congelado =="
-$PSQL -f "$RAIZ/supabase/pruebas/B4_cifras_fiables.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
-echo
-echo "== Ajustes de Gerencia =="
-$PSQL -f "$RAIZ/supabase/pruebas/B5_gerencia_ajustes.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Gastos con impuestos y periodicidad =="
-$PSQL -f "$RAIZ/supabase/pruebas/B7_gastos_impuestos.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Gastos con o sin justificante =="
-$PSQL -f "$RAIZ/supabase/pruebas/B9_gastos_justificante.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Facturas de compra de todo el negocio =="
-$PSQL -f "$RAIZ/supabase/pruebas/C1_compras_generales.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Facturas recibidas: importes calculados en la base =="
-$PSQL -f "$RAIZ/supabase/pruebas/C2_compras_recibidas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Facturas recibidas: cola de revisión y duplicados =="
-$PSQL -f "$RAIZ/supabase/pruebas/C3_compras_cola.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Bancos: cuentas y extractos =="
-$PSQL -f "$RAIZ/supabase/pruebas/C4_banco_cuentas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Conciliación: compras, grupos, revisar y traspasos =="
-$PSQL -f "$RAIZ/supabase/pruebas/C5_conciliacion_motor.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Clave del lector de facturas en Vault =="
-$PSQL -f "$RAIZ/supabase/pruebas/C6_clave_lector.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Borrar la última factura de la serie =="
-$PSQL -f "$RAIZ/supabase/pruebas/C7_borrar_ultima_factura.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== De dónde salen los metros de una línea =="
-$PSQL -f "$RAIZ/supabase/pruebas/C8_metros_origen.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Bucket de los PDF de facturas =="
-$PSQL -f "$RAIZ/supabase/pruebas/B8_bucket_facturas.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Reponer factura_comprobar_fecha =="
-$PSQL -f "$RAIZ/supabase/pruebas/B6_reponer_comprobar_fecha.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Tickets y facturas con la fecha del pedido =="
-$PSQL -f "$RAIZ/supabase/pruebas/C9_fecha_del_pedido.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Número de factura único por ejercicio =="
-$PSQL -f "$RAIZ/supabase/pruebas/C10_numero_por_ejercicio.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //; s/^WARNING:  //' | sed 's/^/  /'
-
-echo
-echo "== Credenciales de WooCommerce en Vault =="
-$PSQL -f "$RAIZ/supabase/pruebas/30_credenciales_vault.sql" 2>&1 \
-  | grep -E "BIEN|MAL|ERROR|LINE [0-9]" | sed -E 's/^psql:[^ ]+ //; s/^NOTICE:  //' | sed 's/^/  /'
-
+# ---------------------------------------------------------------------------
+# Veredicto
+# ---------------------------------------------------------------------------
 echo
 huecos=$($PSQL -tAc "SELECT count(*) FROM public.facturas_huecos_en_serie();")
 rotos=$($PSQL -tAc "SELECT count(*) FROM public.auditoria_verificar();")
-if [ "$huecos" = "0" ] && [ "$rotos" = "0" ]; then
-  echo "TODO EN VERDE: sin huecos en la serie y con la cadena de auditoría intacta."
-else
-  [ "$huecos" = "0" ] || echo "FALLO: $huecos hueco(s) en la numeración de facturas."
-  [ "$rotos" = "0" ] || {
-    echo "FALLO: $rotos eslabón(es) rotos en la cadena de auditoría."
-    $PSQL -c "SELECT * FROM public.auditoria_verificar() LIMIT 5;"
-  }
+fallo=0
+
+if [ "${#MALES[@]}" -gt 0 ]; then
+  echo "FALLO: ${#MALES[@]} línea(s) MAL:"
+  printf '  %s\n' "${MALES[@]}"
+  fallo=1
+fi
+
+if [ "${#CORTADAS[@]}" -gt 0 ]; then
+  echo "FALLO: ${#CORTADAS[@]} prueba(s) se cortaron con un error de SQL antes de terminar:"
+  printf '  %s\n' "${CORTADAS[@]}"
+  fallo=1
+fi
+
+if [ "$huecos" != "0" ]; then
+  echo "FALLO: $huecos hueco(s) en la numeración de facturas."
+  fallo=1
+fi
+
+if [ "$rotos" != "0" ]; then
+  echo "FALLO: $rotos eslabón(es) rotos en la cadena de auditoría."
+  $PSQL -c "SELECT * FROM public.auditoria_verificar() LIMIT 5;"
+  fallo=1
+fi
+
+if [ "$fallo" -ne 0 ]; then
   exit 1
 fi
+
+echo "TODO EN VERDE: ninguna línea MAL, ninguna prueba cortada, sin huecos en la serie y con la cadena de auditoría intacta."

@@ -4,6 +4,8 @@ import {
   calcularMetros,
   calcularTotales,
   importeLineaSinIva,
+  lineaImpresa,
+  lineasImpresas,
   pieDocumentoEmitido,
   redondear,
   type LineaBruta,
@@ -244,6 +246,162 @@ describe("importeLineaSinIva", () => {
         subtotal: Number.NaN,
       }),
     ).toBe(20);
+  });
+});
+
+describe("lineaImpresa", () => {
+  it("con todo congelado, lo imprime tal cual y no recalcula nada", () => {
+    // Cuota guardada a propósito distinta de base × tipo: manda la guardada.
+    expect(
+      lineaImpresa({
+        descripcion: "Camiseta",
+        cantidad: 2,
+        unidad: "m",
+        precio_unitario: 5,
+        iva_rate: 21,
+        subtotal: 10,
+        iva: 2.11,
+        total: 12.11,
+      }),
+    ).toEqual({
+      descripcion: "Camiseta",
+      cantidad: 2,
+      unidad: "m",
+      precio_unitario: 5,
+      iva_rate: 21,
+      subtotal: 10,
+      iva: 2.11,
+      total: 12.11,
+    });
+  });
+
+  it("sin cuota ni total (textil_factura_items), los saca de la base como factura_calcular", () => {
+    // 3 × 8,25 = 24,75; 24,75 × 21 % = 5,1975 → 5,20; total 29,95.
+    expect(
+      lineaImpresa({
+        descripcion: "Sudadera",
+        cantidad: 3,
+        precio_unitario: 8.25,
+        iva_rate: 21,
+        subtotal: 24.75,
+      }),
+    ).toMatchObject({ subtotal: 24.75, iva: 5.2, total: 29.95 });
+  });
+
+  it("redondea la cuota a la mitad hacia arriba", () => {
+    // 12,50 × 21 % = 2,625 → 2,63: la mitad, hacia arriba.
+    expect(lineaImpresa({ iva_rate: 21, subtotal: 12.5 })).toMatchObject({
+      iva: 2.63,
+      total: 15.13,
+    });
+  });
+
+  it("la cuota sale de la base congelada, no de cantidad × precio", () => {
+    // 10 × 10 € con un 15 % de descuento: base 85, cuota 17,85.
+    expect(
+      lineaImpresa({ cantidad: 10, precio_unitario: 10, iva_rate: 21, subtotal: 85 }),
+    ).toMatchObject({ subtotal: 85, iva: 17.85, total: 102.85 });
+  });
+
+  it("una línea en negativo (rectificativa) mantiene el signo", () => {
+    expect(
+      lineaImpresa({ cantidad: -1, precio_unitario: 12.5, iva_rate: 21, subtotal: -12.5 }),
+    ).toMatchObject({ subtotal: -12.5, iva: -2.63, total: -15.13 });
+  });
+
+  it("al 0 % no hay cuota", () => {
+    expect(lineaImpresa({ iva_rate: 0, subtotal: 40 })).toMatchObject({ iva: 0, total: 40 });
+  });
+
+  it("acepta las cifras como texto, como devuelve numeric", () => {
+    expect(
+      lineaImpresa({
+        cantidad: "2",
+        precio_unitario: "7.50",
+        iva_rate: "21",
+        subtotal: "15",
+        iva: "3.15",
+        total: "18.15",
+      }),
+    ).toMatchObject({
+      cantidad: 2,
+      precio_unitario: 7.5,
+      iva_rate: 21,
+      subtotal: 15,
+      iva: 3.15,
+      total: 18.15,
+    });
+  });
+
+  it("sin unidad, «ud»; con unidad, la suya", () => {
+    expect(lineaImpresa({ subtotal: 1 }).unidad).toBe("ud");
+    expect(lineaImpresa({ subtotal: 1, unidad: "  " }).unidad).toBe("ud");
+    expect(lineaImpresa({ subtotal: 1, unidad: "m" }).unidad).toBe("m");
+  });
+
+  it("sin descripción, texto vacío y no «undefined»", () => {
+    expect(lineaImpresa({ subtotal: 1 }).descripcion).toBe("");
+  });
+
+  it("sin base congelada, la calcula como al emitir", () => {
+    expect(lineaImpresa({ cantidad: 3.5, precio_unitario: 15, iva_rate: 21 })).toMatchObject({
+      subtotal: 52.5,
+      iva: 11.03,
+      total: 63.53,
+    });
+  });
+});
+
+describe("lineasImpresas", () => {
+  const tabla = [
+    { descripcion: "B", cantidad: 1, precio_unitario: 10, iva_rate: 21, subtotal: 10 },
+    { descripcion: "A", cantidad: 2, precio_unitario: 5, iva_rate: 10, subtotal: 10 },
+  ];
+
+  it("con lineas_snapshot, imprime lo congelado: su unidad, su cuota y su orden", () => {
+    const snapshot = [
+      {
+        descripcion: "A",
+        cantidad: 2,
+        unidad: "m",
+        precio_unitario: 5,
+        iva_rate: 10,
+        subtotal: 10,
+        iva: 1,
+        total: 11,
+      },
+      {
+        descripcion: "B",
+        cantidad: 1,
+        unidad: "ud",
+        precio_unitario: 10,
+        iva_rate: 21,
+        subtotal: 10,
+        iva: 2.1,
+        total: 12.1,
+      },
+    ];
+    const r = lineasImpresas(snapshot, tabla);
+    expect(r.map((l) => l.descripcion)).toEqual(["A", "B"]);
+    expect(r[0]).toMatchObject({ unidad: "m", iva: 1, total: 11 });
+  });
+
+  it("sin lineas_snapshot (emitidas antes del motor), las de la tabla, con la cuota calculada", () => {
+    for (const snapshot of [null, undefined, [], "no es una lista"]) {
+      const r = lineasImpresas(snapshot, tabla);
+      expect(r.map((l) => [l.descripcion, l.unidad, l.iva, l.total])).toEqual([
+        ["B", "ud", 2.1, 12.1],
+        ["A", "ud", 1, 11],
+      ]);
+    }
+  });
+
+  it("descarta lo que no es una línea dentro del snapshot", () => {
+    expect(lineasImpresas([null, 3, { descripcion: "A", subtotal: 4 }], tabla)).toHaveLength(1);
+  });
+
+  it("sin nada de nada, ninguna línea", () => {
+    expect(lineasImpresas(null, null)).toEqual([]);
   });
 });
 

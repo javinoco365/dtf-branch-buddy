@@ -46,6 +46,7 @@ export function describirDocumentos(
 export type TotalesCliente = {
   tienda: TotalesPedidos;
   textil: TotalesPedidos;
+  /** Las facturas y tickets de las tiendas y del textil, en una sola tabla. */
   facturas: TotalesDocumentos;
   /**
    * Lo que ha pedido en total, tiendas y textil juntos y sin cancelados: la
@@ -55,18 +56,26 @@ export type TotalesCliente = {
   totalPedidos: number;
 };
 
-/** Los pies del historial de un cliente y la cifra de «Total pedidos». */
+/**
+ * Los pies del historial de un cliente y la cifra de «Total pedidos».
+ *
+ * Las facturas de las tiendas y las del textil van en la misma tabla y suman
+ * con las mismas reglas (`totalesDocumentos`). Se pueden juntar en una lista:
+ * un canje o una rectificativa siempre apunta a un documento de su misma
+ * tabla, y los ids no se repiten entre las dos.
+ */
 export function totalesCliente(historial: {
   pedidos: Parameters<typeof totalesPedidos>[0];
   pedidosTextil: Parameters<typeof totalesPedidos>[0];
   facturas: Parameters<typeof totalesDocumentos>[0];
+  facturasTextil: Parameters<typeof totalesDocumentos>[0];
 }): TotalesCliente {
   const tienda = totalesPedidos(historial.pedidos);
   const textil = totalesPedidos(historial.pedidosTextil);
   return {
     tienda,
     textil,
-    facturas: totalesDocumentos(historial.facturas),
+    facturas: totalesDocumentos([...historial.facturas, ...historial.facturasTextil]),
     totalPedidos: redondear(tienda.total + textil.total),
   };
 }

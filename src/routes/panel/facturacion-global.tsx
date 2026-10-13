@@ -239,7 +239,7 @@ function FacturacionGlobal() {
         f.total,
       ]),
       [
-        "TOTAL",
+        "Total",
         totales.pedidos,
         totales.cobros,
         totales.metros,
@@ -500,7 +500,7 @@ function FacturacionGlobal() {
                   </TableBody>
                   <TableFooter>
                     <TableRow className="font-bold">
-                      <TableCell>TOTAL</TableCell>
+                      <TableCell>Total</TableCell>
                       <TableCell className="text-right">{totales.pedidos}</TableCell>
                       <TableCell className="text-right">{metros(totales.metros)}</TableCell>
                       <TableCell className="text-right">{eur(totales.base)}</TableCell>

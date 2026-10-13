@@ -3,7 +3,7 @@ import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-ur
 import { useTiendas } from "@/lib/periodo";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -51,6 +51,8 @@ import {
 import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
 import { esEstimado } from "@/dominio/metros-woo";
+import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
+import { desglosePedido } from "@/dominio/desglose-pedido";
 import { descargarCSV } from "@/lib/csv";
 import {
   lineasDireccion,
@@ -70,6 +72,13 @@ import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
 import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
+import {
+  SUMA_SYNC_WOO_VACIA,
+  sumarTandaWoo,
+  textoProtegidos,
+  textoQuedan,
+  textoSincronizado,
+} from "@/lib/sync-woo";
 import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
@@ -209,11 +218,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const sincronizar = useMutation({
     mutationKey: CLAVE_SINCRONIZAR,
     mutationFn: () => sincronizarFn({ data: { tienda_id: tiendaId! } }),
-    onSuccess: (r: any) => {
-      toast.success(
-        `Sincronizado: ${r?.pedidos ?? 0} pedidos, ${r?.clientes ?? 0} clientes, ` +
-          `${r?.productos ?? 0} productos`,
-      );
+    // Una sola tanda: lo que quede, y los avisos (topes, migraciones que
+    // faltan), se dicen aquí en vez de callarlos. Mismos textos que Ajustes.
+    onSuccess: (r) => {
+      const suma = sumarTandaWoo(SUMA_SYNC_WOO_VACIA, r);
+      const quedan = textoQuedan(r);
+      toast.success(textoSincronizado(suma), {
+        description: quedan ?? undefined,
+        duration: quedan ? 15_000 : undefined,
+      });
+      const protegidos = textoProtegidos(suma);
+      if (protegidos) toast.warning(protegidos);
+      r.avisos.forEach((a) => toast.warning(a, { duration: 15_000 }));
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
     },
@@ -247,11 +263,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey,
+    // Los días del periodo, no los instantes: el servidor filtra por el día
+    // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
     queryFn: () =>
       list({
-        data: { tiendaId: tiendaConsulta, desde: desde.toISOString(), hasta: hasta.toISOString() },
+        data: {
+          tiendaId: tiendaConsulta,
+          desde: format(desde, "yyyy-MM-dd"),
+          hasta: format(hasta, "yyyy-MM-dd"),
+        },
       }),
   });
 
@@ -301,21 +323,23 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     });
   }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
 
-  // Agrupar por día
   // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
   // más antiguo al más nuevo. Como mucho 500 de una vez.
   const sinDocumento = useMemo(
     () =>
-      filtrados
-        .filter((p) => p.estado !== "cancelado" && !p.documento)
-        .sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido)),
+      ordenarPedidos(
+        filtrados.filter((p) => p.estado !== "cancelado" && !p.documento),
+        "antiguo",
+      ),
     [filtrados],
   );
 
+  // Por el día del pedido, el mismo que lleva su ticket: con la hora del
+  // navegador, un pedido web de las 23:15 caía en el día siguiente.
   const grupos = useMemo(() => {
     const map = new Map<string, PedidoFila[]>();
     for (const p of filtrados) {
-      const k = format(new Date(p.fecha_pedido), "yyyy-MM-dd");
+      const k = diaDelPedido(p);
       const arr = map.get(k) ?? [];
       arr.push(p);
       map.set(k, arr);
@@ -352,7 +376,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       ...filtrados.map((p) => {
         const cobro = resumenCobros(p.total, p.cobros ?? []);
         return [
-          format(new Date(p.fecha_pedido), "yyyy-MM-dd"),
+          diaDelPedido(p),
           p.numero,
           p.tienda_nombre ?? "",
           p.cliente_nombre ?? "",
@@ -519,10 +543,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               <X className="h-4 w-4 mr-1" /> Quitar filtros
             </Button>
           )}
-          <div className="text-xs text-muted-foreground ml-auto">
-            {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
-            <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
-          </div>
+          {/* Sin lista, mientras se lee o porque la lectura ha fallado,
+              «0 pedidos · 0,00 €» sería una cifra inventada: no se enseña. */}
+          {data && (
+            <div className="text-xs text-muted-foreground ml-auto">
+              {describirPedidos(totalesPeriodo.pedidos, totalesPeriodo.cancelados)} ·{" "}
+              <span className="font-semibold text-foreground">{eur(totalesPeriodo.total)}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -543,7 +571,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </CardContent>
           </Card>
         )}
-        {!isLoading && grupos.length === 0 && (
+        {/* Si la lectura falla se dice, en vez de «Sin pedidos en este
+            periodo», que parecería que no hay ventas. */}
+        {error && (
+          <Card>
+            <CardContent className="py-6 text-sm text-destructive">
+              {data ? "No se han podido actualizar" : "No se han podido cargar"} los pedidos:{" "}
+              {error.message}
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && !error && grupos.length === 0 && (
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
               Sin pedidos en este periodo.
@@ -554,7 +592,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           <div key={g.fecha}>
             <div className="flex items-center justify-between pb-2 border-b mb-2">
               <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:text-xs">
-                {format(new Date(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
+                {format(parseISO(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{eur(g.totales.total)}</span>
@@ -1237,6 +1275,7 @@ function MenuAcciones({
 
 /** Lo que se ve al desplegar un pedido: líneas, totales, cliente y envío. */
 function DetallePedido({ pedido }: { pedido: PedidoFila }) {
+  const desglose = desglosePedido(pedido);
   return (
     <div className="py-2 space-y-2">
       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1264,18 +1303,20 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
           ))}
         </TableBody>
       </Table>
+      {/* Se suman de izquierda a derecha. El subtotal guardado ya lleva el
+          envío: enseñarlo junto al envío lo contaba dos veces. */}
       <div className="grid grid-cols-4 gap-4 pt-2 text-sm max-md:grid-cols-2 max-md:gap-2">
         <div>
-          <span className="text-muted-foreground">Subtotal:</span>{" "}
-          <span className="font-medium">{eur(pedido.subtotal)}</span>
+          <span className="text-muted-foreground">Productos (sin IVA):</span>{" "}
+          <span className="font-medium">{eur(desglose.productos)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Envío (sin IVA):</span>{" "}
+          <span className="font-medium">{eur(desglose.envio)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">IVA:</span>{" "}
-          <span className="font-medium">{eur(pedido.iva)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Envío:</span>{" "}
-          <span className="font-medium">{eur(pedido.envio)}</span>
+          <span className="font-medium">{eur(desglose.iva)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Total:</span>{" "}

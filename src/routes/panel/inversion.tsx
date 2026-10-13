@@ -92,10 +92,11 @@ function InversionPage() {
     onError: (e: Error) => toast.error(e.message || "No se ha podido borrar"),
   });
 
+  // Se exporta lo que se ve: los apuntes con los filtros puestos.
   function exportar() {
     descargarCSV("inversion.csv", [
       ["Fecha", "Socio", "Tipo", "Importe", "Observaciones"],
-      ...movimientos.map((m) => [
+      ...filtrados.map((m) => [
         m.fecha,
         m.socio_nombre,
         m.tipo === "aportacion" ? "Aportación" : "Retirada",
@@ -118,7 +119,7 @@ function InversionPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportar} disabled={movimientos.length === 0}>
+          <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
           <Button
@@ -285,10 +286,12 @@ function InversionPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {!isLoading && !error && movimientos.length === 0 && (
+              {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    Sin apuntes.
+                    {movimientos.length === 0
+                      ? "Sin apuntes."
+                      : "Ningún apunte cumple los filtros."}
                   </TableCell>
                 </TableRow>
               )}

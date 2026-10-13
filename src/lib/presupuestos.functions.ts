@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { leerTodas } from "./paginar";
 import {
   ambitoPresupuesto,
   prefijoDeTienda,
@@ -62,14 +63,19 @@ export const listPresupuestosTienda = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ tiendaId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: filas, error } = await tabla(context.supabase, "presupuestos")
-      .select("*, items:presupuesto_items(*), pedido:pedidos(numero)")
-      .eq("tienda_id", data.tiendaId)
-      .order("fecha", { ascending: false })
-      .order("numero", { ascending: false });
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data: filas, error } = await leerTodas<Presupuesto>((a, b) =>
+      tabla(context.supabase, "presupuestos")
+        .select("*, items:presupuesto_items(*), pedido:pedidos(numero)")
+        .eq("tienda_id", data.tiendaId)
+        .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
     if (faltaLaTabla(error)) return { disponible: false, presupuestos: [] as Presupuesto[] };
     if (error) throw new Error(error.message);
-    const presupuestos = ((filas ?? []) as Presupuesto[]).map((p) => ({
+    const presupuestos = filas.map((p) => ({
       ...p,
       items: [...(p.items ?? [])].sort((a, b) => a.orden - b.orden),
     }));

@@ -77,8 +77,36 @@ describe("consolidarCobro", () => {
   });
 
   it("por fecha del pedido se fecha con el pedido; por fecha de cobro, con el cobro", () => {
-    expect(consolidarCobro(leido(), "pedido").fecha).toBe(pedido.fecha);
+    // El momento del pedido en el reloj de España: 09:00 UTC son las 11:00.
+    expect(consolidarCobro(leido(), "pedido").fecha).toBe("2026-09-01T11:00:00");
+    expect(consolidarCobro(leido(), "pedido").fecha_pedido).toBe("2026-09-01");
     expect(consolidarCobro(leido(), "cobro").fecha).toBe("2026-09-10T12:00:00");
+  });
+
+  it("el pedido va en su día, el de su ticket: el web por la hora de la web", () => {
+    // Un pedido web guarda la hora de la web como si fuera UTC: el de las
+    // 23:15 del 30 de septiembre es de septiembre.
+    const web = consolidarCobro(
+      leido({
+        pedido: { ...pedido, fecha: "2026-09-30T23:15:00+00:00", origen: "woocommerce" },
+      }),
+      "pedido",
+    );
+    expect(web.fecha_pedido).toBe("2026-09-30");
+    expect(web.fecha).toBe("2026-09-30T23:15:00");
+    // Uno del CRM de las 22:30 UTC del 30 son las 00:30 del 1 de octubre.
+    const crm = consolidarCobro(
+      leido({ pedido: { ...pedido, fecha: "2026-09-30T22:30:00+00:00", origen: "manual" } }),
+      "pedido",
+    );
+    expect(crm.fecha_pedido).toBe("2026-10-01");
+    expect(crm.fecha).toBe("2026-10-01T00:30:00");
+    // Y así caen en su mes al repartir por rangos.
+    const meses = [
+      { desde: new Date(2026, 8, 1), hasta: new Date(2026, 8, 30, 23, 59, 59, 999) },
+      { desde: new Date(2026, 9, 1), hasta: new Date(2026, 9, 31, 23, 59, 59, 999) },
+    ];
+    expect(totalPorRangos([web, crm], meses).map((m) => m.total)).toEqual([121, 121]);
   });
 
   it("el día sin hora del textil se sitúa a mediodía", () => {

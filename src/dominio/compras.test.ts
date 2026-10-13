@@ -5,11 +5,17 @@ import { gastosFijosPorGrupo } from "./grupos";
 import type { CompraResumen } from "./fiscal";
 import {
   calcularCompra,
+  cambiarLineaCompra,
   categoriaCompra,
   comparacionCompras,
   comprasQueCuentan,
+  costeUnitarioDeImporte,
   descuadreLiquido,
+  importeLineaCompra,
   importesDeCompra,
+  lineaCompraNueva,
+  TIPO_IVA_GENERAL,
+  TIPOS_IVA,
   tipoIrpfProbable,
   tipoProbable,
   comprasParaComparar,
@@ -90,6 +96,7 @@ describe("factura enlazada a un gasto fijo", () => {
       compras,
       gastos,
       cuotaIsAnterior: null,
+      primeraVenta: null,
     });
     // Tres alquileres de 210 de IVA y 190 de retención: la factura es uno de ellos.
     expect(q1).toMatchObject({ ivaSoportado: 630, irpf115: 570, irpf111: 0 });
@@ -158,6 +165,7 @@ describe("compras que cuestan como un gasto", () => {
       compras: [...compras, compra("abog", { categoria: "servicios", irpf: 15 })],
       gastos,
       cuotaIsAnterior: null,
+      primeraVenta: null,
     });
     // IVA de las 6 registradas (21 cada una) y la retención del abogado al 111.
     expect(q1).toMatchObject({ ivaSoportado: 126, irpf111: 15 });
@@ -226,5 +234,109 @@ describe("importes de una factura recibida", () => {
     expect(comprasQueCuentan([fila, { ...fila, id: "b", borrada_en: "2026-10-07" }])).toHaveLength(
       1,
     );
+  });
+});
+
+describe("líneas de una factura recibida", () => {
+  const linea = { descripcion: "Camiseta", cantidad: 3, precio_unitario: 2.5, importe: 7.5 };
+
+  it("el importe es cantidad por coste, al céntimo", () => {
+    expect(importeLineaCompra({ cantidad: 3, precio_unitario: 1.115 })).toBe(3.35);
+    expect(importeLineaCompra({ cantidad: "2", precio_unitario: "0.1" })).toBe(0.2);
+    expect(importeLineaCompra({ cantidad: null, precio_unitario: 4 })).toBe(0);
+  });
+
+  it("cambiar la cantidad o el coste recalcula el importe", () => {
+    expect(cambiarLineaCompra(linea, { cantidad: 4 })).toMatchObject({ cantidad: 4, importe: 10 });
+    expect(cambiarLineaCompra(linea, { precio_unitario: 3.333 })).toMatchObject({
+      precio_unitario: 3.333,
+      importe: 10,
+    });
+  });
+
+  it("cambiar el importe se queda con él y recalcula el coste, a cuatro decimales", () => {
+    // El papel trae 3 × 10 = 27: un descuento.
+    expect(cambiarLineaCompra({ ...linea, precio_unitario: 10 }, { importe: 27 })).toMatchObject({
+      cantidad: 3,
+      precio_unitario: 9,
+      importe: 27,
+    });
+    expect(cambiarLineaCompra(linea, { importe: 10 })).toMatchObject({
+      precio_unitario: 3.3333,
+      importe: 10,
+    });
+    expect(cambiarLineaCompra(linea, { importe: 0 })).toMatchObject({
+      precio_unitario: 0,
+      importe: 0,
+    });
+  });
+
+  it("con el importe corregido, cambiar luego la cantidad vuelve a calcular el importe", () => {
+    const corregida = cambiarLineaCompra({ ...linea, cantidad: 2 }, { importe: 27 });
+    expect(corregida).toMatchObject({ cantidad: 2, precio_unitario: 13.5, importe: 27 });
+    expect(cambiarLineaCompra(corregida, { cantidad: 3 })).toMatchObject({
+      cantidad: 3,
+      precio_unitario: 13.5,
+      importe: 40.5,
+    });
+    // Y si después se escribe el importe del papel, el coste se ajusta otra vez.
+    expect(
+      cambiarLineaCompra(cambiarLineaCompra(corregida, { cantidad: 3 }), { importe: 27 }),
+    ).toMatchObject({ cantidad: 3, precio_unitario: 9, importe: 27 });
+  });
+
+  it("con cantidad 0 el importe escrito se queda y el coste no cambia", () => {
+    expect(cambiarLineaCompra({ ...linea, cantidad: 0 }, { importe: 12 })).toMatchObject({
+      cantidad: 0,
+      precio_unitario: 2.5,
+      importe: 12,
+    });
+  });
+
+  it("si llegan a la vez el importe y el coste, se quedan los dos", () => {
+    expect(cambiarLineaCompra(linea, { precio_unitario: 10, importe: 27 })).toMatchObject({
+      precio_unitario: 10,
+      importe: 27,
+    });
+    // El importe y la cantidad a la vez: el coste sale de los dos nuevos.
+    expect(cambiarLineaCompra(linea, { cantidad: 4, importe: 30 })).toMatchObject({
+      cantidad: 4,
+      precio_unitario: 7.5,
+      importe: 30,
+    });
+  });
+
+  it("el coste unitario que explica un importe", () => {
+    expect(costeUnitarioDeImporte({ cantidad: 3, importe: 27 })).toBe(9);
+    expect(costeUnitarioDeImporte({ cantidad: 7, importe: 100 })).toBe(14.2857);
+    expect(costeUnitarioDeImporte({ cantidad: "4", importe: "10" })).toBe(2.5);
+    expect(costeUnitarioDeImporte({ cantidad: 3, importe: -10 })).toBe(-3.3333);
+    expect(costeUnitarioDeImporte({ cantidad: 0, importe: 10 })).toBeNull();
+    expect(costeUnitarioDeImporte({ cantidad: null, importe: 10 })).toBeNull();
+    // Recalculado con ese coste, el importe vuelve a ser el escrito.
+    expect(importeLineaCompra({ cantidad: 7, precio_unitario: 14.2857 })).toBe(100);
+    // Con muchas unidades, cuatro decimales no siempre bastan: la línea guarda el escrito.
+    const mil = cambiarLineaCompra({ ...linea, cantidad: 1000 }, { importe: 1234.56 });
+    expect(mil).toMatchObject({ precio_unitario: 1.2346, importe: 1234.56 });
+    expect(importeLineaCompra(mil)).toBe(1234.6);
+  });
+
+  it("cambiar solo el concepto deja el importe leído, aunque no cuadre", () => {
+    const leida = { ...linea, importe: 7 }; // un descuento que no se leyó
+    expect(cambiarLineaCompra(leida, { descripcion: "Polo" })).toEqual({
+      ...leida,
+      descripcion: "Polo",
+    });
+  });
+
+  it("una línea nueva cuadra desde el principio", () => {
+    const nueva = lineaCompraNueva();
+    expect(nueva).toMatchObject({ cantidad: 1, precio_unitario: 0, importe: 0 });
+    expect(cambiarLineaCompra(nueva, { precio_unitario: 12.4 }).importe).toBe(12.4);
+  });
+
+  it("una factura a mano empieza con el IVA general, que es uno de los tipos", () => {
+    expect(TIPO_IVA_GENERAL).toBe(0.21);
+    expect(TIPOS_IVA).toContain(TIPO_IVA_GENERAL);
   });
 });

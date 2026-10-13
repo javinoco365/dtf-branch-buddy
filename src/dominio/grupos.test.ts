@@ -109,6 +109,53 @@ describe("facturado sin pedido", () => {
       ]),
     ).toBe(30);
   });
+
+  describe("un ticket sin pedido canjeado por factura cuenta una vez", () => {
+    // La factura del canje hereda el pedido del ticket: aquí, ninguno.
+    const ticket = f("t", 100, { tipo: "simplificada", fecha: "2026-02-10" });
+    const canje = f("c", 100, { fecha: "2026-02-10", sustituye_a_id: "t" });
+    const anulacion = f("r", -100, {
+      tipo: "rectificativa",
+      fecha: "2026-04-02",
+      rectifica_a_id: "c",
+    });
+
+    it("canje sin anular: 100, no 200", () => {
+      expect(facturadoSinPedido([ticket, canje])).toBe(100);
+      // En dos periodos: el ticket en el suyo; la factura no suma en el suyo.
+      expect(facturadoSinPedido([ticket])).toBe(100);
+      expect(facturadoSinPedido([{ ...canje, fecha: "2026-04-03" }], [ticket])).toBe(0);
+    });
+
+    it("la rectificativa que anula el canje deja el ticket: 0 en su periodo, 100 en total", () => {
+      expect(facturadoSinPedido([anulacion], [ticket, canje])).toBe(0);
+      expect(facturadoSinPedido([ticket, canje, anulacion])).toBe(100);
+    });
+
+    it("si el ticket es de un pedido, su venta ya está en las ventas: aquí nada", () => {
+      const deP = { pedido_id: "p" };
+      expect(
+        facturadoSinPedido([
+          { ...ticket, ...deP },
+          { ...canje, ...deP },
+        ]),
+      ).toBe(0);
+      expect(
+        facturadoSinPedido(
+          [{ ...anulacion }],
+          [
+            { ...ticket, ...deP },
+            { ...canje, ...deP },
+          ],
+        ),
+      ).toBe(0);
+    });
+
+    it("lo mismo en el textil", () => {
+      const textil = (x: DocumentoFiscal) => ({ ...x, tienda_id: "textil-personalizado" });
+      expect(facturadoSinPedido([ticket, canje, anulacion].map(textil))).toBe(100);
+    });
+  });
 });
 
 describe("cuenta de resultados en tres columnas", () => {

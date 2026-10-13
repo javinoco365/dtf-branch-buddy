@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "@/lib/rpc";
 import { leerTodas, trozos } from "@/lib/paginar";
+import { leerPorIds } from "@/lib/leer-por-ids";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
 import { listMovimientosBanco } from "@/lib/banco.functions";
@@ -451,7 +452,14 @@ function claveIds(ids: readonly string[]): string {
 export type HuecoSerie = { serie: string; ejercicio: number; numero_ausente: number };
 
 export type DatosFiscal = {
+  /** Los emitidos y borradores con fecha en el rango. */
   documentos: DocumentoFiscal[];
+  /**
+   * Los de fuera del rango que hacen falta para casar los canjes de ticket
+   * por factura de los del rango: el ticket de cada factura de canje y la
+   * factura (y su ticket) de cada rectificativa. Solo se miran: no cuentan.
+   */
+  referencias: DocumentoFiscal[];
   /** Nulo si la tabla de compras no existe todavía. */
   compras: CompraResumen[] | null;
   huecos: HuecoSerie[];
@@ -512,7 +520,83 @@ export function useComprasGerencia() {
   });
 }
 
-/** Facturas, tickets y rectificativas emitidos en el rango, compras del rango y huecos de numeración. */
+type FilaDocumento = Record<string, unknown>;
+type Lectura = { data: FilaDocumento[]; error: { code?: string; message: string } | null };
+
+const CAMPOS_FACTURA =
+  "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id, sustituye_a_id";
+const CAMPOS_TEXTIL = "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva, rectifica_a_id";
+/** El pedido y el canje del textil llegaron con la misma migración (tickets). */
+const CAMPOS_TEXTIL_CANJE = `${CAMPOS_TEXTIL}, textil_pedido_id, sustituye_a_id`;
+
+const deFactura = (x: FilaDocumento): DocumentoFiscal => ({
+  id: x.id as string,
+  tipo: x.tipo as DocumentoFiscal["tipo"],
+  estado: x.estado as string,
+  fecha: x.fecha as string,
+  tienda_id: x.tienda_id as string,
+  base: x.base_imponible as number,
+  iva: x.iva_total as number,
+  total: x.total as number,
+  desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
+  pedido_id: (x.pedido_id as string | null) ?? null,
+  rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
+  sustituye_a_id: (x.sustituye_a_id as string | null) ?? null,
+});
+
+const deFacturaTextil = (x: FilaDocumento): DocumentoFiscal => ({
+  id: x.id as string,
+  tipo: (x.tipo ?? "ordinaria") as DocumentoFiscal["tipo"],
+  estado: x.estado as string,
+  fecha: x.fecha as string,
+  tienda_id: TIENDA_TEXTIL.id,
+  base: x.subtotal as number,
+  iva: x.iva as number,
+  total: x.total as number,
+  desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
+  pedido_id: (x.textil_pedido_id as string | null) ?? null,
+  rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
+  sustituye_a_id: (x.sustituye_a_id as string | null) ?? null,
+});
+
+/**
+ * Los documentos de una tabla que faltan para casar los canjes de `filas`:
+ * el ticket de cada factura de canje (`sustituye_a_id`) y la factura de cada
+ * rectificativa (`rectifica_a_id`), y luego el ticket de esas facturas. Se
+ * leen por id, con las mismas columnas, hasta que no falta ninguno.
+ */
+async function referenciasDeCanje(
+  nombre: "facturas" | "textil_facturas",
+  campos: string,
+  filas: readonly FilaDocumento[],
+): Promise<Lectura> {
+  const conocidos = new Set(filas.map((x) => x.id as string));
+  const leidas: FilaDocumento[] = [];
+  let ultimas = filas;
+  for (;;) {
+    const faltan = [
+      ...new Set(
+        ultimas
+          .flatMap((x) => [x.sustituye_a_id, x.rectifica_a_id])
+          .filter((id): id is string => typeof id === "string" && !conocidos.has(id)),
+      ),
+    ];
+    if (!faltan.length) return { data: leidas, error: null };
+    const r = await leerPorIds<FilaDocumento>(faltan, (trozo, a, b) =>
+      tabla(supabase, nombre).select(campos).in("id", trozo).order("id").range(a, b),
+    );
+    if (r.error) return { data: leidas, error: r.error };
+    for (const id of faltan) conocidos.add(id);
+    leidas.push(...r.data);
+    ultimas = r.data;
+  }
+}
+
+/**
+ * Facturas, tickets y rectificativas emitidos en el rango, los documentos de
+ * fuera que hacen falta para casar sus canjes, compras del rango y huecos de
+ * numeración.
+ */
 export function useFiscal(rango: RangoFechas) {
   const desde = dia(rango.desde);
   const hasta = dia(rango.hasta);
@@ -520,7 +604,7 @@ export function useFiscal(rango: RangoFechas) {
     queryKey: ["gerencia-fiscal", desde, hasta],
     queryFn: async (): Promise<DatosFiscal> => {
       const enRango = (nombre: string, campos: string) =>
-        leerTodas<Record<string, unknown>>((a, b) =>
+        leerTodas<FilaDocumento>((a, b) =>
           tabla(supabase, nombre)
             .select(campos)
             .gte("fecha", desde)
@@ -528,14 +612,9 @@ export function useFiscal(rango: RangoFechas) {
             .order("id")
             .range(a, b),
         );
-      const camposTextil =
-        "id, tipo, estado, fecha, subtotal, iva, total, desglose_iva, rectifica_a_id";
       const [f, t0, c] = await Promise.all([
-        enRango(
-          "facturas",
-          "id, tipo, estado, fecha, tienda_id, base_imponible, iva_total, total, desglose_iva, pedido_id, rectifica_a_id",
-        ),
-        enRango("textil_facturas", `${camposTextil}, textil_pedido_id`),
+        enRango("facturas", CAMPOS_FACTURA),
+        enRango("textil_facturas", CAMPOS_TEXTIL_CANJE),
         leerCompras(
           (campos) =>
             enRango("textil_compras", campos) as Promise<{
@@ -544,11 +623,20 @@ export function useFiscal(rango: RangoFechas) {
             }>,
         ),
       ]);
-      // Antes de la migración de tickets la factura textil no sabe su pedido.
+      // Antes de la migración de tickets la factura textil no sabe su pedido
+      // ni canjea tickets.
+      const camposTextil = faltaLaColumna(t0.error) ? CAMPOS_TEXTIL : CAMPOS_TEXTIL_CANJE;
       const t = faltaLaColumna(t0.error) ? await enRango("textil_facturas", camposTextil) : t0;
       if (f.error) throw new Error(f.error.message);
       if (t.error) throw new Error(t.error.message);
       if (c.error && !faltaLaTabla(c.error)) throw new Error(c.error.message);
+
+      const [rf, rt] = await Promise.all([
+        referenciasDeCanje("facturas", CAMPOS_FACTURA, f.data),
+        referenciasDeCanje("textil_facturas", camposTextil, t.data),
+      ]);
+      if (rf.error) throw new Error(rf.error.message);
+      if (rt.error) throw new Error(rt.error.message);
 
       let huecos: HuecoSerie[] = [];
       try {
@@ -558,36 +646,9 @@ export function useFiscal(rango: RangoFechas) {
         huecos = [];
       }
 
-      const documentos: DocumentoFiscal[] = [
-        ...f.data.map((x) => ({
-          id: x.id as string,
-          tipo: x.tipo as DocumentoFiscal["tipo"],
-          estado: x.estado as string,
-          fecha: x.fecha as string,
-          tienda_id: x.tienda_id as string,
-          base: x.base_imponible as number,
-          iva: x.iva_total as number,
-          total: x.total as number,
-          desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
-          pedido_id: (x.pedido_id as string | null) ?? null,
-          rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
-        })),
-        ...t.data.map((x) => ({
-          id: x.id as string,
-          tipo: (x.tipo ?? "ordinaria") as DocumentoFiscal["tipo"],
-          estado: x.estado as string,
-          fecha: x.fecha as string,
-          tienda_id: TIENDA_TEXTIL.id,
-          base: x.subtotal as number,
-          iva: x.iva as number,
-          total: x.total as number,
-          desglose_iva: x.desglose_iva as DocumentoFiscal["desglose_iva"],
-          pedido_id: (x.textil_pedido_id as string | null) ?? null,
-          rectifica_a_id: (x.rectifica_a_id as string | null) ?? null,
-        })),
-      ];
       return {
-        documentos,
+        documentos: [...f.data.map(deFactura), ...t.data.map(deFacturaTextil)],
+        referencias: [...rf.data.map(deFactura), ...rt.data.map(deFacturaTextil)],
         compras: faltaLaTabla(c.error) ? null : (c.data as CompraResumen[]),
         huecos: (huecos ?? []).map((h) => ({
           serie: h.serie,
@@ -595,6 +656,34 @@ export function useFiscal(rango: RangoFechas) {
           numero_ausente: h.numero_ausente,
         })),
       };
+    },
+  });
+}
+
+/**
+ * El día del primer documento de venta emitido del CRM: factura o ticket,
+ * de tienda o del textil, sin borradores. Desde su trimestre el CRM sabe lo
+ * que se vende, y desde ahí se compensa el 303 (ver `inicioHistorial303`).
+ * Nulo si todavía no hay ninguno.
+ */
+export function usePrimeraVenta() {
+  return useQuery({
+    queryKey: ["gerencia-primera-venta"],
+    queryFn: async (): Promise<string | null> => {
+      const primera = async (nombre: "facturas" | "textil_facturas") => {
+        // Un estado vacío (textil antiguo) es un documento emitido, como en resumenIva.
+        const r = await tabla(supabase, nombre)
+          .select("fecha")
+          .or("estado.is.null,estado.neq.borrador")
+          .order("fecha", { ascending: true })
+          .limit(1);
+        if (r.error) throw new Error(r.error.message);
+        return ((r.data ?? []) as { fecha: string | null }[])[0]?.fecha ?? null;
+      };
+      const fechas = (await Promise.all([primera("facturas"), primera("textil_facturas")])).filter(
+        (x): x is string => !!x,
+      );
+      return fechas.length ? fechas.map((x) => x.slice(0, 10)).sort()[0] : null;
     },
   });
 }

@@ -4,7 +4,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { numero } from "@/lib/format";
 import { Explicacion } from "@/components/Explicacion";
-import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
+import { DEFINICIONES, type ClaveDefinicion, type Definicion } from "@/dominio/definiciones";
 
 /**
  * Una cifra de un cuadro de mando, con su variación frente al periodo con el
@@ -24,8 +24,11 @@ export function TarjetaKpi({
   titulo: string;
   /** Debajo de todo: un enlace al detalle, una nota. */
   pie?: ReactNode;
-  /** La definición que sale en su ⓘ (ver dominio/definiciones.ts). */
-  explicacion?: ClaveDefinicion;
+  /**
+   * La definición que sale en su ⓘ (ver dominio/definiciones.ts): su clave o,
+   * si lleva datos del caso, la definición ya montada.
+   */
+  explicacion?: ClaveDefinicion | Definicion;
   valor: string;
   /** `null` cuando el periodo anterior no da para comparar. */
   delta: number | null;
@@ -45,7 +48,14 @@ export function TarjetaKpi({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             <span>{titulo}</span>
-            {explicacion && <Explicacion titulo={titulo} definicion={DEFINICIONES[explicacion]} />}
+            {explicacion && (
+              <Explicacion
+                titulo={titulo}
+                definicion={
+                  typeof explicacion === "string" ? DEFINICIONES[explicacion] : explicacion
+                }
+              />
+            )}
           </div>
           <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
             <Icon className="h-5 w-5" />
