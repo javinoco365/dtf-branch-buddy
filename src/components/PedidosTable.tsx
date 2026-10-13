@@ -656,9 +656,12 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   desplace en horizontal en vez de estrujar las columnas.
 
                   Ojo con la suma: los anchos fijos dan 968 px, así que a
-                  Cliente le quedan al menos 152 y unos 166 en un portátil de
-                  1440 (la tabla mide allí 1134: con el mínimo de 1120 no se
-                  desplaza). Llegaron a sumar 1184, más que la propia tabla, y
+                  Cliente le quedan al menos 136 y unos 150-166 en un portátil
+                  de 1440. Allí la tabla mide 1134, o 1117 si el navegador
+                  tiene barra de desplazamiento fija (Windows, o un Mac con
+                  ratón): el mínimo de 1104 cabe en las dos y no se desplaza.
+                  Con 1120 sobraba un píxel y salía una barra horizontal bajo
+                  cada día. Llegaron a sumar 1184, más que la propia tabla, y
                   Cliente se quedaba en cero: el nombre desaparecía y su
                   cabecera se montaba encima de la de Tienda. Por eso la tienda
                   va debajo del número y el método de pago debajo del total.
@@ -669,7 +672,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
                   del total del periodo: si cambian aquí, cambian allí.
                 */}
-                <Table className="table-fixed min-w-[1120px]">
+                <Table className="table-fixed min-w-[1104px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
@@ -735,7 +738,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 «Pendiente» delante de cada cifra (las etiquetas salen de la
                 cabecera).
               */}
-              <Table movil="tarjetas" className="table-fixed min-w-[1120px]">
+              <Table movil="tarjetas" className="table-fixed min-w-[1104px]">
                 <ColumnasPedidos />
                 <TableHeader className="hidden">
                   <TableRow>
@@ -1443,6 +1446,13 @@ const TITULO_ESTIMADO =
   "Incluye metros estimados (importe ÷ precio por metro): WooCommerce no trajo la longitud del montador de alguna línea. El detalle del pedido dice cuál.";
 
 /**
+ * Una cifra de metros que no se parte: «12.345,67 m» va entera en una línea,
+ * sin dejar la «m» sola debajo. Si no cabe con «≈» delante, baja la cifra y el
+ * «≈» se queda arriba.
+ */
+const Metros = ({ m }: { m: number }) => <span className="whitespace-nowrap">{metros(m)}</span>;
+
+/**
  * Los metros del pedido: `metros_total`, los mismos que suman Gerencia y la
  * facturación de la tienda. Si alguna línea es estimada, el total también, y
  * se dice como en el detalle. Sin metros, «—»: un «0,00 m» parecería un pedido
@@ -1453,10 +1463,10 @@ const TITULO_ESTIMADO =
 function MetrosPedido({ pedido, enLinea }: { pedido: PedidoFila; enLinea?: boolean }) {
   const m = Number(pedido.metros_total ?? 0);
   if (!(m > 0)) return <span className="text-muted-foreground">—</span>;
-  if (!pedidoConMetrosEstimados(pedido.items)) return <>{metros(m)}</>;
+  if (!pedidoConMetrosEstimados(pedido.items)) return <Metros m={m} />;
   return (
     <span title={TITULO_ESTIMADO}>
-      ≈ {metros(m)}
+      ≈ <Metros m={m} />
       {!enLinea && <span className="block text-xs text-muted-foreground">estimado</span>}
     </span>
   );
@@ -1464,8 +1474,12 @@ function MetrosPedido({ pedido, enLinea }: { pedido: PedidoFila; enLinea?: boole
 
 /** Los metros de un pie de pedidos (sin los cancelados), con «≈» si alguno es estimado. */
 function MetrosSuma({ totales }: { totales: TotalesPedidos }) {
-  if (!totales.metrosEstimados) return <>{metros(totales.metros)}</>;
-  return <span title={TITULO_ESTIMADO}>≈ {metros(totales.metros)}</span>;
+  if (!totales.metrosEstimados) return <Metros m={totales.metros} />;
+  return (
+    <span title={TITULO_ESTIMADO}>
+      ≈ <Metros m={totales.metros} />
+    </span>
+  );
 }
 
 /**
