@@ -27,7 +27,44 @@ describe("totalesPedidos", () => {
       { total: 50, estado: "pendiente", cobros: [{ importe: 20 }] },
       { total: 80, estado: "cancelado", cobros: [{ importe: 80 }] },
     ]);
-    expect(t).toEqual({ pedidos: 2, cancelados: 1, total: 150, cobrado: 120, pendiente: 30 });
+    expect(t).toEqual({
+      pedidos: 2,
+      cancelados: 1,
+      total: 150,
+      cobrado: 120,
+      pendiente: 30,
+      metros: 0,
+      metrosEstimados: false,
+    });
+  });
+
+  it("los metros de los cancelados tampoco suman", () => {
+    const t = totalesPedidos([
+      { total: 100, estado: "entregado", metros_total: 10.255 },
+      { total: 50, estado: "pendiente", metros_total: "2.5" },
+      { total: 80, estado: "cancelado", metros_total: 99 },
+      { total: 30, estado: "pendiente", metros_total: null },
+    ]);
+    expect(t.metros).toBe(12.755);
+  });
+
+  it("la suma es estimada si lo es algún metro de un pedido que cuenta", () => {
+    const estimado = { metros_origen: "precio_linea" };
+    const leido = { metros_origen: "montador" };
+    expect(
+      totalesPedidos([{ total: 10, metros_total: 1, items: [leido, estimado] }]).metrosEstimados,
+    ).toBe(true);
+    expect(
+      totalesPedidos([{ total: 10, metros_total: 1, items: [leido, { metros_origen: null }] }])
+        .metrosEstimados,
+    ).toBe(false);
+    // Un cancelado no suma sus metros: tampoco hace estimada la suma.
+    expect(
+      totalesPedidos([
+        { total: 10, metros_total: 1, items: [leido] },
+        { total: 5, estado: "cancelado", metros_total: 2, items: [estimado] },
+      ]).metrosEstimados,
+    ).toBe(false);
   });
 
   it("lo cobrado de más no resta del pendiente de los demás", () => {

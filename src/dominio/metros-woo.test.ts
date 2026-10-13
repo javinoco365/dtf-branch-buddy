@@ -6,6 +6,7 @@ import {
   medirLineaWoo,
   metrosPedidoWoo,
   numeroDeTexto,
+  pedidoConMetrosEstimados,
   primerNumero,
   type LineaWoo,
 } from "./metros-woo";
@@ -229,5 +230,24 @@ describe("metros de una línea", () => {
       ),
     ).toBe(6.153);
     expect(metrosPedidoWoo(null, PRECIO)).toBe(0);
+  });
+});
+
+describe("pedidoConMetrosEstimados", () => {
+  it("basta una línea estimada para que el pedido lo sea", () => {
+    expect(
+      pedidoConMetrosEstimados([
+        { metros_origen: "montador" },
+        { metros_origen: "precio_ajustes" },
+      ]),
+    ).toBe(true);
+    expect(pedidoConMetrosEstimados([{ metros_origen: "precio_linea" }])).toBe(true);
+  });
+
+  it("leídos del montador, sin origen (líneas antiguas) o sin líneas: no", () => {
+    expect(pedidoConMetrosEstimados([{ metros_origen: "montador" }, {}])).toBe(false);
+    expect(pedidoConMetrosEstimados([{ metros_origen: null }])).toBe(false);
+    expect(pedidoConMetrosEstimados([])).toBe(false);
+    expect(pedidoConMetrosEstimados(null)).toBe(false);
   });
 });

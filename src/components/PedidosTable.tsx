@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
-import { esEstimado } from "@/dominio/metros-woo";
+import { esEstimado, pedidoConMetrosEstimados } from "@/dominio/metros-woo";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { desglosePedido } from "@/dominio/desglose-pedido";
 import { descargarCSV } from "@/lib/csv";
@@ -595,7 +595,16 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 {format(parseISO(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="font-semibold">{eur(g.totales.total)}</span>
+                {/* En el ordenador los metros del día van en su pie, debajo de
+                    su columna. En el móvil no hay pie: van aquí, debajo del
+                    importe, para que la fecha no se parta en dos líneas. */}
+                <div className="text-right leading-tight md:hidden">
+                  <div className="font-semibold">{eur(g.totales.total)}</div>
+                  <div className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                    <MetrosSuma totales={g.totales} />
+                  </div>
+                </div>
+                <span className="font-semibold max-md:hidden">{eur(g.totales.total)}</span>
                 <Badge variant="outline" className="whitespace-nowrap">
                   {describirPedidos(g.totales.pedidos)}
                 </Badge>
@@ -646,31 +655,35 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   El `min-w` es para que en pantallas estrechas la tabla se
                   desplace en horizontal en vez de estrujar las columnas.
 
-                  Ojo con la suma: los anchos fijos dan 912 px, así que a
-                  Cliente le quedan al menos 168 y unos 220 en un portátil de
-                  1440. Llegaron a sumar 1184, más que la propia tabla, y
+                  Ojo con la suma: los anchos fijos dan 968 px, así que a
+                  Cliente le quedan al menos 152 y unos 166 en un portátil de
+                  1440 (la tabla mide allí 1134: con el mínimo de 1120 no se
+                  desplaza). Llegaron a sumar 1184, más que la propia tabla, y
                   Cliente se quedaba en cero: el nombre desaparecía y su
                   cabecera se montaba encima de la de Tienda. Por eso la tienda
                   va debajo del número y el método de pago debajo del total.
-                  Si se añade una columna, que le quite el sitio a otra.
+                  Si se añade una columna, que le quite el sitio a otra:
+                  Metros se lo quitó a Nº Pedido, Estado y Env., que tenían de
+                  sobra, y a Cliente.
 
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
                   del total del periodo: si cambian aquí, cambian allí.
                 */}
-                <Table className="table-fixed min-w-[1080px]">
+                <Table className="table-fixed min-w-[1120px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead className="w-40">
+                      <TableHead className="w-36">
                         {tiendaId ? "Nº Pedido" : "Nº Pedido · Tienda"}
                       </TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead className="w-32">Origen</TableHead>
-                      <TableHead className="w-36">Estado</TableHead>
+                      <TableHead className="w-32">Estado</TableHead>
+                      <TableHead className="w-24 text-right">Metros</TableHead>
                       <TableHead className="w-28 text-right">Total</TableHead>
                       <TableHead className="w-28 text-right">Cobrado</TableHead>
                       <TableHead className="w-28 text-right">Pendiente</TableHead>
-                      <TableHead className="w-14">Env.</TableHead>
+                      <TableHead className="w-12">Env.</TableHead>
                       <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
@@ -718,10 +731,11 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 el pie (con celdas juntas): por eso van en un <colgroup>.
 
                 La cabecera está escondida: solo sirve para que, en el móvil,
-                la tarjeta del pie diga «Total», «Cobrado» y «Pendiente»
-                delante de cada cifra (las etiquetas salen de la cabecera).
+                la tarjeta del pie diga «Metros», «Total», «Cobrado» y
+                «Pendiente» delante de cada cifra (las etiquetas salen de la
+                cabecera).
               */}
-              <Table movil="tarjetas" className="table-fixed min-w-[1080px]">
+              <Table movil="tarjetas" className="table-fixed min-w-[1120px]">
                 <ColumnasPedidos />
                 <TableHeader className="hidden">
                   <TableRow>
@@ -730,6 +744,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Origen</TableHead>
                     <TableHead>Estado</TableHead>
+                    <TableHead>Metros</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Cobrado</TableHead>
                     <TableHead>Pendiente</TableHead>
@@ -847,7 +862,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 }
 
 /**
- * Los anchos de las diez columnas de la tabla de cada día (su cabecera, más
+ * Los anchos de las once columnas de la tabla de cada día (su cabecera, más
  * arriba), para la tabla del total del periodo, que no tiene cabecera
  * visible. Si cambian allí, tienen que cambiar aquí.
  */
@@ -855,24 +870,25 @@ function ColumnasPedidos() {
   return (
     <colgroup>
       <col className="w-10" />
-      <col className="w-40" />
+      <col className="w-36" />
       <col />
       <col className="w-32" />
-      <col className="w-36" />
+      <col className="w-32" />
+      <col className="w-24" />
       <col className="w-28" />
       <col className="w-28" />
       <col className="w-28" />
-      <col className="w-14" />
+      <col className="w-12" />
       <col className="w-12" />
     </colgroup>
   );
 }
 
 /**
- * La fila de total de una lista de pedidos. Diez celdas, como la cabecera:
- * las cinco primeras juntas para el texto, Total, Cobrado y Pendiente en las
- * suyas, y dos vacías (envío y acciones). Con table-fixed, una de más o de
- * menos descuadra la tabla.
+ * La fila de total de una lista de pedidos. Once celdas, como la cabecera:
+ * las cinco primeras juntas para el texto, Metros, Total, Cobrado y Pendiente
+ * en las suyas, y dos vacías (envío y acciones). Con table-fixed, una de más o
+ * de menos descuadra la tabla.
  */
 function FilaTotales({
   titulo,
@@ -888,6 +904,9 @@ function FilaTotales({
     <TableRow>
       <TableCell colSpan={5} className="font-semibold">
         {titulo} · {describirPedidos(totales.pedidos, totales.cancelados)}
+      </TableCell>
+      <TableCell className="text-right font-bold tabular-nums">
+        <MetrosSuma totales={totales} />
       </TableCell>
       <TableCell className="text-right font-bold tabular-nums">{eur(totales.total)}</TableCell>
       <TableCell className="text-right font-bold tabular-nums">
@@ -1037,6 +1056,9 @@ function FilaPedido({
               de cajas y hacía difícil leer la columna de un vistazo. */}
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
         </TableCell>
+        <TableCell className="text-right tabular-nums">
+          <MetrosPedido pedido={pedido} />
+        </TableCell>
         <TableCell className="text-right">
           <div className="font-semibold">{eur(pedido.total)}</div>
           {pedido.metodo_pago && (
@@ -1096,7 +1118,7 @@ function FilaPedido({
       {abierta && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
-          <TableCell colSpan={9}>
+          <TableCell colSpan={10}>
             <DetallePedido pedido={pedido} />
           </TableCell>
         </TableRow>
@@ -1149,6 +1171,11 @@ function TarjetaPedido({
           </button>
           <div className="text-right shrink-0">
             <div className="font-semibold tabular-nums">{eur(pedido.total)}</div>
+            {Number(pedido.metros_total ?? 0) > 0 && (
+              <div className="text-xs tabular-nums text-muted-foreground">
+                <MetrosPedido pedido={pedido} enLinea />
+              </div>
+            )}
             <div className="text-xs text-muted-foreground">{pedido.metodo_pago ?? ""}</div>
           </div>
         </div>
@@ -1410,6 +1437,35 @@ function BloqueDireccion({
       {nota && filas.length > 0 && <div className="text-xs text-muted-foreground mt-1">{nota}</div>}
     </div>
   );
+}
+
+const TITULO_ESTIMADO =
+  "Incluye metros estimados (importe ÷ precio por metro): WooCommerce no trajo la longitud del montador de alguna línea. El detalle del pedido dice cuál.";
+
+/**
+ * Los metros del pedido: `metros_total`, los mismos que suman Gerencia y la
+ * facturación de la tienda. Si alguna línea es estimada, el total también, y
+ * se dice como en el detalle. Sin metros, «—»: un «0,00 m» parecería un pedido
+ * vacío, y es uno que no se vende por metros.
+ *
+ * `enLinea`, para la tarjeta del móvil: sin la segunda línea «estimado».
+ */
+function MetrosPedido({ pedido, enLinea }: { pedido: PedidoFila; enLinea?: boolean }) {
+  const m = Number(pedido.metros_total ?? 0);
+  if (!(m > 0)) return <span className="text-muted-foreground">—</span>;
+  if (!pedidoConMetrosEstimados(pedido.items)) return <>{metros(m)}</>;
+  return (
+    <span title={TITULO_ESTIMADO}>
+      ≈ {metros(m)}
+      {!enLinea && <span className="block text-xs text-muted-foreground">estimado</span>}
+    </span>
+  );
+}
+
+/** Los metros de un pie de pedidos (sin los cancelados), con «≈» si alguno es estimado. */
+function MetrosSuma({ totales }: { totales: TotalesPedidos }) {
+  if (!totales.metrosEstimados) return <>{metros(totales.metros)}</>;
+  return <span title={TITULO_ESTIMADO}>≈ {metros(totales.metros)}</span>;
 }
 
 /**
