@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Building2, Wallet } from "lucide-react";
+import { Users, Building2, Wallet, FileText } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion")({
@@ -27,6 +27,15 @@ function ConfiguracionPage() {
             icon={Building2}
             title="Datos de la empresa"
             desc="Razón social, CIF, dirección, contacto fiscal y costes de producción por metro."
+            badge="Admin"
+          />
+        )}
+        {isAdmin && (
+          <ConfigCard
+            to="/panel/configuracion-pdf"
+            icon={FileText}
+            title="PDF de presupuestos"
+            desc="La plantilla del PDF de cada tienda y del textil: logo, nombre comercial, cabecera, textos y pie con los datos fiscales."
             badge="Admin"
           />
         )}
