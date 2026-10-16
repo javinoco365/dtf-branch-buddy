@@ -12,7 +12,7 @@ import {
   type EstadoPresupuesto,
 } from "@/dominio/presupuestos";
 import { lineasDireccion } from "@/dominio/direcciones";
-import { generarPresupuestoPDF } from "@/lib/pdf-presupuesto";
+import { generarPresupuestoPDF, type VistaPreviaPresupuesto } from "@/lib/pdf-presupuesto";
 import { descargarLogo } from "@/lib/logo-descarga";
 
 /**
@@ -350,4 +350,15 @@ export const pdfPresupuesto = createServerFn({ method: "POST" })
       binario += String.fromCharCode(...bytes.subarray(i, i + 8192));
     }
     return { nombre: `${p.numero}.pdf`, base64: btoa(binario) };
+  });
+
+/**
+ * Para el editor de plantillas: los datos del último presupuesto de la tienda,
+ * listos para maquetar con la plantilla que se está editando.
+ */
+export const vistaPreviaPresupuestoTienda = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ tiendaId: z.string().uuid() }).parse(d))
+  .handler(async (): Promise<VistaPreviaPresupuesto> => {
+    throw new Error("Pendiente");
   });

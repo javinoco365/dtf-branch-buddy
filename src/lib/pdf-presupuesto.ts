@@ -1,6 +1,7 @@
 import { eur, eurUnitario, fechaCorta, numeroJusto } from "@/lib/format";
 import type { LogoPDF } from "@/lib/pdf-factura";
 import type { DocumentoPresupuesto } from "@/dominio/presupuestos";
+import { PLANTILLA_POR_DEFECTO, type PlantillaPresupuesto } from "@/dominio/plantilla-presupuesto";
 
 /**
  * El PDF de un presupuesto de tienda, en A4.
@@ -97,7 +98,24 @@ export function coloresPresupuesto(css: string | null | undefined): {
 const cantidadConUnidad = (cantidad: number, unidad: string) =>
   `${numeroJusto(cantidad)} ${unidad}`;
 
-export async function generarPresupuestoPDF(d: PresupuestoPDFData): Promise<Blob> {
+/**
+ * Lo que necesita el editor de plantillas para enseñar la vista previa: los
+ * datos del último presupuesto del ámbito (o sin líneas, si no hay ninguno),
+ * sin logo, y la identidad de la tienda o de la marca para que el editor le
+ * aplique la plantilla (`resolverIdentidad`).
+ */
+export type VistaPreviaPresupuesto = {
+  datos: PresupuestoPDFData;
+  base: { nombre: string | null; logo_url: string | null; color: string | null };
+  /** El número del presupuesto que se enseña; null si no hay ninguno todavía. */
+  numero: string | null;
+};
+
+export async function generarPresupuestoPDF(
+  d: PresupuestoPDFData,
+  plantilla: PlantillaPresupuesto = PLANTILLA_POR_DEFECTO,
+): Promise<Blob> {
+  void plantilla; // La usa el maquetador con plantilla (siguiente paso).
   const [{ jsPDF }, autoTableMod] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
   const autoTable = autoTableMod.default;
   const doc = new jsPDF({ unit: "mm", format: "a4" });

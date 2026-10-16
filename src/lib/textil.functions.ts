@@ -6,6 +6,7 @@ import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import type { Cobro } from "./cobros.functions";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
+import type { VistaPreviaPresupuesto } from "@/lib/pdf-presupuesto";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
@@ -1515,4 +1516,21 @@ export const anularTicketTextil = createServerFn({ method: "POST" })
       },
     );
     return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
+  });
+
+// ============ PDF DE PRESUPUESTOS ============
+
+/** El PDF de un presupuesto textil, para descargarlo: nombre del fichero y PDF en base64. */
+export const pdfPresupuestoTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async (): Promise<{ nombre: string; base64: string }> => {
+    throw new Error("Pendiente");
+  });
+
+/** Para el editor de plantillas: los datos del último presupuesto textil. */
+export const vistaPreviaPresupuestoTextil = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async (): Promise<VistaPreviaPresupuesto> => {
+    throw new Error("Pendiente");
   });
