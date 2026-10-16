@@ -63,7 +63,7 @@ function errorDeEscritura(error: { code?: string; message: string }): Error {
  * empresa_global. Si la base todavía no tiene la columna nueva, se lee de la
  * vieja.
  */
-async function leerEmpresaActiva(
+export async function leerEmpresaActiva(
   sb: unknown,
 ): Promise<{ id: string; marcaPredeterminada: string | null } | null> {
   const conMarca = await tabla(sb, "empresas")
@@ -106,7 +106,7 @@ async function leerEmpresaActiva(
  * no existe), los de la primera marca activa por fecha de alta. Sin marcas,
  * vacío: el PDF sale con el nombre comercial de la plantilla, o sin él.
  */
-async function identidadTextil(
+export async function identidadTextil(
   sb: unknown,
   marcaPredeterminada: string | null,
 ): Promise<Identidad> {

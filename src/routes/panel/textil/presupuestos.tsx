@@ -30,13 +30,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, PackageCheck } from "lucide-react";
+import { FileDown, Loader2, Plus, Pencil, Trash2, PackageCheck } from "lucide-react";
 import {
   listPresupuestos,
   upsertPresupuesto,
   deletePresupuesto,
   updatePresupuestoEstado,
   confirmarPresupuestoTextil,
+  pdfPresupuestoTextil,
   listMarcas,
   listTextilClientes,
   getEmpresaGlobal,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
+import { descargarBlob } from "@/lib/csv";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
 import {
   SelectorClienteTextil,
@@ -95,6 +97,7 @@ function PresupuestosPage() {
   const delFn = useServerFn(deletePresupuesto);
   const estFn = useServerFn(updatePresupuestoEstado);
   const confirmarFn = useServerFn(confirmarPresupuestoTextil);
+  const pdfFn = useServerFn(pdfPresupuestoTextil);
   const marcasFn = useServerFn(listMarcas);
   const cliFn = useServerFn(listTextilClientes);
   const empFn = useServerFn(getEmpresaGlobal);
@@ -140,13 +143,34 @@ function PresupuestosPage() {
     qc.invalidateQueries({ queryKey: ["textil-stock"] });
   };
 
+  /**
+   * Genera el PDF del presupuesto y lo descarga. Se llama al guardarlo y desde
+   * el botón de cada fila. Si falla, el presupuesto sigue guardado: se avisa y
+   * se puede volver a pedir desde la fila.
+   */
+  const pdfMut = useMutation({
+    mutationFn: (id: string) => pdfFn({ data: { id } }),
+    onMutate: () => toast.loading("Generando el PDF…", { id: "pdf-presupuesto-textil" }),
+    onSuccess: (r) => {
+      const binario = atob(r.base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      descargarBlob(r.nombre, new Blob([bytes], { type: "application/pdf" }));
+      toast.success(`PDF descargado: ${r.nombre}`, { id: "pdf-presupuesto-textil" });
+    },
+    onError: (e: Error) =>
+      toast.error(`No se pudo generar el PDF: ${e.message}`, { id: "pdf-presupuesto-textil" }),
+  });
+
   const save = useMutation({
     mutationFn: (d: any) => upsertFn({ data: d }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       invalidate();
       toast.success("Guardado");
       setOpen(false);
       setEditing(null);
+      // El PDF de lo que se acaba de guardar, listo para mandarlo.
+      if (r?.id) pdfMut.mutate(r.id);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -281,6 +305,20 @@ function PresupuestosPage() {
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
                   <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Descargar PDF"
+                      aria-label="Descargar PDF"
+                      onClick={() => pdfMut.mutate(p.id)}
+                      disabled={pdfMut.isPending}
+                    >
+                      {pdfMut.isPending && pdfMut.variables === p.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <FileDown className="h-4 w-4" />
+                      )}
+                    </Button>
                     {!p.pedido_id && p.estado !== "facturado" && p.estado !== "rechazado" && (
                       <Button
                         variant="ghost"
