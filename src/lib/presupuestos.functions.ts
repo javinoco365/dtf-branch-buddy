@@ -12,7 +12,20 @@ import {
   type EstadoPresupuesto,
 } from "@/dominio/presupuestos";
 import { lineasDireccion } from "@/dominio/direcciones";
-import { generarPresupuestoPDF } from "@/lib/pdf-presupuesto";
+import { diaEnEspana } from "@/dominio/fecha-documento";
+import { resolverIdentidad } from "@/dominio/plantilla-presupuesto";
+import {
+  generarPresupuestoPDF,
+  type PresupuestoPDFData,
+  type VistaPreviaPresupuesto,
+} from "@/lib/pdf-presupuesto";
+import {
+  leerEmisorEmpresa,
+  leerPlantillaPresupuesto,
+  pdfEnBase64,
+  texto,
+  webLegible,
+} from "@/lib/pdf-presupuesto-datos";
 import { descargarLogo } from "@/lib/logo-descarga";
 
 /**
@@ -250,8 +263,105 @@ export const confirmarPresupuesto = createServerFn({ method: "POST" })
     return { id: pedidoId, numero: (pedido?.numero as string | undefined) ?? null };
   });
 
-/** Un texto de la base, recortado; null si no queda nada. */
-const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+// ---------------------------------------------------------------------------
+// El PDF
+// ---------------------------------------------------------------------------
+
+/** Lo que se lee de una tienda para el PDF de sus presupuestos. */
+const COLUMNAS_TIENDA_PDF =
+  "id, empresa_id, nombre, logo_url, color, woo_url, telefono, correo_remitente_email";
+
+/** La validez de un presupuesto nuevo: la de la base (`presupuestos.validez_dias`). */
+const VALIDEZ_POR_DEFECTO = 30;
+
+/** Una fila tal como llega de la base: `tabla()` no la tipa. */
+type Fila = Record<string, unknown>;
+
+/** El nombre, el logo y el color de la tienda: lo que sale si la plantilla no lo cambia. */
+const identidadTienda = (tienda: Fila | null) => ({
+  nombre: texto(tienda?.nombre),
+  logo_url: texto(tienda?.logo_url),
+  color: texto(tienda?.color),
+});
+
+/**
+ * Los datos del PDF de un presupuesto de tienda, sin logo ni color: la
+ * identidad (nombre comercial, logo y color) la pone quien llama, con la
+ * plantilla (`resolverIdentidad`). Lo comparten el PDF y la vista previa del
+ * editor, para que la vista previa sea de verdad lo que saldrá.
+ *
+ * El emisor es la sociedad (`empresas`, la misma que sale en las facturas); la
+ * web, el correo de contacto y el teléfono de respaldo, los de la tienda. Del
+ * cliente, el nombre, el correo y el teléfono congelados en el presupuesto; el
+ * NIF y la dirección, de su ficha si la tiene.
+ *
+ * Sin presupuesto (la vista previa de una tienda que todavía no tiene
+ * ninguno), uno vacío con la fecha de hoy en España: sin líneas, sin número y
+ * sin cliente. Nunca líneas de ejemplo.
+ */
+async function datosPdfTienda(
+  sb: unknown,
+  tienda: Fila,
+  p: Fila | null,
+): Promise<PresupuestoPDFData> {
+  const [emisor, cliente] = await Promise.all([
+    leerEmisorEmpresa(sb, String(p?.empresa_id ?? tienda.empresa_id)),
+    p?.cliente_id
+      ? tabla(sb, "clientes")
+          .select("nombre, empresa, nif, direccion, codigo_postal, ciudad, provincia, pais")
+          .eq("id", p.cliente_id)
+          .maybeSingle()
+          .then((r: { data: Fila | null }) => r.data)
+      : Promise.resolve(null as Fila | null),
+  ]);
+
+  const fecha = texto(p?.fecha) ?? diaEnEspana(new Date());
+  const validez_dias = p ? Number(p.validez_dias) : VALIDEZ_POR_DEFECTO;
+  type Guardado = Parameters<typeof documentoPresupuesto>[0];
+  const documento = documentoPresupuesto(
+    p
+      ? {
+          ...(p as Guardado),
+          fecha,
+          validez_dias,
+          items: (p.items as Guardado["items"] | null) ?? [],
+        }
+      : { fecha, validez_dias, envio: 0, subtotal: 0, iva: 0, total: 0, items: [] },
+  );
+
+  return {
+    numero: texto(p?.numero) ?? "",
+    fecha,
+    validez_dias,
+    documento,
+    emisor: {
+      nombre_comercial: texto(tienda.nombre) ?? "",
+      razon_social: emisor.razon_social,
+      cif: emisor.cif,
+      direccion: emisor.direccion,
+      email: texto(tienda.correo_remitente_email) ?? emisor.email,
+      telefono: emisor.telefono ?? texto(tienda.telefono),
+      web: webLegible(tienda.woo_url),
+    },
+    cliente: {
+      nombre: texto(p?.cliente_nombre) ?? texto(cliente?.nombre) ?? "",
+      empresa: texto(cliente?.empresa),
+      nif: texto(cliente?.nif),
+      direccion: lineasDireccion({
+        direccion: cliente?.direccion,
+        codigo_postal: cliente?.codigo_postal,
+        ciudad: cliente?.ciudad,
+        provincia: cliente?.provincia,
+        pais: cliente?.pais,
+      }),
+      email: texto(p?.cliente_email),
+      telefono: texto(p?.cliente_telefono),
+    },
+    notas: texto(p?.notas),
+    logo: null,
+    color: null,
+  };
+}
 
 /**
  * El PDF de un presupuesto, para descargarlo: devuelve el nombre del fichero
@@ -259,12 +369,12 @@ const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : nu
  *
  * Se genera cada vez con lo que hay guardado, porque un presupuesto se edita y
  * su PDF tiene que decir lo de ahora. No se guarda en Storage: no es un
- * documento fiscal y se rehace en un momento.
+ * documento fiscal y se rehace en un momento. Sale con la plantilla de su
+ * tienda (Ajustes generales → PDF de presupuestos), o con la de siempre si no
+ * tiene.
  *
  * Todo se lee con la sesión de quien lo pide: si la RLS no le deja ver el
- * presupuesto, no hay PDF. El emisor es la sociedad (`empresas`, la misma que
- * sale en las facturas); el nombre, el logo, el color, la web y el correo de
- * contacto, los de la tienda.
+ * presupuesto, no hay PDF.
  */
 export const pdfPresupuesto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -278,76 +388,54 @@ export const pdfPresupuesto = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     if (!p) throw new Error("Sin acceso a este presupuesto");
 
-    const [{ data: tienda }, { data: empresa }, { data: cliente }] = await Promise.all([
-      tabla(sb, "tiendas")
-        .select("nombre, logo_url, color, woo_url, telefono, correo_remitente_email")
-        .eq("id", p.tienda_id)
-        .maybeSingle(),
-      tabla(sb, "empresas")
-        .select(
-          "razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais, email_fiscal, telefono",
-        )
-        .eq("id", p.empresa_id)
-        .maybeSingle(),
-      p.cliente_id
-        ? tabla(sb, "clientes")
-            .select("nombre, empresa, nif, direccion, codigo_postal, ciudad, provincia, pais")
-            .eq("id", p.cliente_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
+    const [{ data: tienda }, { plantilla, logo_url }] = await Promise.all([
+      tabla(sb, "tiendas").select(COLUMNAS_TIENDA_PDF).eq("id", p.tienda_id).maybeSingle(),
+      leerPlantillaPresupuesto(sb, { ambito: "tienda", tiendaId: p.tienda_id }),
     ]);
+    const datos = await datosPdfTienda(sb, tienda ?? { empresa_id: p.empresa_id }, p);
+    const identidad = resolverIdentidad(plantilla, logo_url, identidadTienda(tienda));
 
-    // La web de la tienda tal como la escribe la gente: dtfculture.com.
-    const web = texto(tienda?.woo_url)
-      ?.replace(/^https?:\/\//i, "")
-      .replace(/^www\./i, "")
-      .replace(/\/+$/, "");
-
-    const blob = await generarPresupuestoPDF({
-      numero: p.numero,
-      fecha: p.fecha,
-      validez_dias: Number(p.validez_dias),
-      documento: documentoPresupuesto({ ...p, items: p.items ?? [] }),
-      emisor: {
-        nombre_comercial: texto(tienda?.nombre) ?? "",
-        razon_social: texto(empresa?.razon_social) ?? "",
-        cif: texto(empresa?.cif) ?? "",
-        direccion: lineasDireccion({
-          direccion: empresa?.direccion,
-          codigo_postal: empresa?.codigo_postal,
-          ciudad: empresa?.ciudad,
-          provincia: empresa?.provincia,
-          pais: empresa?.pais,
-        }),
-        email: texto(tienda?.correo_remitente_email) ?? texto(empresa?.email_fiscal),
-        telefono: texto(empresa?.telefono) ?? texto(tienda?.telefono),
-        web,
+    const blob = await generarPresupuestoPDF(
+      {
+        ...datos,
+        emisor: { ...datos.emisor, nombre_comercial: identidad.nombre_comercial },
+        logo: await descargarLogo(identidad.logo_url),
+        color: identidad.color,
       },
-      // El nombre, el correo y el teléfono, los congelados en el presupuesto;
-      // el NIF y la dirección, de la ficha del cliente si la tiene.
-      cliente: {
-        nombre: texto(p.cliente_nombre) ?? texto(cliente?.nombre) ?? "",
-        empresa: texto(cliente?.empresa),
-        nif: texto(cliente?.nif),
-        direccion: lineasDireccion({
-          direccion: cliente?.direccion,
-          codigo_postal: cliente?.codigo_postal,
-          ciudad: cliente?.ciudad,
-          provincia: cliente?.provincia,
-          pais: cliente?.pais,
-        }),
-        email: texto(p.cliente_email),
-        telefono: texto(p.cliente_telefono),
-      },
-      notas: texto(p.notas),
-      logo: await descargarLogo(texto(tienda?.logo_url)),
-      color: texto(tienda?.color),
-    });
+      plantilla,
+    );
+    return { nombre: `${p.numero}.pdf`, base64: await pdfEnBase64(blob) };
+  });
 
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binario = "";
-    for (let i = 0; i < bytes.length; i += 8192) {
-      binario += String.fromCharCode(...bytes.subarray(i, i + 8192));
-    }
-    return { nombre: `${p.numero}.pdf`, base64: btoa(binario) };
+/**
+ * Para el editor de plantillas: los datos del último presupuesto de la tienda
+ * (el más reciente por fecha y número), listos para maquetar con la plantilla
+ * que se está editando; sin presupuestos, uno vacío. Sin logo ni color: el
+ * editor los resuelve con la plantilla a partir de `base`.
+ */
+export const vistaPreviaPresupuestoTienda = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ tiendaId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<VistaPreviaPresupuesto> => {
+    const sb = context.supabase;
+    const [{ data: tienda, error: errorTienda }, { data: p, error }] = await Promise.all([
+      tabla(sb, "tiendas").select(COLUMNAS_TIENDA_PDF).eq("id", data.tiendaId).maybeSingle(),
+      tabla(sb, "presupuestos")
+        .select("*, items:presupuesto_items(*)")
+        .eq("tienda_id", data.tiendaId)
+        .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (errorTienda) throw new Error(errorTienda.message);
+    if (!tienda) throw new Error("Sin acceso a esta tienda");
+    if (error && !faltaLaTabla(error)) throw new Error(error.message);
+
+    const presupuesto = (p as Fila | null) ?? null;
+    return {
+      datos: await datosPdfTienda(sb, tienda, presupuesto),
+      base: identidadTienda(tienda),
+      numero: texto(presupuesto?.numero),
+    };
   });

@@ -10,7 +10,7 @@
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { sesion, TIENDA } from "./datos.mjs";
+import { sesion, TIENDA, TIENDA_2 } from "./datos.mjs";
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 
@@ -56,6 +56,9 @@ export const RUTAS = {
   configuracion: "/panel/configuracion",
   "configuracion-empresa": "/panel/configuracion-empresa",
   "configuracion-caja": "/panel/configuracion-caja",
+  "configuracion-pdf": `/panel/configuracion-pdf?ambito=tienda:${TIENDA}`,
+  "configuracion-pdf-guardada": `/panel/configuracion-pdf?ambito=tienda:${TIENDA_2}`,
+  "configuracion-pdf-textil": "/panel/configuracion-pdf?ambito=textil",
   usuarios: "/panel/usuarios",
   tiendas: "/panel/tiendas",
   "tienda-inicio": `/panel/tiendas/${TIENDA}`,

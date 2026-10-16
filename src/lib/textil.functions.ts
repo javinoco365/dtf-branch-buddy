@@ -7,6 +7,18 @@ import { leerTodas } from "./paginar";
 import type { Cobro } from "./cobros.functions";
 import type { FacturaPDFData } from "@/lib/pdf-factura";
 import {
+  generarPresupuestoPDF,
+  type PresupuestoPDFData,
+  type VistaPreviaPresupuesto,
+} from "@/lib/pdf-presupuesto";
+import {
+  leerEmisorEmpresa,
+  leerPlantillaPresupuesto,
+  pdfEnBase64,
+  texto,
+} from "@/lib/pdf-presupuesto-datos";
+import { identidadTextil, leerEmpresaActiva } from "./plantillas-presupuesto.functions";
+import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
   lineasImpresas,
@@ -19,7 +31,20 @@ import {
 // cargándolos a demanda.
 import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
 import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
-import { fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import { diaEnEspana, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
+import { resolverIdentidad } from "@/dominio/plantilla-presupuesto";
+import {
+  VALIDEZ_TEXTIL_POR_DEFECTO,
+  clientePresupuestoTextil,
+  contactoPresupuestoTextil,
+  documentoPresupuestoTextil,
+  documentoPresupuestoTextilVacio,
+  identidadBaseTextil,
+  validezTextil,
+  type FichaClienteTextil,
+  type MarcaTextil,
+  type PresupuestoTextilGuardado,
+} from "@/dominio/presupuesto-textil";
 
 // types.ts está generado y todavía no conoce las funciones del motor de
 // facturación. El casting vive aquí, en un solo sitio, hasta que se regenere
@@ -1515,4 +1540,170 @@ export const anularTicketTextil = createServerFn({ method: "POST" })
       },
     );
     return { ...r, pdf_guardado: await guardarPdfTextilTrasEmitir(context.userId, r.id) };
+  });
+
+// ============ PDF DE PRESUPUESTOS ============
+// El mismo PDF que el de las tiendas (generarPresupuestoPDF), con la plantilla
+// del textil (Ajustes generales → PDF de presupuestos). Las cifras y las líneas
+// salen de lo guardado (documentoPresupuestoTextil): el total del PDF es el de
+// la lista. La sociedad que emite es la empresa, como en las facturas textil;
+// el nombre, el logo, el color y el contacto, los de la marca del presupuesto.
+// Sin marca, la misma que enseña el editor de plantillas (identidadTextil).
+// Todo con la sesión de quien lo pide: si la RLS no le deja ver el
+// presupuesto, no hay PDF.
+
+/** Lo que se lee de un presupuesto textil para su PDF: la fila y sus líneas. */
+const CAMPOS_PRESUPUESTO_PDF = "*, items:textil_presupuesto_items(*)";
+
+/** Lo que se lee de la ficha del cliente: lo que completa al congelado. */
+const CAMPOS_FICHA_CLIENTE =
+  "nombre, empresa, nif, direccion, codigo_postal, ciudad, provincia, pais, email, telefono";
+
+/** La marca de un presupuesto; null si ya no existe o la RLS no la deja ver. */
+async function leerMarcaTextil(sb: unknown, id: string): Promise<MarcaTextil | null> {
+  const { data, error } = await tabla(sb, "textil_marcas")
+    .select("nombre, logo_url, color, email, telefono")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as MarcaTextil | null) ?? null;
+}
+
+async function leerFichaCliente(sb: unknown, id: string): Promise<FichaClienteTextil | null> {
+  const { data, error } = await tabla(sb, "clientes")
+    .select(CAMPOS_FICHA_CLIENTE)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as FichaClienteTextil | null) ?? null;
+}
+
+/**
+ * Los datos del PDF de un presupuesto textil, sin logo ni color, y la
+ * identidad de su marca, a la que se le aplica después la plantilla
+ * (`resolverIdentidad`).
+ *
+ * Sin marca (se guardó sin ella, o ya no existe), la identidad es la del
+ * editor de plantillas: la marca predeterminada o la primera activa
+ * (`identidadTextil`), y el contacto, el de la empresa.
+ *
+ * Sin presupuesto (la vista previa cuando todavía no hay ninguno), uno vacío
+ * con la fecha de hoy en España: sin líneas, sin número y sin cliente. Nunca
+ * líneas de ejemplo.
+ */
+async function datosPdfTextil(
+  sb: unknown,
+  // Una fila de textil_presupuestos con sus líneas; types.ts no la conoce entera.
+  p: Record<string, any> | null,
+  empresa: { id: string; marcaPredeterminada: string | null },
+): Promise<{ datos: PresupuestoPDFData; base: VistaPreviaPresupuesto["base"] }> {
+  const [emisor, marca, ficha] = await Promise.all([
+    leerEmisorEmpresa(sb, empresa.id),
+    p?.marca_id ? leerMarcaTextil(sb, p.marca_id) : null,
+    p?.cliente_id ? leerFichaCliente(sb, p.cliente_id) : null,
+  ]);
+  const base = marca
+    ? identidadBaseTextil(marca)
+    : await identidadTextil(sb, empresa.marcaPredeterminada);
+  const contacto = contactoPresupuestoTextil(marca, emisor);
+
+  const fecha = texto(p?.fecha)?.slice(0, 10) ?? diaEnEspana(new Date());
+  const validez_dias = p ? validezTextil(p.validez_dias) : VALIDEZ_TEXTIL_POR_DEFECTO;
+
+  const datos: PresupuestoPDFData = {
+    numero: texto(p?.numero) ?? "",
+    fecha,
+    validez_dias,
+    documento: p
+      ? documentoPresupuestoTextil({ ...(p as PresupuestoTextilGuardado), fecha })
+      : documentoPresupuestoTextilVacio(fecha),
+    emisor: {
+      nombre_comercial: base.nombre ?? "",
+      razon_social: emisor.razon_social,
+      cif: emisor.cif,
+      direccion: emisor.direccion,
+      email: contacto.email,
+      telefono: contacto.telefono,
+      // Ni las marcas ni la empresa tienen web.
+      web: null,
+    },
+    cliente: clientePresupuestoTextil(p ?? {}, ficha),
+    notas: texto(p?.notas),
+    logo: null,
+    color: null,
+  };
+  return { datos, base };
+}
+
+/**
+ * El PDF de un presupuesto textil, para descargarlo: nombre del fichero y PDF
+ * en base64. Se genera cada vez con lo guardado, porque un presupuesto se
+ * edita y su PDF tiene que decir lo de ahora; no es un documento fiscal y no
+ * se guarda en Storage.
+ */
+export const pdfPresupuestoTextil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<{ nombre: string; base64: string }> => {
+    const sb = context.supabase;
+    const { data: p, error } = await tabla(sb, "textil_presupuestos")
+      .select(CAMPOS_PRESUPUESTO_PDF)
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!p) throw new Error("Sin acceso a este presupuesto");
+
+    // El emisor y la plantilla, los de la empresa del presupuesto; la marca
+    // predeterminada, la que tenga apuntada esa empresa (hoy solo hay una).
+    const activa = await leerEmpresaActiva(sb);
+    const empresaId = texto(p.empresa_id) ?? activa?.id;
+    if (!empresaId) throw new Error("No hay ninguna empresa activa configurada");
+    const empresa = {
+      id: empresaId,
+      marcaPredeterminada: activa?.id === empresaId ? activa.marcaPredeterminada : null,
+    };
+    const [{ datos, base }, { plantilla, logo_url }] = await Promise.all([
+      datosPdfTextil(sb, p, empresa),
+      leerPlantillaPresupuesto(sb, { ambito: "textil" }, empresaId),
+    ]);
+
+    const { descargarLogo } = await import("@/lib/logo-descarga");
+    const identidad = resolverIdentidad(plantilla, logo_url, base);
+    const blob = await generarPresupuestoPDF(
+      {
+        ...datos,
+        emisor: { ...datos.emisor, nombre_comercial: identidad.nombre_comercial },
+        logo: await descargarLogo(identidad.logo_url),
+        color: identidad.color,
+      },
+      plantilla,
+    );
+    return { nombre: `${p.numero}.pdf`, base64: await pdfEnBase64(blob) };
+  });
+
+/**
+ * Para el editor de plantillas: los datos del último presupuesto textil de la
+ * empresa (el más reciente por fecha y número), listos para maquetar con la
+ * plantilla que se está editando, y la identidad de su marca; sin
+ * presupuestos, uno vacío. Sin logo ni color: el editor los resuelve con la
+ * plantilla a partir de `base`.
+ */
+export const vistaPreviaPresupuestoTextil = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<VistaPreviaPresupuesto> => {
+    const sb = context.supabase;
+    const empresa = await leerEmpresaActiva(sb);
+    if (!empresa) throw new Error("No hay ninguna empresa activa configurada");
+    const { data: p, error } = await tabla(sb, "textil_presupuestos")
+      .select(CAMPOS_PRESUPUESTO_PDF)
+      .eq("empresa_id", empresa.id)
+      .order("fecha", { ascending: false })
+      .order("numero", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+
+    const presupuesto = (p as Record<string, any> | null) ?? null;
+    const { datos, base } = await datosPdfTextil(sb, presupuesto, empresa);
+    return { datos, base, numero: texto(presupuesto?.numero) };
   });

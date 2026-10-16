@@ -940,6 +940,50 @@ const OBJETIVOS = [
   { id: id("0b", 1), empresa_id: EMPRESA, desde: "2026-09-01", metros: 40, vendido: 1500 },
 ];
 
+// ---------------------------------------------------------------------------
+// Plantillas del PDF de presupuestos
+// ---------------------------------------------------------------------------
+
+// Un logo de prueba (PNG de 240 × 80, «T2 · Tienda Dos»), incrustado para que
+// el banco no dependa de ningún servidor de imágenes. El Supabase de prueba no
+// sirve los ficheros públicos del almacenamiento.
+const LOGO_PRUEBA =
+  "data:image/png;base64,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";
+
+// Solo lo que cambia respecto a la de por defecto: el resto lo pone
+// normalizarPlantilla al leerla, como con una plantilla vieja o a medias.
+const PLANTILLAS_PRESUPUESTO = [
+  {
+    id: id("pp", 1),
+    ambito: "tienda",
+    tienda_id: TIENDA_2,
+    empresa_id: EMPRESA,
+    logo_url: LOGO_PRUEBA,
+    config: {
+      version: 1,
+      colores: { principal: "#be123c", acento: "" },
+      cabecera: {
+        alto: 44,
+        logo: { mostrar: true, x: 16, y: 12, ancho: 66, alto: 22 },
+        titulo: { texto: "OFERTA", x: 194, y: 21, tamano: 22, alineacion: "derecha" },
+        datos: { x: 128, y: 28 },
+        texto: {
+          mostrar: true,
+          texto: "{web} · {telefono}",
+          x: 16,
+          y: 40,
+          tamano: 8,
+          alineacion: "izquierda",
+        },
+      },
+      condiciones: { titulo: "Condiciones de la oferta" },
+      pie: { texto: "{razon_social} · CIF {cif}\n{direccion}", alineacion: "centro" },
+    },
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+  },
+];
+
 Object.assign(DATOS, {
   enlaces_seguimiento: ENLACES,
   textil_pedido_items: TEXTIL_PEDIDOS.flatMap((p) => p.items),
@@ -984,6 +1028,9 @@ Object.assign(DATOS, {
   textil_facturas: TEXTIL_FACTURAS,
   textil_compras: COMPRAS,
   tienda_plantillas_correo: [],
+  // Del PDF de presupuestos, solo la Tienda Dos tiene plantilla guardada; la
+  // Tienda Uno y el textil salen con la de por defecto.
+  plantillas_presupuesto: PLANTILLAS_PRESUPUESTO,
 });
 
 Object.assign(RPC, {
