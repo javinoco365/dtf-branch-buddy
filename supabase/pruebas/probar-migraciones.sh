@@ -157,6 +157,7 @@ seccion "Auditoría en las tablas que faltaban" C12_auditoria_tablas_pendientes.
 seccion "El ejercicio de la factura es obligatorio" C13_facturas_ejercicio_obligatorio.sql
 seccion "Conciliación: la ventana cuenta solo lo pendiente" C14_conciliacion_pendientes.sql
 seccion "WooCommerce: cursor y turno de la sincronización" C15_woo_sincronizacion_turno.sql
+seccion "PDF de presupuestos: plantillas por tienda y de textil" C16_plantillas_presupuesto.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto

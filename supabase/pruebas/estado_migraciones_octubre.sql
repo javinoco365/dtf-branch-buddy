@@ -29,6 +29,8 @@ FROM (VALUES
             WHERE n.nspname = 'public' AND p.proname = 'woo_sincronizacion_tomar')),
   ('20261025100000_conciliacion_pendientes',
    EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-            WHERE n.nspname = 'public' AND p.proname = 'banco_documentos_por_conciliar'))
+            WHERE n.nspname = 'public' AND p.proname = 'banco_documentos_por_conciliar')),
+  ('20261026100000_plantillas_presupuesto',
+   to_regclass('public.plantillas_presupuesto') IS NOT NULL)
 ) AS m(migracion, aplicada)
 ORDER BY migracion;
