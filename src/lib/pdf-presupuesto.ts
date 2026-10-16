@@ -15,9 +15,11 @@ import {
 import {
   LINEAS_CON_ACEPTACION,
   TINTA,
+  ajusteVertical,
   altoLinea,
   anchoDisponible,
   anchosColumnas,
+  anclaEnPagina,
   bajada,
   cajaTexto,
   colorHex,
@@ -26,8 +28,11 @@ import {
   encajarTexto,
   inicioCuerpo,
   juntarConAceptacion,
+  maquetaDatos,
   maquetaPie,
+  referenciaPaginas,
   subida,
+  tramoEnPagina,
   type Caja,
   type ColumnaCifra,
   type Medir,
@@ -141,12 +146,6 @@ export function valoresPresupuesto(
   };
 }
 
-/** «PRESUPUESTO» → «Presupuesto», para el encabezado de las páginas siguientes. */
-const enFrase = (texto: string) => {
-  const t = texto.trim();
-  return t && t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t;
-};
-
 /**
  * Lo que necesita el editor de plantillas para enseñar la vista previa: los
  * datos del último presupuesto del ámbito (o sin líneas, si no hay ninguno),
@@ -242,47 +241,85 @@ export async function generarPresupuestoPDF(
   if (cab.logo.mostrar && d.logo) {
     try {
       const props = doc.getImageProperties(d.logo.dataUrl);
-      const caja = encajarImagen(cab.logo, { ancho: props.width, alto: props.height });
-      doc.addImage(
-        d.logo.dataUrl,
-        d.logo.formato,
-        caja.x0,
-        caja.y0,
-        caja.x1 - caja.x0,
-        caja.y1 - caja.y0,
+      // La caja, entera dentro del papel: una plantilla con X + ancho de más
+      // sacaría el logo cortado, o ni se vería y además quitaría el nombre.
+      const h = tramoEnPagina(cab.logo.x, cab.logo.ancho, W);
+      const v = tramoEnPagina(cab.logo.y, cab.logo.alto, H);
+      const caja = encajarImagen(
+        { x: h.inicio, y: v.inicio, ancho: h.largo, alto: v.largo },
+        { ancho: props.width, alto: props.height },
       );
-      dibujado.push(caja);
-      hayLogo = true;
+      // Solo cuenta como logo (y quita el nombre en «auto») si se ve algo.
+      if (caja.x1 > caja.x0 && caja.y1 > caja.y0) {
+        doc.addImage(
+          d.logo.dataUrl,
+          d.logo.formato,
+          caja.x0,
+          caja.y0,
+          caja.x1 - caja.x0,
+          caja.y1 - caja.y0,
+        );
+        dibujado.push(caja);
+        hayLogo = true;
+      }
     } catch {
       // Un logo ilegible no impide sacar el presupuesto: sale el nombre.
     }
   }
 
   if (cab.datos.mostrar) {
-    const { x, y, ancho } = cab.datos;
     // Una etiqueta vacía quita su fila.
     const filas = (
       [
-        [cab.datos.etiquetaNumero, d.numero.trim() || "—"],
-        [cab.datos.etiquetaFecha, fechaCorta(d.fecha)],
-        [cab.datos.etiquetaValidez, fechaCorta(doc_.validoHasta)],
+        [cab.datos.etiquetaNumero.trim(), d.numero.trim() || "—"],
+        [cab.datos.etiquetaFecha.trim(), fechaCorta(d.fecha)],
+        [cab.datos.etiquetaValidez.trim(), fechaCorta(doc_.validoHasta)],
       ] as const
-    ).filter(([etiqueta]) => etiqueta.trim());
-    filas.forEach(([etiqueta, valor], i) => {
-      fuente("normal", 8.5, GRIS);
-      doc.text(etiqueta.trim(), x, y + i * 5.5);
-      fuente("bold", 9.5);
-      doc.text(valor, x + ancho, y + i * 5.5, { align: "right" });
-    });
+    ).filter(([etiqueta]) => etiqueta);
     if (filas.length) {
+      // El bloque, entero dentro del papel; la etiqueta y el valor, sin pisarse
+      // (más pequeños o, si ni así caben, el valor en la línea de debajo).
+      const { inicio: x, largo: ancho } = tramoEnPagina(cab.datos.x, cab.datos.ancho, W);
+      const m = maquetaDatos(
+        filas.map(([etiqueta, valor]) => ({
+          etiqueta: medir("normal")(etiqueta, 8.5),
+          valor: medir("bold")(valor, 9.5),
+        })),
+        ancho,
+      );
+      const y = cab.datos.y + ajusteVertical(cab.datos.y, m.alto, 9.5 * m.escala);
+      filas.forEach(([etiqueta, valor], i) => {
+        const f = m.filas[i];
+        fuente("normal", 8.5 * f.escalaEtiqueta, GRIS);
+        doc.text(etiqueta, x, y + f.y);
+        fuente("bold", 9.5 * f.escalaValor);
+        doc.text(valor, x + ancho, y + f.yValor, { align: "right" });
+      });
       dibujado.push({
         x0: x,
-        y0: y - subida(9.5),
+        y0: y - subida(9.5 * m.escala),
         x1: x + ancho,
-        y1: y + (filas.length - 1) * 5.5 + bajada(9.5),
+        y1: y + m.alto + bajada(9.5 * m.escala),
       });
     }
   }
+
+  /**
+   * Dibuja las líneas de un texto de la cabecera y apunta lo que ocupan. Si se
+   * saldría del papel por arriba o por abajo (una Y en el borde), baja o sube
+   * lo justo.
+   */
+  const dibujarCabecera = (
+    lineas: string[],
+    x: number,
+    t: { y: number; alineacion: Alineacion },
+    tamano: number,
+  ) => {
+    const caja = cajaTexto(x, t.y, anchoMayor(lineas), lineas.length, tamano, t.alineacion);
+    const dy = ajusteVertical(t.y, (lineas.length - 1) * altoLinea(tamano), tamano);
+    doc.text(lineas, x, t.y + dy, { align: ALINEAR[t.alineacion] });
+    dibujado.push({ ...caja, y0: caja.y0 + dy, y1: caja.y1 + dy });
+  };
 
   /** Un texto de la cabecera, encajado en el sitio que le queda. */
   const textoCabecera = (
@@ -292,11 +329,14 @@ export async function generarPresupuestoPDF(
     c: RGB,
     opciones: { minimoUnaLinea: number; maxLineas: number; lineasPrevistas: number },
   ) => {
+    // Pegado al margen por el lado hacia el que crece (p. ej. el título en 194
+    // pasado «a la izquierda»), el ancla se mete en la página.
+    const x = anclaEnPagina(t.x, t.alineacion, medir(estilo)(texto.trim(), t.tamano));
     const banda = {
       y0: t.y - subida(t.tamano),
       y1: t.y + (opciones.lineasPrevistas - 1) * altoLinea(t.tamano) + bajada(t.tamano),
     };
-    const ancho = anchoDisponible(t, banda, dibujado);
+    const ancho = anchoDisponible({ x, alineacion: t.alineacion }, banda, dibujado);
     const { tamano, lineas } = encajarTexto(
       texto,
       ancho,
@@ -306,8 +346,7 @@ export async function generarPresupuestoPDF(
     );
     if (!lineas.length) return;
     fuente(estilo, tamano, c);
-    doc.text(lineas, t.x, t.y, { align: ALINEAR[t.alineacion] });
-    dibujado.push(cajaTexto(t.x, t.y, anchoMayor(lineas), lineas.length, tamano, t.alineacion));
+    dibujarCabecera(lineas, x, t, tamano);
   };
 
   if (cab.titulo.mostrar && cab.titulo.texto.trim()) {
@@ -323,15 +362,16 @@ export async function generarPresupuestoPDF(
     const t = cab.texto;
     const parrafos = rellenarTexto(t.texto, valores);
     if (parrafos.length) {
+      const natural = Math.max(...parrafos.map((l) => medir("normal")(l, t.tamano)));
+      const x = anclaEnPagina(t.x, t.alineacion, natural);
       const banda = {
         y0: t.y - subida(t.tamano),
         y1: t.y + parrafos.length * altoLinea(t.tamano) + bajada(t.tamano),
       };
-      const ancho = anchoDisponible(t, banda, dibujado);
+      const ancho = anchoDisponible({ x, alineacion: t.alineacion }, banda, dibujado);
       const lineas = parrafos.flatMap((l) => partir("normal")(l, ancho, t.tamano));
       fuente("normal", t.tamano, GRIS);
-      doc.text(lineas, t.x, t.y, { align: ALINEAR[t.alineacion] });
-      dibujado.push(cajaTexto(t.x, t.y, anchoMayor(lineas), lineas.length, t.tamano, t.alineacion));
+      dibujarCabecera(lineas, x, t, t.tamano);
     }
   }
 
@@ -413,6 +453,12 @@ export async function generarPresupuestoPDF(
       }),
     );
     const altoCaja = primeraLinea + ultimaLinea + 6.4;
+    // Una cabecera que llega hasta abajo deja las cajas para la página siguiente,
+    // en vez de dibujarlas fuera del papel.
+    if (y + altoCaja > mp.finCuerpo) {
+      doc.addPage();
+      y = ARRIBA;
+    }
     cajas.forEach((k, i) => {
       const x = M + i * (anchoCaja + 6);
       const b = bloques[k];
@@ -505,6 +551,9 @@ export async function generarPresupuestoPDF(
     ),
     theme: "plain",
     showHead: "everyPage",
+    // Una fila de dos o tres renglones pasa de página entera, con sus cifras;
+    // solo se parte si no cabe ni en una página entera.
+    rowPageBreak: "avoid",
     styles: {
       font: "helvetica",
       fontSize: 9,
@@ -731,9 +780,7 @@ export async function generarPresupuestoPDF(
   // ---------------------------------------------------------------------------
   const paginas = doc.getNumberOfPages();
   const xPie = pie.alineacion === "centro" ? W / 2 : pie.alineacion === "derecha" ? W - M : M;
-  const referencia = [enFrase(cab.titulo.texto) || "Presupuesto", d.numero.trim()]
-    .filter(Boolean)
-    .join(" ");
+  const referencia = referenciaPaginas(cab.titulo.texto, d.numero);
   for (let i = 1; i <= paginas; i++) {
     doc.setPage(i);
     if (hayPie) {

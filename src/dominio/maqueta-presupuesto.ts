@@ -91,6 +91,66 @@ export function anchoDisponible(
 }
 
 /**
+ * Dónde anclar un texto de la cabecera para que no se salga del papel.
+ *
+ * Si por el lado hacia el que crece no le quedan ni `minimo` mm hasta el
+ * margen (está pegado a él, o fuera), el ancla se mete hacia dentro lo justo
+ * para que el texto quepa a su ancho natural (`natural`, el de una línea a su
+ * tamaño; nunca más que el ancho entre márgenes). Es lo que pasa al cambiar
+ * solo la alineación de un texto que estaba en una guía: el título, a la
+ * derecha en 194, pasado «a la izquierda» acaba en 194 en vez de empezar ahí
+ * estrujado en 15 mm y fuera del margen. Con sitio, el ancla no se toca: lo que
+ * no quepa lo encoge o lo parte quien llama, con `anchoDisponible`.
+ */
+export function anclaEnPagina(
+  x: number,
+  alineacion: Alineacion,
+  natural: number,
+  minimo = 15,
+): number {
+  const izquierda = MARGEN;
+  const derecha = ANCHO_PAGINA - MARGEN;
+  const largo = Math.min(Math.max(0, natural), derecha - izquierda);
+  if (alineacion === "izquierda") {
+    return derecha - x >= minimo ? x : Math.min(x, derecha - largo);
+  }
+  if (alineacion === "derecha") {
+    return x - izquierda >= minimo ? x : Math.max(x, izquierda + largo);
+  }
+  if (2 * Math.min(x - izquierda, derecha - x) >= minimo) return x;
+  return x < ANCHO_PAGINA / 2
+    ? Math.max(x, izquierda + largo / 2)
+    : Math.min(x, derecha - largo / 2);
+}
+
+/**
+ * Un tramo de `largo` mm que empieza en `inicio`, metido entero en [0, total]
+ * (el ancho o el alto del papel): se desplaza hacia dentro lo justo y, si ni
+ * así cabe, se queda en el total. Si ya está dentro, sale tal cual.
+ */
+export function tramoEnPagina(
+  inicio: number,
+  largo: number,
+  total: number = ANCHO_PAGINA,
+): { inicio: number; largo: number } {
+  const l = Math.min(Math.max(0, largo), total);
+  return { inicio: Math.min(Math.max(0, inicio), total - l), largo: l };
+}
+
+/**
+ * Cuánto bajar (o subir, si sale negativo) un texto para que no se salga del
+ * papel por arriba ni por abajo. `y` es la línea base de su primera línea y
+ * `alto`, lo que hay de ella a la última. Arriba cuenta lo más alto que llega
+ * la letra (una mayúscula con tilde: 0,93 em), no solo la mayúscula. Dentro
+ * del papel, 0.
+ */
+export function ajusteVertical(y: number, alto: number, tamano: number): number {
+  const arriba = y - tamano * MM_POR_PUNTO * 0.93;
+  const abajo = y + Math.max(0, alto) + bajada(tamano);
+  return tramoEnPagina(arriba, abajo - arriba, ALTO_PAGINA).inicio - arriba;
+}
+
+/**
  * Cómo se alinea el logo dentro de su caja, según dónde esté la caja: en el
  * centro de la página, centrado; en la mitad derecha, a la derecha; si no, a
  * la izquierda. Así un logo estrecho en una caja ancha queda donde se espera.
@@ -198,6 +258,86 @@ export function maquetaPie(
 export function inicioCuerpo(alto: number, cabecera: readonly Caja[]): number {
   const fondo = cabecera.reduce((m, c) => Math.max(m, c.y1), 0);
   return Math.max(alto + 7, fondo + 6);
+}
+
+/**
+ * Cómo se colocan las filas del bloque de datos (número, fecha y validez): la
+ * etiqueta a la izquierda y el valor alineado a la derecha, en `ancho` mm. Los
+ * anchos de la etiqueta y del valor de cada fila los mide quien llama, a su
+ * tamaño de siempre.
+ *
+ * La etiqueta y el valor nunca se pisan. Si alguna fila no cabe con `hueco` mm
+ * entre los dos, todo el bloque encoge por igual lo que pida la más apretada,
+ * hasta `escalaMinima`. Una fila que ni así cabe se parte: la etiqueta en su
+ * línea y el valor en la siguiente, a la escala del bloque o menos si hace falta
+ * para no pasar de `ancho`; las filas de después bajan. Si todo cabe, no cambia
+ * nada: una fila cada `paso` mm, a tamaño completo.
+ */
+export function maquetaDatos(
+  filas: readonly { etiqueta: number; valor: number }[],
+  ancho: number,
+  {
+    hueco = 3,
+    escalaMinima = 0.75,
+    paso = 5.5,
+    tamanoEtiqueta = 8.5,
+    tamanoValor = 9.5,
+  }: {
+    hueco?: number;
+    escalaMinima?: number;
+    paso?: number;
+    tamanoEtiqueta?: number;
+    tamanoValor?: number;
+  } = {},
+): {
+  /** Lo que encoge todo el bloque (1: nada). */
+  escala: number;
+  /**
+   * Por fila: la línea base de la etiqueta y la del valor, contadas desde la
+   * de la primera fila, y lo que encoge cada uno.
+   */
+  filas: { y: number; yValor: number; escalaEtiqueta: number; escalaValor: number }[];
+  /** De la primera línea base a la última. */
+  alto: number;
+} {
+  const juntas = (f: { etiqueta: number; valor: number }) => f.etiqueta + f.valor;
+  const necesaria = (f: { etiqueta: number; valor: number }) =>
+    juntas(f) > 0 ? (ancho - hueco) / juntas(f) : 1;
+  // Las filas que caben en una línea marcan la escala; si no cabe ninguna, la mínima.
+  const posibles = filas.map(necesaria).filter((k) => k >= escalaMinima);
+  const escala = filas.length && !posibles.length ? escalaMinima : Math.min(1, ...posibles);
+  let y = 0;
+  const colocadas = filas.map((f) => {
+    if (juntas(f) * escala + hueco <= ancho + 1e-9) {
+      const fila = { y, yValor: y, escalaEtiqueta: escala, escalaValor: escala };
+      y += paso;
+      return fila;
+    }
+    const escalaEtiqueta = Math.min(escala, f.etiqueta > 0 ? ancho / f.etiqueta : 1);
+    const escalaValor = Math.min(escala, f.valor > 0 ? ancho / f.valor : 1);
+    const yValor =
+      y + altoLinea(Math.max(tamanoEtiqueta * escalaEtiqueta, tamanoValor * escalaValor));
+    const fila = { y, yValor, escalaEtiqueta, escalaValor };
+    y = yValor + paso;
+    return fila;
+  });
+  return {
+    escala,
+    filas: colocadas,
+    alto: colocadas.length ? colocadas[colocadas.length - 1].yValor : 0,
+  };
+}
+
+/**
+ * A qué presupuesto pertenece cada página desde la segunda, arriba: el título
+ * tal como lo escribió el usuario («PRESUPUESTO DTF», «Oferta»), sin tocarle
+ * las mayúsculas, que pueden ser siglas, y el número. El título de por defecto
+ * de la plantilla («PRESUPUESTO»), o ninguno, sale como siempre: «Presupuesto».
+ */
+export function referenciaPaginas(titulo: string, numero: string): string {
+  const t = titulo.trim().replace(/\s+/g, " ");
+  const nombre = !t || t === "PRESUPUESTO" ? "Presupuesto" : t;
+  return [nombre, numero.trim()].filter(Boolean).join(" ");
 }
 
 export type ColumnaCifra = "cantidad" | "precio" | "iva" | "importe";
