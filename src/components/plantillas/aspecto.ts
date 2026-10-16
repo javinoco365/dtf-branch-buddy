@@ -15,6 +15,7 @@ import {
   coloresDocumento,
   type RGB,
 } from "@/dominio/maqueta-presupuesto";
+import { SALTO_FILAS_DATOS, type MedidasTexto } from "@/dominio/maqueta-cabecera";
 import type { Plantilla } from "./editor";
 
 /** Un punto tipográfico en milímetros: los tamaños de letra van en puntos, las posiciones en mm. */
@@ -32,7 +33,7 @@ export const GRIS_SUAVE = "rgb(100 116 139)";
 export const GRIS_LINEA = "rgb(226 232 240)";
 
 /** Entre fila y fila de los datos del presupuesto (número, fecha, validez), en mm. */
-export const SALTO_DATOS = 5.5;
+export const SALTO_DATOS = SALTO_FILAS_DATOS;
 
 const css = (c: RGB) => `rgb(${c[0]} ${c[1]} ${c[2]})`;
 const hex = (c: RGB) => `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
@@ -99,15 +100,6 @@ export function encajeLogo(caja: { x: number; ancho: number }): string {
 }
 
 /**
- * Si el nombre comercial sale en la cabecera: «siempre», «nunca» o, en «auto»,
- * solo cuando no hay logo que poner.
- */
-export function nombreVisible(plantilla: Plantilla, hayLogo: boolean): boolean {
-  const modo = plantilla.cabecera.nombre.mostrar;
-  return modo === "siempre" || (modo === "auto" && !(plantilla.cabecera.logo.mostrar && hayLogo));
-}
-
-/**
  * Parte un texto en renglones de hasta `ancho` mm, a ojo: un carácter de
  * Helvetica ocupa de media algo más de medio cuerpo. Solo para enseñarlo en
  * el diseñador; el PDF corta con las medidas exactas de la letra.
@@ -129,3 +121,12 @@ export function partirAprox(texto: string, ancho: number, tamanoPt: number): str
   if (actual) renglones.push(actual);
   return renglones;
 }
+
+/**
+ * Medidas a ojo (`partirAprox`): solo mientras no han llegado las de la letra
+ * del PDF (`useMedidasPdf`), que son las que valen.
+ */
+export const MEDIDAS_A_OJO: MedidasTexto = {
+  medir: () => (texto, tamanoPt) => texto.length * tamanoPt * MM_POR_PT * 0.52,
+  partir: () => partirAprox,
+};

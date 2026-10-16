@@ -395,21 +395,25 @@ export function TextoConVariables({
 }) {
   const id = useId();
   const area = useRef<HTMLTextAreaElement>(null);
-  // Dónde estaba el cursor la última vez: al pulsar una pastilla el área pierde el foco.
-  const cursor = useRef<{ inicio: number; fin: number } | null>(null);
+  // Dónde estaba el cursor la última vez, y en qué texto: al pulsar una
+  // pastilla el área pierde el foco. Si el texto ha cambiado desde fuera (otro
+  // ámbito, Descartar, Restablecer), esa posición ya no vale.
+  const cursor = useRef<{ inicio: number; fin: number; texto: string } | null>(null);
 
   const recordar = () => {
     const a = area.current;
-    if (a) cursor.current = { inicio: a.selectionStart, fin: a.selectionEnd };
+    if (a) cursor.current = { inicio: a.selectionStart, fin: a.selectionEnd, texto: a.value };
   };
 
   const insertar = (variable: VariablePlantilla) => {
     const marca = `{${variable}}`;
-    const { inicio, fin } = cursor.current ?? { inicio: valor.length, fin: valor.length };
+    // Sin un cursor tomado en este mismo texto, al final.
+    const c = cursor.current?.texto === valor ? cursor.current : null;
+    const { inicio, fin } = c ?? { inicio: valor.length, fin: valor.length };
     const nuevo = (valor.slice(0, inicio) + marca + valor.slice(fin)).slice(0, maximo);
     onChange(nuevo);
     const despues = Math.min(inicio + marca.length, nuevo.length);
-    cursor.current = { inicio: despues, fin: despues };
+    cursor.current = { inicio: despues, fin: despues, texto: nuevo };
     requestAnimationFrame(() => {
       const a = area.current;
       if (!a) return;

@@ -37,6 +37,7 @@ import {
   TextoConVariables,
 } from "./Campos";
 import { SeccionLogo } from "./SeccionLogo";
+import { useMaquetaCabecera } from "./use-maqueta-cabecera";
 import { PiePagina, RENGLONES_PIE } from "./PiePagina";
 
 /**
@@ -170,20 +171,22 @@ export function SeccionesPlantilla({
 function PosicionTexto({ el }: { el: "nombre" | "titulo" | "texto" }) {
   const { plantilla, cambiar } = useEditor();
   const t = plantilla.cabecera[el];
+  // Con la caja del texto dentro del papel, como al arrastrarlo.
+  const l = useMaquetaCabecera().limites(el);
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <CampoNumero
         etiqueta="X"
         valor={t.x}
-        min={MINIMOS.cabecera[el].x}
-        max={MAXIMOS.cabecera[el].x}
+        min={l.minX}
+        max={l.maxX}
         onChange={(x) => cambiar(conElemento(el, { x }))}
       />
       <CampoNumero
         etiqueta="Y (línea base)"
         valor={t.y}
-        min={MINIMOS.cabecera[el].y}
-        max={MAXIMOS.cabecera[el].y}
+        min={l.minY}
+        max={l.maxY}
         onChange={(y) => cambiar(conElemento(el, { y }))}
       />
       <CampoNumero
@@ -276,6 +279,9 @@ function SeccionTitulo() {
 function SeccionDatos() {
   const { plantilla, cambiar } = useEditor();
   const d = plantilla.cabecera.datos;
+  // Con la caja de los datos dentro del papel, como al arrastrarla.
+  const { limites, anchoMax } = useMaquetaCabecera();
+  const l = limites("datos");
   return (
     <>
       <CampoInterruptor
@@ -307,22 +313,22 @@ function SeccionDatos() {
         <CampoNumero
           etiqueta="X (etiquetas)"
           valor={d.x}
-          min={MINIMOS.cabecera.datos.x}
-          max={MAXIMOS.cabecera.datos.x}
+          min={l.minX}
+          max={l.maxX}
           onChange={(x) => cambiar(conElemento("datos", { x }))}
         />
         <CampoNumero
           etiqueta="Y (primera fila)"
           valor={d.y}
-          min={MINIMOS.cabecera.datos.y}
-          max={MAXIMOS.cabecera.datos.y}
+          min={l.minY}
+          max={l.maxY}
           onChange={(y) => cambiar(conElemento("datos", { y }))}
         />
         <CampoNumero
           etiqueta="Ancho"
           valor={d.ancho}
           min={MINIMOS.cabecera.datos.ancho}
-          max={MAXIMOS.cabecera.datos.ancho}
+          max={anchoMax("datos")}
           onChange={(ancho) => cambiar(conElemento("datos", { ancho }))}
         />
       </div>

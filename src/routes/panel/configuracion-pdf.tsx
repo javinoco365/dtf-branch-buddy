@@ -181,6 +181,8 @@ function ConfiguracionPdfPage() {
       const enviado = {
         clave,
         etiqueta: actual.etiqueta,
+        // La versión guardada de la que salía lo que se guarda.
+        origen: firmaOrigen,
         plantilla: normalizarPlantilla(borrador.plantilla),
         logo_url: borrador.logo_url?.trim() || null,
       };
@@ -209,7 +211,20 @@ function ConfiguracionPdfPage() {
             }
           : d,
       );
-      setEdicion((e) => (e?.clave === enviado.clave ? null : e));
+      // Lo cambiado mientras se guardaba no se pierde: sigue como cambios sin
+      // guardar, ahora sobre lo recién guardado. Si no se ha tocado nada, ya no
+      // hay cambios.
+      const firmaGuardada = firmaBorrador({
+        plantilla: enviado.plantilla,
+        logo_url: enviado.logo_url,
+      });
+      setEdicion((e) =>
+        e?.clave !== enviado.clave
+          ? e
+          : e.origen === enviado.origen && firmaBorrador(e.borrador) !== firmaGuardada
+            ? { ...e, origen: firmaGuardada }
+            : null,
+      );
       toast.success(
         `Plantilla guardada. Los PDF de presupuestos de ${enviado.etiqueta} saldrán así.`,
       );

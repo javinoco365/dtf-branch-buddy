@@ -1,11 +1,12 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, ArrowDown, EyeOff, Move } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { numeroJusto } from "@/lib/format";
-import { ANCHO_PAGINA, MARGEN, rellenarTexto } from "@/dominio/plantilla-presupuesto";
-import { inicioCuerpo } from "@/dominio/maqueta-presupuesto";
+import { ANCHO_PAGINA, MARGEN, type Alineacion } from "@/dominio/plantilla-presupuesto";
+import type { Caja } from "@/dominio/maqueta-presupuesto";
+import type { RangoPosicion, TextoMaquetado } from "@/dominio/maqueta-cabecera";
 import {
   ELEMENTOS,
   NOMBRE_ELEMENTO,
@@ -29,9 +30,9 @@ import {
   SALTO_DATOS,
   coloresDiseno,
   encajeLogo,
-  nombreVisible,
 } from "./aspecto";
 import { CampoAlineacion, CampoInterruptor, CampoNumero } from "./Campos";
+import { useMaquetaCabecera } from "./use-maqueta-cabecera";
 
 /**
  * El diseñador de la cabecera: la franja de arriba de un A4 a escala, con el
@@ -40,6 +41,10 @@ import { CampoAlineacion, CampoInterruptor, CampoNumero } from "./Campos";
  * se sube o se baja. Todo en milímetros, al medio milímetro, sin salirse de la
  * página. Debajo, la posición exacta de lo elegido, en campos que siguen al
  * arrastre y que también lo mueven.
+ *
+ * Cada texto se encoge o se parte como en el PDF, con las mismas cuentas
+ * (`maquetarCabecera`) y las medidas de su letra: así las cajas, dónde empieza
+ * el cuerpo y el aviso son los del PDF.
  */
 
 /** Lo que se ve del cuerpo, para situarse: unos milímetros de las cajas del emisor y el cliente. */
@@ -47,8 +52,6 @@ const BAJO_CUERPO = 7;
 /** A cuántos mm de una guía (márgenes, centro) se pega lo que se arrastra. */
 const IMAN = 1.5;
 const GUIAS = [MARGEN, ANCHO_PAGINA / 2, ANCHO_PAGINA - MARGEN];
-
-type Caja = { x: number; y: number; ancho: number; alto: number };
 
 type Arrastre =
   | {
@@ -59,12 +62,8 @@ type Arrastre =
       x0: number;
       y0: number;
       mmPorPx: number;
-      /** La caja del elemento respecto a su punto (x, y): para no sacarla de la página. */
-      izq: number;
-      der: number;
-      arriba: number;
-      abajo: number;
-      altoLienzo: number;
+      /** Hasta dónde puede ir el punto sin sacar la caja de la página (`limitesEnPapel`). */
+      limites: RangoPosicion;
     }
   | {
       tipo: "tamano";
@@ -102,7 +101,7 @@ export function DisenadorCabecera({
   /** Abre en el formulario la sección de lo elegido. */
   onMasOpciones: (seccion: string) => void;
 }) {
-  const { plantilla: p, cambiar, identidad, logoPropio, base, valores } = useEditor();
+  const { plantilla: p, cambiar, base } = useEditor();
   const cab = p.cabecera;
   const { texto: colorTexto, acento } = coloresDiseno(p, base.color);
 
@@ -111,57 +110,21 @@ export function DisenadorCabecera({
   const [arrastrando, setArrastrando] = useState(false);
   const [guia, setGuia] = useState<number | null>(null);
 
-  // Las cajas de cada elemento, medidas en el propio dibujo (en mm).
-  const contenidos = useRef<Partial<Record<ElementoCabecera, SVGGElement | null>>>({});
-  const [cajas, setCajas] = useState<Partial<Record<ElementoCabecera, Caja>>>({});
-  useLayoutEffect(() => {
-    const nuevas: Partial<Record<ElementoCabecera, Caja>> = {};
-    for (const el of ELEMENTOS) {
-      const g = contenidos.current[el];
-      if (!g) continue;
-      try {
-        const b = g.getBBox();
-        if (b.width > 0 || b.height > 0) {
-          nuevas[el] = { x: b.x, y: b.y, ancho: b.width, alto: b.height };
-        }
-      } catch {
-        // Sin medir (aún no se ha pintado): sin caja.
-      }
-    }
-    const distinta = ELEMENTOS.some((el) => {
-      const a = cajas[el];
-      const b = nuevas[el];
-      if (!a || !b) return !!a !== !!b;
-      return (
-        Math.abs(a.x - b.x) > 0.01 ||
-        Math.abs(a.y - b.y) > 0.01 ||
-        Math.abs(a.ancho - b.ancho) > 0.01 ||
-        Math.abs(a.alto - b.alto) > 0.01
-      );
-    });
-    if (distinta) setCajas(nuevas);
-    // Se mide cada vez que cambia algo de lo que se dibuja; si sale lo mismo, no se toca.
-  }, [cab, identidad.nombre_comercial, valores, logoPropio, base.logo_url, cajas]);
-
-  const logoDisponible = logoPropio || base.logo_url;
-  const verNombre = nombreVisible(p, !!logoDisponible);
-  const visible: Record<ElementoCabecera, boolean> = {
-    logo: cab.logo.mostrar && !!logoDisponible,
-    nombre: verNombre,
-    titulo: cab.titulo.mostrar,
-    datos: cab.datos.mostrar,
-    texto: cab.texto.mostrar && cab.texto.texto.trim() !== "",
-  };
+  // La cabecera maquetada como en el PDF (`useMaquetaCabecera`): lo que sale,
+  // el tamaño y las líneas de cada texto, lo que ocupa cada elemento y hasta
+  // dónde se puede mover sin salirse del papel.
+  const { maqueta, visible, textos, cajas, limites, anchoMax, filasDatos, logoDisponible } =
+    useMaquetaCabecera();
 
   // Dónde empieza el cuerpo, como en el PDF: 7 mm bajo la línea, o 6 mm bajo
   // lo más bajo que salga en la cabecera si baja más. El dibujo llega un poco
-  // más abajo, para que se vea dónde empieza.
-  const cajasVisibles = ELEMENTOS.flatMap((el) => {
+  // más abajo, para que se vea dónde empieza, y nunca corta lo que enseña.
+  const inicio = maqueta.inicio;
+  const fondoVisto = ELEMENTOS.reduce((m, el) => {
     const c = cajas[el];
-    return visible[el] && c ? [{ x0: c.x, y0: c.y, x1: c.x + c.ancho, y1: c.y + c.alto }] : [];
-  });
-  const inicio = inicioCuerpo(cab.alto, cajasVisibles);
-  const altoLienzo = inicio + BAJO_CUERPO;
+    return (visible[el] || seleccion === el) && c ? Math.max(m, c.y1) : m;
+  }, 0);
+  const altoLienzo = Math.max(inicio + BAJO_CUERPO, fondoVisto + 2);
 
   const mmPorPx = () => {
     const ancho = marco.current?.getBoundingClientRect().width ?? 0;
@@ -172,6 +135,10 @@ export function DisenadorCabecera({
     e.stopPropagation();
     if (e.button !== 0) return;
     e.preventDefault();
+    // Al cancelar el pointerdown, el navegador no da el foco: se le da a la
+    // caja o a la línea, para que luego las flechas la muevan. Los tiradores
+    // no lo toman: se queda en su caja.
+    if (e.currentTarget instanceof SVGElement) e.currentTarget.focus({ preventScroll: true });
     marco.current?.setPointerCapture(e.pointerId);
     arrastre.current = a;
     setArrastrando(true);
@@ -180,7 +147,6 @@ export function DisenadorCabecera({
   const empezarMover = (e: React.PointerEvent, el: ElementoCabecera) => {
     onSeleccion(el);
     const { x, y } = punto(p, el);
-    const c = cajas[el] ?? { x, y, ancho: 0, alto: 0 };
     empezar(e, {
       tipo: "mover",
       el,
@@ -189,11 +155,8 @@ export function DisenadorCabecera({
       x0: x,
       y0: y,
       mmPorPx: mmPorPx(),
-      izq: c.x - x,
-      der: c.x + c.ancho - x,
-      arriba: c.y - y,
-      abajo: c.y + c.alto - y,
-      altoLienzo,
+      // Al arrastrar, la caja no baja del fondo del dibujo.
+      limites: limites(el, altoLienzo),
     });
   };
 
@@ -235,12 +198,9 @@ export function DisenadorCabecera({
     // y con la caja entera dentro de la página.
     const anchoCaja = a.el === "logo" ? cab.logo.ancho : a.el === "datos" ? cab.datos.ancho : null;
     const pegado = pegarAGuia(aMedioMm(a.x0 + dx), anchoCaja);
-    const minX = Math.max(MINIMOS.cabecera[a.el].x, -a.izq);
-    const maxX = Math.min(MAXIMOS.cabecera[a.el].x, ANCHO_PAGINA - a.der);
-    const minY = Math.max(MINIMOS.cabecera[a.el].y, -a.arriba);
-    const maxY = Math.min(MAXIMOS.cabecera[a.el].y, a.altoLienzo - a.abajo);
-    const x = acotar(pegado.x, minX, Math.max(minX, maxX));
-    const y = acotar(aMedioMm(a.y0 + dy), minY, Math.max(minY, maxY));
+    const { minX, maxX, minY, maxY } = a.limites;
+    const x = acotar(pegado.x, minX, maxX);
+    const y = acotar(aMedioMm(a.y0 + dy), minY, maxY);
     setGuia(pegado.guia != null && x === pegado.x ? pegado.guia : null);
     const actual = punto(p, a.el);
     if (x !== actual.x || y !== actual.y) cambiar(conElemento(a.el, { x, y }));
@@ -273,28 +233,18 @@ export function DisenadorCabecera({
       cambiar(conCabecera({ alto }));
       return;
     }
+    // Con la caja dentro del papel, igual que al arrastrar.
     const { x, y } = punto(p, s);
+    const l = limites(s);
     cambiar(
       conElemento(s, {
-        x: acotar(aMedioMm(x + mov[0]), MINIMOS.cabecera[s].x, MAXIMOS.cabecera[s].x),
-        y: acotar(aMedioMm(y + mov[1]), MINIMOS.cabecera[s].y, MAXIMOS.cabecera[s].y),
+        x: acotar(aMedioMm(x + mov[0]), l.minX, l.maxX),
+        y: acotar(aMedioMm(y + mov[1]), l.minY, l.maxY),
       }),
     );
   };
 
   const pt = (tamano: number) => tamano * MM_POR_PT;
-
-  // Lo que dice cada elemento, con los datos de la vista previa si los hay.
-  const nombre = identidad.nombre_comercial || base.nombre || "";
-  const lineasTexto = rellenarTexto(cab.texto.texto, valores);
-  // Una etiqueta vacía quita su fila, como en el PDF.
-  const filasDatos = (
-    [
-      [cab.datos.etiquetaNumero, valores.numero || "—"],
-      [cab.datos.etiquetaFecha, valores.fecha || "—"],
-      [cab.datos.etiquetaValidez, valores.fecha_validez || "—"],
-    ] as const
-  ).filter(([etiqueta]) => etiqueta.trim() !== "");
 
   /**
    * Un elemento arrastrable: su dibujo, una caja para cogerlo y el marco si
@@ -317,20 +267,19 @@ export function DisenadorCabecera({
           1,
         )} mm desde arriba${visible[el] ? "" : " (no sale en el PDF)"}. Arrástralo o muévelo con las flechas.`}
         className="cursor-grab outline-none active:cursor-grabbing"
-        style={{ touchAction: "none" }}
         onPointerDown={(e) => empezarMover(e, el)}
         onKeyDown={(e) => teclas(e, el)}
         onFocus={() => onSeleccion(el)}
         opacity={visible[el] ? 1 : 0.35}
       >
-        <g ref={(g) => void (contenidos.current[el] = g)}>{dibujo}</g>
+        {dibujo}
         {c && (
           <rect
             className="marco"
-            x={c.x - 0.8}
-            y={c.y - 0.8}
-            width={c.ancho + 1.6}
-            height={c.alto + 1.6}
+            x={c.x0 - 0.8}
+            y={c.y0 - 0.8}
+            width={c.x1 - c.x0 + 1.6}
+            height={c.y1 - c.y0 + 1.6}
             rx={0.6}
             fill="transparent"
             style={{ stroke: elegido ? "var(--primary)" : "rgb(148 163 184)" }}
@@ -343,25 +292,31 @@ export function DisenadorCabecera({
     );
   };
 
+  /** Un texto de la cabecera con el tamaño y las líneas con que sale en el PDF. */
   const textoPdf = (
-    t: { x: number; y: number; tamano: number; alineacion: keyof typeof ANCLA },
-    contenido: React.ReactNode,
+    t: { x: number; y: number; alineacion: Alineacion },
+    m: TextoMaquetado | null,
     color: string,
     negrita = true,
-  ) => (
-    <text
-      x={t.x}
-      y={t.y}
-      fontSize={pt(t.tamano)}
-      fontFamily={FUENTE_PDF}
-      fontWeight={negrita ? 700 : 400}
-      textAnchor={ANCLA[t.alineacion]}
-      fill={color}
-      style={{ userSelect: "none" }}
-    >
-      {contenido}
-    </text>
-  );
+  ) =>
+    m && (
+      <text
+        x={t.x}
+        y={t.y}
+        fontSize={pt(m.tamano)}
+        fontFamily={FUENTE_PDF}
+        fontWeight={negrita ? 700 : 400}
+        textAnchor={ANCLA[t.alineacion]}
+        fill={color}
+        style={{ userSelect: "none" }}
+      >
+        {m.lineas.map((l, i) => (
+          <tspan key={i} x={t.x} dy={i === 0 ? 0 : pt(m.tamano) * INTERLINEA}>
+            {l}
+          </tspan>
+        ))}
+      </text>
+    );
 
   // La caja de lo elegido, en porcentajes del lienzo, para el rótulo y los tiradores.
   const cajaElegida = seleccion && seleccion !== "linea" ? cajas[seleccion] : undefined;
@@ -370,11 +325,20 @@ export function DisenadorCabecera({
     top: `${(mmY / altoLienzo) * 100}%`,
   });
 
-  // Lo que baja tanto de la línea que empuja el cuerpo hacia abajo.
+  // Lo que baja tanto de la línea que empuja el cuerpo hacia abajo: lo que
+  // dibuja el PDF (el logo, la imagen encajada; no su caja entera).
+  const dibujadas: Record<ElementoCabecera, Caja | null> = {
+    logo: maqueta.logo,
+    datos: maqueta.datos,
+    titulo: maqueta.titulo?.caja ?? null,
+    texto: maqueta.texto?.caja ?? null,
+    nombre: maqueta.nombre?.caja ?? null,
+  };
   const empujanCuerpo = ELEMENTOS.filter((el) => {
-    const c = cajas[el];
-    return visible[el] && c && c.y + c.alto + 6 > cab.alto + 7 + 0.25;
+    const c = dibujadas[el];
+    return !!c && c.y1 + 6 > cab.alto + 7 + 0.25;
   });
+  const uno = empujanCuerpo.length === 1;
 
   return (
     <div className="space-y-3">
@@ -390,13 +354,23 @@ export function DisenadorCabecera({
             setArrastrando(false);
             setGuia(null);
           }}
+          // Las cajas, la línea y los tiradores cancelan el pointerdown, y así
+          // el foco no sale del campo que lo tenga (X, Y, Ancho…). Se le quita
+          // aquí, antes que nada: el campo aplica lo suyo al elemento que era
+          // suyo y luego sigue al arrastre, en vez de escribirlo en otro.
+          onPointerDownCapture={() => {
+            const activo = document.activeElement;
+            if (activo instanceof HTMLElement && activo !== document.body) activo.blur();
+          }}
           // Un toque en el papel, fuera de todo, quita la selección (los
           // elementos, la línea y los tiradores no dejan que llegue aquí).
           onPointerDown={() => onSeleccion(null)}
         >
+          {/* touch-none en el propio svg: en sus hijos Chrome no lo respeta, y
+              el dedo desplazaría la página en vez de arrastrar. */}
           <svg
             viewBox={`0 0 ${ANCHO_PAGINA} ${altoLienzo}`}
-            className="block h-auto w-full overflow-visible"
+            className="block h-auto w-full touch-none overflow-visible"
             role="group"
             aria-label="Cabecera del PDF a escala"
           >
@@ -512,8 +486,8 @@ export function DisenadorCabecera({
                 </>
               ),
             )}
-            {elemento("nombre", textoPdf(cab.nombre, nombre || "Nombre comercial", colorTexto))}
-            {elemento("titulo", textoPdf(cab.titulo, cab.titulo.texto || "Título", colorTexto))}
+            {elemento("nombre", textoPdf(cab.nombre, textos.nombre, colorTexto))}
+            {elemento("titulo", textoPdf(cab.titulo, textos.titulo, colorTexto))}
             {elemento(
               "datos",
               <>
@@ -545,23 +519,7 @@ export function DisenadorCabecera({
                 ))}
               </>,
             )}
-            {elemento(
-              "texto",
-              textoPdf(
-                cab.texto,
-                (lineasTexto.length ? lineasTexto : ["Texto libre"]).map((l, i) => (
-                  <tspan
-                    key={i}
-                    x={cab.texto.x}
-                    dy={i === 0 ? 0 : pt(cab.texto.tamano) * INTERLINEA}
-                  >
-                    {l}
-                  </tspan>
-                )),
-                GRIS_SUAVE,
-                false,
-              ),
-            )}
+            {elemento("texto", textoPdf(cab.texto, textos.texto, GRIS_SUAVE, false))}
 
             {/* La línea de la cabecera: se arrastra arriba y abajo. */}
             <g
@@ -573,7 +531,6 @@ export function DisenadorCabecera({
               aria-valuenow={cab.alto}
               aria-valuetext={`${numeroJusto(cab.alto, 1)} mm desde arriba`}
               className="cursor-ns-resize outline-none"
-              style={{ touchAction: "none" }}
               onPointerDown={(e) => {
                 onSeleccion("linea");
                 empezar(e, { tipo: "linea", py0: e.clientY, alto0: cab.alto, mmPorPx: mmPorPx() });
@@ -610,7 +567,7 @@ export function DisenadorCabecera({
           {cajaElegida && seleccion && seleccion !== "linea" && (
             <div
               className="pointer-events-none absolute -translate-y-full pb-1"
-              style={pct(cajaElegida.x - 0.8, cajaElegida.y - 0.8)}
+              style={pct(cajaElegida.x0 - 0.8, cajaElegida.y0 - 0.8)}
             >
               <span className="whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground shadow-sm">
                 {NOMBRE_ELEMENTO[seleccion]}
@@ -640,7 +597,10 @@ export function DisenadorCabecera({
             <Tirador
               titulo="Cambiar el ancho de los datos"
               cursor="ew-resize"
-              style={pct(cab.datos.x + cab.datos.ancho + 0.8, cajas.datos.y + cajas.datos.alto / 2)}
+              style={pct(
+                cab.datos.x + cab.datos.ancho + 0.8,
+                (cajas.datos.y0 + cajas.datos.y1) / 2,
+              )}
               onPointerDown={(e) =>
                 empezar(e, {
                   tipo: "tamano",
@@ -681,11 +641,10 @@ export function DisenadorCabecera({
         <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            {empujanCuerpo.map((el) => NOMBRE_ELEMENTO[el]).join(", ")}{" "}
-            {empujanCuerpo.length === 1 ? "baja" : "bajan"} de la línea de la cabecera: el cuerpo
-            empieza más abajo, a {numeroJusto(inicio, 1)} mm, para no pisar{" "}
-            {empujanCuerpo.length === 1 ? "lo" : "los"}. Súbelo o baja la línea si quieres que quede
-            dentro de la cabecera.
+            {empujanCuerpo.map((el) => NOMBRE_ELEMENTO[el]).join(", ")} {uno ? "baja" : "bajan"} de
+            la línea de la cabecera: el cuerpo empieza más abajo, a {numeroJusto(inicio, 1)} mm,
+            para no {uno ? "pisarlo" : "pisarlos"}. {uno ? "Súbelo" : "Súbelos"} o baja la línea si
+            quieres que {uno ? "quede" : "queden"} dentro de la cabecera.
           </span>
         </p>
       )}
@@ -715,7 +674,14 @@ export function DisenadorCabecera({
       </ToggleGroup>
 
       {seleccion ? (
-        <PosicionElegida seleccion={seleccion} onMasOpciones={onMasOpciones} />
+        // Con `key`, los campos de un elemento nunca pasan a otro con lo que tenían escrito.
+        <PosicionElegida
+          key={seleccion}
+          seleccion={seleccion}
+          limites={seleccion === "linea" ? null : limites(seleccion)}
+          anchoMax={anchoMax}
+          onMasOpciones={onMasOpciones}
+        />
       ) : (
         <p className="text-xs text-muted-foreground">
           Toca un elemento en el dibujo o en la lista para ver su posición exacta.
@@ -754,9 +720,15 @@ function Tirador({
 /** La posición exacta de lo elegido, en campos que siguen al arrastre. */
 function PosicionElegida({
   seleccion,
+  limites,
+  anchoMax,
   onMasOpciones,
 }: {
   seleccion: Seleccion;
+  /** Hasta dónde pueden ir X e Y con la caja dentro del papel (`limitesEnPapel`). */
+  limites: RangoPosicion | null;
+  /** El ancho máximo de la caja del logo o de los datos, sin pasar del borde del papel. */
+  anchoMax: (el: "logo" | "datos") => number;
   onMasOpciones: (seccion: string) => void;
 }) {
   const { plantilla: p, cambiar } = useEditor();
@@ -788,15 +760,15 @@ function PosicionElegida({
         <CampoNumero
           etiqueta="X"
           valor={el.x}
-          min={MINIMOS.cabecera[seleccion].x}
-          max={MAXIMOS.cabecera[seleccion].x}
+          min={limites?.minX ?? MINIMOS.cabecera[seleccion].x}
+          max={limites?.maxX ?? MAXIMOS.cabecera[seleccion].x}
           onChange={(x) => cambiar(conElemento(seleccion, { x }))}
         />
         <CampoNumero
           etiqueta="Y"
           valor={el.y}
-          min={MINIMOS.cabecera[seleccion].y}
-          max={MAXIMOS.cabecera[seleccion].y}
+          min={limites?.minY ?? MINIMOS.cabecera[seleccion].y}
+          max={limites?.maxY ?? MAXIMOS.cabecera[seleccion].y}
           onChange={(y) => cambiar(conElemento(seleccion, { y }))}
         />
       </>
@@ -809,7 +781,7 @@ function PosicionElegida({
             etiqueta="Ancho"
             valor={cab.logo.ancho}
             min={MINIMOS.cabecera.logo.ancho}
-            max={MAXIMOS.cabecera.logo.ancho}
+            max={anchoMax("logo")}
             onChange={(ancho) => cambiar(conElemento("logo", { ancho }))}
           />
           <CampoNumero
@@ -829,7 +801,7 @@ function PosicionElegida({
             etiqueta="Ancho"
             valor={cab.datos.ancho}
             min={MINIMOS.cabecera.datos.ancho}
-            max={MAXIMOS.cabecera.datos.ancho}
+            max={anchoMax("datos")}
             onChange={(ancho) => cambiar(conElemento("datos", { ancho }))}
           />
         </>
