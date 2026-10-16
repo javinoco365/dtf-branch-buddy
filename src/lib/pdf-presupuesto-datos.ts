@@ -30,7 +30,7 @@ export const webLegible = (url: unknown) =>
  * La plantilla del PDF de un ámbito, ya completa (`normalizarPlantilla`).
  *
  * Sin fila guardada, o sin la migración de plantillas aplicada, la de por
- * defecto: el PDF sale igual que antes de existir el editor.
+ * defecto de su ámbito: el modelo de la casa.
  */
 export async function leerPlantillaPresupuesto(
   sb: unknown,
@@ -48,7 +48,7 @@ export async function leerPlantillaPresupuesto(
   const { data, error } = await consulta.limit(1).maybeSingle();
   if (error && !faltaLaTabla(error)) throw new Error(error.message);
   return {
-    plantilla: normalizarPlantilla(data?.config),
+    plantilla: normalizarPlantilla(data?.config, ambito.ambito),
     logo_url: texto(data?.logo_url),
     guardada: !!data,
   };

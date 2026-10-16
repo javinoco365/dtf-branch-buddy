@@ -1,8 +1,9 @@
 /**
  * Las cuentas de la maqueta del PDF de presupuestos: cuánto sitio tiene cada
- * texto de la cabecera, a qué tamaño cabe un nombre, dónde va el pie según
- * cuántas líneas lleve, qué ancho necesita cada columna de la tabla y cuándo
- * la caja de aceptación tiene que pasar de página con lo que la precede.
+ * texto de la cabecera, a qué tamaño cabe un nombre, cómo se colocan las
+ * pastillas de los datos, dónde va la banda del pie según cuántas líneas
+ * lleve, qué ancho necesita cada columna de la tabla y cómo se reparten las
+ * condiciones en dos columnas.
  *
  * Lógica pura, en milímetros sobre un A4 vertical. El ancho de un texto lo
  * mide quien llama (`Medir`, `Partir`), porque depende de la fuente del PDF;
@@ -11,6 +12,8 @@
  */
 
 import { ALTO_PAGINA, ANCHO_PAGINA, MARGEN, type Alineacion } from "./plantilla-presupuesto";
+import type { DocumentoPresupuesto } from "./presupuestos";
+import { redondear } from "./importes";
 
 /** Milímetros por punto tipográfico. */
 export const MM_POR_PUNTO = 25.4 / 72;
@@ -31,6 +34,32 @@ export type Caja = { x0: number; y0: number; x1: number; y1: number };
 export type Medir = (texto: string, tamano: number) => number;
 /** Un texto partido en líneas que quepan en `ancho` mm a `tamano` puntos. */
 export type Partir = (texto: string, ancho: number, tamano: number) => string[];
+
+/**
+ * Parte un texto en líneas de hasta `ancho` mm, por palabras, con la medida
+ * que se le pase: para letras que jsPDF no sabe partir solas (las espaciadas).
+ * Una palabra que no cabe sola va en su línea.
+ */
+export function partirConMedida(
+  texto: string,
+  ancho: number,
+  tamano: number,
+  medir: Medir,
+): string[] {
+  const lineas: string[] = [];
+  let actual = "";
+  for (const palabra of texto.split(/\s+/).filter(Boolean)) {
+    const prueba = actual ? `${actual} ${palabra}` : palabra;
+    if (actual && medir(prueba, tamano) > ancho) {
+      lineas.push(actual);
+      actual = palabra;
+    } else {
+      actual = prueba;
+    }
+  }
+  if (actual) lineas.push(actual);
+  return lineas;
+}
 
 /** Dónde empieza (por la izquierda) un texto de `ancho` mm anclado en `x`. */
 export function inicioTexto(x: number, ancho: number, alineacion: Alineacion): number {
@@ -225,107 +254,109 @@ export function encajarTexto(
   return { tamano: minimo, lineas: partir(limpio, ancho, minimo) };
 }
 
+/** Lo que mide como poco la banda del pie. */
+export const ALTO_BANDA_PIE = 12;
+
 /**
- * Dónde va el pie según sus líneas y su tamaño, y hasta dónde puede llegar lo
- * de encima. Crece hacia arriba: la última línea nunca baja de 7,5 mm del
- * borde. Con el pie de siempre (una o dos líneas a 7 pt) sale lo de antes:
- * raya a 282 mm, texto a 286,5 mm y el cuerpo hasta 273 mm.
+ * La banda de color del pie según sus líneas y su tamaño, y hasta dónde puede
+ * llegar lo de encima. Va pegada al borde de abajo y crece hacia arriba si el
+ * texto no cabe en 12 mm; el texto, centrado en ella. Con el pie de siempre
+ * (una línea a 8 pt): banda desde 285 mm, texto a 292 mm, cuerpo hasta 282,5 mm.
  */
 export function maquetaPie(
   lineas: number,
   tamano: number,
 ): {
-  /** La línea base de la primera línea del pie. */
+  /** Donde empieza la banda. */
+  arriba: number;
+  /** La línea base de la primera línea del texto. */
   primeraLinea: number;
-  /** La raya que separa el pie del cuerpo. */
-  raya: number;
-  /** Hasta dónde llega el texto del cuerpo. */
+  /** Hasta dónde llega el cuerpo. */
   finCuerpo: number;
   /** Hasta dónde llega la tabla de líneas. */
   finTabla: number;
 } {
   const n = Math.max(1, lineas);
-  const ultimaPermitida = ALTO_PAGINA - 7.5;
-  const primeraLinea = Math.min(ALTO_PAGINA - 10.5, ultimaPermitida - (n - 1) * altoLinea(tamano));
-  const raya = Math.min(ALTO_PAGINA - 15, primeraLinea - subida(tamano) - 2.7);
-  return { primeraLinea, raya, finCuerpo: raya - 9, finTabla: raya - 13 };
+  const bloque = (n - 1) * altoLinea(tamano) + subida(tamano);
+  const alto = Math.max(ALTO_BANDA_PIE, bloque + 7);
+  const arriba = ALTO_PAGINA - alto;
+  const primeraLinea = arriba + (alto - bloque) / 2 + subida(tamano);
+  return { arriba, primeraLinea, finCuerpo: arriba - 2.5, finTabla: arriba - 6 };
 }
 
 /**
- * Dónde empieza el cuerpo: debajo de la raya de la cabecera (`alto`) y nunca
- * por encima de lo más bajo que se haya dibujado en ella.
+ * Dónde empieza el cuerpo: 5 mm por debajo de donde acaba la cabecera (`fin`:
+ * la banda o, si la hay, la cinta) y nunca por encima de lo más bajo que se
+ * haya dibujado en ella, con 6 mm de aire.
  */
-export function inicioCuerpo(alto: number, cabecera: readonly Caja[]): number {
+export function inicioCuerpo(fin: number, cabecera: readonly Caja[]): number {
   const fondo = cabecera.reduce((m, c) => Math.max(m, c.y1), 0);
-  return Math.max(alto + 7, fondo + 6);
+  return Math.max(fin + 5, fondo + 6);
 }
 
+// ---------------------------------------------------------------------------
+// Las pastillas de los datos: número, fecha y validez
+// ---------------------------------------------------------------------------
+
+/** Lo alta que es cada pastilla, en mm. */
+export const ALTO_PASTILLA = 6.9;
+/** Lo que se ve de la sombra de cada pastilla, abajo a la derecha. */
+export const SOMBRA_PASTILLA = 0.5;
+/** El hueco entre dos pastillas de la misma fila. */
+export const HUECO_PASTILLAS = 3;
+/** De la letra al borde de la pastilla, a cada lado. */
+export const RELLENO_PASTILLA = 3.7;
+/** De una fila de pastillas a la siguiente. */
+export const SALTO_PASTILLAS = ALTO_PASTILLA + 2.5;
+/** El tamaño de la letra de las pastillas, en puntos. */
+export const TAMANO_PASTILLA = 8;
+
 /**
- * Cómo se colocan las filas del bloque de datos (número, fecha y validez): la
- * etiqueta a la izquierda y el valor alineado a la derecha, en `ancho` mm. Los
- * anchos de la etiqueta y del valor de cada fila los mide quien llama, a su
- * tamaño de siempre.
- *
- * La etiqueta y el valor nunca se pisan. Si alguna fila no cabe con `hueco` mm
- * entre los dos, todo el bloque encoge por igual lo que pida la más apretada,
- * hasta `escalaMinima`. Una fila que ni así cabe se parte: la etiqueta en su
- * línea y el valor en la siguiente, a la escala del bloque o menos si hace falta
- * para no pasar de `ancho`; las filas de después bajan. Si todo cabe, no cambia
- * nada: una fila cada `paso` mm, a tamaño completo.
+ * Cómo se colocan las pastillas entre `x` y `x + ancho`: en su orden, en filas
+ * alineadas a la derecha; la que no cabe en una fila pasa a la siguiente.
+ * `textos` es el ancho de la letra de cada una, a `TAMANO_PASTILLA`. Si la más
+ * ancha no cabe sola, todas encogen por igual (`escala`).
  */
-export function maquetaDatos(
-  filas: readonly { etiqueta: number; valor: number }[],
-  ancho: number,
-  {
-    hueco = 3,
-    escalaMinima = 0.75,
-    paso = 5.5,
-    tamanoEtiqueta = 8.5,
-    tamanoValor = 9.5,
-  }: {
-    hueco?: number;
-    escalaMinima?: number;
-    paso?: number;
-    tamanoEtiqueta?: number;
-    tamanoValor?: number;
-  } = {},
+export function maquetaPastillas(
+  textos: readonly number[],
+  caja: { x: number; ancho: number },
 ): {
-  /** Lo que encoge todo el bloque (1: nada). */
   escala: number;
-  /**
-   * Por fila: la línea base de la etiqueta y la del valor, contadas desde la
-   * de la primera fila, y lo que encoge cada uno.
-   */
-  filas: { y: number; yValor: number; escalaEtiqueta: number; escalaValor: number }[];
-  /** De la primera línea base a la última. */
-  alto: number;
+  pastillas: { x: number; fila: number; ancho: number }[];
+  filas: number;
 } {
-  const juntas = (f: { etiqueta: number; valor: number }) => f.etiqueta + f.valor;
-  const necesaria = (f: { etiqueta: number; valor: number }) =>
-    juntas(f) > 0 ? (ancho - hueco) / juntas(f) : 1;
-  // Las filas que caben en una línea marcan la escala; si no cabe ninguna, la mínima.
-  const posibles = filas.map(necesaria).filter((k) => k >= escalaMinima);
-  const escala = filas.length && !posibles.length ? escalaMinima : Math.min(1, ...posibles);
-  let y = 0;
-  const colocadas = filas.map((f) => {
-    if (juntas(f) * escala + hueco <= ancho + 1e-9) {
-      const fila = { y, yValor: y, escalaEtiqueta: escala, escalaValor: escala };
-      y += paso;
-      return fila;
+  if (!textos.length) return { escala: 1, pastillas: [], filas: 0 };
+  const mayor = Math.max(...textos);
+  const escala = Math.min(1, Math.max(0.5, (caja.ancho - 2 * RELLENO_PASTILLA) / (mayor || 1)));
+  const anchos = textos.map((t) => t * escala + 2 * RELLENO_PASTILLA);
+  const filas: number[][] = [[]];
+  let usado = 0;
+  anchos.forEach((a, i) => {
+    const fila = filas[filas.length - 1];
+    const necesita = (fila.length ? usado + HUECO_PASTILLAS : 0) + a;
+    if (fila.length && necesita > caja.ancho + 1e-9) {
+      filas.push([i]);
+      usado = a;
+    } else {
+      fila.push(i);
+      usado = necesita;
     }
-    const escalaEtiqueta = Math.min(escala, f.etiqueta > 0 ? ancho / f.etiqueta : 1);
-    const escalaValor = Math.min(escala, f.valor > 0 ? ancho / f.valor : 1);
-    const yValor =
-      y + altoLinea(Math.max(tamanoEtiqueta * escalaEtiqueta, tamanoValor * escalaValor));
-    const fila = { y, yValor, escalaEtiqueta, escalaValor };
-    y = yValor + paso;
-    return fila;
   });
-  return {
-    escala,
-    filas: colocadas,
-    alto: colocadas.length ? colocadas[colocadas.length - 1].yValor : 0,
-  };
+  const pastillas: { x: number; fila: number; ancho: number }[] = [];
+  filas.forEach((fila, f) => {
+    const largo = fila.reduce((s, i) => s + anchos[i], 0) + (fila.length - 1) * HUECO_PASTILLAS;
+    let x = caja.x + caja.ancho - largo;
+    for (const i of fila) {
+      pastillas[i] = { x, fila: f, ancho: anchos[i] };
+      x += anchos[i] + HUECO_PASTILLAS;
+    }
+  });
+  return { escala, pastillas, filas: filas.length };
+}
+
+/** Lo que ocupan `filas` filas de pastillas que empiezan en `y`, sombra incluida. */
+export function altoPastillas(filas: number): number {
+  return filas ? (filas - 1) * SALTO_PASTILLAS + ALTO_PASTILLA + SOMBRA_PASTILLA : 0;
 }
 
 /**
@@ -344,11 +375,14 @@ export type ColumnaCifra = "cantidad" | "precio" | "iva" | "importe";
 
 /** Los anchos de siempre de las columnas de cifras, y hasta dónde pueden crecer. */
 export const COLUMNAS_CIFRAS: Record<ColumnaCifra, { base: number; tope: number }> = {
-  cantidad: { base: 25, tope: 34 },
-  precio: { base: 28, tope: 40 },
+  cantidad: { base: 22, tope: 34 },
+  precio: { base: 27, tope: 40 },
   iva: { base: 16, tope: 20 },
-  importe: { base: 28, tope: 36 },
+  importe: { base: 27, tope: 36 },
 };
+
+/** El ancho de la columna de la referencia (01, 02…). */
+export const ANCHO_REF = 16;
 
 /**
  * El ancho de cada columna de cifras: el de siempre, o más si su contenido lo
@@ -390,11 +424,17 @@ export function anchosColumnas(
 
 export type RGB = [number, number, number];
 
-// La identidad de DTI: azul marino y azul cielo, los mismos que la aplicación.
-export const MARINO: RGB = [42, 34, 96];
+// La identidad de DTI: azul noche, azul marino, azul cielo y naranja.
+/** La banda de la cabecera y del pie, y la cabecera de la tabla. */
+export const NOCHE: RGB = [24, 19, 65];
+/** Los títulos sobre el papel. */
+export const MARINO: RGB = [42, 33, 96];
 export const CIELO: RGB = [0, 168, 228];
-/** El texto de siempre: casi negro. */
-export const TINTA: RGB = [15, 23, 42];
+export const NARANJA: RGB = [251, 131, 0];
+/** El texto de siempre: casi negro. También los bordes. */
+export const TINTA: RGB = [20, 22, 31];
+/** Las etiquetas y las notas. */
+export const GRIS: RGB = [91, 96, 117];
 export const BLANCO: RGB = [255, 255, 255];
 
 /** «#2a2260» o «#22a» a RGB; null si no es un color en hexadecimal. */
@@ -419,55 +459,82 @@ export function contraste(a: RGB, b: RGB): number {
 }
 
 /**
- * Los colores del documento.
- *
- * - Con un principal elegido en la plantilla, ese, aunque sea claro: es la
- *   marca. Lo que se escribe encima (la cabecera de la tabla, el TOTAL) pasa a
- *   tinta oscura si en blanco no se leería, y los títulos que van en ese color
- *   sobre el papel, también, si no llegan a 3:1.
- * - Sin él, el color de la tienda o de la marca si el blanco se lee bien encima
- *   (4,5:1); si no, o si no tiene, el azul marino de la casa con el azul cielo
- *   de acento. Es lo de antes de existir la plantilla.
- * - El acento (la raya de la cabecera), el de la plantilla; si no, el principal
- *   (o el azul cielo con el azul de la casa).
+ * Los colores del documento: los de la plantilla y, los que deja vacíos, los
+ * de la casa. El principal, aunque sea claro, es la marca: lo que se escribe
+ * encima pasa a tinta oscura si en blanco no se leería, y los títulos que van
+ * en ese color sobre el papel, también, si no llegan a 3:1. Lo mismo con el
+ * acento (la cinta) y el destacado (el TOTAL).
  */
 export function coloresDocumento(o: {
   principal?: string | null;
   acento?: string | null;
-  base?: string | null;
-}): { principal: RGB; acento: RGB; sobrePrincipal: RGB; textoPrincipal: RGB } {
+  destacado?: string | null;
+}): {
+  banda: RGB;
+  sobreBanda: RGB;
+  titulos: RGB;
+  acento: RGB;
+  sobreAcento: RGB;
+  destacado: RGB;
+  sobreDestacado: RGB;
+} {
   const elegido = colorHex(o.principal);
-  const base = colorHex(o.base);
-  const deLaBase = !elegido && base && contraste(base, BLANCO) >= 4.5 ? base : null;
-  const principal = elegido ?? deLaBase ?? MARINO;
-  const acento = colorHex(o.acento) ?? (elegido || deLaBase ? principal : CIELO);
+  const banda = elegido ?? NOCHE;
+  const acento = colorHex(o.acento) ?? CIELO;
+  const destacado = colorHex(o.destacado) ?? NARANJA;
+  const encima = (fondo: RGB) => (contraste(fondo, TINTA) >= 4.5 ? TINTA : BLANCO);
   return {
-    principal,
+    banda,
+    sobreBanda: contraste(banda, BLANCO) >= 4.5 ? BLANCO : TINTA,
+    titulos: elegido ? (contraste(elegido, BLANCO) >= 3 ? elegido : TINTA) : MARINO,
     acento,
-    sobrePrincipal: contraste(principal, BLANCO) >= 4.5 ? BLANCO : TINTA,
-    textoPrincipal: contraste(principal, BLANCO) >= 3 ? principal : TINTA,
+    sobreAcento: encima(acento),
+    destacado,
+    sobreDestacado: encima(destacado),
   };
 }
 
 // ---------------------------------------------------------------------------
-// Paso de página
+// El resumen y las condiciones
 // ---------------------------------------------------------------------------
 
-/** Las líneas de un bloque largo que pasan de página con la caja de aceptación. */
-export const LINEAS_CON_ACEPTACION = 3;
+/**
+ * Con una sola línea, lo que cuesta cada unidad con el IVA: el total entre la
+ * cantidad, redondeado al céntimo. Null si hay más de una línea (el envío
+ * cuenta como una), si la cantidad no es positiva o si no hay total.
+ */
+export function unitarioConIva(
+  d: Pick<DocumentoPresupuesto, "lineas" | "total">,
+): { cantidad: number; unidad: string; precio: number; conIva: number } | null {
+  if (d.lineas.length !== 1) return null;
+  const [l] = d.lineas;
+  if (!(l.cantidad > 0) || !(d.total > 0)) return null;
+  return {
+    cantidad: l.cantidad,
+    unidad: l.unidad,
+    precio: l.precio_unitario,
+    conIva: redondear(d.total / l.cantidad),
+  };
+}
 
 /**
- * Si lo que va justo antes de la aceptación tiene que pasar de página con
- * ella: sí cuando las dos cosas juntas son cortas (caben de sobra en media
- * página). Así la caja de firma nunca se queda sola en una página nueva,
- * separada de las condiciones que acepta. Con un bloque largo no: ese pasa de
- * página línea a línea, y lo que pasa con la caja son sus últimas líneas
- * (`LINEAS_CON_ACEPTACION`).
+ * Reparte bloques de `altos` mm en dos columnas, en su orden: los primeros en
+ * la izquierda hasta la mitad del alto total (más o menos), el resto en la
+ * derecha. Devuelve cuántos van en la izquierda.
  */
-export function juntarConAceptacion(
-  altoAnterior: number,
-  altoAceptacion: number,
-  altoUtil: number,
-): boolean {
-  return altoAnterior > 0 && altoAnterior + altoAceptacion <= altoUtil / 2;
+export function repartirEnDosColumnas(altos: readonly number[]): number {
+  const total = altos.reduce((s, a) => s + a, 0);
+  let mejor = altos.length;
+  let diferencia = Infinity;
+  let izquierda = 0;
+  for (let i = 0; i <= altos.length; i++) {
+    const d = Math.abs(izquierda - (total - izquierda));
+    // A igualdad, la izquierda con más: se lee primero.
+    if (d <= diferencia + 1e-9) {
+      diferencia = d;
+      mejor = i;
+    }
+    if (i < altos.length) izquierda += altos[i];
+  }
+  return Math.max(Math.min(altos.length, 1), mejor);
 }

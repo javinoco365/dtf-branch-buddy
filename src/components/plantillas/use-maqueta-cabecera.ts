@@ -3,7 +3,8 @@ import { ALTO_PAGINA, ANCHO_PAGINA, rellenarTexto } from "@/dominio/plantilla-pr
 import type { Caja } from "@/dominio/maqueta-presupuesto";
 import {
   ENCAJE_TITULO,
-  cajaDatos,
+  maquetarDatos,
+  textosDatos,
   encajarEnCabecera,
   encajeNombre,
   limitesEnPapel,
@@ -62,15 +63,15 @@ export function useMaquetaCabecera() {
     () => rellenarTexto(cab.texto.texto, valores),
     [cab.texto.texto, valores],
   );
-  // Una etiqueta vacía quita su fila, como en el PDF.
-  const filasDatos = (
-    [
-      [cab.datos.etiquetaNumero, valores.numero || "—"],
-      [cab.datos.etiquetaFecha, valores.fecha || "—"],
-      [cab.datos.etiquetaValidez, valores.fecha_validez || "—"],
-    ] as const
-  ).filter(([etiqueta]) => etiqueta.trim() !== "");
-  const nFilas = filasDatos.length;
+  // Una etiqueta vacía quita su pastilla, como en el PDF.
+  const filasDatos = textosDatos(cab, {
+    numero: valores.numero || "—",
+    fecha: valores.fecha || "—",
+    validez: valores.fecha_validez || "—",
+  });
+  // Por su texto: el mismo array mientras no cambie, para no maquetar de más.
+  const claveDatos = filasDatos.map((f) => f.texto).join("\n");
+  const textosPastillas = useMemo(() => (claveDatos ? claveDatos.split("\n") : []), [claveDatos]);
 
   const medidas = useMedidasPdf() ?? MEDIDAS_A_OJO;
   const natural = useTamanoNatural(logoDisponible);
@@ -81,7 +82,7 @@ export function useMaquetaCabecera() {
       {
         // Sin su tamaño (cargando, o sin medidas propias), la caja entera.
         logo: logoDisponible ? (natural ?? { ancho: cab.logo.ancho, alto: cab.logo.alto }) : null,
-        filasDatos: nFilas,
+        datos: textosPastillas,
         parrafos,
         nombre: nombre || "Nombre comercial",
       },
@@ -106,7 +107,7 @@ export function useMaquetaCabecera() {
         encajarEnCabecera(
           cab.nombre,
           nombre || "Nombre comercial",
-          "bold",
+          "titular",
           encajeNombre(cab.nombre.tamano),
           maqueta.dibujado,
           medidas,
@@ -116,7 +117,7 @@ export function useMaquetaCabecera() {
         encajarEnCabecera(
           cab.titulo,
           cab.titulo.texto.trim() || "Título",
-          "bold",
+          "titular",
           ENCAJE_TITULO,
           maqueta.dibujado,
           medidas,
@@ -125,7 +126,7 @@ export function useMaquetaCabecera() {
         maqueta.texto ??
         partirTextoLibre(
           cab.texto,
-          parrafos.length ? parrafos : ["Texto libre"],
+          parrafos.length ? parrafos : ["Antetítulo"],
           maqueta.dibujado,
           medidas,
         ),
@@ -141,7 +142,8 @@ export function useMaquetaCabecera() {
         y1: cab.logo.y + cab.logo.alto,
       },
     };
-    if (nFilas) cajas.datos = cajaDatos(cab.datos, nFilas);
+    const datos = maqueta.datos ?? maquetarDatos(cab.datos, textosPastillas, medidas.medir("bold"));
+    if (datos) cajas.datos = datos.caja;
     if (textos.nombre) cajas.nombre = textos.nombre.caja;
     if (textos.titulo) cajas.titulo = textos.titulo.caja;
     if (textos.texto) cajas.texto = textos.texto.caja;
@@ -161,8 +163,8 @@ export function useMaquetaCabecera() {
         Math.min(MAXIMOS.cabecera[el].ancho, ANCHO_PAGINA - cab[el].x),
       );
 
-    return { maqueta, visible, textos, cajas, limites, anchoMax };
-  }, [cab, logoDisponible, natural, nFilas, parrafos, nombre, medidas]);
+    return { maqueta, visible, textos, cajas, limites, anchoMax, pastillas: datos };
+  }, [cab, logoDisponible, natural, textosPastillas, parrafos, nombre, medidas]);
 
   return { ...calculado, filasDatos, logoDisponible };
 }

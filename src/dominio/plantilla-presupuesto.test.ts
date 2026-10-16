@@ -4,6 +4,7 @@ import {
   ambitoDeClave,
   claveAmbito,
   normalizarPlantilla,
+  plantillaPorDefecto,
   rellenarTexto,
   resolverIdentidad,
 } from "./plantilla-presupuesto";
@@ -44,15 +45,30 @@ describe("normalizarPlantilla", () => {
     ).toEqual({
       principal: "#2a2260",
       acento: "",
+      destacado: "",
     });
   });
 
-  it("el orden tiene cada sección una vez; las que faltan, al final", () => {
-    expect(normalizarPlantilla({ orden: ["aceptacion", "aceptacion", "x"] }).orden).toEqual([
-      "aceptacion",
-      "observaciones",
-      "condiciones",
-    ]);
+  it("lo que falta sale de la de por defecto de su ámbito", () => {
+    const textil = normalizarPlantilla({ pie: { texto: "Mío" } }, "textil");
+    expect(textil.cabecera.texto.texto).toBe("Presupuesto de personalización");
+    expect(textil.cabecera.cinta.texto).toContain("Impresión DTI");
+    expect(textil.pie.texto).toBe("Mío");
+    expect(normalizarPlantilla(null, "tienda").cabecera.texto.texto).toBe(
+      "Presupuesto de impresión DTF",
+    );
+    // Lo guardado manda también en el textil.
+    expect(
+      normalizarPlantilla({ cabecera: { texto: { texto: "Otro" } } }, "textil").cabecera.texto
+        .texto,
+    ).toBe("Otro");
+  });
+
+  it("la de por defecto de cada ámbito ya está completa", () => {
+    expect(normalizarPlantilla(plantillaPorDefecto("textil"))).toEqual(
+      plantillaPorDefecto("textil"),
+    );
+    expect(plantillaPorDefecto("tienda")).toEqual(PLANTILLA_POR_DEFECTO);
   });
 
   it("los textos se cortan a su largo máximo", () => {
@@ -96,8 +112,10 @@ describe("rellenarTexto", () => {
       fecha_validez: "15/11/2026",
       validez: "30 días",
     });
-    expect(lineas).toHaveLength(2);
-    expect(lineas[0]).toBe("Validez: hasta el 15/11/2026, 30 días desde la fecha del presupuesto.");
+    expect(lineas).toHaveLength(5);
+    expect(lineas[4]).toBe(
+      "Validez del presupuesto: 30 días desde la fecha de emisión, hasta el 15/11/2026.",
+    );
   });
 });
 

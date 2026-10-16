@@ -5,13 +5,15 @@
  * presupuestos). Se guarda en `plantillas_presupuesto.config` como JSON y se
  * lee siempre con `normalizarPlantilla`: lo que falte o venga mal se rellena
  * con lo de por defecto, así que un JSON viejo, a medias o roto nunca impide
- * sacar un presupuesto. Sin plantilla guardada, el PDF sale con
- * `PLANTILLA_POR_DEFECTO`, que es el diseño de siempre.
+ * sacar un presupuesto. Sin plantilla guardada, el PDF sale con la de por
+ * defecto de su ámbito (`plantillaPorDefecto`): el modelo de la casa, con la
+ * banda oscura, la cinta de lemas, las cajas de emisor y cliente, el total en
+ * naranja y las condiciones a dos columnas.
  *
  * Las posiciones van en milímetros sobre un A4 vertical (210 × 297), medidas
  * desde la esquina de arriba a la izquierda. La cabecera se coloca libre (cada
  * elemento en su x, y); el cuerpo va seguido, porque la tabla crece con las
- * líneas y puede pasar de página: de él se elige el orden y qué se enseña.
+ * líneas y puede pasar de página: de él se elige qué se enseña y con qué textos.
  *
  * Lógica pura: sin base de datos ni PDF. La usan el generador, el servidor y
  * el editor.
@@ -22,13 +24,17 @@ import { z } from "zod";
 export const ANCHO_PAGINA = 210;
 export const ALTO_PAGINA = 297;
 /** El margen lateral del cuerpo y del pie. */
-export const MARGEN = 16;
+export const MARGEN = 14;
+/** Lo que mide la cinta de lemas, debajo de la banda de la cabecera. */
+export const ALTO_CINTA = 8.9;
 
 // ---------------------------------------------------------------------------
 // Ámbitos: de quién es cada plantilla
 // ---------------------------------------------------------------------------
 
 export type AmbitoPlantilla = { ambito: "tienda"; tiendaId: string } | { ambito: "textil" };
+/** De qué es la plantilla: cambia algún texto de la de por defecto. */
+export type TipoPlantilla = AmbitoPlantilla["ambito"];
 
 /** Una clave estable para un ámbito: «tienda:<id>» o «textil». */
 export function claveAmbito(a: AmbitoPlantilla): string {
@@ -46,22 +52,24 @@ export function ambitoDeClave(clave: string): AmbitoPlantilla | null {
 // ---------------------------------------------------------------------------
 
 export type Alineacion = "izquierda" | "centro" | "derecha";
-export type SeccionFinal = "observaciones" | "condiciones" | "aceptacion";
 /** Cuándo sale el nombre comercial en la cabecera. */
 export type ModoNombre = "auto" | "siempre" | "nunca";
 
 export type PlantillaPresupuesto = {
   version: 1;
   colores: {
-    /** Hexadecimal (#2a2260). Vacío: el color de la tienda o de la marca; si no, el azul de la casa. */
+    /** La banda de la cabecera y del pie, y los títulos. Hexadecimal (#181341). Vacío: el azul noche de la casa. */
     principal: string;
-    /** La línea de la cabecera. Vacío: el principal, o el azul cielo con el azul de la casa. */
+    /** La cinta, el antetítulo, las marcas de las condiciones y la sombra de los datos. Vacío: el azul cielo. */
     acento: string;
+    /** La caja del TOTAL y la fecha de validez. Vacío: el naranja de la casa. */
+    destacado: string;
   };
   cabecera: {
-    /** Dónde va la línea que separa la cabecera del cuerpo (y, en mm). El cuerpo empieza debajo. */
+    /** Dónde acaba la banda de color de la cabecera (y, en mm). La cinta y el cuerpo van debajo. */
     alto: number;
-    linea: boolean;
+    /** La cinta de lemas bajo la banda: un lema por línea, separados por estrellas. Admite variables. */
+    cinta: { mostrar: boolean; texto: string };
     /** El logo se encaja en esta caja sin deformarse. */
     logo: { mostrar: boolean; x: number; y: number; ancho: number; alto: number };
     nombre: {
@@ -82,7 +90,10 @@ export type PlantillaPresupuesto = {
       tamano: number;
       alineacion: Alineacion;
     };
-    /** Número, fecha y validez: la etiqueta en x y el valor alineado a la derecha en x + ancho. */
+    /**
+     * Número, fecha y validez, en pastillas alineadas a la derecha entre x y
+     * x + ancho; y es el borde de arriba. Si no caben en una fila, siguen debajo.
+     */
     datos: {
       mostrar: boolean;
       x: number;
@@ -92,7 +103,7 @@ export type PlantillaPresupuesto = {
       etiquetaFecha: string;
       etiquetaValidez: string;
     };
-    /** Un texto libre: un eslogan, una dirección, lo que haga falta. Admite variables. */
+    /** El antetítulo: un texto corto en mayúsculas espaciadas, con una raya delante. Admite variables. */
     texto: {
       mostrar: boolean;
       texto: string;
@@ -126,6 +137,10 @@ export type PlantillaPresupuesto = {
     };
   };
   tabla: {
+    /** El título de encima de la tabla; la última palabra sale en el color de acento. */
+    titulo: string;
+    ref: string;
+    mostrarRef: boolean;
     descripcion: string;
     cantidad: string;
     precio: string;
@@ -137,16 +152,16 @@ export type PlantillaPresupuesto = {
   };
   resumen: {
     base: string;
-    /** Delante del tipo: «IVA» → «IVA 21 %». */
+    /** Delante del tipo: «IVA» → «IVA (21 %)». */
     iva: string;
     total: string;
+    /** Debajo del total, con una sola línea: «20 ud. × 8,00 € + IVA · 9,68 €/ud. IVA incluido». */
+    mostrarUnitario: boolean;
     mostrarMetros: boolean;
     metros: string;
   };
-  /** El orden de lo que va después del resumen. */
-  orden: SeccionFinal[];
   observaciones: { mostrar: boolean; titulo: string };
-  /** Una línea por condición. Admite variables. */
+  /** Una línea por condición, a dos columnas con una marca delante. Admite variables. */
   condiciones: { mostrar: boolean; titulo: string; texto: string };
   aceptacion: {
     mostrar: boolean;
@@ -155,8 +170,11 @@ export type PlantillaPresupuesto = {
     etiquetaFecha: string;
     etiquetaFirma: string;
   };
+  /** La banda del pie: el título a la izquierda y el texto en lo que queda. */
   pie: {
-    /** Los datos fiscales. Hasta tres líneas. Admite variables. */
+    /** En letra grande y en el color de acento: la web. Admite variables. */
+    titulo: string;
+    /** El contacto o los datos fiscales. Hasta dos líneas. Admite variables. */
     texto: string;
     alineacion: Alineacion;
     tamano: number;
@@ -166,43 +184,51 @@ export type PlantillaPresupuesto = {
 
 export const PLANTILLA_POR_DEFECTO: PlantillaPresupuesto = {
   version: 1,
-  colores: { principal: "", acento: "" },
+  colores: { principal: "", acento: "", destacado: "" },
   cabecera: {
-    alto: 48,
-    linea: true,
-    logo: { mostrar: true, x: MARGEN, y: 14, ancho: 52, alto: 22 },
+    alto: 38,
+    cinta: {
+      mostrar: true,
+      texto: [
+        "Impresión DTF",
+        "Taller propio en Cartaya",
+        "Revisión de cada archivo",
+        "{web}",
+      ].join("\n"),
+    },
+    logo: { mostrar: true, x: MARGEN, y: 9, ancho: 52, alto: 21 },
     nombre: {
       mostrar: "auto",
       texto: "",
       x: MARGEN,
-      y: 24,
-      tamano: 18,
+      y: 22,
+      tamano: 24,
       alineacion: "izquierda",
     },
     titulo: {
       mostrar: true,
       texto: "PRESUPUESTO",
       x: ANCHO_PAGINA - MARGEN,
-      y: 23,
-      tamano: 24,
+      y: 22,
+      tamano: 34,
       alineacion: "derecha",
     },
     datos: {
       mostrar: true,
-      x: ANCHO_PAGINA - MARGEN - 66,
-      y: 31,
-      ancho: 66,
-      etiquetaNumero: "Número",
+      x: 70,
+      y: 25.1,
+      ancho: ANCHO_PAGINA - MARGEN - 70,
+      etiquetaNumero: "Nº",
       etiquetaFecha: "Fecha",
       etiquetaValidez: "Válido hasta",
     },
     texto: {
-      mostrar: false,
-      texto: "",
-      x: MARGEN,
-      y: 42,
-      tamano: 8.5,
-      alineacion: "izquierda",
+      mostrar: true,
+      texto: "Presupuesto de impresión DTF",
+      x: ANCHO_PAGINA - MARGEN,
+      y: 9.5,
+      tamano: 7.5,
+      alineacion: "derecha",
     },
   },
   partes: {
@@ -215,7 +241,7 @@ export const PLANTILLA_POR_DEFECTO: PlantillaPresupuesto = {
       direccion: true,
       email: true,
       telefono: true,
-      web: true,
+      web: false,
     },
     cliente: {
       mostrar: true,
@@ -228,47 +254,88 @@ export const PLANTILLA_POR_DEFECTO: PlantillaPresupuesto = {
     },
   },
   tabla: {
+    titulo: "Detalle del pedido",
+    ref: "Ref.",
+    mostrarRef: true,
     descripcion: "Descripción",
-    cantidad: "Cantidad",
-    precio: "Precio unit.",
+    cantidad: "Cant.",
+    precio: "Precio ud.",
     iva: "IVA",
     importe: "Importe",
     mostrarCantidad: true,
     mostrarPrecio: true,
-    mostrarIva: true,
+    mostrarIva: false,
   },
   resumen: {
     base: "Base imponible",
     iva: "IVA",
     total: "TOTAL",
+    mostrarUnitario: true,
     mostrarMetros: true,
     metros: "Metros totales",
   },
-  orden: ["observaciones", "condiciones", "aceptacion"],
   observaciones: { mostrar: true, titulo: "Observaciones" },
   condiciones: {
     mostrar: true,
     titulo: "Condiciones",
     texto: [
-      "Validez: hasta el {fecha_validez}, {validez} desde la fecha del presupuesto.",
-      "Precios e importes de las líneas sin IVA. El IVA se suma en el resumen, por tipo.",
+      "Precios sin IVA. El IVA se suma en el resumen del presupuesto.",
+      "Plazo de entrega: a confirmar tras la aceptación del presupuesto.",
+      "Forma de pago: a convenir con el cliente. Se emitirá la factura correspondiente.",
+      "El cliente declara contar con autorización para el uso de los diseños y logotipos que se reproducen.",
+      "Validez del presupuesto: {validez} desde la fecha de emisión, hasta el {fecha_validez}.",
       "Para aceptarlo o resolver cualquier duda: {contacto}.",
     ].join("\n"),
   },
   aceptacion: {
     mostrar: true,
     titulo: "Aceptación del cliente",
-    texto: "Conforme con el presupuesto {numero} y sus condiciones.",
+    texto: "",
     etiquetaFecha: "Fecha",
-    etiquetaFirma: "Firma y sello",
+    etiquetaFirma: "Nombre, cargo, firma y sello",
   },
   pie: {
-    texto: "{razon_social} · CIF {cif} · {direccion}",
-    alineacion: "izquierda",
-    tamano: 7,
+    titulo: "{web}",
+    texto: "WhatsApp {telefono} · {email} · {direccion}",
+    alineacion: "derecha",
+    tamano: 8,
     paginas: true,
   },
 };
+
+/** Lo que cambia la de por defecto del textil: es personalización de prendas, con DTI. */
+const PROPIO_TEXTIL = {
+  cabecera: {
+    cinta: {
+      texto: [
+        "Impresión DTI",
+        "Taller propio en Cartaya",
+        "Revisión de cada archivo",
+        "{web}",
+      ].join("\n"),
+    },
+    texto: { texto: "Presupuesto de personalización" },
+  },
+};
+
+/** ¿Es un objeto de los de JSON (no una lista ni null)? */
+const esObjeto = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
+/** `encima` sobre `debajo`, campo a campo: lo que no trae `encima` sale de `debajo`. */
+function fundir(debajo: unknown, encima: unknown): unknown {
+  if (!esObjeto(debajo) || !esObjeto(encima)) return encima === undefined ? debajo : encima;
+  const r: Record<string, unknown> = { ...debajo };
+  for (const [k, v] of Object.entries(encima)) r[k] = fundir(debajo[k], v);
+  return r;
+}
+
+/** La plantilla con que sale el PDF de un ámbito que no ha guardado ninguna. */
+export function plantillaPorDefecto(tipo: TipoPlantilla = "tienda"): PlantillaPresupuesto {
+  return tipo === "textil"
+    ? (fundir(PLANTILLA_POR_DEFECTO, PROPIO_TEXTIL) as PlantillaPresupuesto)
+    : structuredClone(PLANTILLA_POR_DEFECTO);
+}
 
 // ---------------------------------------------------------------------------
 // Leer lo guardado: tolerante, siempre devuelve una plantilla completa
@@ -305,14 +372,15 @@ const Y = (def: number) => num(def, 0, ALTO_PAGINA);
 const objeto = <T extends z.ZodRawShape>(forma: T) =>
   z.preprocess((v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}), z.object(forma));
 
-const SECCIONES: SeccionFinal[] = ["observaciones", "condiciones", "aceptacion"];
-
 export const esquemaPlantilla = objeto({
   version: z.literal(1).catch(1),
-  colores: objeto({ principal: hex, acento: hex }),
+  colores: objeto({ principal: hex, acento: hex, destacado: hex }),
   cabecera: objeto({
     alto: num(D.cabecera.alto, 20, 120),
-    linea: bool(D.cabecera.linea),
+    cinta: objeto({
+      mostrar: bool(D.cabecera.cinta.mostrar),
+      texto: txt(D.cabecera.cinta.texto, 400),
+    }),
     logo: objeto({
       mostrar: bool(D.cabecera.logo.mostrar),
       x: X(D.cabecera.logo.x),
@@ -377,6 +445,9 @@ export const esquemaPlantilla = objeto({
     }),
   }),
   tabla: objeto({
+    titulo: txt(D.tabla.titulo, 40),
+    ref: txt(D.tabla.ref, 12),
+    mostrarRef: bool(D.tabla.mostrarRef),
     descripcion: txt(D.tabla.descripcion, 30),
     cantidad: txt(D.tabla.cantidad, 20),
     precio: txt(D.tabla.precio, 20),
@@ -390,19 +461,10 @@ export const esquemaPlantilla = objeto({
     base: txt(D.resumen.base, 30),
     iva: txt(D.resumen.iva, 20),
     total: txt(D.resumen.total, 20),
+    mostrarUnitario: bool(D.resumen.mostrarUnitario),
     mostrarMetros: bool(D.resumen.mostrarMetros),
     metros: txt(D.resumen.metros, 30),
   }),
-  // Cada sección una vez, en el orden guardado; las que falten, al final en su orden de siempre.
-  orden: z
-    .array(z.unknown())
-    .transform((a) => {
-      const vistas = a.filter(
-        (s, i): s is SeccionFinal => SECCIONES.includes(s as SeccionFinal) && a.indexOf(s) === i,
-      );
-      return [...vistas, ...SECCIONES.filter((s) => !vistas.includes(s))];
-    })
-    .catch([...D.orden]),
   observaciones: objeto({
     mostrar: bool(D.observaciones.mostrar),
     titulo: txt(D.observaciones.titulo, 40),
@@ -420,6 +482,7 @@ export const esquemaPlantilla = objeto({
     etiquetaFirma: txt(D.aceptacion.etiquetaFirma, 30),
   }),
   pie: objeto({
+    titulo: txt(D.pie.titulo, 60),
     texto: txt(D.pie.texto, 600),
     alineacion: alin(D.pie.alineacion),
     tamano: num(D.pie.tamano, 5, 12),
@@ -429,11 +492,16 @@ export const esquemaPlantilla = objeto({
 
 /**
  * La plantilla completa a partir de lo que haya guardado (o de nada). Nunca
- * falla: lo que no sirve se sustituye por lo de por defecto.
+ * falla: lo que falta sale de la de por defecto del ámbito (`tipo`), y lo que
+ * no sirve, de la de por defecto.
  */
-export function normalizarPlantilla(guardada: unknown): PlantillaPresupuesto {
-  const r = esquemaPlantilla.safeParse(guardada ?? {});
-  return r.success ? (r.data as PlantillaPresupuesto) : structuredClone(PLANTILLA_POR_DEFECTO);
+export function normalizarPlantilla(
+  guardada: unknown,
+  tipo: TipoPlantilla = "tienda",
+): PlantillaPresupuesto {
+  const base = plantillaPorDefecto(tipo);
+  const r = esquemaPlantilla.safeParse(fundir(base, esObjeto(guardada) ? guardada : {}));
+  return r.success ? (r.data as PlantillaPresupuesto) : base;
 }
 
 // ---------------------------------------------------------------------------

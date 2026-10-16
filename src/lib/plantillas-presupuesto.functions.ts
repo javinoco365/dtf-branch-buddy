@@ -231,7 +231,7 @@ export const listarPlantillasPresupuesto = createServerFn({ method: "GET" })
     ): AmbitoEditable => ({
       clave: claveAmbito(a),
       etiqueta,
-      plantilla: normalizarPlantilla(fila?.config),
+      plantilla: normalizarPlantilla(fila?.config, a.ambito),
       logo_url: texto(fila?.logo_url),
       guardada: !!fila,
       base,
@@ -284,7 +284,7 @@ export const guardarPlantillaPresupuesto = createServerFn({ method: "POST" })
 
     // Nunca lo que llega tal cual: la plantilla completa, con cada valor dentro
     // de sus límites.
-    const config = normalizarPlantilla(data.config);
+    const config = normalizarPlantilla(data.config, ambito.ambito);
     const logo_url = logoDelProyecto(data.logo_url);
 
     // La empresa: la de la tienda (si no la ve, no es suya) o la activa, en el

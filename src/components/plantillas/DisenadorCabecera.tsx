@@ -4,9 +4,21 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { numeroJusto } from "@/lib/format";
-import { ANCHO_PAGINA, MARGEN, type Alineacion } from "@/dominio/plantilla-presupuesto";
+import {
+  ALTO_CINTA,
+  ANCHO_PAGINA,
+  MARGEN,
+  rellenarTexto,
+  type Alineacion,
+} from "@/dominio/plantilla-presupuesto";
 import type { Caja } from "@/dominio/maqueta-presupuesto";
-import type { RangoPosicion, TextoMaquetado } from "@/dominio/maqueta-cabecera";
+import {
+  ALTO_PASTILLA,
+  ESPACIADO_ROTULO,
+  RAYA_ANTETITULO,
+  type RangoPosicion,
+  type TextoMaquetado,
+} from "@/dominio/maqueta-cabecera";
 import {
   ELEMENTOS,
   NOMBRE_ELEMENTO,
@@ -22,16 +34,16 @@ import { MAXIMOS, MINIMOS, aMedioMm, acotar } from "./limites";
 import {
   ANCLA,
   FUENTE_PDF,
+  FUENTE_TITULAR,
   GRIS_LINEA,
   GRIS_SUAVE,
   GRIS_TEXTO,
   INTERLINEA,
   MM_POR_PT,
-  SALTO_DATOS,
   coloresDiseno,
   encajeLogo,
 } from "./aspecto";
-import { CampoAlineacion, CampoInterruptor, CampoNumero } from "./Campos";
+import { CampoAlineacion, CampoInterruptor, CampoNumero, TextoConVariables } from "./Campos";
 import { useMaquetaCabecera } from "./use-maqueta-cabecera";
 
 /**
@@ -101,9 +113,12 @@ export function DisenadorCabecera({
   /** Abre en el formulario la sección de lo elegido. */
   onMasOpciones: (seccion: string) => void;
 }) {
-  const { plantilla: p, cambiar, base } = useEditor();
+  const { plantilla: p, cambiar, valores } = useEditor();
   const cab = p.cabecera;
-  const { texto: colorTexto, acento } = coloresDiseno(p, base.color);
+  const colores = coloresDiseno(p);
+  const lemas = cab.cinta.mostrar
+    ? rellenarTexto(cab.cinta.texto, valores).map((l) => l.toUpperCase())
+    : [];
 
   const marco = useRef<HTMLDivElement>(null);
   const arrastre = useRef<Arrastre | null>(null);
@@ -113,10 +128,19 @@ export function DisenadorCabecera({
   // La cabecera maquetada como en el PDF (`useMaquetaCabecera`): lo que sale,
   // el tamaño y las líneas de cada texto, lo que ocupa cada elemento y hasta
   // dónde se puede mover sin salirse del papel.
-  const { maqueta, visible, textos, cajas, limites, anchoMax, filasDatos, logoDisponible } =
-    useMaquetaCabecera();
+  const {
+    maqueta,
+    visible,
+    textos,
+    cajas,
+    limites,
+    anchoMax,
+    filasDatos,
+    pastillas,
+    logoDisponible,
+  } = useMaquetaCabecera();
 
-  // Dónde empieza el cuerpo, como en el PDF: 7 mm bajo la línea, o 6 mm bajo
+  // Dónde empieza el cuerpo, como en el PDF: 5 mm bajo la banda o la cinta, o 6 mm bajo
   // lo más bajo que salga en la cabecera si baja más. El dibujo llega un poco
   // más abajo, para que se vea dónde empieza, y nunca corta lo que enseña.
   const inicio = maqueta.inicio;
@@ -294,28 +318,42 @@ export function DisenadorCabecera({
 
   /** Un texto de la cabecera con el tamaño y las líneas con que sale en el PDF. */
   const textoPdf = (
-    t: { x: number; y: number; alineacion: Alineacion },
+    t: { alineacion: Alineacion },
     m: TextoMaquetado | null,
     color: string,
-    negrita = true,
+    rotulo = false,
   ) =>
     m && (
-      <text
-        x={t.x}
-        y={t.y}
-        fontSize={pt(m.tamano)}
-        fontFamily={FUENTE_PDF}
-        fontWeight={negrita ? 700 : 400}
-        textAnchor={ANCLA[t.alineacion]}
-        fill={color}
-        style={{ userSelect: "none" }}
-      >
-        {m.lineas.map((l, i) => (
-          <tspan key={i} x={t.x} dy={i === 0 ? 0 : pt(m.tamano) * INTERLINEA}>
-            {l}
-          </tspan>
-        ))}
-      </text>
+      <g>
+        {rotulo && (
+          // La raya de delante del antetítulo, como en el PDF (a ojo con la letra espaciada).
+          <line
+            x1={m.caja.x0}
+            x2={m.caja.x0 + RAYA_ANTETITULO.largo}
+            y1={m.y - pt(m.tamano) * 0.36}
+            y2={m.y - pt(m.tamano) * 0.36}
+            stroke={colores.destacado}
+            strokeWidth={0.5}
+          />
+        )}
+        <text
+          x={m.x}
+          y={m.y}
+          fontSize={pt(m.tamano)}
+          fontFamily={rotulo ? FUENTE_PDF : FUENTE_TITULAR}
+          fontWeight={rotulo ? 700 : 400}
+          letterSpacing={rotulo ? ESPACIADO_ROTULO : undefined}
+          textAnchor={ANCLA[t.alineacion]}
+          fill={color}
+          style={{ userSelect: "none" }}
+        >
+          {m.lineas.map((l, i) => (
+            <tspan key={i} x={m.x} dy={i === 0 ? 0 : pt(m.tamano) * INTERLINEA}>
+              {l}
+            </tspan>
+          ))}
+        </text>
+      </g>
     );
 
   // La caja de lo elegido, en porcentajes del lienzo, para el rótulo y los tiradores.
@@ -329,14 +367,14 @@ export function DisenadorCabecera({
   // dibuja el PDF (el logo, la imagen encajada; no su caja entera).
   const dibujadas: Record<ElementoCabecera, Caja | null> = {
     logo: maqueta.logo,
-    datos: maqueta.datos,
+    datos: maqueta.datos?.caja ?? null,
     titulo: maqueta.titulo?.caja ?? null,
     texto: maqueta.texto?.caja ?? null,
     nombre: maqueta.nombre?.caja ?? null,
   };
   const empujanCuerpo = ELEMENTOS.filter((el) => {
     const c = dibujadas[el];
-    return !!c && c.y1 + 6 > cab.alto + 7 + 0.25;
+    return !!c && c.y1 + 6 > maqueta.fin + 5 + 0.25;
   });
   const uno = empujanCuerpo.length === 1;
 
@@ -391,6 +429,40 @@ export function DisenadorCabecera({
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
             />
+            {/* La banda de color y, debajo, la cinta de lemas. */}
+            <rect x={0} y={0} width={ANCHO_PAGINA} height={cab.alto} fill={colores.banda} />
+            {cab.cinta.mostrar && (
+              <g pointerEvents="none" style={{ userSelect: "none" }}>
+                <rect
+                  x={0}
+                  y={cab.alto}
+                  width={ANCHO_PAGINA}
+                  height={ALTO_CINTA}
+                  fill={colores.acento}
+                />
+                <clipPath id="disenador-cinta">
+                  <rect
+                    x={MARGEN}
+                    y={cab.alto}
+                    width={ANCHO_PAGINA - 2 * MARGEN}
+                    height={ALTO_CINTA}
+                  />
+                </clipPath>
+                <text
+                  x={MARGEN + 2.5}
+                  y={cab.alto + 5.7}
+                  fontSize={pt(9)}
+                  fontFamily={FUENTE_TITULAR}
+                  letterSpacing={0.16}
+                  fill={colores.sobreAcento}
+                  clipPath="url(#disenador-cinta)"
+                >
+                  {Array.from({ length: 4 }, () => lemas)
+                    .flat()
+                    .join("  ★  ")}
+                </text>
+              </g>
+            )}
             {[MARGEN, ANCHO_PAGINA - MARGEN].map((x) => (
               <line
                 key={x}
@@ -486,46 +558,57 @@ export function DisenadorCabecera({
                 </>
               ),
             )}
-            {elemento("nombre", textoPdf(cab.nombre, textos.nombre, colorTexto))}
-            {elemento("titulo", textoPdf(cab.titulo, textos.titulo, colorTexto))}
+            {elemento("nombre", textoPdf(cab.nombre, textos.nombre, colores.sobreBanda))}
+            {elemento("titulo", textoPdf(cab.titulo, textos.titulo, colores.sobreBanda))}
             {elemento(
               "datos",
               <>
-                {filasDatos.map(([etiqueta, valor], i) => (
-                  <g key={i}>
-                    <text
-                      x={cab.datos.x}
-                      y={cab.datos.y + i * SALTO_DATOS}
-                      fontSize={pt(8.5)}
-                      fontFamily={FUENTE_PDF}
-                      fill={GRIS_SUAVE}
-                      style={{ userSelect: "none" }}
-                    >
-                      {etiqueta}
-                    </text>
-                    <text
-                      x={cab.datos.x + cab.datos.ancho}
-                      y={cab.datos.y + i * SALTO_DATOS}
-                      fontSize={pt(9.5)}
-                      fontFamily={FUENTE_PDF}
-                      fontWeight={700}
-                      textAnchor="end"
-                      fill={GRIS_TEXTO}
-                      style={{ userSelect: "none" }}
-                    >
-                      {valor}
-                    </text>
-                  </g>
-                ))}
+                {pastillas?.pastillas.map((pa, i) => {
+                  const validez = filasDatos[i]?.validez;
+                  return (
+                    <g key={i}>
+                      <rect
+                        x={pa.x + 0.5}
+                        y={pa.y + 0.5}
+                        width={pa.ancho}
+                        height={ALTO_PASTILLA}
+                        rx={ALTO_PASTILLA / 2}
+                        fill={colores.acento}
+                      />
+                      <rect
+                        x={pa.x}
+                        y={pa.y}
+                        width={pa.ancho}
+                        height={ALTO_PASTILLA}
+                        rx={ALTO_PASTILLA / 2}
+                        fill={validez ? colores.destacado : "white"}
+                        stroke={GRIS_TEXTO}
+                        strokeWidth={0.35}
+                      />
+                      <text
+                        x={pa.x + pa.ancho / 2}
+                        y={pa.y + ALTO_PASTILLA / 2 + pt(pastillas.tamano) * 0.36}
+                        fontSize={pt(pastillas.tamano)}
+                        fontFamily={FUENTE_PDF}
+                        fontWeight={700}
+                        textAnchor="middle"
+                        fill={validez ? colores.sobreDestacado : GRIS_TEXTO}
+                        style={{ userSelect: "none" }}
+                      >
+                        {pa.texto}
+                      </text>
+                    </g>
+                  );
+                })}
               </>,
             )}
-            {elemento("texto", textoPdf(cab.texto, textos.texto, GRIS_SUAVE, false))}
+            {elemento("texto", textoPdf(cab.texto, textos.texto, colores.acento, true))}
 
             {/* La línea de la cabecera: se arrastra arriba y abajo. */}
             <g
               role="slider"
               tabIndex={0}
-              aria-label="Línea de la cabecera: dónde empieza el cuerpo"
+              aria-label="Borde de la banda de la cabecera"
               aria-valuemin={MINIMOS.cabecera.alto}
               aria-valuemax={MAXIMOS.cabecera.alto}
               aria-valuenow={cab.alto}
@@ -543,9 +626,9 @@ export function DisenadorCabecera({
                 x2={ANCHO_PAGINA - MARGEN}
                 y1={cab.alto}
                 y2={cab.alto}
-                stroke={cab.linea ? acento : "rgb(148 163 184)"}
-                strokeWidth={cab.linea ? 0.8 : 0.3}
-                strokeDasharray={cab.linea ? undefined : "1.5 1.5"}
+                stroke={colores.acento}
+                strokeWidth={0.3}
+                strokeDasharray="1.5 1.5"
               />
               {/* Más gruesa por dentro, para cogerla con el dedo. */}
               <rect
@@ -632,8 +715,8 @@ export function DisenadorCabecera({
         </div>
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Move className="h-3 w-3 shrink-0" />
-          Arrastra cada caja para colocarla y la línea para cambiar dónde empieza el cuerpo. Se pega
-          a los márgenes (en azul) y al centro.
+          Arrastra cada caja para colocarla y el borde de la banda para cambiar su alto. Se pega a
+          los márgenes (en azul) y al centro.
         </p>
       </div>
 
@@ -642,9 +725,9 @@ export function DisenadorCabecera({
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             {empujanCuerpo.map((el) => NOMBRE_ELEMENTO[el]).join(", ")} {uno ? "baja" : "bajan"} de
-            la línea de la cabecera: el cuerpo empieza más abajo, a {numeroJusto(inicio, 1)} mm,
-            para no {uno ? "pisarlo" : "pisarlos"}. {uno ? "Súbelo" : "Súbelos"} o baja la línea si
-            quieres que {uno ? "quede" : "queden"} dentro de la cabecera.
+            la banda de la cabecera: el cuerpo empieza más abajo, a {numeroJusto(inicio, 1)} mm,
+            para no {uno ? "pisarlo" : "pisarlos"}. {uno ? "Súbelo" : "Súbelos"} o alarga la banda
+            si quieres que {uno ? "quede" : "queden"} dentro.
           </span>
         </p>
       )}
@@ -659,7 +742,7 @@ export function DisenadorCabecera({
         aria-label="Elegir un elemento de la cabecera"
       >
         {[...ELEMENTOS, "linea" as const].map((s) => {
-          const oculto = s === "linea" ? !cab.linea : !visible[s];
+          const oculto = s === "linea" ? false : !visible[s];
           return (
             <ToggleGroupItem
               key={s}
@@ -739,18 +822,29 @@ function PosicionElegida({
     campos = (
       <>
         <CampoNumero
-          etiqueta="Línea a"
+          etiqueta="Alto de la banda"
           valor={cab.alto}
           min={MINIMOS.cabecera.alto}
           max={MAXIMOS.cabecera.alto}
           onChange={(alto) => cambiar(conCabecera({ alto }))}
         />
         <CampoInterruptor
-          etiqueta="Dibujar la línea"
-          valor={cab.linea}
-          onChange={(linea) => cambiar(conCabecera({ linea }))}
+          etiqueta="Cinta de lemas"
+          valor={cab.cinta.mostrar}
+          onChange={(mostrar) => cambiar(conCabecera({ cinta: { ...cab.cinta, mostrar } }))}
           className="col-span-2 self-end pb-1.5 sm:col-span-1"
         />
+        {cab.cinta.mostrar && (
+          <div className="col-span-2 sm:col-span-4">
+            <TextoConVariables
+              etiqueta="Lemas de la cinta (uno por línea)"
+              valor={cab.cinta.texto}
+              maximo={400}
+              filas={4}
+              onChange={(texto) => cambiar(conCabecera({ cinta: { ...cab.cinta, texto } }))}
+            />
+          </div>
+        )}
       </>
     );
   } else {
@@ -848,7 +942,7 @@ function PosicionElegida({
           {seleccion === "logo"
             ? "X e Y: la esquina de arriba a la izquierda de la caja, en mm desde el borde del papel. El logo se encaja en la caja sin deformarse."
             : seleccion === "datos"
-              ? "X: donde empiezan las etiquetas; las cifras acaban en X + ancho. Y: la línea sobre la que se apoya la primera fila. En mm desde el borde del papel."
+              ? "Las pastillas van alineadas a la derecha entre X y X + ancho; Y es su borde de arriba. Si no caben en una fila, siguen debajo. En mm desde el borde del papel."
               : "X: el punto donde se alinea el texto. Y: la línea sobre la que se apoya. En mm desde el borde del papel."}
         </p>
       )}

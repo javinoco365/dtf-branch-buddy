@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   ENCAJE_TITULO,
-  cajaDatos,
+  RAYA_ANTETITULO,
   encajarEnCabecera,
   encajeNombre,
   limitesEnPapel,
   maquetarCabecera,
+  maquetarDatos,
   partirTextoLibre,
+  textosDatos,
   type MedidasTexto,
 } from "./maqueta-cabecera";
 import {
+  ALTO_PASTILLA,
+  SOMBRA_PASTILLA,
   altoLinea,
   bajada,
   encajarImagen,
@@ -19,7 +23,7 @@ import {
 } from "./maqueta-presupuesto";
 import { PLANTILLA_POR_DEFECTO, type PlantillaPresupuesto } from "./plantilla-presupuesto";
 
-// Una fuente de mentira: cada carácter mide medio punto en mm (la negrita, igual).
+// Una fuente de mentira: cada carácter mide medio punto en mm (todas las letras, igual).
 const medir: Medir = (texto, tamano) => texto.length * tamano * 0.5 * (25.4 / 72);
 const partir: Partir = (texto, ancho, tamano) => {
   const lineas: string[] = [];
@@ -43,36 +47,75 @@ const cabecera = (cambios: (c: Cabecera) => void = () => {}): Cabecera => {
   cambios(c);
   return c;
 };
+const datos = textosDatos(PLANTILLA_POR_DEFECTO.cabecera, {
+  numero: "PRE-2026-1016-01",
+  fecha: "16/10/2026",
+  validez: "15/11/2026",
+}).map((d) => d.texto);
 const contenido = {
-  logo: { ancho: 300, alto: 100 },
-  filasDatos: 3,
+  logo: { ancho: 100, alto: 100 },
+  datos,
   parrafos: [] as string[],
   nombre: "Tienda Uno",
 };
 
+describe("textosDatos", () => {
+  it("cada pastilla con su etiqueta delante; la de validez, marcada", () => {
+    expect(
+      textosDatos(PLANTILLA_POR_DEFECTO.cabecera, { numero: "N1", fecha: "F", validez: "V" }),
+    ).toEqual([
+      { texto: "Nº N1", validez: false },
+      { texto: "Fecha F", validez: false },
+      { texto: "Válido hasta V", validez: true },
+    ]);
+  });
+  it("una etiqueta vacía quita su pastilla", () => {
+    const c = cabecera((c) => (c.datos.etiquetaFecha = " "));
+    expect(textosDatos(c, { numero: "N1", fecha: "F", validez: "V" })).toHaveLength(2);
+  });
+});
+
 describe("maquetarCabecera", () => {
-  it("con la plantilla de siempre y logo: logo, datos y título; el nombre no sale", () => {
-    const m = maquetarCabecera(cabecera(), contenido, medidas);
-    // El logo, encajado en su caja de 52 × 22 sin deformarse: 52 × 17,3.
+  it("con la plantilla de por defecto y logo: logo, datos, título y antetítulo; el nombre no", () => {
+    const c = cabecera((c) => (c.texto.texto = "Presupuesto"));
+    const m = maquetarCabecera(c, { ...contenido, parrafos: ["Presupuesto"] }, medidas);
+    // El logo, cuadrado, encajado en su caja de 52 × 21: 21 × 21, a la izquierda.
     expect(m.logo).toEqual(encajarImagen(PLANTILLA_POR_DEFECTO.cabecera.logo, contenido.logo));
-    expect(m.logo!.y1).toBeCloseTo(14 + 52 / 3);
-    expect(m.datos).toEqual(cajaDatos(PLANTILLA_POR_DEFECTO.cabecera.datos, 3));
+    expect(m.logo!.x1 - m.logo!.x0).toBeCloseTo(21);
+    // Las tres pastillas en una fila, acabando en el margen derecho.
+    expect(m.datos!.pastillas).toHaveLength(3);
+    const ultima = m.datos!.pastillas[2];
+    expect(ultima.x + ultima.ancho).toBeCloseTo(196);
+    expect(m.datos!.caja.y1).toBeCloseTo(25.1 + ALTO_PASTILLA + SOMBRA_PASTILLA);
     // El título, alineado a la derecha en el margen.
     expect(m.titulo!.lineas).toEqual(["PRESUPUESTO"]);
-    expect(m.titulo!.caja.x1).toBeCloseTo(194);
-    expect(m.texto).toBeNull();
+    expect(m.titulo!.caja.x1).toBeCloseTo(196);
+    // El antetítulo, en mayúsculas y con la raya delante.
+    expect(m.texto!.lineas).toEqual(["PRESUPUESTO"]);
+    expect(m.texto!.caja.x0).toBeCloseTo(
+      196 - medir("PRESUPUESTO", 7.5) - RAYA_ANTETITULO.largo - RAYA_ANTETITULO.hueco,
+    );
     expect(m.nombre).toBeNull();
-    expect(m.dibujado).toHaveLength(3);
-    // Nada baja de la línea: el cuerpo empieza 7 mm debajo de ella.
-    expect(m.inicio).toBe(48 + 7);
+    // La cabecera acaba con la cinta, y el cuerpo empieza 5 mm debajo.
+    expect(m.fin).toBeCloseTo(38 + 8.9);
+    expect(m.inicio).toBeCloseTo(38 + 8.9 + 5);
   });
 
-  it("sin logo sale el nombre, y no llega hasta los datos", () => {
+  it("sin cinta, la cabecera acaba en la banda", () => {
+    const m = maquetarCabecera(
+      cabecera((c) => (c.cinta.mostrar = false)),
+      contenido,
+      medidas,
+    );
+    expect(m.fin).toBe(38);
+    expect(m.inicio).toBe(43);
+  });
+
+  it("sin logo sale el nombre, y no llega hasta las pastillas", () => {
     const m = maquetarCabecera(cabecera(), { ...contenido, logo: null }, medidas);
     expect(m.logo).toBeNull();
     expect(m.nombre).not.toBeNull();
-    expect(m.nombre!.caja.x0).toBe(16);
-    expect(m.nombre!.caja.x1).toBeLessThanOrEqual(m.datos!.x0 - 6);
+    expect(m.nombre!.caja.x0).toBe(14);
   });
 
   it("el nombre «siempre» sale aunque haya logo, y «nunca» no sale aunque no lo haya", () => {
@@ -101,104 +144,99 @@ describe("maquetarCabecera", () => {
     expect(m.nombre).not.toBeNull();
   });
 
-  it("el cuerpo empieza bajo la imagen del logo, no bajo su caja entera", () => {
-    // Una caja de 60 mm de alto con un logo de 3:1: la imagen solo baja 22 mm.
+  it("lo que baja de la banda empuja el cuerpo", () => {
     const m = maquetarCabecera(
-      cabecera((c) => (c.logo = { ...c.logo, x: 16, y: 12, ancho: 66, alto: 60 })),
+      cabecera((c) => (c.logo = { ...c.logo, x: 14, y: 12, ancho: 60, alto: 60 })),
       contenido,
       medidas,
     );
-    expect(m.logo!.y1).toBeCloseTo(12 + 22);
-    expect(m.inicio).toBe(48 + 7);
-    // Si solo se sabe la caja (el logo no ha cargado), se cuenta la caja entera.
-    const sinTamano = maquetarCabecera(
-      cabecera((c) => (c.logo = { ...c.logo, x: 16, y: 12, ancho: 66, alto: 60 })),
-      { ...contenido, logo: { ancho: 66, alto: 60 } },
-      medidas,
-    );
-    expect(sinTamano.inicio).toBeCloseTo(12 + 60 + 6);
+    expect(m.logo!.y1).toBeCloseTo(72);
+    expect(m.inicio).toBeCloseTo(72 + 6);
   });
 
-  it("el título vacío o los datos sin filas no salen ni estorban", () => {
+  it("el título vacío o los datos sin pastillas no salen ni estorban", () => {
     const m = maquetarCabecera(
-      cabecera((c) => (c.titulo.texto = "   ")),
-      { ...contenido, logo: null, filasDatos: 0 },
+      cabecera((c) => {
+        c.titulo.texto = "   ";
+        c.texto.mostrar = false;
+      }),
+      { ...contenido, logo: null, datos: [] },
       medidas,
     );
     expect(m.titulo).toBeNull();
     expect(m.datos).toBeNull();
-    // Sin nada a su derecha, el nombre tiene hasta el margen.
-    expect(m.nombre!.tamano).toBe(18);
+    expect(m.nombre!.tamano).toBe(24);
     expect(m.dibujado).toEqual([m.nombre!.caja]);
   });
 
-  it("el texto libre se parte antes de los datos y empuja el cuerpo, como en el PDF", () => {
-    const parrafos = [
-      "Impresión DTF por metros para profesionales del textil y la personalización",
-      "Envíos en 24 horas a toda la península con seguimiento del pedido",
-      "Atención de lunes a viernes de nueve a dos y de cuatro a siete",
-    ];
-    const m = maquetarCabecera(
-      cabecera((c) => (c.texto = { ...c.texto, mostrar: true, tamano: 16 })),
-      { ...contenido, parrafos },
-      medidas,
-    );
-    const t = m.texto!;
-    // No cabe en tres líneas: sale en más, y nunca pasa de los datos (con su hueco).
-    expect(t.lineas.length).toBeGreaterThan(3);
-    expect(t.caja.x1).toBeLessThanOrEqual(m.datos!.x0 - 6 + 1e-9);
-    expect(t.caja.y1).toBeCloseTo(42 + (t.lineas.length - 1) * altoLinea(16) + bajada(16));
-    expect(m.inicio).toBeCloseTo(t.caja.y1 + 6);
-  });
-
-  it("un texto libre oculto, o sin párrafos, no sale", () => {
-    expect(maquetarCabecera(cabecera(), { ...contenido, parrafos: ["Hola"] }, medidas).texto).toBe(
-      null,
-    );
+  it("un antetítulo oculto, o sin párrafos, no sale", () => {
     expect(
       maquetarCabecera(
-        cabecera((c) => (c.texto.mostrar = true)),
-        { ...contenido, parrafos: [] },
+        cabecera((c) => (c.texto.mostrar = false)),
+        { ...contenido, parrafos: ["Hola"] },
         medidas,
       ).texto,
     ).toBeNull();
+    expect(maquetarCabecera(cabecera(), { ...contenido, parrafos: [] }, medidas).texto).toBeNull();
+  });
+});
+
+describe("maquetarDatos", () => {
+  it("en una caja estrecha, las pastillas siguen en otra fila y la caja crece", () => {
+    const m = maquetarDatos({ x: 140, y: 25, ancho: 56 }, datos, medir)!;
+    expect(new Set(m.pastillas.map((p) => p.y)).size).toBeGreaterThan(1);
+    expect(m.caja.y1).toBeGreaterThan(25 + ALTO_PASTILLA + SOMBRA_PASTILLA);
+    for (const p of m.pastillas) {
+      expect(p.x).toBeGreaterThanOrEqual(140 - 1e-9);
+      expect(p.x + p.ancho).toBeLessThanOrEqual(196 + 1e-9);
+    }
+  });
+  it("sin textos, nada", () => {
+    expect(maquetarDatos({ x: 70, y: 25, ancho: 126 }, [], medir)).toBeNull();
   });
 });
 
 describe("encajarEnCabecera y partirTextoLibre", () => {
-  const datos = cajaDatos(PLANTILLA_POR_DEFECTO.cabecera.datos, 3);
+  const obstaculo = { x0: 70, y0: 10, x1: 196, y1: 40 };
 
   it("un nombre largo se encoge antes de pisar lo que tiene al lado", () => {
-    const ancla = { x: 16, y: 34, tamano: 18, alineacion: "izquierda" as const };
+    const ancla = { x: 14, y: 22, tamano: 24, alineacion: "izquierda" as const };
     const largo = "Estampaciones y Serigrafía del Norte";
-    const libre = encajarEnCabecera(ancla, largo, "bold", encajeNombre(18), [], medidas)!;
-    const conDatos = encajarEnCabecera(ancla, largo, "bold", encajeNombre(18), [datos], medidas)!;
-    expect(libre.tamano).toBe(18);
-    expect(conDatos.caja.x1).toBeLessThanOrEqual(datos.x0 - 6 + 1e-9);
-    expect(conDatos.tamano * conDatos.lineas.length).toBeLessThan(18 * 2);
+    const libre = encajarEnCabecera(ancla, largo, "titular", encajeNombre(24), [], medidas)!;
+    const conDatos = encajarEnCabecera(
+      ancla,
+      largo,
+      "titular",
+      encajeNombre(24),
+      [obstaculo],
+      medidas,
+    )!;
+    expect(libre.tamano).toBe(24);
+    expect(conDatos.caja.x1).toBeLessThanOrEqual(obstaculo.x0 - 6 + 1e-9);
+    expect(conDatos.tamano * conDatos.lineas.length).toBeLessThan(24 * 2);
   });
 
   it("el título se queda en una línea: más pequeño, hasta 6 pt", () => {
-    const ancla = { x: 194, y: 34, tamano: 24, alineacion: "derecha" as const };
-    const t = encajarEnCabecera(ancla, "PRESUPUESTO", "bold", ENCAJE_TITULO, [], medidas)!;
+    const ancla = { x: 196, y: 22, tamano: 34, alineacion: "derecha" as const };
+    const t = encajarEnCabecera(ancla, "PRESUPUESTO", "titular", ENCAJE_TITULO, [], medidas)!;
     expect(t.lineas).toEqual(["PRESUPUESTO"]);
     const estrecho = encajarEnCabecera(
       ancla,
       "PRESUPUESTO",
-      "bold",
+      "titular",
       ENCAJE_TITULO,
-      [{ x0: 0, y0: 20, x1: 160, y1: 40 }],
+      [{ x0: 0, y0: 5, x1: 160, y1: 30 }],
       medidas,
     )!;
     expect(estrecho.lineas).toHaveLength(1);
-    expect(estrecho.tamano).toBeLessThan(24);
+    expect(estrecho.tamano).toBeLessThan(34);
     expect(estrecho.caja.x0).toBeGreaterThanOrEqual(166 - 1e-9);
   });
 
-  it("la caja de un texto va de la subida de su primera línea a la bajada de la última", () => {
-    const ancla = { x: 16, y: 42, tamano: 10, alineacion: "izquierda" as const };
+  it("la caja del antetítulo va de la subida de su primera línea a la bajada de la última", () => {
+    const ancla = { x: 14, y: 42, tamano: 10, alineacion: "izquierda" as const };
     const t = partirTextoLibre(ancla, ["Uno", "Dos"], [], medidas)!;
-    expect(t.lineas).toEqual(["Uno", "Dos"]);
+    expect(t.lineas).toEqual(["UNO", "DOS"]);
     expect(t.caja.y0).toBeCloseTo(42 - subida(10));
     expect(t.caja.y1).toBeCloseTo(42 + altoLinea(10) + bajada(10));
     expect(partirTextoLibre(ancla, [], [], medidas)).toBeNull();

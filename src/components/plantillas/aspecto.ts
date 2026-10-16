@@ -15,7 +15,7 @@ import {
   coloresDocumento,
   type RGB,
 } from "@/dominio/maqueta-presupuesto";
-import { SALTO_FILAS_DATOS, type MedidasTexto } from "@/dominio/maqueta-cabecera";
+import type { MedidasTexto } from "@/dominio/maqueta-cabecera";
 import type { Plantilla } from "./editor";
 
 /** Un punto tipográfico en milímetros: los tamaños de letra van en puntos, las posiciones en mm. */
@@ -24,63 +24,40 @@ export const MM_POR_PT = MM_POR_PUNTO;
 /** Lo que baja cada renglón respecto al tamaño de la letra (el de jsPDF). */
 export const INTERLINEA = INTERLINEADO;
 
-/** La letra del PDF (Helvetica) y las que miden igual. */
-export const FUENTE_PDF = "Helvetica, Arial, 'Liberation Sans', sans-serif";
+/** Las letras del PDF (`registrarFuentesNavegador`), y parecidas mientras cargan. */
+export const FUENTE_PDF = "'PDF Inter', Inter, Helvetica, Arial, sans-serif";
+export const FUENTE_TITULAR = "'PDF Anton', Anton, Impact, 'Arial Narrow', sans-serif";
 
 /** Los grises del PDF. */
-export const GRIS_TEXTO = "rgb(15 23 42)";
-export const GRIS_SUAVE = "rgb(100 116 139)";
-export const GRIS_LINEA = "rgb(226 232 240)";
-
-/** Entre fila y fila de los datos del presupuesto (número, fecha, validez), en mm. */
-export const SALTO_DATOS = SALTO_FILAS_DATOS;
+export const GRIS_TEXTO = "rgb(20 22 31)";
+export const GRIS_SUAVE = "rgb(91 96 117)";
+export const GRIS_LINEA = "rgb(216 221 233)";
 
 const css = (c: RGB) => `rgb(${c[0]} ${c[1]} ${c[2]})`;
 const hex = (c: RGB) => `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
 /**
  * Los colores con que sale la cabecera, con las mismas reglas que el PDF
- * (`coloresDocumento`): `texto` es el del nombre y el título (el principal, o
- * tinta oscura si es tan claro que no se lee sobre el papel) y `acento`, el de
- * la línea.
+ * (`coloresDocumento`): la banda, lo que se escribe encima, el acento (la
+ * cinta, el antetítulo, la sombra de las pastillas) y el destacado (la raya
+ * del antetítulo y la pastilla de la validez).
  */
-export function coloresDiseno(
-  plantilla: Plantilla,
-  colorBase: string | null,
-): { texto: string; acento: string } {
-  const c = coloresDocumento({
-    principal: plantilla.colores.principal,
-    acento: plantilla.colores.acento,
-    base: colorBase,
-  });
-  return { texto: css(c.textoPrincipal), acento: css(c.acento) };
+export function coloresDiseno(plantilla: Plantilla) {
+  const c = coloresDocumento(plantilla.colores);
+  return {
+    banda: css(c.banda),
+    sobreBanda: css(c.sobreBanda),
+    acento: css(c.acento),
+    sobreAcento: css(c.sobreAcento),
+    destacado: css(c.destacado),
+    sobreDestacado: css(c.sobreDestacado),
+  };
 }
 
-/**
- * Qué color sale si el principal o el de la línea se dejan vacíos, en
- * hexadecimal, y de dónde viene: para enseñarlo junto al campo.
- */
-export function coloresHeredados(
-  plantilla: Plantilla,
-  colorBase: string | null,
-): {
-  principal: string;
-  principalDeLaBase: boolean;
-  acento: string;
-  acentoEsPrincipal: boolean;
-} {
-  const sinPrincipal = coloresDocumento({ base: colorBase });
-  const conPrincipal = coloresDocumento({
-    principal: plantilla.colores.principal,
-    base: colorBase,
-  });
-  return {
-    principal: hex(sinPrincipal.principal),
-    // El de la base solo vale si el blanco se lee encima; si no, sale el de la casa.
-    principalDeLaBase: hex(sinPrincipal.principal) === hex(sinPrincipal.acento),
-    acento: hex(conPrincipal.acento),
-    acentoEsPrincipal: hex(conPrincipal.acento) === hex(conPrincipal.principal),
-  };
+/** Qué color sale si se deja vacío cada uno, en hexadecimal: los de la casa. */
+export function coloresHeredados(): { principal: string; acento: string; destacado: string } {
+  const c = coloresDocumento({});
+  return { principal: hex(c.banda), acento: hex(c.acento), destacado: hex(c.destacado) };
 }
 
 /** Del alineado de la plantilla al de SVG. */
@@ -127,6 +104,7 @@ export function partirAprox(texto: string, ancho: number, tamanoPt: number): str
  * del PDF (`useMedidasPdf`), que son las que valen.
  */
 export const MEDIDAS_A_OJO: MedidasTexto = {
-  medir: () => (texto, tamanoPt) => texto.length * tamanoPt * MM_POR_PT * 0.52,
+  medir: (estilo) => (texto, tamanoPt) =>
+    texto.length * tamanoPt * MM_POR_PT * (estilo === "titular" ? 0.42 : 0.55),
   partir: () => partirAprox,
 };

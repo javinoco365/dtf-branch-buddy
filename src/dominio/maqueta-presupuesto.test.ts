@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALTO_PASTILLA,
   BLANCO,
   CIELO,
+  HUECO_PASTILLAS,
   MARINO,
+  NARANJA,
+  NOCHE,
+  RELLENO_PASTILLA,
+  SALTO_PASTILLAS,
+  SOMBRA_PASTILLA,
   TINTA,
   alineacionDeCaja,
   altoLinea,
+  altoPastillas,
   anchoDisponible,
   anchosColumnas,
   cajaTexto,
@@ -16,8 +24,11 @@ import {
   encajarTexto,
   inicioCuerpo,
   inicioTexto,
-  juntarConAceptacion,
+  maquetaPastillas,
   maquetaPie,
+  partirConMedida,
+  repartirEnDosColumnas,
+  unitarioConIva,
   type Medir,
   type Partir,
 } from "./maqueta-presupuesto";
@@ -61,9 +72,9 @@ describe("anchoDisponible", () => {
   const datos = { x0: 128, y0: 28.6, x1: 194, y1: 42.7 };
 
   it("sin nada al lado, hasta el margen de la página", () => {
-    expect(anchoDisponible({ x: 16, alineacion: "izquierda" }, { y0: 18, y1: 30 }, [])).toBe(178);
-    expect(anchoDisponible({ x: 194, alineacion: "derecha" }, { y0: 18, y1: 30 }, [])).toBe(178);
-    expect(anchoDisponible({ x: 105, alineacion: "centro" }, { y0: 18, y1: 30 }, [])).toBe(178);
+    expect(anchoDisponible({ x: 16, alineacion: "izquierda" }, { y0: 18, y1: 30 }, [])).toBe(180);
+    expect(anchoDisponible({ x: 194, alineacion: "derecha" }, { y0: 18, y1: 30 }, [])).toBe(180);
+    expect(anchoDisponible({ x: 105, alineacion: "centro" }, { y0: 18, y1: 30 }, [])).toBe(182);
   });
 
   it("se para antes de lo que hay a su altura, con un hueco", () => {
@@ -75,14 +86,14 @@ describe("anchoDisponible", () => {
 
   it("lo que está a otra altura no estorba", () => {
     expect(anchoDisponible({ x: 16, alineacion: "izquierda" }, { y0: 50, y1: 60 }, [datos])).toBe(
-      178,
+      180,
     );
   });
 
   it("lo que está detrás del ancla no estorba", () => {
     const logo = { x0: 16, y0: 14, x1: 68, y1: 36 };
     expect(anchoDisponible({ x: 16, alineacion: "izquierda" }, { y0: 18, y1: 30 }, [logo])).toBe(
-      178,
+      180,
     );
   });
 
@@ -171,41 +182,128 @@ describe("encajarTexto", () => {
 });
 
 describe("maquetaPie", () => {
-  it("con el pie de siempre, lo de antes: raya a 282 y el cuerpo hasta 273", () => {
-    for (const lineas of [0, 1, 2]) {
-      const p = maquetaPie(lineas, 7);
-      expect(p.raya).toBe(282);
-      expect(p.primeraLinea).toBe(286.5);
-      expect(p.finCuerpo).toBe(273);
-      expect(p.finTabla).toBe(269);
+  it("con el pie de siempre (una línea a 8 pt): banda desde 285 y el cuerpo hasta 282,5", () => {
+    for (const lineas of [0, 1]) {
+      const p = maquetaPie(lineas, 8);
+      expect(p.arriba).toBe(285);
+      expect(p.primeraLinea).toBeCloseTo(292, 0);
+      expect(p.finCuerpo).toBe(282.5);
+      expect(p.finTabla).toBe(279);
     }
   });
 
-  it("tres líneas grandes suben el pie y la última no baja de 7,5 mm del borde", () => {
+  it("muchas líneas grandes suben la banda y el texto sigue dentro", () => {
     const p = maquetaPie(3, 12);
-    expect(p.primeraLinea + 2 * altoLinea(12)).toBeCloseTo(297 - 7.5);
-    expect(p.raya).toBeLessThan(p.primeraLinea - 3);
-    expect(p.finCuerpo).toBe(p.raya - 9);
+    expect(p.arriba).toBeLessThan(285);
+    expect(p.primeraLinea + 2 * altoLinea(12)).toBeLessThan(297 - 3);
+    expect(p.primeraLinea).toBeGreaterThan(p.arriba);
   });
 });
 
 describe("inicioCuerpo", () => {
-  it("debajo de la raya de la cabecera", () => {
-    expect(inicioCuerpo(48, [{ x0: 0, y0: 0, x1: 1, y1: 42.7 }])).toBe(55);
+  it("5 mm debajo de la banda o la cinta", () => {
+    expect(inicioCuerpo(46.9, [{ x0: 0, y0: 0, x1: 1, y1: 30 }])).toBeCloseTo(51.9);
   });
   it("nunca por encima de lo más bajo de la cabecera", () => {
     expect(inicioCuerpo(48, [{ x0: 0, y0: 0, x1: 1, y1: 60 }])).toBe(66);
   });
 });
 
+describe("maquetaPastillas", () => {
+  it("caben en una fila: alineadas a la derecha, con su hueco", () => {
+    const m = maquetaPastillas([30, 20, 25], { x: 70, ancho: 126 });
+    expect(m.filas).toBe(1);
+    expect(m.escala).toBe(1);
+    const ultima = m.pastillas[2];
+    expect(ultima.x + ultima.ancho).toBeCloseTo(196);
+    expect(m.pastillas[1].x + m.pastillas[1].ancho + HUECO_PASTILLAS).toBeCloseTo(ultima.x);
+    expect(m.pastillas[0].ancho).toBeCloseTo(30 + 2 * RELLENO_PASTILLA);
+  });
+
+  it("la que no cabe pasa a la fila de debajo, también a la derecha", () => {
+    const m = maquetaPastillas([30, 20, 25], { x: 130, ancho: 66 });
+    expect(m.filas).toBe(2);
+    expect(m.pastillas.map((p) => p.fila)).toEqual([0, 1, 1]);
+    expect(m.pastillas[0].x + m.pastillas[0].ancho).toBeCloseTo(196);
+    expect(m.pastillas[2].x + m.pastillas[2].ancho).toBeCloseTo(196);
+  });
+
+  it("si la más ancha no cabe sola, todas encogen", () => {
+    const m = maquetaPastillas([60, 20], { x: 150, ancho: 46 });
+    expect(m.escala).toBeLessThan(1);
+    expect(m.pastillas[0].ancho).toBeLessThanOrEqual(46 + 1e-9);
+  });
+
+  it("sin pastillas, nada", () => {
+    expect(maquetaPastillas([], { x: 0, ancho: 50 }).filas).toBe(0);
+    expect(altoPastillas(0)).toBe(0);
+  });
+
+  it("el alto cuenta las filas y la sombra", () => {
+    expect(altoPastillas(1)).toBeCloseTo(ALTO_PASTILLA + SOMBRA_PASTILLA);
+    expect(altoPastillas(2)).toBeCloseTo(SALTO_PASTILLAS + ALTO_PASTILLA + SOMBRA_PASTILLA);
+  });
+});
+
+describe("unitarioConIva", () => {
+  const linea = {
+    descripcion: "Calzona",
+    cantidad: 20,
+    unidad: "ud.",
+    precio_unitario: 8,
+    iva_rate: 21,
+    importe: 160,
+  };
+  it("con una sola línea, el total entre la cantidad", () => {
+    expect(unitarioConIva({ lineas: [linea], total: 193.6 })).toEqual({
+      cantidad: 20,
+      unidad: "ud.",
+      precio: 8,
+      conIva: 9.68,
+    });
+  });
+  it("con varias líneas, o sin cantidad, nada", () => {
+    expect(unitarioConIva({ lineas: [linea, linea], total: 387.2 })).toBeNull();
+    expect(unitarioConIva({ lineas: [{ ...linea, cantidad: 0 }], total: 10 })).toBeNull();
+    expect(unitarioConIva({ lineas: [], total: 0 })).toBeNull();
+  });
+});
+
+describe("repartirEnDosColumnas", () => {
+  it("iguales: la mitad en cada lado", () => {
+    expect(repartirEnDosColumnas([10, 10, 10, 10, 10, 10])).toBe(3);
+  });
+  it("impares: la izquierda con una más", () => {
+    expect(repartirEnDosColumnas([10, 10, 10])).toBe(2);
+  });
+  it("una muy larga va sola", () => {
+    expect(repartirEnDosColumnas([40, 5, 5, 5])).toBe(1);
+  });
+  it("una sola, a la izquierda", () => {
+    expect(repartirEnDosColumnas([10])).toBe(1);
+    expect(repartirEnDosColumnas([])).toBe(0);
+  });
+});
+
+describe("partirConMedida", () => {
+  it("parte por palabras con la medida que se le pasa", () => {
+    expect(partirConMedida("UNO DOS TRES", 3.5, 10, (t) => t.length)).toEqual([
+      "UNO",
+      "DOS",
+      "TRES",
+    ]);
+    expect(partirConMedida("UNO DOS TRES", 7, 10, (t) => t.length)).toEqual(["UNO DOS", "TRES"]);
+  });
+});
+
 describe("anchosColumnas", () => {
   it("los anchos de siempre si el contenido cabe", () => {
     expect(anchosColumnas({ cantidad: 15, precio: 20, iva: 12, importe: 20 }, 178)).toEqual({
-      descripcion: 178 - 25 - 28 - 16 - 28,
-      cantidad: 25,
-      precio: 28,
+      descripcion: 178 - 22 - 27 - 16 - 27,
+      cantidad: 22,
+      precio: 27,
       iva: 16,
-      importe: 28,
+      importe: 27,
     });
   });
 
@@ -213,19 +311,19 @@ describe("anchosColumnas", () => {
     const a = anchosColumnas({ cantidad: 15, precio: 35, iva: 12, importe: 50 }, 178);
     expect(a.precio).toBe(35);
     expect(a.importe).toBe(36);
-    expect(a.descripcion).toBe(178 - 25 - 35 - 16 - 36);
+    expect(a.descripcion).toBe(178 - 22 - 35 - 16 - 36);
   });
 
   it("las columnas ocultas no ocupan sitio", () => {
     const a = anchosColumnas({ importe: 20 }, 178);
-    expect(a).toEqual({ descripcion: 150, importe: 28 });
+    expect(a).toEqual({ descripcion: 151, importe: 27 });
   });
 
   it("la descripción nunca baja del mínimo: lo que crece se reparte", () => {
     const a = anchosColumnas({ cantidad: 99, precio: 99, iva: 99, importe: 99 }, 178, 70);
     expect(a.descripcion).toBeCloseTo(70);
     expect(a.cantidad! + a.precio! + a.iva! + a.importe!).toBeCloseTo(108);
-    expect(a.precio).toBeGreaterThan(28);
+    expect(a.precio).toBeGreaterThan(27);
   });
 });
 
@@ -242,42 +340,30 @@ describe("colores", () => {
     expect(contraste(BLANCO, BLANCO)).toBeCloseTo(1);
   });
 
-  it("sin plantilla: el color de la tienda si se lee el blanco encima; si no, el de la casa", () => {
-    expect(coloresDocumento({ base: "#2a2260" })).toMatchObject({
-      principal: [42, 34, 96],
-      acento: [42, 34, 96],
-      sobrePrincipal: BLANCO,
-    });
-    expect(coloresDocumento({ base: "#FCD34D" })).toMatchObject({
-      principal: MARINO,
+  it("sin plantilla, los de la casa", () => {
+    expect(coloresDocumento({})).toEqual({
+      banda: NOCHE,
+      sobreBanda: BLANCO,
+      titulos: MARINO,
       acento: CIELO,
+      sobreAcento: TINTA,
+      destacado: NARANJA,
+      sobreDestacado: TINTA,
     });
-    expect(coloresDocumento({})).toMatchObject({ principal: MARINO, acento: CIELO });
   });
 
   it("el de la plantilla manda, aunque sea claro: lo de encima pasa a tinta oscura", () => {
-    const c = coloresDocumento({ principal: "#fcd34d", base: "#2a2260" });
-    expect(c.principal).toEqual([252, 211, 77]);
-    expect(c.acento).toEqual([252, 211, 77]);
-    expect(c.sobrePrincipal).toEqual(TINTA);
-    expect(c.textoPrincipal).toEqual(TINTA);
+    const c = coloresDocumento({ principal: "#fcd34d" });
+    expect(c.banda).toEqual([252, 211, 77]);
+    expect(c.sobreBanda).toEqual(TINTA);
+    expect(c.titulos).toEqual(TINTA);
   });
 
-  it("el acento de la plantilla, aparte", () => {
-    const c = coloresDocumento({ acento: "#f59e0b" });
-    expect(c.principal).toEqual(MARINO);
+  it("un principal oscuro también va en los títulos; el acento y el destacado, aparte", () => {
+    const c = coloresDocumento({ principal: "#2a2260", acento: "#f59e0b", destacado: "#123456" });
+    expect(c.titulos).toEqual([42, 34, 96]);
     expect(c.acento).toEqual([245, 158, 11]);
-  });
-});
-
-describe("juntarConAceptacion", () => {
-  it("unas condiciones cortas pasan de página con la caja de firma", () => {
-    expect(juntarConAceptacion(23, 26, 247)).toBe(true);
-  });
-  it("un bloque largo no: pasa línea a línea", () => {
-    expect(juntarConAceptacion(150, 26, 247)).toBe(false);
-  });
-  it("sin nada delante, nada que juntar", () => {
-    expect(juntarConAceptacion(0, 26, 247)).toBe(false);
+    expect(c.destacado).toEqual([18, 52, 86]);
+    expect(c.sobreDestacado).toEqual(BLANCO);
   });
 });

@@ -49,7 +49,7 @@ import {
   listarPlantillasPresupuesto,
 } from "@/lib/plantillas-presupuesto.functions";
 import {
-  PLANTILLA_POR_DEFECTO,
+  plantillaPorDefecto,
   ambitoDeClave,
   normalizarPlantilla,
   resolverIdentidad,
@@ -130,9 +130,9 @@ function ConfiguracionPdfPage() {
   const origen = useMemo<Borrador | null>(
     () =>
       actual
-        ? { plantilla: normalizarPlantilla(actual.plantilla), logo_url: actual.logo_url }
+        ? { plantilla: normalizarPlantilla(actual.plantilla, tipo), logo_url: actual.logo_url }
         : null,
-    [actual],
+    [actual, tipo],
   );
   const firmaOrigen = useMemo(() => (origen ? firmaBorrador(origen) : null), [origen]);
 
@@ -146,7 +146,7 @@ function ConfiguracionPdfPage() {
   const sucio = !!borrador && firmaActual !== firmaOrigen;
   const esPorDefecto =
     !!borrador &&
-    firmaActual === firmaBorrador({ plantilla: PLANTILLA_POR_DEFECTO, logo_url: null });
+    firmaActual === firmaBorrador({ plantilla: plantillaPorDefecto(tipo), logo_url: null });
 
   const editar = (f: (b: Borrador) => Borrador) =>
     setEdicion((e) => {
@@ -183,7 +183,7 @@ function ConfiguracionPdfPage() {
         etiqueta: actual.etiqueta,
         // La versión guardada de la que salía lo que se guarda.
         origen: firmaOrigen,
-        plantilla: normalizarPlantilla(borrador.plantilla),
+        plantilla: normalizarPlantilla(borrador.plantilla, tipo),
         logo_url: borrador.logo_url?.trim() || null,
       };
       await guardarFn({
@@ -235,7 +235,7 @@ function ConfiguracionPdfPage() {
 
   const descartar = () => setEdicion(null);
   const restablecer = () => {
-    editar(() => ({ plantilla: structuredClone(PLANTILLA_POR_DEFECTO), logo_url: null }));
+    editar(() => ({ plantilla: plantillaPorDefecto(tipo), logo_url: null }));
     toast.info("Puesta la plantilla por defecto. Pulsa «Guardar» para quedarte con ella.");
   };
   const descargar = () => {

@@ -33,8 +33,8 @@ export const NOMBRE_ELEMENTO: Record<Seleccion, string> = {
   nombre: "Nombre comercial",
   titulo: "Título",
   datos: "Datos del presupuesto",
-  texto: "Texto libre",
-  linea: "Línea de la cabecera",
+  texto: "Antetítulo",
+  linea: "Banda y cinta de la cabecera",
 };
 
 /** La sección del formulario (acordeón) donde está cada cosa del diseñador. */
@@ -63,9 +63,9 @@ export const conElemento =
   <K extends ElementoCabecera>(k: K, parcial: Partial<Plantilla["cabecera"][K]>): Cambio =>
   (p) => ({ ...p, cabecera: { ...p.cabecera, [k]: { ...p.cabecera[k], ...parcial } } });
 
-/** Cambia el alto o la línea de la cabecera. */
+/** Cambia el alto de la banda o la cinta de la cabecera. */
 export const conCabecera =
-  (parcial: Partial<Pick<Plantilla["cabecera"], "alto" | "linea">>): Cambio =>
+  (parcial: Partial<Pick<Plantilla["cabecera"], "alto" | "cinta">>): Cambio =>
   (p) => ({ ...p, cabecera: { ...p.cabecera, ...parcial } });
 
 /** Cambia unos campos del emisor o del cliente, o el orden de los dos. */

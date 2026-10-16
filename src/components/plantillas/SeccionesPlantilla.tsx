@@ -1,4 +1,3 @@
-import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -6,7 +5,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -16,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { rellenarTexto, type ModoNombre, type SeccionFinal } from "@/dominio/plantilla-presupuesto";
+import { rellenarTexto, type ModoNombre } from "@/dominio/plantilla-presupuesto";
 import { LARGOS, MAXIMOS, MINIMOS } from "./limites";
 import {
   conCabecera,
@@ -81,7 +79,7 @@ export function SeccionesPlantilla({
     datos: no(cab.datos.mostrar),
     texto: cab.texto.mostrar && cab.texto.texto.trim() ? null : "No sale",
     cabecera: null,
-    colores: p.colores.principal || p.colores.acento ? "Propios" : null,
+    colores: p.colores.principal || p.colores.acento || p.colores.destacado ? "Propios" : null,
     partes: null,
     tabla: null,
     resumen: null,
@@ -129,17 +127,17 @@ export function SeccionesPlantilla({
       {item("datos", "Datos del presupuesto", "Número, fecha y validez", <SeccionDatos />)}
       {item(
         "texto",
-        "Texto libre",
-        "Un eslogan, una dirección… admite variables",
+        "Antetítulo",
+        "La línea pequeña sobre el título; admite variables",
         <SeccionTextoLibre />,
       )}
       {item(
         "cabecera",
-        "Altura de la cabecera y línea",
-        "Dónde acaba la cabecera y empieza el cuerpo",
+        "Banda y cinta de lemas",
+        "El alto de la banda y los lemas de la cinta de debajo",
         <SeccionCabecera />,
       )}
-      {item("colores", "Colores", "El principal y el de la línea", <SeccionColores />)}
+      {item("colores", "Colores", "La banda, el acento y el del TOTAL", <SeccionColores />)}
 
       <p className="pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Cuerpo y pie
@@ -150,15 +148,25 @@ export function SeccionesPlantilla({
         "Las dos cajas: orden, títulos y qué datos llevan",
         <SeccionPartes />,
       )}
-      {item("tabla", "Tabla de líneas", "Títulos de las columnas y cuáles salen", <SeccionTabla />)}
-      {item("resumen", "Resumen", "Base imponible, IVA, TOTAL y metros", <SeccionResumen />)}
+      {item(
+        "tabla",
+        "Detalle del pedido",
+        "El título, las columnas y cuáles salen",
+        <SeccionTabla />,
+      )}
+      {item(
+        "resumen",
+        "Resumen",
+        "Base imponible, IVA, TOTAL y la nota de debajo",
+        <SeccionResumen />,
+      )}
       {item(
         "secciones",
-        "Secciones finales",
-        "Observaciones, condiciones y aceptación: orden y textos",
+        "Observaciones, aceptación y condiciones",
+        "Qué sale y con qué textos",
         <SeccionesFinales />,
       )}
-      {item("pie", "Pie de página", "Los datos fiscales y el número de página", <SeccionPie />)}
+      {item("pie", "Pie de página", "La banda del pie y el número de página", <SeccionPie />)}
     </Accordion>
   );
 }
@@ -311,14 +319,14 @@ function SeccionDatos() {
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <CampoNumero
-          etiqueta="X (etiquetas)"
+          etiqueta="X (desde)"
           valor={d.x}
           min={l.minX}
           max={l.maxX}
           onChange={(x) => cambiar(conElemento("datos", { x }))}
         />
         <CampoNumero
-          etiqueta="Y (primera fila)"
+          etiqueta="Y (arriba)"
           valor={d.y}
           min={l.minY}
           max={l.maxY}
@@ -333,8 +341,9 @@ function SeccionDatos() {
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Las etiquetas empiezan en X y las cifras acaban en X + ancho, alineadas a la derecha. Con
-        una etiqueta vacía, esa fila no sale.
+        Cada dato va en una pastilla con su etiqueta delante («Nº PRE-…»); la de la validez, en el
+        color destacado. Van alineadas a la derecha entre X y X + ancho y, si no caben en una fila,
+        siguen debajo. Con una etiqueta vacía, esa pastilla no sale.
       </p>
     </>
   );
@@ -346,7 +355,7 @@ function SeccionTextoLibre() {
   return (
     <>
       <CampoInterruptor
-        etiqueta="Poner un texto libre en la cabecera"
+        etiqueta="Poner un antetítulo sobre el título"
         valor={t.mostrar}
         onChange={(mostrar) => cambiar(conElemento("texto", { mostrar }))}
       />
@@ -354,9 +363,9 @@ function SeccionTextoLibre() {
         etiqueta="Texto"
         valor={t.texto}
         maximo={largo(LARGOS.cabecera.texto.texto)}
-        filas={3}
-        placeholder="Por ejemplo: {web} · {telefono}"
-        ayuda="Cada línea, un renglón."
+        filas={2}
+        placeholder="Presupuesto de impresión DTF"
+        ayuda="Sale en mayúsculas espaciadas, en el color de acento, con una raya delante."
         onChange={(texto) => cambiar(conElemento("texto", { texto }))}
       />
       <PosicionTexto el="texto" />
@@ -371,7 +380,7 @@ function SeccionCabecera() {
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <CampoNumero
-          etiqueta="La línea va a"
+          etiqueta="Alto de la banda"
           valor={c.alto}
           min={MINIMOS.cabecera.alto}
           max={MAXIMOS.cabecera.alto}
@@ -379,42 +388,57 @@ function SeccionCabecera() {
         />
       </div>
       <CampoInterruptor
-        etiqueta="Dibujar la línea bajo la cabecera"
-        ayuda="Sin línea, el cuerpo empieza igual a esa altura."
-        valor={c.linea}
-        onChange={(linea) => cambiar(conCabecera({ linea }))}
+        etiqueta="Cinta de lemas bajo la banda"
+        valor={c.cinta.mostrar}
+        onChange={(mostrar) => cambiar(conCabecera({ cinta: { ...c.cinta, mostrar } }))}
+      />
+      <TextoConVariables
+        etiqueta="Lemas"
+        valor={c.cinta.texto}
+        maximo={largo(LARGOS.cabecera.cinta.texto)}
+        filas={4}
+        disabled={!c.cinta.mostrar}
+        ayuda="Uno por línea. Salen en mayúsculas, separados por estrellas, y se repiten hasta llenar la cinta."
+        onChange={(texto) => cambiar(conCabecera({ cinta: { ...c.cinta, texto } }))}
       />
       <p className="text-xs text-muted-foreground">
-        Medido desde el borde de arriba del papel. El cuerpo empieza 7 mm por debajo de la línea; si
-        algo de la cabecera baja más, el cuerpo empieza debajo de ello, así que nunca se pisan.
+        Medido desde el borde de arriba del papel. El cuerpo empieza 5 mm por debajo de la banda (o
+        de la cinta); si algo de la cabecera baja más, el cuerpo empieza debajo de ello, así que
+        nunca se pisan.
       </p>
     </>
   );
 }
 
 function SeccionColores() {
-  const { plantilla, cambiar, base, ambito } = useEditor();
+  const { plantilla, cambiar } = useEditor();
   const c = plantilla.colores;
-  const heredado = coloresHeredados(plantilla, base.color);
+  const heredado = coloresHeredados();
   return (
     <>
       <CampoColor
         etiqueta="Color principal"
         valor={c.principal}
         heredado={heredado.principal}
-        nombreHeredado={
-          heredado.principalDeLaBase ? `el ${deLaBase(ambito)}` : "el azul de la casa"
-        }
-        ayuda={`El nombre, el título, los rótulos, la cabecera de la tabla y el TOTAL. Si es muy claro, lo que va escrito encima sale en oscuro para que se lea. Vacío: el ${deLaBase(ambito)}, si el blanco se lee bien encima; si no, el azul de la casa.`}
+        nombreHeredado="el azul noche de la casa"
+        ayuda="La banda de la cabecera y del pie, la cabecera de la tabla y los títulos. Si es muy claro, lo que va escrito encima sale en oscuro para que se lea."
         onChange={(principal) => cambiar(conGrupo("colores", { principal }))}
       />
       <CampoColor
-        etiqueta="Color de la línea"
+        etiqueta="Color de acento"
         valor={c.acento}
         heredado={heredado.acento}
-        nombreHeredado={heredado.acentoEsPrincipal ? "el principal" : "el azul cielo de la casa"}
-        ayuda="La línea bajo la cabecera."
+        nombreHeredado="el azul cielo de la casa"
+        ayuda="La cinta de lemas, el antetítulo, la última palabra de los títulos y las marcas de las condiciones."
         onChange={(acento) => cambiar(conGrupo("colores", { acento }))}
+      />
+      <CampoColor
+        etiqueta="Color destacado"
+        valor={c.destacado}
+        heredado={heredado.destacado}
+        nombreHeredado="el naranja de la casa"
+        ayuda="La caja del TOTAL, la pastilla de la validez y la raya del antetítulo."
+        onChange={(destacado) => cambiar(conGrupo("colores", { destacado }))}
       />
     </>
   );
@@ -530,10 +554,19 @@ function SeccionPartes() {
 function SeccionTabla() {
   const { plantilla, cambiar } = useEditor();
   const t = plantilla.tabla;
-  const tx = (k: "descripcion" | "cantidad" | "precio" | "iva" | "importe") => (v: string) =>
-    cambiar(conGrupo("tabla", { [k]: v } as Partial<Plantilla["tabla"]>));
+  const tx =
+    (k: "titulo" | "ref" | "descripcion" | "cantidad" | "precio" | "iva" | "importe") =>
+    (v: string) =>
+      cambiar(conGrupo("tabla", { [k]: v } as Partial<Plantilla["tabla"]>));
   return (
     <>
+      <CampoTexto
+        etiqueta="Título de la tabla"
+        valor={t.titulo}
+        maximo={largo(LARGOS.tabla.titulo)}
+        ayuda="La última palabra sale en el color de acento. Vacío: sin título."
+        onChange={tx("titulo")}
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <CampoTexto
           etiqueta="Columna de la descripción"
@@ -551,6 +584,7 @@ function SeccionTabla() {
       <div className="grid gap-3 sm:grid-cols-3">
         {(
           [
+            ["mostrarRef", "ref", "Referencia (01, 02…)"],
             ["mostrarCantidad", "cantidad", "Cantidad"],
             ["mostrarPrecio", "precio", "Precio unitario"],
             ["mostrarIva", "iva", "IVA"],
@@ -597,7 +631,7 @@ function SeccionResumen() {
           etiqueta="IVA"
           valor={r.iva}
           maximo={largo(LARGOS.resumen.iva)}
-          ayuda={`Va delante del tipo: «${r.iva || "IVA"} 21 %».`}
+          ayuda={`Va delante del tipo: «${r.iva || "IVA"} (21 %)».`}
           onChange={(iva) => cambiar(conGrupo("resumen", { iva }))}
         />
         <CampoTexto
@@ -607,10 +641,16 @@ function SeccionResumen() {
           onChange={(total) => cambiar(conGrupo("resumen", { total }))}
         />
       </div>
+      <CampoInterruptor
+        etiqueta="Con una sola línea, poner el precio por unidad con IVA"
+        ayuda="Debajo del TOTAL: «20 ud. × 8,00 € + IVA · 9,68 €/ud. IVA incluido»."
+        valor={r.mostrarUnitario}
+        onChange={(mostrarUnitario) => cambiar(conGrupo("resumen", { mostrarUnitario }))}
+      />
       <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
         <CampoInterruptor
           etiqueta="Poner los metros totales"
-          ayuda="Solo salen si el presupuesto tiene líneas por metros."
+          ayuda="Debajo del TOTAL. Solo salen si el presupuesto tiene líneas por metros."
           valor={r.mostrarMetros}
           onChange={(mostrarMetros) => cambiar(conGrupo("resumen", { mostrarMetros }))}
         />
@@ -626,82 +666,37 @@ function SeccionResumen() {
   );
 }
 
-const NOMBRE_SECCION: Record<SeccionFinal, string> = {
-  observaciones: "Observaciones",
-  condiciones: "Condiciones",
-  aceptacion: "Aceptación del cliente",
-};
+/** Lo que va después de la tabla: cada sección en su sitio del modelo. */
+const SECCIONES = [
+  ["observaciones", "Observaciones", "A la izquierda del resumen; si son largas, debajo."],
+  ["aceptacion", "Aceptación del cliente", "Debajo del TOTAL: dónde firmar y la fecha."],
+  ["condiciones", "Condiciones", "Al final, a dos columnas."],
+] as const;
 
 function SeccionesFinales() {
   const { plantilla, cambiar } = useEditor();
-  const orden = plantilla.orden;
-
-  const mover = (i: number, d: -1 | 1) => {
-    const j = i + d;
-    if (j < 0 || j >= orden.length) return;
-    const nuevo = [...orden];
-    [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
-    cambiar((p: Plantilla) => ({ ...p, orden: nuevo }));
-  };
-
   return (
-    <>
-      <p className="text-xs text-muted-foreground">
-        Van después del resumen, en este orden. Usa las flechas para cambiarlo.
-      </p>
-      <ol className="space-y-3">
-        {orden.map((s, i) => {
-          const mostrar = plantilla[s].mostrar;
-          return (
-            <li
-              key={s}
-              className={cn("space-y-3 rounded-lg border p-3", !mostrar && "bg-muted/30")}
-            >
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {NOMBRE_SECCION[s]}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={i === 0}
-                  aria-label={`Subir ${NOMBRE_SECCION[s]}`}
-                  title="Subir"
-                  onClick={() => mover(i, -1)}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={i === orden.length - 1}
-                  aria-label={`Bajar ${NOMBRE_SECCION[s]}`}
-                  title="Bajar"
-                  onClick={() => mover(i, 1)}
-                >
-                  <ArrowDown />
-                </Button>
-              </div>
-              <CampoInterruptor
-                etiqueta="Sale en el PDF"
-                valor={mostrar}
-                onChange={(v) => cambiar(conGrupo(s, { mostrar: v }))}
-              />
-              {s === "observaciones" && <CamposObservaciones />}
-              {s === "condiciones" && <CamposCondiciones />}
-              {s === "aceptacion" && <CamposAceptacion />}
-            </li>
-          );
-        })}
-      </ol>
-    </>
+    <ol className="space-y-3">
+      {SECCIONES.map(([s, nombre, donde]) => {
+        const mostrar = plantilla[s].mostrar;
+        return (
+          <li key={s} className={cn("space-y-3 rounded-lg border p-3", !mostrar && "bg-muted/30")}>
+            <div>
+              <p className="text-sm font-medium">{nombre}</p>
+              <p className="text-xs text-muted-foreground">{donde}</p>
+            </div>
+            <CampoInterruptor
+              etiqueta="Sale en el PDF"
+              valor={mostrar}
+              onChange={(v) => cambiar(conGrupo(s, { mostrar: v }))}
+            />
+            {s === "observaciones" && <CamposObservaciones />}
+            {s === "condiciones" && <CamposCondiciones />}
+            {s === "aceptacion" && <CamposAceptacion />}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -738,7 +733,7 @@ function CamposCondiciones() {
         maximo={largo(LARGOS.condiciones.texto)}
         filas={5}
         disabled={!c.mostrar}
-        ayuda="Una condición por línea."
+        ayuda="Una condición por línea; cada una sale con una marca delante."
         onChange={(texto) => cambiar(conGrupo("condiciones", { texto }))}
       />
     </>
@@ -768,7 +763,7 @@ function CamposAceptacion() {
       <div className="grid gap-3 sm:grid-cols-2">
         <CampoTexto
           etiqueta="Rótulo de la fecha"
-          ayuda="Vacío: sin línea para la fecha."
+          ayuda="Vacío: sin caja para la fecha."
           valor={a.etiquetaFecha}
           maximo={largo(LARGOS.aceptacion.etiquetaFecha)}
           disabled={!a.mostrar}
@@ -776,7 +771,7 @@ function CamposAceptacion() {
         />
         <CampoTexto
           etiqueta="Rótulo de la firma"
-          ayuda="Vacío: sin línea para la firma."
+          ayuda="Vacío: sin caja para la firma."
           valor={a.etiquetaFirma}
           maximo={largo(LARGOS.aceptacion.etiquetaFirma)}
           disabled={!a.mostrar}
@@ -795,12 +790,21 @@ function SeccionPie() {
   return (
     <>
       <TextoConVariables
+        etiqueta="A la izquierda, en grande"
+        valor={pie.titulo}
+        maximo={largo(LARGOS.pie.titulo)}
+        filas={1}
+        placeholder="{web}"
+        ayuda="En mayúsculas y en el color de acento. Vacío: el texto ocupa toda la banda."
+        onChange={(titulo) => cambiar(conGrupo("pie", { titulo }))}
+      />
+      <TextoConVariables
         etiqueta="Texto del pie"
         valor={pie.texto}
         maximo={largo(LARGOS.pie.texto)}
         filas={3}
-        placeholder="{razon_social} · CIF {cif} · {direccion}"
-        ayuda={`Los datos fiscales de la sociedad, en cada página. Hasta ${RENGLONES_PIE} renglones; los largos se parten solos y, si no caben, la letra se hace más pequeña.`}
+        placeholder="WhatsApp {telefono} · {email} · {direccion}"
+        ayuda={`El contacto o los datos fiscales, en cada página. Hasta ${RENGLONES_PIE} renglones; los largos se parten solos y, si no caben, la letra se hace más pequeña.`}
         onChange={(texto) => cambiar(conGrupo("pie", { texto }))}
       />
       {Math.max(lineas, rellenas) > RENGLONES_PIE && (
@@ -824,7 +828,7 @@ function SeccionPie() {
         />
       </div>
       <CampoInterruptor
-        etiqueta="Número de página («Página 1 de 2»), en el lado contrario al texto"
+        etiqueta="Número de página («Página 1 de 2») encima de la banda, si hay más de una"
         valor={pie.paginas}
         onChange={(paginas) => cambiar(conGrupo("pie", { paginas }))}
       />
