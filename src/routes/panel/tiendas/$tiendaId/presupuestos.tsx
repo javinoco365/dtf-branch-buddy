@@ -54,8 +54,10 @@ import {
   cambiarEstadoPresupuesto,
   confirmarPresupuesto,
   listPresupuestosTienda,
+  pdfPresupuesto,
   type Presupuesto,
 } from "@/lib/presupuestos.functions";
+import { descargarBlob } from "@/lib/csv";
 import {
   ESTADOS_PRESUPUESTO,
   estadoVisible,
@@ -90,6 +92,7 @@ function PresupuestosTienda() {
   const cambiarEstado = useServerFn(cambiarEstadoPresupuesto);
   const borrar = useServerFn(borrarPresupuesto);
   const confirmar = useServerFn(confirmarPresupuesto);
+  const pdf = useServerFn(pdfPresupuesto);
 
   // Los filtros viven en la dirección.
   const { valores: u, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
@@ -130,6 +133,25 @@ function PresupuestosTienda() {
   const hayFiltro = hay();
 
   const refrescar = () => qc.invalidateQueries({ queryKey: ["presupuestos", tiendaId] });
+
+  /**
+   * Genera el PDF del presupuesto y lo descarga. Se llama al guardarlo y desde
+   * el menú de cada fila. Si falla, el presupuesto sigue guardado: se avisa y
+   * se puede volver a pedir desde el menú.
+   */
+  const pdfMut = useMutation({
+    mutationFn: (id: string) => pdf({ data: { id } }),
+    onMutate: () => toast.loading("Generando el PDF…", { id: "pdf-presupuesto" }),
+    onSuccess: (r) => {
+      const binario = atob(r.base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      descargarBlob(r.nombre, new Blob([bytes], { type: "application/pdf" }));
+      toast.success(`PDF descargado: ${r.nombre}`, { id: "pdf-presupuesto" });
+    },
+    onError: (e: Error) =>
+      toast.error(`No se pudo generar el PDF: ${e.message}`, { id: "pdf-presupuesto" }),
+  });
 
   const estadoMut = useMutation({
     mutationFn: (v: { id: string; estado: EstadoPresupuesto }) => cambiarEstado({ data: v }),
@@ -303,6 +325,13 @@ function PresupuestosTienda() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
+                              onClick={() => pdfMut.mutate(p.id)}
+                              disabled={pdfMut.isPending}
+                            >
+                              Descargar PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
                               onClick={() => setEditando(p)}
                               disabled={!!p.pedido_id}
                             >
@@ -372,10 +401,12 @@ function PresupuestosTienda() {
         }}
         tiendaId={tiendaId}
         presupuesto={editando ?? undefined}
-        onGuardado={() => {
+        onGuardado={({ id }) => {
           setNuevo(false);
           setEditando(null);
           refrescar();
+          // El PDF de lo que se acaba de guardar, listo para mandarlo.
+          pdfMut.mutate(id);
         }}
       />
 

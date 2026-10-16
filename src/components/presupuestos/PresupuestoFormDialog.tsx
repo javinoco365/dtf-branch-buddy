@@ -89,7 +89,8 @@ export function PresupuestoFormDialog({
   onOpenChange: (o: boolean) => void;
   tiendaId: string;
   presupuesto?: Presupuesto;
-  onGuardado: () => void;
+  /** Con el id del presupuesto guardado: la pantalla descarga su PDF. */
+  onGuardado: (guardado: { id: string }) => void;
 }) {
   const guardar = useServerFn(guardarPresupuesto);
 
@@ -228,9 +229,9 @@ export function PresupuestoFormDialog({
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
       toast.success(presupuesto ? "Presupuesto actualizado" : "Presupuesto creado");
-      onGuardado();
+      onGuardado(r);
     },
     onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
   });

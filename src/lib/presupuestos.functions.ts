@@ -5,11 +5,15 @@ import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import {
   ambitoPresupuesto,
+  documentoPresupuesto,
   prefijoDeTienda,
   referenciaPresupuesto,
   totalesPresupuesto,
   type EstadoPresupuesto,
 } from "@/dominio/presupuestos";
+import { lineasDireccion } from "@/dominio/direcciones";
+import { generarPresupuestoPDF } from "@/lib/pdf-presupuesto";
+import { descargarLogo } from "@/lib/logo-descarga";
 
 /**
  * Presupuestos de las tiendas. Ver 20261001100000_presupuestos_tiendas.sql.
@@ -244,4 +248,106 @@ export const confirmarPresupuesto = createServerFn({ method: "POST" })
       .eq("id", pedidoId)
       .maybeSingle();
     return { id: pedidoId, numero: (pedido?.numero as string | undefined) ?? null };
+  });
+
+/** Un texto de la base, recortado; null si no queda nada. */
+const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/**
+ * El PDF de un presupuesto, para descargarlo: devuelve el nombre del fichero
+ * y el PDF en base64.
+ *
+ * Se genera cada vez con lo que hay guardado, porque un presupuesto se edita y
+ * su PDF tiene que decir lo de ahora. No se guarda en Storage: no es un
+ * documento fiscal y se rehace en un momento.
+ *
+ * Todo se lee con la sesión de quien lo pide: si la RLS no le deja ver el
+ * presupuesto, no hay PDF. El emisor es la sociedad (`empresas`, la misma que
+ * sale en las facturas); el nombre, el logo, el color, la web y el correo de
+ * contacto, los de la tienda.
+ */
+export const pdfPresupuesto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const sb = context.supabase;
+    const { data: p, error } = await tabla(sb, "presupuestos")
+      .select("*, items:presupuesto_items(*)")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!p) throw new Error("Sin acceso a este presupuesto");
+
+    const [{ data: tienda }, { data: empresa }, { data: cliente }] = await Promise.all([
+      tabla(sb, "tiendas")
+        .select("nombre, logo_url, color, woo_url, telefono, correo_remitente_email")
+        .eq("id", p.tienda_id)
+        .maybeSingle(),
+      tabla(sb, "empresas")
+        .select(
+          "razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais, email_fiscal, telefono",
+        )
+        .eq("id", p.empresa_id)
+        .maybeSingle(),
+      p.cliente_id
+        ? tabla(sb, "clientes")
+            .select("nombre, empresa, nif, direccion, codigo_postal, ciudad, provincia, pais")
+            .eq("id", p.cliente_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    // La web de la tienda tal como la escribe la gente: dtfculture.com.
+    const web = texto(tienda?.woo_url)
+      ?.replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/, "");
+
+    const blob = await generarPresupuestoPDF({
+      numero: p.numero,
+      fecha: p.fecha,
+      validez_dias: Number(p.validez_dias),
+      documento: documentoPresupuesto({ ...p, items: p.items ?? [] }),
+      emisor: {
+        nombre_comercial: texto(tienda?.nombre) ?? "",
+        razon_social: texto(empresa?.razon_social) ?? "",
+        cif: texto(empresa?.cif) ?? "",
+        direccion: lineasDireccion({
+          direccion: empresa?.direccion,
+          codigo_postal: empresa?.codigo_postal,
+          ciudad: empresa?.ciudad,
+          provincia: empresa?.provincia,
+          pais: empresa?.pais,
+        }),
+        email: texto(tienda?.correo_remitente_email) ?? texto(empresa?.email_fiscal),
+        telefono: texto(empresa?.telefono) ?? texto(tienda?.telefono),
+        web,
+      },
+      // El nombre, el correo y el teléfono, los congelados en el presupuesto;
+      // el NIF y la dirección, de la ficha del cliente si la tiene.
+      cliente: {
+        nombre: texto(p.cliente_nombre) ?? texto(cliente?.nombre) ?? "",
+        empresa: texto(cliente?.empresa),
+        nif: texto(cliente?.nif),
+        direccion: lineasDireccion({
+          direccion: cliente?.direccion,
+          codigo_postal: cliente?.codigo_postal,
+          ciudad: cliente?.ciudad,
+          provincia: cliente?.provincia,
+          pais: cliente?.pais,
+        }),
+        email: texto(p.cliente_email),
+        telefono: texto(p.cliente_telefono),
+      },
+      notas: texto(p.notas),
+      logo: await descargarLogo(texto(tienda?.logo_url)),
+      color: texto(tienda?.color),
+    });
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binario = "";
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binario += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    }
+    return { nombre: `${p.numero}.pdf`, base64: btoa(binario) };
   });
