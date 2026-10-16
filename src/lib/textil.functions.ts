@@ -18,6 +18,11 @@ import {
   texto,
 } from "@/lib/pdf-presupuesto-datos";
 import { identidadTextil, leerEmpresaActiva } from "./plantillas-presupuesto.functions";
+// Arriba y no con await import(): este módulo también se importa de forma
+// normal (presupuestos, facturas y la vista previa del editor), y cargarlo de
+// las dos formas deja en el arranque del servidor una importación circular
+// que tira el panel entero («This page didn't load», 16-10-2026).
+import { descargarLogo } from "@/lib/logo-descarga";
 import {
   calcularLinea,
   calcularTotales as calcularTotalesDominio,
@@ -1016,7 +1021,6 @@ export const getEmpresaGlobal = createServerFn({ method: "GET" })
  * que se congeló al emitir. Solo administradores, como hasta ahora.
  */
 async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId: string) {
-  const { descargarLogo } = await import("@/lib/logo-descarga");
   const { data: esAdmin } = await supabaseAdmin
     .from("user_roles")
     .select("role")
@@ -1667,7 +1671,6 @@ export const pdfPresupuestoTextil = createServerFn({ method: "POST" })
       leerPlantillaPresupuesto(sb, { ambito: "textil" }, empresaId),
     ]);
 
-    const { descargarLogo } = await import("@/lib/logo-descarga");
     const identidad = resolverIdentidad(plantilla, logo_url, base);
     const blob = await generarPresupuestoPDF(
       {
