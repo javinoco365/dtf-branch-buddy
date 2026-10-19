@@ -52,6 +52,8 @@ import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
 import { esEstimado, pedidoConMetrosEstimados } from "@/dominio/metros-woo";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
+import { HORA_CORTE_POR_DEFECTO } from "@/dominio/realizado";
+import { HoraPedido, RealizadoEn } from "@/components/pedidos/Realizado";
 import { desglosePedido } from "@/dominio/desglose-pedido";
 import { descargarCSV } from "@/lib/csv";
 import {
@@ -124,6 +126,10 @@ export type PedidoFila = {
   iva: number;
   total: number;
   fecha_pedido: string;
+  /** Cuándo se realizó (20261027100000): al pasar a enviado, o la fecha de completado de Woo. */
+  realizado_en?: string | null;
+  /** Lo que cobró la agencia por el envío, sin IVA. Vacío: se estima. */
+  coste_envio_real?: number | null;
   notas: string | null;
   cliente_id: string | null;
   cliente_nombre: string | null;
@@ -279,6 +285,12 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const pedidos: PedidoFila[] = (data?.pedidos ?? []) as any;
   const cobrosDisponibles = data?.cobrosDisponibles ?? true;
+  const horaCorte = data?.horaCorte ?? HORA_CORTE_POR_DEFECTO;
+  // Los metros realizados cada día (de pedidos de ese día o de otros). Sin la
+  // migración de realizado_en, no se enseñan.
+  const realizadosPorDia: Record<string, number> | null = data?.conRealizado
+    ? (data.realizadosPorDia ?? {})
+    : null;
 
   const estadoMut = useMutation({
     mutationFn: (vars: { id: string; estado: string }) =>
@@ -602,6 +614,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   <div className="font-semibold">{eur(g.totales.total)}</div>
                   <div className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                     <MetrosSuma totales={g.totales} />
+                    {realizadosPorDia && <> · {metros(realizadosPorDia[g.fecha] ?? 0)} hechos</>}
                   </div>
                 </div>
                 <span className="font-semibold max-md:hidden">{eur(g.totales.total)}</span>
@@ -636,6 +649,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     onBorrar={() => setBorrar(p)}
                     onFacturar={() => setFacturar(p)}
                     onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
+                    horaCorte={horaCorte}
                   />
                 );
               })}
@@ -706,6 +720,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                           onBorrar={() => setBorrar(p)}
                           onFacturar={() => setFacturar(p)}
                           onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
+                          horaCorte={horaCorte}
                         />
                       );
                     })}
@@ -715,6 +730,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                       titulo="Total del día"
                       totales={g.totales}
                       conCobros={cobrosDisponibles}
+                      realizados={realizadosPorDia ? (realizadosPorDia[g.fecha] ?? 0) : undefined}
                     />
                   </TableFooter>
                 </Table>
@@ -760,6 +776,15 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     titulo="Total del periodo"
                     totales={totalesPeriodo}
                     conCobros={cobrosDisponibles}
+                    realizados={
+                      realizadosPorDia
+                        ? sumarRealizados(
+                            realizadosPorDia,
+                            format(desde, "yyyy-MM-dd"),
+                            format(hasta, "yyyy-MM-dd"),
+                          )
+                        : undefined
+                    }
                   />
                 </TableFooter>
               </Table>
@@ -897,11 +922,14 @@ function FilaTotales({
   titulo,
   totales,
   conCobros,
+  realizados,
 }: {
   titulo: string;
   totales: TotalesPedidos;
   /** Sin la migración de cobros, como en las filas: «—». */
   conCobros: boolean;
+  /** Metros realizados en esos días (de pedidos de esos días o de otros). */
+  realizados?: number;
 }) {
   return (
     <TableRow>
@@ -910,6 +938,14 @@ function FilaTotales({
       </TableCell>
       <TableCell className="text-right font-bold tabular-nums">
         <MetrosSuma totales={totales} />
+        {realizados !== undefined && (
+          <div
+            className="whitespace-nowrap text-[11px] font-normal text-muted-foreground"
+            title="Metros realizados (enviados) en estos días, sean del día que sean sus pedidos"
+          >
+            {metros(realizados)} hechos
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-right font-bold tabular-nums">{eur(totales.total)}</TableCell>
       <TableCell className="text-right font-bold tabular-nums">
@@ -936,7 +972,16 @@ type PropsPedido = {
   onFacturar: () => void;
   /** Sin él, la migración de cobros no está aplicada y no se ofrece. */
   onCobros?: () => void;
+  /** Lo que entra a esta hora o después se hace al día siguiente ('hh:mm'). */
+  horaCorte: string;
 };
+
+/** Los metros realizados de los días entre `desde` y `hasta` ('yyyy-mm-dd', incluidos). */
+function sumarRealizados(porDia: Record<string, number>, desde: string, hasta: string): number {
+  let total = 0;
+  for (const [dia, m] of Object.entries(porDia)) if (dia >= desde && dia <= hasta) total += m;
+  return Math.round(total * 100) / 100;
+}
 
 // El número que ve el cliente, siempre. Antes esta línea era al revés: si
 // el pedido venía de WooCommerce se pintaba `#` + el id interno de
@@ -1011,6 +1056,7 @@ function FilaPedido({
   onBorrar,
   onFacturar,
   onCobros,
+  horaCorte,
 }: PropsPedido) {
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
   const numeroLabel = numeroVisible(pedido);
@@ -1024,7 +1070,10 @@ function FilaPedido({
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
         <TableCell>
-          <div className="font-mono text-sm truncate">{numeroLabel}</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-sm truncate">{numeroLabel}</span>
+            <HoraPedido pedido={pedido} horaCorte={horaCorte} />
+          </div>
           {mostrarTienda && (
             <div
               className="text-xs text-muted-foreground truncate"
@@ -1058,6 +1107,7 @@ function FilaPedido({
               etiqueta abre el menú. Un desplegable por fila llenaba la tabla
               de cajas y hacía difícil leer la columna de un vistazo. */}
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
+          <RealizadoEn tabla="pedidos" pedido={pedido} />
         </TableCell>
         <TableCell className="text-right tabular-nums">
           <MetrosPedido pedido={pedido} />
@@ -1146,6 +1196,7 @@ function TarjetaPedido({
   onBorrar,
   onFacturar,
   onCobros,
+  horaCorte,
 }: PropsPedido) {
   const cancelado = pedido.estado === "cancelado";
   const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
@@ -1163,6 +1214,7 @@ function TarjetaPedido({
           >
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-mono">{numeroVisible(pedido)}</span>
+              <HoraPedido pedido={pedido} horaCorte={horaCorte} />
               {mostrarTienda && pedido.tienda_nombre && (
                 <span className="truncate">· {pedido.tienda_nombre}</span>
               )}
@@ -1185,6 +1237,7 @@ function TarjetaPedido({
 
         <div className="flex flex-wrap items-center gap-1.5">
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
+          <RealizadoEn tabla="pedidos" pedido={pedido} />
           <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
             {pedido.origen === "woocommerce" ? "WooCommerce" : "Manual"}
           </Badge>
