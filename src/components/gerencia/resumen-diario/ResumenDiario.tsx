@@ -28,6 +28,7 @@ import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
   AJUSTES_JORNADA_POR_DEFECTO,
   gastosFijosDelRango,
+  gastosFijosDesglose,
   objetivoDelRango,
   type AjustesJornada,
   type GastoFijo,
@@ -161,6 +162,12 @@ function Contenido({
     ? calcular(previo, anterior.data, docsPrevios.data)
     : null;
 
+  // Los gastos fijos uno a uno, para ver de dónde sale el total.
+  const gastosDelPeriodo = useMemo(
+    () => (gastos ? gastosFijosDesglose(gastos, transcurrido(rango)) : null),
+    [gastos, rango],
+  );
+
   const error = actual.error ?? docs.error;
   const etiqueta = etiquetaPeriodo(seleccion);
 
@@ -193,6 +200,7 @@ function Contenido({
                     frente: comparacion?.etiqueta ?? null,
                     colores: Object.fromEntries(tiendas.map((t) => [t.id, t.color])),
                     jornada,
+                    gastos: gastosDelPeriodo,
                   }
                 : null
             }
@@ -231,6 +239,7 @@ function Contenido({
             <Desglose
               r={resumen}
               ajustes={jornada}
+              gastos={gastosDelPeriodo}
               acciones={<RecuperarFechas tiendas={tiendas} />}
             />
           </section>

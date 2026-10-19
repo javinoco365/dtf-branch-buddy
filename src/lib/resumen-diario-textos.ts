@@ -1,6 +1,8 @@
 import { format, getQuarter } from "date-fns";
 import { es } from "date-fns/locale";
 import { rangoDe, type Seleccion } from "@/dominio/periodos";
+import { TIPOS_GASTO } from "@/dominio/impuestos";
+import type { GastoFijo } from "@/dominio/gerencia";
 import { eur, metros, numero } from "@/lib/format";
 import type { AvisoResumen } from "@/dominio/resumen-diario";
 
@@ -86,4 +88,47 @@ export function tituloInforme(sel: Seleccion): { tipo: string; titulo: string } 
         titulo: r ? mayuscula(delAl(r.desde, r.hasta)) : "Todo",
       };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Los gastos fijos, para el desglose
+// ---------------------------------------------------------------------------
+
+/** '2026-01-15' → '15/01/2026'. */
+const fechaDeDia = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}`;
+
+/** «Alquiler del local», «Factura de compra», «Amortización». */
+export function etiquetaGasto(g: GastoFijo): string {
+  if (g.origen === "compra") return "Factura de compra";
+  if (g.origen === "amortizacion") return "Amortización";
+  return TIPOS_GASTO.find((t) => t.valor === g.tipo)?.etiqueta ?? "Otros";
+}
+
+/** «800,00 €/mes», «1200,00 €/año», «50,00 € una vez». */
+export function textoCargo(g: GastoFijo): string {
+  const importe = eur(Number(g.importe_mensual ?? 0));
+  switch (g.periodicidad) {
+    case "puntual":
+      return `${importe} una vez`;
+    case "trimestral":
+      return `${importe}/trimestre`;
+    case "anual":
+      return `${importe}/año`;
+    default:
+      return `${importe}/mes`;
+  }
+}
+
+/** «Desde 01/01/2026», «01/01/2026 – 31/12/2026», «El 15/03/2026». */
+export function textoVigencia(g: GastoFijo): string {
+  if (g.periodicidad === "puntual") return `El ${fechaDeDia(g.desde)}`;
+  return g.hasta
+    ? `${fechaDeDia(g.desde)} – ${fechaDeDia(g.hasta)}`
+    : `Desde ${fechaDeDia(g.desde)}`;
+}
+
+/** Dónde se corrige cada gasto en la aplicación. */
+export function dondeSeCorrige(g: GastoFijo): string {
+  if (g.origen === "compra" || g.origen === "amortizacion") return "Facturas de compra";
+  return "Gerencia › Ajustes";
 }

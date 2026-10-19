@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gastosFijosDelRango, type GastoFijo } from "./gerencia";
+import { gastosFijosDelRango, gastosFijosDesglose, type GastoFijo } from "./gerencia";
 import {
   calendarioTrimestre,
   cargosDelRango,
@@ -606,5 +606,45 @@ describe("el 303 solo se compensa desde la primera venta del CRM", () => {
       trimestre: { anio: 2026, numero: 4 },
       motivo: "datos",
     });
+  });
+});
+
+describe("gastosFijosDesglose", () => {
+  const d = (a: number, m: number, dd: number) => new Date(a, m - 1, dd, 12);
+  const base = { iva_pct: 0, irpf_pct: 0, tipo: "otros", hasta: null } as const;
+  const alquiler: GastoFijo = {
+    ...base,
+    id: "a",
+    concepto: "Alquiler",
+    importe_mensual: 800,
+    periodicidad: "mensual",
+    desde: "2026-01-01",
+  };
+  const seguro: GastoFijo = {
+    ...base,
+    id: "s",
+    concepto: "Seguro",
+    importe_mensual: 1200,
+    periodicidad: "anual",
+    desde: "2026-01-01",
+  };
+  const futuro: GastoFijo = {
+    ...base,
+    id: "f",
+    concepto: "Futuro",
+    importe_mensual: 50,
+    periodicidad: "mensual",
+    desde: "2027-01-01",
+  };
+  it("uno a uno, de mayor a menor, sin los que no tocan, y suman el total", () => {
+    const r = { desde: d(2026, 10, 1), hasta: d(2026, 10, 31) };
+    const x = gastosFijosDesglose([seguro, futuro, alquiler], r);
+    expect(x.map((g) => [g.gasto.id, g.importe])).toEqual([
+      ["a", 800],
+      ["s", 100],
+    ]);
+    expect(x.reduce((s, g) => s + g.importe, 0)).toBe(
+      gastosFijosDelRango([seguro, futuro, alquiler], r),
+    );
   });
 });

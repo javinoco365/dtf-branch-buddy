@@ -1,9 +1,16 @@
 import type { jsPDF } from "jspdf";
 import { eur, metros, numero } from "@/lib/format";
 import { LETRA, registrarFuentesPdf } from "@/lib/fuentes-pdf";
-import { horas, porcentaje, textoAvisoResumen } from "@/lib/resumen-diario-textos";
+import {
+  etiquetaGasto,
+  horas,
+  porcentaje,
+  textoAvisoResumen,
+  textoCargo,
+  textoVigencia,
+} from "@/lib/resumen-diario-textos";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import type { AjustesJornada } from "@/dominio/gerencia";
+import type { AjustesJornada, GastoDelRango } from "@/dominio/gerencia";
 import {
   BLANCO,
   CIELO,
@@ -16,6 +23,8 @@ import {
   type RGB,
 } from "@/dominio/maqueta-presupuesto";
 import {
+  costesDelPeriodo,
+  proporcion,
   ratiosDe,
   serieDelResumen,
   variacionResumen,
@@ -57,6 +66,8 @@ export type DatosInformeSocios = {
   /** El color de cada tienda (hexadecimal), para sus barras y su ficha. */
   colores: Record<string, string | null | undefined>;
   jornada: AjustesJornada;
+  /** Los gastos fijos del periodo uno a uno; nulo si no se han podido leer. */
+  gastos: readonly GastoDelRango[] | null;
   generado: Date;
 };
 
@@ -962,6 +973,142 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
 }
 
 // ---------------------------------------------------------------------------
+// Los gastos del periodo
+// ---------------------------------------------------------------------------
+
+function gastosDelPeriodo(c: Lienzo, autoTable: AutoTable, inicio: number) {
+  const { doc, d } = c;
+  const costes = costesDelPeriodo(d.resumen);
+  c.seccion("En qué se fue el dinero", "Costes de lo pedido en el periodo, sin IVA");
+
+  // Las tres partidas en una barra, y cada una con su parte.
+  const partidas: [string, number, RGB, string][] = [
+    ["Producción", costes.produccion, CIELO, "Metros × coste por metro; ropa del textil"],
+    ["Envíos", costes.envios, NARANJA, "Lo que cobra la agencia"],
+    ["Gastos fijos", costes.fijos, MARINO, "Alquiler, sueldos, cuotas… (abajo, uno a uno)"],
+  ];
+  const y0 = c.y;
+  let x = M;
+  for (const [, importe, color] of partidas) {
+    const parte = proporcion(importe, costes.total) ?? 0;
+    if (parte <= 0) continue;
+    c.relleno(color);
+    doc.rect(x, y0, ANCHO * parte, 6, "F");
+    x += ANCHO * parte;
+  }
+  if (costes.total <= 0) {
+    c.relleno(LINEA);
+    doc.rect(M, y0, ANCHO, 6, "F");
+  }
+  c.y = y0 + 12;
+  const wCol = (ANCHO - 2 * 4) / 3;
+  partidas.forEach(([nombre, importe, color, nota], i) => {
+    const cx = M + i * (wCol + 4);
+    c.relleno(color);
+    doc.rect(cx, c.y - 3, 2.4, 2.4, "F");
+    c.letra("negrita", 8, TINTA);
+    c.texto(nombre, cx + 4, c.y - 0.8);
+    c.letra("titular", 14, TINTA);
+    c.texto(eur(importe), cx, c.y + 6.5);
+    c.letra("negrita", 7.5, GRIS);
+    c.texto(porcentaje(proporcion(importe, costes.total)), cx + wCol, c.y + 6.5, "right");
+    c.letra("texto", 6.3, GRIS);
+    c.texto(nota, cx, c.y + 11);
+  });
+  c.y += 15;
+  c.relleno(FONDO_NARANJA);
+  doc.roundedRect(M, c.y, ANCHO, 9, 1.5, 1.5, "F");
+  c.letra("negrita", 8.5, TINTA);
+  c.texto("Total de costes del periodo", M + 4, c.y + 5.9);
+  c.letra("titular", 12, TINTA);
+  c.texto(eur(costes.total), W - M - 4, c.y + 6.2, "right");
+  c.y += 17;
+
+  // Los gastos fijos, uno a uno.
+  c.seccion("Gastos fijos, uno a uno", "Lo que le toca a cada uno en el periodo");
+  const lista = d.gastos;
+  if (!lista || lista.length === 0) {
+    c.letra("texto", 8.5, GRIS);
+    c.texto(
+      lista ? "No hay gastos fijos en este periodo." : "No se han podido leer los gastos fijos.",
+      M,
+      c.y,
+    );
+    c.y += 8;
+  } else {
+    autoTable(doc, {
+      startY: c.y,
+      margin: { left: M, right: M, top: 30, bottom: H - LIMITE },
+      head: [["Concepto", "Tipo", "Cada cargo", "Vigencia", "Justif.", "En el periodo"]],
+      body: lista.map(({ gasto: g, importe }) => [
+        g.concepto + (g.notas ? `\n${g.notas}` : ""),
+        etiquetaGasto(g),
+        textoCargo(g),
+        textoVigencia(g),
+        g.con_justificante === false ? "No" : "Sí",
+        eur(importe),
+      ]),
+      foot: [["Total gastos fijos", "", "", "", "", eur(d.resumen.gastosFijos ?? 0)]],
+      theme: "plain",
+      styles: { font: LETRA.texto, fontSize: 7.4, textColor: TINTA, cellPadding: 1.6 },
+      headStyles: { fillColor: NOCHE, textColor: BLANCO, fontStyle: "bold", fontSize: 7 },
+      footStyles: { fillColor: FONDO_NARANJA, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: FONDO },
+      columnStyles: {
+        0: { cellWidth: 46, fontStyle: "bold" },
+        1: { cellWidth: 36, textColor: GRIS },
+        2: { cellWidth: 28, halign: "right" },
+        3: { cellWidth: 34 },
+        4: { cellWidth: 12, halign: "center" },
+        5: { halign: "right", fontStyle: "bold" },
+      },
+      didParseCell: (h) => {
+        if (h.column.index === 5) h.cell.styles.halign = "right";
+        if (h.section === "head" && h.column.index === 4) h.cell.styles.halign = "center";
+      },
+      didDrawPage: () => {
+        if (doc.getCurrentPageInfo().pageNumber > inicio) {
+          const y = c.y;
+          c.cabeceraInterior("Gastos del periodo");
+          c.y = y;
+        }
+      },
+    });
+    c.y = finTabla(doc) + 5;
+  }
+
+  // Dónde se corrige cada cosa.
+  const ayudas: [string, string][] = [
+    ["Un gasto fijo (importe, fechas, periodicidad)", "Gerencia › Ajustes › Gastos fijos"],
+    ["Una factura de compra o una amortización", "Facturas de compra"],
+    ["El coste por metro de producción", "Configuración de la empresa"],
+    ["Lo que cobró la agencia por un envío", "En el envío de cada pedido"],
+  ];
+  c.sitio(10 + ayudas.length * 5, "Gastos del periodo");
+  c.relleno(FONDO_CIELO);
+  doc.roundedRect(M, c.y, ANCHO, 8 + ayudas.length * 4.6, 1.8, 1.8, "F");
+  c.letra("negrita", 7, CIELO);
+  c.texto("SI ALGO NO CUADRA, SE CORRIGE EN LA APLICACIÓN", M + 4, c.y + 5);
+  ayudas.forEach(([que, donde], i) => {
+    const y = c.y + 9.6 + i * 4.6;
+    c.letra("texto", 7.5, TINTA);
+    c.texto(que, M + 4, y);
+    c.letra("negrita", 7.5, MARINO);
+    c.texto(donde, W - M - 4, y, "right");
+  });
+  c.y += 14 + ayudas.length * 4.6;
+  const conFactura = (d.gastos ?? []).filter((x) => (x.gasto.facturas?.length ?? 0) > 0);
+  if (conFactura.length) {
+    c.letra("texto", 6.8, GRIS);
+    c.texto(
+      `${conFactura.length} ${conFactura.length === 1 ? "gasto cuenta" : "gastos cuentan"} lo de su factura real en vez del importe previsto.`,
+      M,
+      c.y - 4,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Página 3: cada negocio
 // ---------------------------------------------------------------------------
 
@@ -1141,7 +1288,13 @@ export async function generarInformeSocios(d: DatosInformeSocios): Promise<Blob>
   maquinaYCobros(c);
   evolucion(c, autoTable);
 
-  // Página 3
+  // Los gastos
+  doc.addPage();
+  c.cabeceraInterior("Gastos del periodo");
+  const inicioGastos = doc.getNumberOfPages();
+  gastosDelPeriodo(c, autoTable, inicioGastos);
+
+  // Cada negocio
   doc.addPage();
   c.cabeceraInterior("Cada negocio");
   fichas(c);

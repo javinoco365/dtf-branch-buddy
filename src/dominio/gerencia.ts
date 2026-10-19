@@ -691,33 +691,53 @@ export function gastosFijosDelRango(
   gastos: readonly GastoFijo[],
   r: { desde: Date; hasta: Date },
 ): number {
-  let total = 0;
+  return redondear(gastos.reduce((s, g) => s + importeDelGasto(g, r), 0));
+}
+
+/** Lo que le toca a un gasto en un rango, sin redondear (ver gastosFijosDelRango). */
+function importeDelGasto(g: GastoFijo, r: { desde: Date; hasta: Date }): number {
   // Con factura, cada cargo cuenta lo que dice la factura.
-  const facturas = new Map(gastos.map((g) => [g, facturasPorCargo(g)]));
+  const facturas = facturasPorCargo(g);
   // Un gasto puntual cuenta entero el día en que se paga.
-  for (const g of gastos) {
-    if (g.periodicidad !== "puntual") continue;
+  if (g.periodicidad === "puntual") {
     const dia = diaLocalDe(g.desde);
-    if (soloDia(dia) >= soloDia(r.desde) && soloDia(dia) <= soloDia(r.hasta)) {
-      total += facturas.get(g)?.get(0)?.base ?? num(g.importe_mensual);
-    }
+    return soloDia(dia) >= soloDia(r.desde) && soloDia(dia) <= soloDia(r.hasta)
+      ? (facturas.get(0)?.base ?? num(g.importe_mensual))
+      : 0;
   }
+  let total = 0;
+  const meses = MESES_POR_CARGO[g.periodicidad ?? "mensual"] ?? 1;
+  const ini = soloDia(diaLocalDe(g.desde));
+  const fin = g.hasta ? soloDia(diaLocalDe(g.hasta)) : null;
   for (const mes of mesesDelRango(r)) {
-    for (const g of gastos) {
-      if (g.periodicidad === "puntual") continue;
-      const meses = MESES_POR_CARGO[g.periodicidad ?? "mensual"] ?? 1;
-      const ini = soloDia(diaLocalDe(g.desde));
-      const fin = g.hasta ? soloDia(diaLocalDe(g.hasta)) : null;
-      const primero = ini > mes.primero ? ini : mes.primero;
-      const ultimo = fin && fin < mes.ultimo ? fin : mes.ultimo;
-      if (ultimo < primero) continue;
-      const dias = Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1;
-      const k = Math.floor(mesesEntre(ini, mes.inicio) / meses);
-      const importe = facturas.get(g)?.get(k)?.base ?? num(g.importe_mensual);
-      total += (importe / meses) * (dias / mes.diasDelMes);
-    }
+    const primero = ini > mes.primero ? ini : mes.primero;
+    const ultimo = fin && fin < mes.ultimo ? fin : mes.ultimo;
+    if (ultimo < primero) continue;
+    const dias = Math.round((ultimo.getTime() - primero.getTime()) / 86_400_000) + 1;
+    const k = Math.floor(mesesEntre(ini, mes.inicio) / meses);
+    const importe = facturas.get(k)?.base ?? num(g.importe_mensual);
+    total += (importe / meses) * (dias / mes.diasDelMes);
   }
-  return redondear(total);
+  return total;
+}
+
+/** Un gasto fijo y lo que le toca en un rango. */
+export type GastoDelRango = { gasto: GastoFijo; importe: number };
+
+/**
+ * Los gastos fijos de un rango uno a uno, de mayor a menor: de dónde sale el
+ * total de gastosFijosDelRango. Sin los que no tocan al rango. Cada importe va
+ * redondeado al céntimo, así que su suma puede diferir del total en algún
+ * céntimo.
+ */
+export function gastosFijosDesglose(
+  gastos: readonly GastoFijo[],
+  r: { desde: Date; hasta: Date },
+): GastoDelRango[] {
+  return gastos
+    .map((gasto) => ({ gasto, importe: redondear(importeDelGasto(gasto, r)) }))
+    .filter((x) => x.importe !== 0)
+    .sort((a, b) => b.importe - a.importe);
 }
 
 /** El objetivo que vale para un mes: el último que empezó ese mes o antes. */
