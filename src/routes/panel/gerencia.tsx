@@ -17,6 +17,7 @@ import { Resultados } from "@/components/gerencia/Resultados";
 import { Fiscal } from "@/components/gerencia/Fiscal";
 import { Textil } from "@/components/gerencia/Textil";
 import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
+import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/ResumenDiario";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
@@ -183,15 +184,22 @@ function Gerencia() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">Gerencia</h1>
           <p className="text-muted-foreground">
             Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
             (con el ratón encima, o tocándolo en el móvil).
           </p>
         </div>
-        <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
+        <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
+          <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
+          <BotonResumenDiario
+            tiendas={tiendas}
+            gastos={datos?.gastos ?? null}
+            objetivos={datos?.objetivos ?? ajustes.data?.objetivos ?? []}
+          />
+        </div>
       </div>
 
       <Card className={enAjustes ? "hidden" : undefined}>
