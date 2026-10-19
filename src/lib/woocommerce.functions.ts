@@ -670,7 +670,13 @@ async function guardarPedidosWoo(
   // Sin la migración de realizado_en (20261027100000) la columna no existe:
   // se guarda sin ella antes que dejar la sincronización parada.
   if (res.error && /realizado_en/.test(res.error.message)) {
-    res = await guardar(filasPedidos.map(({ realizado_en: _sinColumna, ...resto }) => resto));
+    res = await guardar(
+      filasPedidos.map((fila) => {
+        const sinColumna: Record<string, unknown> = { ...fila };
+        delete sinColumna.realizado_en;
+        return sinColumna;
+      }),
+    );
   }
   if (res.error) throw new Error(`No se pudieron guardar los pedidos: ${res.error.message}`);
   const pedidosGuardados = (res.data ?? []) as FilaPedidoGuardada[];
