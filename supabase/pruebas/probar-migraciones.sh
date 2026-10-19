@@ -158,6 +158,7 @@ seccion "El ejercicio de la factura es obligatorio" C13_facturas_ejercicio_oblig
 seccion "Conciliación: la ventana cuenta solo lo pendiente" C14_conciliacion_pendientes.sql
 seccion "WooCommerce: cursor y turno de la sincronización" C15_woo_sincronizacion_turno.sql
 seccion "PDF de presupuestos: plantillas por tienda y de textil" C16_plantillas_presupuesto.sql
+seccion "Pedidos: cuándo se realizaron y coste real del envío" C17_pedidos_realizado.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto

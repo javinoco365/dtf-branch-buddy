@@ -289,3 +289,63 @@
     text-align: left;
   }
 }
+
+/*
+ * El Resumen diario de Gerencia se imprime solo (o se guarda en PDF): sin el
+ * resto de la pantalla, sin los botones, con todo su alto y con el desglose en
+ * una página aparte.
+ */
+@media print {
+  html:has(.resumen-imprimible),
+  body:has(.resumen-imprimible) {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  /* El fondo oscuro del diálogo, que va junto al contenido. */
+  :has(> .resumen-imprimible) > :not(.resumen-imprimible) {
+    display: none !important;
+  }
+  body:has(.resumen-imprimible) > :not(:has(.resumen-imprimible)):not(.resumen-imprimible) {
+    display: none !important;
+  }
+  .resumen-imprimible {
+    position: static !important;
+    transform: none !important;
+    translate: none !important;
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .resumen-imprimible > button,
+  .resumen-imprimible .no-imprimir {
+    display: none !important;
+  }
+  /* Las tablas anchas, más pequeñas: en papel no se puede desplazar. */
+  .resumen-imprimible table {
+    font-size: 10px;
+  }
+  .resumen-imprimible td,
+  .resumen-imprimible th {
+    padding: 3px 4px;
+  }
+  .resumen-imprimible table.tabla-ancha {
+    font-size: 7px;
+  }
+  .resumen-imprimible table.tabla-ancha :is(td, th) {
+    white-space: normal;
+    padding: 2px;
+  }
+  .resumen-salto {
+    break-before: page;
+  }
+  .resumen-imprimible .break-inside-avoid {
+    break-inside: avoid;
+  }
+}

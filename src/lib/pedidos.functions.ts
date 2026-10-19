@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { faltaLaTabla, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { FILAS_POR_PAGINA, leerTodas, trozos } from "./paginar";
 import { leerPorIds, type ErrorConsulta } from "./leer-por-ids";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
@@ -16,6 +16,7 @@ import {
   type FechaPedido,
 } from "@/dominio/dia-pedido";
 import { referenciaFactura } from "@/lib/format";
+import { HORA_CORTE_POR_DEFECTO, horaCorta, metrosRealizadosPorDia } from "@/dominio/realizado";
 import type { Cobro } from "./cobros.functions";
 
 const ESTADO_VALUES = [
@@ -222,7 +223,30 @@ export const listPedidos = createServerFn({ method: "POST" })
       [...unicos.values()].filter((p) => pedidoEnDias(p, data.desde, data.hasta)),
       "reciente",
     );
-    if (pedidos.length === 0) return { pedidos: [], cobrosDisponibles: true };
+    // La hora de corte y los metros realizados cada día del periodo, sean de
+    // pedidos de ese día o de otros (un pedido de la tarde se hace al día
+    // siguiente). Sin la migración de realizado_en, sin ellos.
+    const [{ data: ajustes }, realizados] = await Promise.all([
+      tabla(supabase, "gerencia_ajustes").select("*").limit(1).maybeSingle(),
+      leerTodas<{ realizado_en: string | null; metros_total: number | null }>((a, b) => {
+        let q = tabla(supabase, "pedidos")
+          .select("realizado_en, metros_total")
+          .gte("realizado_en", tramo.desde)
+          .lt("realizado_en", tramo.hasta);
+        if (data.tiendaId) q = q.eq("tienda_id", data.tiendaId);
+        return q.order("realizado_en").order("id").range(a, b);
+      }),
+    ]);
+    const conRealizado = !faltaLaColumna(realizados.error);
+    if (realizados.error && conRealizado) throw new Error(realizados.error.message);
+    const horaCorte = horaCorta(
+      (ajustes as { hora_corte?: string } | null)?.hora_corte,
+      HORA_CORTE_POR_DEFECTO,
+    );
+    const realizadosPorDia = Object.fromEntries(metrosRealizadosPorDia(realizados.data));
+    if (pedidos.length === 0) {
+      return { pedidos: [], cobrosDisponibles: true, horaCorte, realizadosPorDia, conRealizado };
+    }
 
     const ids = pedidos.map((p) => p.id as string);
     const tiendaIds = Array.from(new Set(pedidos.map((p) => p.tienda_id)));
@@ -294,7 +318,81 @@ export const listPedidos = createServerFn({ method: "POST" })
         };
       }),
       cobrosDisponibles,
+      horaCorte,
+      realizadosPorDia,
+      conRealizado,
     };
+  });
+
+/**
+ * Corrige a mano el día y la hora en que se realizó un pedido de tienda o
+ * textil (lo imprimisteis ayer y lo marcasteis hoy). Pasa por
+ * pedido_fijar_realizado(), que comprueba el estado y la fecha y deja el autor
+ * en la auditoría; después, ni la sincronización ni el trigger la pisan.
+ */
+export const fijarRealizadoPedido = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tabla: z.enum(["pedidos", "textil_pedidos"]),
+        id: z.string().uuid(),
+        realizado_en: z.string().datetime({ offset: true }),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!rol) throw new Error("Solo un administrador puede corregir la fecha de realizado");
+    const realizado = await llamarRpc<string>(supabaseAdmin, "pedido_fijar_realizado", {
+      _tabla: data.tabla,
+      _id: data.id,
+      _realizado: data.realizado_en,
+      _usuario_id: context.userId,
+    });
+    return { realizado_en: realizado };
+  });
+
+/**
+ * Lo que cobró la agencia por el envío de un pedido, sin IVA. Vacío: se
+ * estima con el coste de envío por defecto de Gerencia.
+ */
+export const fijarCosteEnvioPedido = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tabla: z.enum(["pedidos", "textil_pedidos"]),
+        id: z.string().uuid(),
+        coste: z.number().min(0).max(1000).nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!rol) throw new Error("Solo un administrador puede cambiar el coste del envío");
+    const { error } = await tabla(supabaseAdmin, data.tabla)
+      .update({ coste_envio_real: data.coste == null ? null : Math.round(data.coste * 100) / 100 })
+      .eq("id", data.id);
+    if (faltaLaColumna(error)) {
+      throw new Error("Falta aplicar la migración 20261027100000_pedidos_realizado.sql");
+    }
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 const itemSchema = z.object({
