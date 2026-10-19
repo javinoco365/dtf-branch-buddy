@@ -32,7 +32,7 @@ async function empresaActiva(supabase: any): Promise<string> {
 export const hayLector = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
-    const { hayLectorConfigurado } = await import("./lector-facturas.server");
+    const { hayLectorConfigurado } = await import("./cola-compras.server");
     return { disponible: await hayLectorConfigurado() };
   });
 

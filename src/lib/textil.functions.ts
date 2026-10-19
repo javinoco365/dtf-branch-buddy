@@ -5,7 +5,10 @@ import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import type { Cobro } from "./cobros.functions";
-import type { FacturaPDFData } from "@/lib/pdf-factura";
+// Arriba y no con await import(): facturas.functions también lo importa de
+// forma normal, y cargarlo de las dos formas tira el arranque del servidor
+// (como logo-descarga, más abajo). jspdf sigue cargándose bajo demanda dentro.
+import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 import {
   generarPresupuestoPDF,
   type PresupuestoPDFData,
@@ -1118,7 +1121,6 @@ const yaExiste = (e: { message?: string; statusCode?: string | number } | null) 
  * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
  */
 async function guardarPdfTextil(sb: any, facturaId: string, userId: string): Promise<string> {
-  const { generarFacturaPDF } = await import("@/lib/pdf-factura");
   const { factura, pdfData } = await leerDatosPdfTextil(sb, facturaId, userId);
 
   const blob = await generarFacturaPDF(pdfData);

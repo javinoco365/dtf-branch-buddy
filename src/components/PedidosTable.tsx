@@ -72,7 +72,10 @@ import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
 import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
-import { EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
+// Normal y no con lazy(): EstadoCobroTexto ya sale de este módulo, y cargarlo
+// de las dos formas puede romper el arranque del servidor (ver
+// src/arquitectura/importaciones-mixtas.test.ts).
+import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { sincronizarWoo } from "@/lib/woocommerce.functions";
 import {
   SUMA_SYNC_WOO_VACIA,
@@ -94,11 +97,6 @@ const FacturarPedidoDialog = lazy(() =>
 const FacturarPedidosDialog = lazy(() =>
   import("@/components/documentos/FacturarPedidosDialog").then((m) => ({
     default: m.FacturarPedidosDialog,
-  })),
-);
-const CobrosPedidoDialog = lazy(() =>
-  import("@/components/cobros/CobrosPedidoDialog").then((m) => ({
-    default: m.CobrosPedidoDialog,
   })),
 );
 import {
