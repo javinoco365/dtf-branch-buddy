@@ -616,3 +616,59 @@ export function variacionResumen(actual: number, anterior: number): number | nul
   if (!anterior) return null;
   return redondear((actual - anterior) / Math.abs(anterior), 4);
 }
+
+// ---------------------------------------------------------------------------
+// Para el informe de los socios
+// ---------------------------------------------------------------------------
+
+/** Una parte de un todo, de 0 a 1 (o más); nulo si el todo no es positivo. */
+export function proporcion(parte: number, todo: number): number | null {
+  return todo > 0 ? redondear(parte / todo, 4) : null;
+}
+
+/** Los porcentajes que se leen de un vistazo. */
+export type Ratios = {
+  /** Margen neto ÷ facturación bruta. */
+  margenNeto: number | null;
+  /** Margen sin envíos ÷ facturación bruta. */
+  margenSinEnvios: number | null;
+  /** De lo vendido en el periodo, la parte que ya está cobrada. */
+  cobradoDeLoPedido: number | null;
+};
+
+export function ratiosDe(c: CifrasNegocio): Ratios {
+  return {
+    margenNeto: proporcion(c.pedido.margenConEnvios, c.pedido.bruta),
+    margenSinEnvios: proporcion(c.pedido.margenSinEnvios, c.pedido.bruta),
+    cobradoDeLoPedido: proporcion(c.pedido.vendido - c.pedido.pendiente, c.pedido.vendido),
+  };
+}
+
+/**
+ * La evolución del periodo para dibujarla: día a día hasta un mes; si es más
+ * largo (un trimestre, un año), mes a mes, con `dia` = 'yyyy-mm'.
+ */
+export function serieDelResumen(r: Resumen): { por: "dia" | "mes"; tramos: DiaResumen[] } {
+  if (r.porDia.length <= 31) return { por: "dia", tramos: r.porDia };
+  const meses = new Map<string, DiaResumen>();
+  for (const d of r.porDia) {
+    const clave = d.dia.slice(0, 7);
+    const m = meses.get(clave) ?? {
+      dia: clave,
+      pedidos: 0,
+      metrosPedidos: 0,
+      metrosImpresos: 0,
+      vendido: 0,
+      cobrado: 0,
+      margenConEnvios: 0,
+    };
+    m.pedidos += d.pedidos;
+    m.metrosPedidos = redondear(m.metrosPedidos + d.metrosPedidos, 2);
+    m.metrosImpresos = redondear(m.metrosImpresos + d.metrosImpresos, 2);
+    m.vendido = redondear(m.vendido + d.vendido);
+    m.cobrado = redondear(m.cobrado + d.cobrado);
+    m.margenConEnvios = redondear(m.margenConEnvios + d.margenConEnvios);
+    meses.set(clave, m);
+  }
+  return { por: "mes", tramos: [...meses.values()] };
+}

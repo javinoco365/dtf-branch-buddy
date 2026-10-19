@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarClock, DownloadCloud, Loader2, Printer } from "lucide-react";
+import { CalendarClock, DownloadCloud, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { endOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +20,10 @@ import { useAjustesGerencia, useCosteMetroActual } from "@/lib/gerencia";
 import { useDatosResumen, useDocumentosResumen, type DatosResumen } from "@/lib/resumen-diario";
 import { recuperarRealizadoWoo } from "@/lib/woocommerce.functions";
 import type { PeriodoUrl } from "@/lib/filtros-url";
+import { leerEmpresa } from "@/lib/empresa";
+import { tituloInforme } from "@/lib/resumen-diario-textos";
+import { descargarBlob } from "@/lib/csv";
+import type { DatosInformeSocios } from "@/lib/pdf-informe-socios";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
   AJUSTES_JORNADA_POR_DEFECTO,
@@ -45,7 +50,13 @@ import { Esquema } from "./Esquema";
 import { Desglose } from "./Desglose";
 import { Jornada } from "./Jornada";
 
-type Tienda = { id: string; nombre: string };
+/** El rango cortado en el final de hoy, si todavía no ha acabado. */
+function transcurrido(r: Rango): Rango {
+  const fin = endOfDay(new Date());
+  return r.hasta > fin && r.desde <= fin ? { desde: r.desde, hasta: fin } : r;
+}
+
+type Tienda = { id: string; nombre: string; color?: string | null };
 
 /**
  * El botón «Resumen diario» de Gerencia y su ventana: cómo ha ido el día (o
@@ -138,8 +149,10 @@ function Contenido({
             costeEnvioDefecto: jornada.coste_envio_defecto,
             costeMetroActual: costeMetro,
           },
-          gastosFijos: gastos ? gastosFijosDelRango(gastos, r) : null,
-          objetivo: objetivoDelRango(objetivos, r),
+          // Los gastos y el objetivo de lo que ha pasado del periodo: un año en
+          // curso no carga los gastos de los meses que aún no han llegado.
+          gastosFijos: gastos ? gastosFijosDelRango(gastos, transcurrido(r)) : null,
+          objetivo: objetivoDelRango(objetivos, transcurrido(r)),
         })
       : null;
 
@@ -169,16 +182,21 @@ function Contenido({
             ajustes={jornada}
             disponible={ajustesGerencia.data?.resumenDisponible ?? false}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="max-md:w-full"
-            disabled={!resumen}
-            onClick={() => window.print()}
-          >
-            <Printer className="h-4 w-4" />
-            Imprimir o PDF
-          </Button>
+          <BotonInforme
+            datos={
+              resumen
+                ? {
+                    resumen,
+                    anterior: resumenPrevio,
+                    tipoInforme: tituloInforme(seleccion).tipo,
+                    periodo: tituloInforme(seleccion).titulo,
+                    frente: comparacion?.etiqueta ?? null,
+                    colores: Object.fromEntries(tiendas.map((t) => [t.id, t.color])),
+                    jornada,
+                  }
+                : null
+            }
+          />
         </div>
       </div>
 
@@ -219,6 +237,51 @@ function Contenido({
         </>
       )}
     </div>
+  );
+}
+
+type DatosBoton = Omit<DatosInformeSocios, "empresa" | "generado">;
+
+/**
+ * Descarga el informe de los socios en PDF: el mismo periodo y las mismas
+ * cifras que se ven, con el formato de la casa.
+ */
+function BotonInforme({ datos }: { datos: DatosBoton | null }) {
+  const generar = useMutation({
+    mutationFn: async (d: DatosBoton) => {
+      const [{ generarInformeSocios }, empresa] = await Promise.all([
+        import("@/lib/pdf-informe-socios"),
+        leerEmpresa(),
+      ]);
+      const blob = await generarInformeSocios({
+        ...d,
+        empresa: {
+          razon_social: empresa?.razon_social?.trim() || "DTI S.L.",
+          cif: empresa?.cif ?? null,
+        },
+        generado: new Date(),
+      });
+      descargarBlob(
+        `Informe socios ${d.resumen.desde}${d.resumen.hasta !== d.resumen.desde ? ` a ${d.resumen.hasta}` : ""}.pdf`,
+        blob,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo generar el informe"),
+  });
+  return (
+    <Button
+      size="sm"
+      className="max-md:w-full"
+      disabled={!datos || generar.isPending}
+      onClick={() => datos && generar.mutate(datos)}
+    >
+      {generar.isPending ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <FileText className="h-4 w-4" />
+      )}
+      Informe PDF para socios
+    </Button>
   );
 }
 

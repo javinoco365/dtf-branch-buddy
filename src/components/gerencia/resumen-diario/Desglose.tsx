@@ -15,7 +15,7 @@ import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
 import type { AjustesJornada } from "@/dominio/gerencia";
 import type { CifrasNegocio, Margenes, Resumen } from "@/dominio/resumen-diario";
 import { Linea } from "./Esquema";
-import { horas, porcentaje } from "./textos";
+import { horas, porcentaje } from "@/lib/resumen-diario-textos";
 
 /**
  * Página 2: todo desglosado. Lo pedido frente a lo realizado, la producción,
