@@ -651,6 +651,10 @@ async function guardarPedidosWoo(
       // Base con el envío dentro y el envío aparte (ver importesPedidoWoo).
       ...importesPedidoWoo(o),
       fecha_pedido: o.date_created,
+      // Cuándo se completó en la web, en UTC. Sin fecha (no completado, o una
+      // web que no la da) va vacío, y el trigger de la base no deja que un
+      // vacío borre la fecha de un pedido que sigue realizado.
+      realizado_en: fechaGmtWoo(o.date_completed_gmt),
       notas: o.customer_note || null,
     };
   });
@@ -658,9 +662,16 @@ async function guardarPedidosWoo(
   // tabla() y no .from(): types.ts está generado y todavía no conoce las
   // columnas de dirección. Se quita cuando se regenere.
   type FilaPedidoGuardada = { id: string; woo_order_id: number; total: number };
-  const res = await tabla(ctx.sb, "pedidos")
-    .upsert(filasPedidos, { onConflict: "tienda_id,woo_order_id" })
-    .select("id, woo_order_id, total");
+  const guardar = (filas: Record<string, unknown>[]) =>
+    tabla(ctx.sb, "pedidos")
+      .upsert(filas, { onConflict: "tienda_id,woo_order_id" })
+      .select("id, woo_order_id, total");
+  let res = await guardar(filasPedidos);
+  // Sin la migración de realizado_en (20261027100000) la columna no existe:
+  // se guarda sin ella antes que dejar la sincronización parada.
+  if (res.error && /realizado_en/.test(res.error.message)) {
+    res = await guardar(filasPedidos.map(({ realizado_en: _sinColumna, ...resto }) => resto));
+  }
   if (res.error) throw new Error(`No se pudieron guardar los pedidos: ${res.error.message}`);
   const pedidosGuardados = (res.data ?? []) as FilaPedidoGuardada[];
   if (!pedidosGuardados.length) return resultado;
@@ -1503,6 +1514,85 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
         .update({ envio })
         .eq("id", p.id)
         .eq("envio", 0);
+      if (uErr) throw new Error(uErr.message);
+      actualizados++;
+    }
+    return {
+      revisados: pedidos.length,
+      actualizados,
+      siguiente: pedidos.length === 100 ? pedidos[pedidos.length - 1].woo_order_id : null,
+    };
+  });
+
+/**
+ * Recupera de WooCommerce la fecha de completado de los pedidos ya enviados o
+ * entregados que no la tienen (los anteriores a guardar realizado_en). Va por
+ * tandas de 100, como recuperarEnviosWoo: la pantalla llama con `desde` hasta
+ * que `siguiente` vuelve nulo. Nunca pisa una fecha que ya haya: solo rellena
+ * huecos, y la base no deja tocar una corregida a mano.
+ */
+export const recuperarRealizadoWoo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid(),
+        desde: z.number().int().nonnegative().default(0),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    const { data: rol } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!rol) throw new Error("Solo un administrador puede recuperar las fechas");
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) return { revisados: 0, actualizados: 0, siguiente: null };
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) return { revisados: 0, actualizados: 0, siguiente: null };
+
+    const { data: filas, error } = await tabla(supabaseAdmin, "pedidos")
+      .select("id, woo_order_id")
+      .eq("tienda_id", data.tienda_id)
+      .in("estado", ["enviado", "entregado", "cancelado"])
+      .is("realizado_en", null)
+      .not("woo_order_id", "is", null)
+      .gt("woo_order_id", data.desde)
+      .order("woo_order_id")
+      .limit(100);
+    if (error) throw new Error(error.message);
+    const pedidos = (filas ?? []) as { id: string; woo_order_id: number }[];
+    if (pedidos.length === 0) return { revisados: 0, actualizados: 0, siguiente: null };
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const ids = pedidos.map((p) => p.woo_order_id).join(",");
+    const r = await fetch(
+      `${base}/wp-json/wc/v3/orders?include=${ids}&per_page=100&status=any&_fields=id,date_completed_gmt`,
+      { headers: { Authorization: autorizacionWoo(creds), Accept: "application/json" } },
+    );
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+    const ordenes = (await r.json()) as { id: number; date_completed_gmt?: string | null }[];
+    const fechaDe = new Map(ordenes.map((o) => [Number(o.id), fechaGmtWoo(o.date_completed_gmt)]));
+
+    let actualizados = 0;
+    for (const p of pedidos) {
+      const realizado_en = fechaDe.get(Number(p.woo_order_id));
+      if (!realizado_en) continue;
+      const { error: uErr } = await tabla(supabaseAdmin, "pedidos")
+        .update({ realizado_en })
+        .eq("id", p.id)
+        .is("realizado_en", null);
       if (uErr) throw new Error(uErr.message);
       actualizados++;
     }
