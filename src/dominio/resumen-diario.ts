@@ -672,3 +672,21 @@ export function serieDelResumen(r: Resumen): { por: "dia" | "mes"; tramos: DiaRe
   }
   return { por: "mes", tramos: [...meses.values()] };
 }
+
+/** Lo que costó el periodo, por partidas (de lo pedido). */
+export type CostesPeriodo = {
+  /** Metros × coste por metro, y la ropa del textil. */
+  produccion: number;
+  /** Lo que cobra la agencia (real o estimado). */
+  envios: number;
+  /** Gastos fijos del periodo; 0 si no se saben. */
+  fijos: number;
+  total: number;
+};
+
+export function costesDelPeriodo(r: Resumen): CostesPeriodo {
+  const produccion = r.total.pedido.costeProduccion;
+  const envios = r.total.pedido.costeEnvios;
+  const fijos = r.gastosFijos ?? 0;
+  return { produccion, envios, fijos, total: redondear(produccion + envios + fijos) };
+}

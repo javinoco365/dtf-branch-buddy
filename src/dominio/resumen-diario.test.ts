@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   capacidad,
+  costesDelPeriodo,
   diasEntre,
   horasJornada,
   margenes,
@@ -330,5 +331,13 @@ describe("informe de los socios", () => {
     expect(s.tramos.map((t) => t.dia)).toEqual(["2026-10", "2026-11"]);
     expect(s.tramos[0].pedidos).toBe(1);
     expect(s.tramos[1].metrosPedidos).toBe(10);
+  });
+});
+
+describe("costesDelPeriodo", () => {
+  it("producción, envíos y gastos fijos", () => {
+    const r = resumenPeriodo(entrada({ pedidos: [web("a")], gastosFijos: 40 }));
+    expect(costesDelPeriodo(r)).toEqual({ produccion: 20, envios: 5, fijos: 40, total: 65 });
+    expect(costesDelPeriodo(resumenPeriodo(entrada({}))).fijos).toBe(0);
   });
 });

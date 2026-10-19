@@ -12,10 +12,18 @@ import { Explicacion } from "@/components/Explicacion";
 import { cn } from "@/lib/utils";
 import { eur, eurConSigno, fechaCorta, metros, numero } from "@/lib/format";
 import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
-import type { AjustesJornada } from "@/dominio/gerencia";
+import type { AjustesJornada, GastoDelRango } from "@/dominio/gerencia";
 import type { CifrasNegocio, Margenes, Resumen } from "@/dominio/resumen-diario";
 import { Linea } from "./Esquema";
-import { horas, porcentaje } from "@/lib/resumen-diario-textos";
+import {
+  dondeSeCorrige,
+  etiquetaGasto,
+  horas,
+  porcentaje,
+  textoCargo,
+  textoVigencia,
+} from "@/lib/resumen-diario-textos";
+import { costesDelPeriodo, proporcion } from "@/dominio/resumen-diario";
 
 /**
  * Página 2: todo desglosado. Lo pedido frente a lo realizado, la producción,
@@ -26,9 +34,12 @@ export function Desglose({
   r,
   ajustes,
   acciones,
+  gastos,
 }: {
   r: Resumen;
   ajustes: AjustesJornada;
+  /** Los gastos fijos del periodo uno a uno; nulo mientras cargan. */
+  gastos: readonly GastoDelRango[] | null;
   /** Lo que se puede hacer con los pedidos sin fecha (recuperarlos de la web). */
   acciones?: React.ReactNode;
 }) {
@@ -107,6 +118,10 @@ export function Desglose({
           </div>
         </Seccion>
       </div>
+
+      <Seccion titulo="Gastos del periodo">
+        <Gastos r={r} gastos={gastos} />
+      </Seccion>
 
       <Seccion titulo="Cada negocio">
         <TablaDetalle r={r} />
@@ -359,5 +374,84 @@ function DiaADia({ r }: { r: Resumen }) {
         </TableRow>
       </TableFooter>
     </Table>
+  );
+}
+
+/** Producción, envíos y gastos fijos; y los gastos fijos uno a uno. */
+function Gastos({ r, gastos }: { r: Resumen; gastos: readonly GastoDelRango[] | null }) {
+  const c = costesDelPeriodo(r);
+  const partidas: [string, number][] = [
+    ["Producción", c.produccion],
+    ["Envíos (agencia)", c.envios],
+    ["Gastos fijos", c.fijos],
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-4">
+        {partidas.map(([nombre, importe]) => (
+          <div key={nombre} className="rounded-lg bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">{nombre}</div>
+            <div className="text-lg font-semibold tabular-nums">{eur(importe)}</div>
+            <div className="text-xs text-muted-foreground">
+              {porcentaje(proporcion(importe, c.total))} del total
+            </div>
+          </div>
+        ))}
+        <div className="rounded-lg bg-primary/10 p-3">
+          <div className="text-xs text-muted-foreground">Total de costes</div>
+          <div className="text-lg font-bold tabular-nums">{eur(c.total)}</div>
+          <div className="text-xs text-muted-foreground">Sin IVA</div>
+        </div>
+      </div>
+      {!gastos ? (
+        <p className="text-sm text-muted-foreground">Cargando los gastos fijos…</p>
+      ) : gastos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay gastos fijos en este periodo.</p>
+      ) : (
+        <Table movil="tarjetas">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Gasto fijo</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead className="text-right">Cada cargo</TableHead>
+              <TableHead>Vigencia</TableHead>
+              <TableHead>Se corrige en</TableHead>
+              <TableHead className="text-right">En el periodo</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {gastos.map(({ gasto: g, importe }) => (
+              <TableRow key={g.id}>
+                <TableCell className="font-medium">
+                  {g.concepto}
+                  {g.con_justificante === false && (
+                    <span className="ml-1 text-xs text-muted-foreground">(sin justificante)</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{etiquetaGasto(g)}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">
+                  {textoCargo(g)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap">{textoVigencia(g)}</TableCell>
+                <TableCell className="text-muted-foreground">{dondeSeCorrige(g)}</TableCell>
+                <TableCell className="text-right tabular-nums font-semibold">
+                  {eur(importe)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell colSpan={5} className="font-semibold">
+                Total gastos fijos
+              </TableCell>
+              <TableCell className="text-right tabular-nums font-semibold">
+                {eur(r.gastosFijos ?? 0)}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
+      )}
+    </div>
   );
 }
