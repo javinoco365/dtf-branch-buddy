@@ -116,8 +116,19 @@ Los tres usuarios son administradores con permisos idénticos. El único control
 npm install          # fichero de bloqueo: package-lock.json, registro público
 npm run dev          # desarrollo
 npm run verify       # lint + tipos + pruebas + compilación  ← antes de dar nada por hecho
-npm run test         # solo las pruebas de dominio
+npm run test         # pruebas de dominio y de arquitectura (src/arquitectura/)
 ```
+
+Para reproducir en local el servidor de producción (la compilación por defecto apunta a
+Cloudflare y no arranca con node):
+
+```sh
+NITRO_PRESET=node-server npx vite build
+PORT=3111 node .output/server/index.mjs
+```
+
+Un `__exportAll is not a function` al arrancar sale de importar el mismo módulo de forma
+normal y con `await import()`. Lo frena `src/arquitectura/importaciones-mixtas.test.ts`.
 
 El repositorio arrastra un `bun.lock` generado dentro del sandbox de Lovable que fija 62
 paquetes al registro privado `lovable-core-prod`. Ese registro no resuelve fuera de Lovable,

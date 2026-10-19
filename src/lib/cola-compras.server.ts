@@ -9,6 +9,11 @@
 
 import { tabla } from "./rpc";
 import { leerFactura } from "./lector-facturas.server";
+// Reexportado para que compras.functions lo cargue con el mismo import() que
+// el resto: lector-facturas.server ya se importa aquí de forma normal, y
+// cargarlo también con import() puede romper el arranque del servidor (ver
+// src/arquitectura/importaciones-mixtas.test.ts).
+export { hayLectorConfigurado } from "./lector-facturas.server";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
 import { TIPO_IVA_GENERAL, tipoIrpfProbable, tipoProbable } from "@/dominio/compras";
 import {

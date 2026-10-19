@@ -12,6 +12,10 @@ import { defineConfig } from "vitest/config";
 // Aquí solo se prueba src/dominio/: funciones puras, sin DOM y sin base de
 // datos. Si una prueba necesita un navegador o una conexión a Supabase, es que
 // la lógica está en el sitio equivocado.
+//
+// La otra excepción es src/arquitectura/: pruebas que leen el código fuente de
+// src/ (sin ejecutarlo) para frenar fallos de compilación que solo se ven al
+// arrancar el servidor de producción.
 
 export default defineConfig({
   resolve: {
@@ -21,7 +25,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/dominio/**/*.test.ts"],
+    include: ["src/dominio/**/*.test.ts", "src/arquitectura/**/*.test.ts"],
     reporters: "dot",
   },
 });
