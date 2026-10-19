@@ -28,6 +28,9 @@ const GERENCIA_PEDIDOS_CLIENTES =
 const GERENCIA_PRESUPUESTOS =
   "Presupuestos de tiendas y textil con fecha en el periodo. Con el filtro de canal: «Manual» son los de tienda y «Textil» los del textil; la web no hace presupuestos.";
 
+const RESUMEN_PEDIDOS =
+  "Pedidos de las tiendas (web y manuales) y del textil con fecha de pedido en el periodo, sin cancelados y con lo devuelto restado.";
+
 export const DEFINICIONES = {
   vendido: {
     que: "Lo vendido en el periodo, con IVA y envío.",
@@ -373,6 +376,55 @@ export const DEFINICIONES = {
       "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura cuenta una vez, como en Fiscal) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: queda a compensar y se descuenta de los 303 positivos siguientes, también de otros años, durante cuatro años; el importe de cada 303 ya lleva descontado lo pendiente, y lo que queda a compensar sale aparte. Solo se compensa desde el trimestre de la primera factura o ticket emitido en el CRM: antes, el CRM no sabe lo que se vendió, así que el 303 de esos trimestres no se calcula y lo soportado entonces no queda a compensar. Solo se compensa el IVA: el 111, el 115 y el 202 se pagan enteros. Es orientativo: lo que de verdad queda a compensar es lo que diga el último 303 que presentó la gestoría. (En el cuarto trimestre la gestoría puede pedir la devolución en vez de compensar; aquí se supone que se compensa.)",
     fuente:
       "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero; para lo que queda a compensar, también los de los cuatro años anteriores, desde la primera venta documentada. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
+  },
+  rd_pedidos: {
+    que: "Los pedidos que entraron en el periodo y los metros que se pidieron.",
+    calculo:
+      "Pedidos no cancelados con fecha de pedido en el periodo. Los metros son los del pedido; el textil no lleva metros. Los que entraron a la hora de corte o después (luna) se hacen al día siguiente.",
+    fuente: RESUMEN_PEDIDOS,
+  },
+  rd_metros_realizados: {
+    que: "Los metros que se imprimieron de verdad en el periodo.",
+    calculo:
+      "Metros de los pedidos que se realizaron en el periodo (pasaron a enviado o entregado; en la web, la fecha de completado), fuera cual fuera el día del pedido. Cuentan también los que se cancelaron después de imprimirse: lo impreso, impreso está.",
+    fuente:
+      "Fecha de realizado de cada pedido. Los enviados antes de guardarse esa fecha no tienen día y no cuentan: se pueden recuperar de WooCommerce o poner a mano en Pedidos.",
+  },
+  rd_facturado: {
+    que: "La base imponible de los tickets y facturas emitidos en el periodo.",
+    calculo:
+      "Suma de la base de los documentos emitidos con fecha en el periodo; las rectificativas restan. Un ticket canjeado por factura cuenta una sola vez, como en Fiscal. Sin IVA.",
+    fuente:
+      "Tickets, facturas y rectificativas de las tiendas y del textil. Los borradores no cuentan.",
+  },
+  rd_cobrado: {
+    que: "El dinero que entró en el periodo, sea del pedido que sea.",
+    calculo: "Suma de los cobros con fecha en el periodo, con IVA y sin propinas.",
+    fuente: "Cobros de las tiendas (incluidos los de la web) y del textil.",
+  },
+  rd_margen_neto: {
+    que: "Lo que queda de lo vendido después de producir y de enviar.",
+    calculo:
+      "Facturación bruta (sin IVA ni envío) − coste de producción (metros × coste por metro congelado en el pedido; en textil, la ropa que salió del almacén) + envío cobrado − lo que cobra la agencia. Si un pedido con envío no tiene apuntado el coste real del envío, se estima con el de Ajustes del Resumen. No resta los gastos fijos: eso es el beneficio.",
+    fuente: RESUMEN_PEDIDOS,
+  },
+  rd_margen_sin_envios: {
+    que: "El margen de imprimir y vender, sin contar los envíos.",
+    calculo:
+      "Facturación bruta (sin IVA ni envío) − coste de producción. La diferencia con el margen neto es lo que se gana o se pierde con los envíos.",
+    fuente: RESUMEN_PEDIDOS,
+  },
+  rd_capacidad: {
+    que: "Cuánto de la máquina se usó en el periodo.",
+    calculo:
+      "Metros realizados ÷ (metros por hora × horas de jornada × días laborables, de lunes a viernes, hasta hoy). Por encima del 90 % la máquina va llena; por debajo del 50 %, hay sitio para vender más.",
+    fuente: "Metros realizados y la jornada de Ajustes del Resumen.",
+  },
+  rd_cola: {
+    que: "Lo que quedaba por hacer al acabar el periodo.",
+    calculo:
+      "Pedidos no cancelados con fecha hasta el final del periodo que no estaban realizados todavía ese día (los de hoy: los que siguen pendientes, en producción, imprimiendo o listos).",
+    fuente: RESUMEN_PEDIDOS,
   },
 } as const satisfies Record<string, Definicion>;
 

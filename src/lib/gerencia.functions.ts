@@ -4,8 +4,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
 import { TIPOS_GASTO } from "@/dominio/impuestos";
 import {
+  AJUSTES_JORNADA_POR_DEFECTO,
   AJUSTES_POR_DEFECTO,
   type AjustesGerencia,
+  type AjustesJornada,
   type GastoFijo,
   type Objetivo,
 } from "@/dominio/gerencia";
@@ -39,6 +41,8 @@ function errorLegible(error: { code?: string; message: string }): Error {
       return new Error("La fecha de fin es anterior a la de inicio.");
     if (error.message.includes("primer_dia"))
       return new Error("Un objetivo empieza el día 1 del mes.");
+    if (error.message.includes("resumen_validos"))
+      return new Error("Revisa la jornada, los metros por hora y el coste del envío.");
     if (error.message.includes("algo")) return new Error("Pon al menos los metros o las ventas.");
     return new Error("Los importes tienen que ser mayores que cero.");
   }
@@ -53,6 +57,10 @@ export type DatosAjustesGerencia = {
   /** Falso si la migración 20261012100000_gastos_justificante no está aplicada. */
   justificanteDisponible: boolean;
   ajustes: AjustesGerencia;
+  /** Falso si la migración 20261027100000_pedidos_realizado no está aplicada. */
+  resumenDisponible: boolean;
+  /** Jornada, máquina, corte y envío del Resumen diario. */
+  resumen: AjustesJornada;
   gastos: GastoFijo[];
   objetivos: Objetivo[];
 };
@@ -76,12 +84,15 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
       tabla(context.supabase, "gerencia_gastos_fijos")
         .select(`id, concepto, importe_mensual, desde, hasta, notas${extra}`)
         .order("desde", { ascending: false });
-    const [a0, g0, o] = await Promise.all([
+    const [a0, g0, o, j] = await Promise.all([
       leerAjustes(true),
       leerGastos(COLUMNAS_GASTOS[0]),
       tabla(context.supabase, "gerencia_objetivos")
         .select("id, desde, metros, vendido")
         .order("desde", { ascending: false }),
+      tabla(context.supabase, "gerencia_ajustes")
+        .select("hora_corte, metros_hora, jornada_inicio, jornada_fin, coste_envio_defecto")
+        .limit(1),
     ]);
     const a = faltaLaColumna(a0.error) ? await leerAjustes(false) : a0;
     let g = g0;
@@ -97,6 +108,8 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
         impuestosDisponibles: false,
         justificanteDisponible: false,
         ajustes: AJUSTES_POR_DEFECTO,
+        resumenDisponible: false,
+        resumen: AJUSTES_JORNADA_POR_DEFECTO,
         gastos: [],
         objetivos: [],
       };
@@ -104,8 +117,24 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
     const error = a.error ?? g.error ?? o.error;
     if (error) throw new Error(error.message);
     const fila = (a.data ?? [])[0] as Partial<Record<keyof AjustesGerencia, unknown>> | undefined;
+    // Sin la migración del Resumen (20261027100000) valen los de por defecto.
+    const resumenDisponible = !j.error;
+    if (j.error && !faltaLaColumna(j.error)) throw new Error(j.error.message);
+    const fj = (j.data ?? [])[0] as Partial<Record<keyof AjustesJornada, unknown>> | undefined;
+    const D = AJUSTES_JORNADA_POR_DEFECTO;
+    const numero = (v: unknown, defecto: number) => (v != null && v !== "" ? Number(v) : defecto);
+    const hora = (v: unknown, defecto: string) =>
+      typeof v === "string" && /^\d{2}:\d{2}/.test(v) ? v.slice(0, 5) : defecto;
     return {
       disponible: true,
+      resumenDisponible,
+      resumen: {
+        hora_corte: hora(fj?.hora_corte, D.hora_corte),
+        metros_hora: numero(fj?.metros_hora, D.metros_hora),
+        jornada_inicio: hora(fj?.jornada_inicio, D.jornada_inicio),
+        jornada_fin: hora(fj?.jornada_fin, D.jornada_fin),
+        coste_envio_defecto: numero(fj?.coste_envio_defecto, D.coste_envio_defecto),
+      },
       impuestosDisponibles: conImpuestos,
       justificanteDisponible: columnas === 0,
       ajustes: {
@@ -123,6 +152,8 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
     };
   });
 
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora no válida (hh:mm)");
+
 export const guardarAjustesGerencia = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
@@ -132,7 +163,20 @@ export const guardarAjustesGerencia = createServerFn({ method: "POST" })
         tipo_is: z.number().min(0).max(100).optional(),
         cuota_is_anterior: z.number().min(0).nullable().optional(),
         precio_metro: z.number().positive("El metro tiene que valer más de 0").optional(),
+        hora_corte: hhmm.optional(),
+        metros_hora: z
+          .number()
+          .positive("La máquina tiene que tirar más de 0 m/h")
+          .max(1000)
+          .optional(),
+        jornada_inicio: hhmm.optional(),
+        jornada_fin: hhmm.optional(),
+        coste_envio_defecto: z.number().min(0).max(1000).optional(),
       })
+      .refine(
+        (a) => !a.jornada_inicio || !a.jornada_fin || a.jornada_inicio < a.jornada_fin,
+        "La jornada tiene que acabar después de empezar",
+      )
       .parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -145,6 +189,9 @@ export const guardarAjustesGerencia = createServerFn({ method: "POST" })
       { empresa_id, ...cambios },
       { onConflict: "empresa_id" },
     );
+    if (faltaLaColumna(error)) {
+      throw new Error("Falta aplicar la migración 20261027100000_pedidos_realizado.sql");
+    }
     if (error) throw errorLegible(error);
     return { ok: true };
   });

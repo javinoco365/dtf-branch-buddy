@@ -551,6 +551,25 @@ export const AJUSTES_POR_DEFECTO: AjustesGerencia = {
   precio_metro: 7,
 };
 
+/** La jornada de impresión, la máquina, la hora de corte y el envío (Resumen diario). */
+export type AjustesJornada = {
+  /** 'hh:mm': lo que entra a esta hora o después se hace al día siguiente. */
+  hora_corte: string;
+  metros_hora: number;
+  jornada_inicio: string;
+  jornada_fin: string;
+  /** Lo que se estima que cobra la agencia por envío, sin IVA. */
+  coste_envio_defecto: number;
+};
+
+export const AJUSTES_JORNADA_POR_DEFECTO: AjustesJornada = {
+  hora_corte: "13:30",
+  metros_hora: 70,
+  jornada_inicio: "09:00",
+  jornada_fin: "13:00",
+  coste_envio_defecto: 5,
+};
+
 /** Un día `yyyy-MM-dd` como fecha local a mediodía, sin líos de huso. */
 function diaLocalDe(texto: string): Date {
   const [a, m, d] = texto.slice(0, 10).split("-").map(Number);
