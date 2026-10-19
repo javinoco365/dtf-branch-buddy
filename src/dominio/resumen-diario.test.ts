@@ -4,6 +4,9 @@ import {
   diasEntre,
   horasJornada,
   margenes,
+  proporcion,
+  ratiosDe,
+  serieDelResumen,
   resumenPeriodo,
   variacionResumen,
   type AjustesResumen,
@@ -296,5 +299,36 @@ describe("utilidades", () => {
     expect(variacionResumen(120, 100)).toBe(0.2);
     expect(variacionResumen(5, 0)).toBeNull();
     expect(variacionResumen(-50, -100)).toBe(0.5);
+  });
+});
+
+describe("informe de los socios", () => {
+  it("porcentajes de margen y de lo cobrado", () => {
+    const r = resumenPeriodo(
+      entrada({ pedidos: [web("a", { cobrado: 60.5 }), web("b", { cobrado: 121 })] }),
+    );
+    const x = ratiosDe(r.total);
+    expect(x.margenNeto).toBe(proporcion(r.total.pedido.margenConEnvios, 190));
+    expect(x.margenSinEnvios).toBe(0.7895);
+    expect(x.cobradoDeLoPedido).toBe(0.75);
+    expect(proporcion(5, 0)).toBeNull();
+  });
+
+  it("la serie va por días hasta un mes y por meses después", () => {
+    const p = web("a", { fecha_pedido: "2026-10-19T10:00:00+00:00" });
+    const q = web("b", { fecha_pedido: "2026-11-03T10:00:00+00:00" });
+    const corta = resumenPeriodo(
+      entrada({ desde: "2026-10-01", hasta: "2026-10-31", hoy: "2026-12-01", pedidos: [p] }),
+    );
+    expect(serieDelResumen(corta).por).toBe("dia");
+    expect(serieDelResumen(corta).tramos).toHaveLength(31);
+    const larga = resumenPeriodo(
+      entrada({ desde: "2026-10-01", hasta: "2026-12-31", hoy: "2026-11-15", pedidos: [p, q] }),
+    );
+    const s = serieDelResumen(larga);
+    expect(s.por).toBe("mes");
+    expect(s.tramos.map((t) => t.dia)).toEqual(["2026-10", "2026-11"]);
+    expect(s.tramos[0].pedidos).toBe(1);
+    expect(s.tramos[1].metrosPedidos).toBe(10);
   });
 });

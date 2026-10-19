@@ -32,7 +32,7 @@ import {
   type CifrasNegocio,
   type Resumen,
 } from "@/dominio/resumen-diario";
-import { porcentaje, textoAvisoResumen } from "./textos";
+import { porcentaje, textoAvisoResumen } from "@/lib/resumen-diario-textos";
 
 const NIVEL: Record<AvisoResumen["nivel"], { icono: typeof Info; clase: string }> = {
   alto: { icono: AlertTriangle, clase: "text-destructive" },

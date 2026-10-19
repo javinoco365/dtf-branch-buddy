@@ -184,22 +184,22 @@ function Gerencia() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h1 className="text-2xl font-bold">Gerencia</h1>
-          <p className="text-muted-foreground">
-            Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
-            (con el ratón encima, o tocándolo en el móvil).
-          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
+            <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
+            <BotonResumenDiario
+              tiendas={tiendas}
+              gastos={datos?.gastos ?? null}
+              objetivos={datos?.objetivos ?? ajustes.data?.objetivos ?? []}
+            />
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
-          <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
-          <BotonResumenDiario
-            tiendas={tiendas}
-            gastos={datos?.gastos ?? null}
-            objetivos={datos?.objetivos ?? ajustes.data?.objetivos ?? []}
-          />
-        </div>
+        <p className="text-muted-foreground">
+          Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
+          (con el ratón encima, o tocándolo en el móvil).
+        </p>
       </div>
 
       <Card className={enAjustes ? "hidden" : undefined}>
