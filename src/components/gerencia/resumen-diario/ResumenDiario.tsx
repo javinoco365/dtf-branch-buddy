@@ -62,7 +62,7 @@ export function BotonResumenDiario(props: {
   const [abierto, setAbierto] = useState(false);
   return (
     <>
-      <Button onClick={() => setAbierto(true)} className="max-md:w-full">
+      <Button size="sm" onClick={() => setAbierto(true)} className="max-md:w-full">
         <CalendarClock className="h-4 w-4" />
         Resumen diario
       </Button>

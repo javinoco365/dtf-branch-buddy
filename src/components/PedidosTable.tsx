@@ -612,7 +612,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   <div className="font-semibold">{eur(g.totales.total)}</div>
                   <div className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                     <MetrosSuma totales={g.totales} />
-                    {realizadosPorDia && <> · {metros(realizadosPorDia[g.fecha] ?? 0)} hechos</>}
+                    {!!realizadosPorDia?.[g.fecha] && (
+                      <> · {metros(realizadosPorDia[g.fecha])} hechos</>
+                    )}
                   </div>
                 </div>
                 <span className="font-semibold max-md:hidden">{eur(g.totales.total)}</span>
@@ -936,7 +938,7 @@ function FilaTotales({
       </TableCell>
       <TableCell className="text-right font-bold tabular-nums">
         <MetrosSuma totales={totales} />
-        {realizados !== undefined && (
+        {!!realizados && (
           <div
             className="whitespace-nowrap text-[11px] font-normal text-muted-foreground"
             title="Metros realizados (enviados) en estos días, sean del día que sean sus pedidos"
@@ -1068,10 +1070,8 @@ function FilaPedido({
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
         <TableCell>
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-sm truncate">{numeroLabel}</span>
-            <HoraPedido pedido={pedido} horaCorte={horaCorte} />
-          </div>
+          {/* El número entero, como siempre; la hora va debajo, junto al ticket. */}
+          <div className="font-mono text-sm truncate">{numeroLabel}</div>
           {mostrarTienda && (
             <div
               className="text-xs text-muted-foreground truncate"
@@ -1080,7 +1080,10 @@ function FilaPedido({
               {pedido.tienda_nombre ?? "—"}
             </div>
           )}
-          {pedido.documento && <BotonDocumento documento={pedido.documento} />}
+          <div className="flex flex-wrap items-center gap-x-1.5">
+            {pedido.documento && <BotonDocumento documento={pedido.documento} />}
+            <HoraPedido pedido={pedido} horaCorte={horaCorte} />
+          </div>
         </TableCell>
         <TableCell>
           {/* Con table-fixed la celda ya no se estira: un correo largo se
