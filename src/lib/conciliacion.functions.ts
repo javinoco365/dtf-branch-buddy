@@ -114,6 +114,8 @@ type FilaDocumento = {
   serie: string | null;
   ejercicio: number | null;
   numero: string | number | null;
+  /** Solo en las recibidas, con las migraciones de proformas: 'factura' o 'proforma'. */
+  tipo_documento?: string | null;
 };
 
 type FilaEnlace = {
@@ -169,7 +171,7 @@ function documentoDe(d: FilaDocumento): DocumentoConciliable {
     contraparte: d.contraparte,
     nif: d.nif,
     referencia: referenciaDe(d),
-    clase: CLASE[d.tipo],
+    clase: d.tipo === "compra" && d.tipo_documento === "proforma" ? "Proforma" : CLASE[d.tipo],
   };
 }
 
@@ -198,6 +200,7 @@ type FilaCompra = {
   proveedor: string | null;
   nif_proveedor: string | null;
   numero: string | null;
+  tipo_documento?: string | null;
 };
 type FilaFactura = {
   id: string;
@@ -212,6 +215,8 @@ type FilaFactura = {
 type FilaTextil = Omit<FilaFactura, "ejercicio" | "numero"> & { numero: string | null };
 
 const COLUMNAS_COMPRA = "id, fecha, liquido, proveedor, nif_proveedor, numero";
+/** Con las migraciones de proformas (20261029…): además el tipo de documento. */
+const COLUMNAS_COMPRA_PROFORMAS = `${COLUMNAS_COMPRA}, tipo_documento`;
 const COLUMNAS_FACTURA = "id, fecha, total, cliente_nombre, cliente_nif, serie, ejercicio, numero";
 const COLUMNAS_TEXTIL = "id, fecha, total, cliente_nombre, cliente_nif, serie, numero";
 
@@ -225,6 +230,7 @@ const deCompra = (c: FilaCompra): FilaDocumento => ({
   serie: null,
   ejercicio: null,
   numero: c.numero,
+  tipo_documento: c.tipo_documento ?? null,
 });
 const deFactura = (f: FilaFactura): FilaDocumento => ({
   tipo: "factura",
@@ -277,18 +283,24 @@ async function leerPendientes(supabase: unknown): Promise<Ventana | null> {
   if (movs.error) throw new Error(movs.error.message);
 
   // Cada clase con su ventana, en el orden de siempre: recibidas, facturas y textil.
-  const clases = await Promise.all(
-    (["compra", "factura", "textil"] as const).map((tipo) =>
-      recientes<FilaDocumento>((a, b) =>
-        filasDeFuncion(supabase, "banco_documentos_por_conciliar")
-          .select("tipo, id, fecha, importe, contraparte, nif, serie, ejercicio, numero")
-          .eq("tipo", tipo)
-          .order("fecha", { ascending: false })
-          .order("id")
-          .range(a, b),
+  const leerClases = (columnas: string) =>
+    Promise.all(
+      (["compra", "factura", "textil"] as const).map((tipo) =>
+        recientes<FilaDocumento>((a, b) =>
+          filasDeFuncion(supabase, "banco_documentos_por_conciliar")
+            .select(columnas)
+            .eq("tipo", tipo)
+            .order("fecha", { ascending: false })
+            .order("id")
+            .range(a, b),
+        ),
       ),
-    ),
-  );
+    );
+  const columnas = "tipo, id, fecha, importe, contraparte, nif, serie, ejercicio, numero";
+  // Con las migraciones de proformas, la función trae además tipo_documento
+  // (para la etiqueta «Proforma»); sin ellas, la de siempre.
+  let clases = await leerClases(`${columnas}, tipo_documento`);
+  if (clases.some((r) => faltaLaColumna(r.error))) clases = await leerClases(columnas);
   for (const r of clases) if (r.error) throw new Error(r.error.message);
 
   return {
@@ -344,16 +356,18 @@ async function leerDeTablas(supabase: unknown): Promise<Ventana | null> {
   if (faltaLaColumna(enl.error)) return null;
   if (enl.error) throw new Error(enl.error.message);
 
-  const [compras, facturas, textil] = await Promise.all([
+  const leerCompras = (columnas: string) =>
     recientes<FilaCompra>((a, b) =>
       tabla(supabase, "textil_compras")
-        .select(COLUMNAS_COMPRA)
+        .select(columnas)
         .eq("estado", "registrada")
         .is("borrada_en", null)
         .order("fecha", { ascending: false })
         .order("id")
         .range(a, b),
-    ),
+    );
+  const [comprasConTipo, facturas, textil, casadas] = await Promise.all([
+    leerCompras(COLUMNAS_COMPRA_PROFORMAS),
     recientes<FilaFactura & { estado: string }>((a, b) =>
       tabla(supabase, "facturas")
         .select(`${COLUMNAS_FACTURA}, estado`)
@@ -370,7 +384,24 @@ async function leerDeTablas(supabase: unknown): Promise<Ventana | null> {
         .order("id")
         .range(a, b),
     ),
+    // Las proformas que ya tienen factura: no son conciliables (como en
+    // banco_documentos(); su pago vive en la factura).
+    leerTodas<{ proforma_id: string }>((a, b) =>
+      tabla(supabase, "textil_compras")
+        .select("proforma_id")
+        .not("proforma_id", "is", null)
+        .order("id")
+        .range(a, b),
+    ),
   ]);
+  // Sin las migraciones de proformas: sin tipo y sin casadas.
+  const compras = faltaLaColumna(comprasConTipo.error)
+    ? await leerCompras(COLUMNAS_COMPRA)
+    : comprasConTipo;
+  const proformasCasadas = new Set(
+    faltaLaColumna(casadas.error) ? [] : casadas.data.map((c) => c.proforma_id),
+  );
+  if (!faltaLaColumna(casadas.error) && casadas.error) throw new Error(casadas.error.message);
   for (const r of [compras, facturas, textil]) if (r.error) throw new Error(r.error.message);
 
   const movsEnlazados = new Set(enl.data.map((e) => e.movimiento_id));
@@ -378,7 +409,7 @@ async function leerDeTablas(supabase: unknown): Promise<Ventana | null> {
     enl.data.flatMap((e) => [e.factura_id, e.compra_id, e.textil_factura_id].filter(Boolean)),
   );
   const documentos = [
-    ...compras.data.map(deCompra),
+    ...compras.data.filter((c) => !proformasCasadas.has(c.id)).map(deCompra),
     // Las de tienda en 'pagada' ya están cobradas por otra vía.
     ...facturas.data.filter((f) => f.estado !== "pagada").map(deFactura),
     ...textil.data.map(deTextil),

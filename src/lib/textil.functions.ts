@@ -333,11 +333,16 @@ export const listMovimientosStock = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ stock_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: filas, error } = await tabla(context.supabase, "textil_stock_movimientos")
-      .select("id, motivo, cantidad, coste_unitario, nota, created_at")
-      .eq("stock_id", data.stock_id)
-      .order("id", { ascending: false })
-      .limit(200);
+    const leer = (columnas: string) =>
+      tabla(context.supabase, "textil_stock_movimientos")
+        .select(columnas)
+        .eq("stock_id", data.stock_id)
+        .order("id", { ascending: false })
+        .limit(200);
+    const columnas = "id, motivo, cantidad, coste_unitario, nota, created_at";
+    // Con las migraciones de proformas, el importe de los ajustes de coste.
+    let { data: filas, error } = await leer(`${columnas}, importe_ajuste`);
+    if (faltaLaColumna(error)) ({ data: filas, error } = await leer(columnas));
     if (error) throw error;
     return filas ?? [];
   });

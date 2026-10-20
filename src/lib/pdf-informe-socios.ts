@@ -1266,6 +1266,20 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
   const y0 = c.y;
   tarjetas.forEach((t, i) => tarjeta(c, t, M + i * (w + 4), y0, w, alto));
   c.y = y0 + alto + 5;
+  // Proformas sin factura: el género ya está en el almacén y no cuentan en el
+  // IVA ni en Gerencia hasta que llegue su factura. Desde el día 1.
+  const pro = a.proformasSinFactura;
+  if (pro && pro.proformas > 0) {
+    c.sitio(8, "Almacén");
+    c.letra("negrita", 7.8, NARANJA);
+    c.texto(
+      `Proformas sin factura: ${numero(pro.proformas, 0)} (${eur(pro.importe)})` +
+        (pro.masAntigua ? `, la más antigua del ${fechaCorta(pro.masAntigua)}` : ""),
+      M,
+      c.y,
+    );
+    c.y += 6;
+  }
   // El «Beneficio» de este informe es margen menos gastos fijos: no resta las
   // mermas y ajustes (ni las compras ni las amortizaciones). Gerencia ›
   // Resultados sí. Se dice para que nadie compare las dos cifras sin saberlo.
@@ -1340,6 +1354,7 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
     `Valor según la caché − valor según el libro: ${
       r.diferenciaValorCache === null ? "—" : eur(r.diferenciaValorCache)
     }. Informativo, no cuenta como control: con el coste medio solo lo mueven los redondeos y las variantes que llegaron a quedar en negativo.` +
+    " En las compras, una factura casada con su proforma se comprueba junto con ella: lo que no se pudo llevar al stock (lo ya vendido) se descuenta." +
     (r.todoEnCero
       ? ""
       : " Si algún control no da 0, hay que mirarlo antes de fiarse de las cifras del almacén.");

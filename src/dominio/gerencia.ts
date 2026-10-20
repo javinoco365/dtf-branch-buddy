@@ -22,6 +22,7 @@ import { TIENDA_TEXTIL } from "./cobros";
 import { diaDelPedido } from "./dia-pedido";
 import { diasDesde, type PedidoPendiente } from "./pendientes";
 import type { CobroConsolidado } from "./facturacion";
+import type { ResumenProformas } from "./proformas";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -399,7 +400,16 @@ export type Aviso =
       /** Si cuentan en lo vendido (Gerencia › Ajustes). */
       cuentan: boolean;
     }
-  | { tipo: "banco_sin_casar"; nivel: "medio"; movimientos: number; importe: number };
+  | { tipo: "banco_sin_casar"; nivel: "medio"; movimientos: number; importe: number }
+  | {
+      tipo: "proforma_sin_factura";
+      nivel: "medio";
+      proformas: number;
+      importe: number;
+      /** Fecha de la más antigua. */
+      masAntigua: string | null;
+      dias: number | null;
+    };
 
 /** Cuánto tiene que caer lo vendido, en %, para avisar. */
 export const CAIDA_AVISO = 20;
@@ -415,6 +425,8 @@ export function avisosGerencia(d: {
   /** Pedidos web del periodo todavía sin pagar, y si cuentan en lo vendido. */
   webSinPagar: { pedidos: number; importe: number; cuentan: boolean };
   banco: ResumenBanco | null;
+  /** Proformas registradas sin factura (resumenProformas). Desde el día 1, sin periodo. */
+  proformas?: ResumenProformas | null;
 }): Aviso[] {
   const avisos: Aviso[] = [];
   const viejos = d.tramos.find((t) => t.clave === "60+");
@@ -438,6 +450,16 @@ export function avisosGerencia(d: {
       nivel: "medio",
       movimientos: d.banco.movimientosSinConciliar,
       importe: d.banco.sinConciliar,
+    });
+  }
+  if (d.proformas && d.proformas.proformas > 0) {
+    avisos.push({
+      tipo: "proforma_sin_factura",
+      nivel: "medio",
+      proformas: d.proformas.proformas,
+      importe: d.proformas.importe,
+      masAntigua: d.proformas.masAntigua,
+      dias: d.proformas.diasMasAntigua,
     });
   }
   return avisos;

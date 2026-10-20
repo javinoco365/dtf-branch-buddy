@@ -1,0 +1,36 @@
+-- ============================================================================
+-- PROFORMAS (1 de 2) · El motivo «ajuste_coste» en el libro de stock
+-- ============================================================================
+--
+-- QUÉ RESUELVE
+--   Cuando llega la factura de una proforma con otro precio, portes o
+--   descuento, el stock que aún queda de cada variante se revaloriza al coste
+--   de la factura (decisión 7 de Javier, docs/proformas/decisiones.md). Eso se
+--   anota en el libro con un movimiento nuevo: «ajuste_coste» (cantidad 0, con
+--   su importe). Esta migración solo añade ese valor al enum stock_motivo.
+--
+-- QUÉ CAMBIA
+--   1. ALTER TYPE public.stock_motivo ADD VALUE 'ajuste_coste'.
+--
+-- POR QUÉ VA SOLA
+--   PostgreSQL no deja usar un valor de enum nuevo en la misma transacción que
+--   lo añade («unsafe use of new value»). La migración siguiente
+--   (20261029100100_proformas_compras.sql) ya lo nombra en sus CHECK.
+--
+--   SE APLICAN EN DOS EJECUCIONES SEPARADAS: primero esta, después
+--   20261029100100. Pegadas juntas en el editor SQL de Supabase van en una
+--   sola transacción y la segunda falla. La segunda empieza con una guarda que
+--   lo dice.
+--
+-- SIN ESTA MIGRACIÓN
+--   Nada cambia: nadie usa el valor hasta aplicar 20261029100100.
+--
+-- NO TOCA NINGUNA FILA. Se puede aplicar dos veces (IF NOT EXISTS).
+--
+-- REVERSIBLE
+--   No del todo: PostgreSQL no quita un valor de un enum. La reversión
+--   (supabase/reversiones/20261029100000_proformas_motivo.sql) no hace nada;
+--   sin la otra migración, nadie usa el valor.
+-- ============================================================================
+
+ALTER TYPE public.stock_motivo ADD VALUE IF NOT EXISTS 'ajuste_coste';

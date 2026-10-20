@@ -5,8 +5,10 @@ import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } f
 import { leerTodas } from "./paginar";
 import {
   AVISO_MIGRACION_ESCANER,
+  AVISO_MIGRACION_PROFORMAS,
   escanerAplicado,
   mensajeErrorEscaner,
+  proformasAplicado,
   textoONulo,
 } from "./escaner-textil";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
@@ -14,8 +16,10 @@ import { CATEGORIAS_COMPRA, FORMAS_PAGO } from "@/dominio/compras";
 import { avisoDuplicado, type CompraComparable } from "@/dominio/cola-compras";
 import { normalizarEan } from "@/dominio/normalizar-textil";
 import { conCostesDeEntrada } from "@/dominio/reparto-compra";
+import type { EntradaProforma } from "@/dominio/proformas";
 import {
   METODOS_CASADO,
+  TIPOS_DOCUMENTO_COMPRA,
   TIPOS_LINEA_COMPRA,
   type LineaRegistro,
   type NuevaVariante,
@@ -249,6 +253,8 @@ const lineaRegistroSchema = z.object({
   stock_id: z.string().uuid().nullable(),
   nueva_variante: nuevaVarianteSchema.nullable(),
   casado_metodo: z.enum(METODOS_CASADO).nullable(),
+  // Con las migraciones de proformas: la línea del papel de la que sale (partida por tallas).
+  linea_papel: z.number().int().positive().nullable().optional(),
 });
 
 const registroSchema = compraSchema.extend({
@@ -257,6 +263,10 @@ const registroSchema = compraSchema.extend({
   proveedor_id: z.string().uuid().nullable().optional(),
   lectura_ia: z.string().nullable().optional(),
   lineas: z.array(lineaRegistroSchema),
+  // Con las migraciones de proformas (20261029…): qué documento es y, en una
+  // factura, la proforma con la que se casa.
+  tipo_documento: z.enum(TIPOS_DOCUMENTO_COMPRA).optional(),
+  proforma_id: z.string().uuid().nullable().optional(),
 });
 
 export type EntradaRegistroCompra = z.input<typeof registroSchema>;
@@ -275,6 +285,11 @@ export type SalidaRegistroCompra = ResultadoRegistro & { atomica: boolean };
  * Sin la migración 20261028100200, cae al camino viejo (guardar el borrador y
  * `textil_compra_registrar`) si la compra no necesita nada nuevo; si lo
  * necesita, lo dice.
+ *
+ * Una proforma, o una factura casada con su proforma, solo se registra con las
+ * migraciones de proformas aplicadas, y nunca por el camino viejo: la función
+ * vieja ignoraría `tipo_documento` y `proforma_id` en silencio y el género de la
+ * proforma entraría dos veces (contrato, A12).
  */
 export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -283,6 +298,12 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
     const { lineas: lineasEntrada, lectura_ia, ...cab } = data;
     const id = cab.id ?? null;
     const categoria = cab.categoria ?? "textil";
+    const tipoDocumento = cab.tipo_documento ?? "factura";
+    const proformaId = cab.proforma_id ?? null;
+    const conProforma = tipoDocumento === "proforma" || proformaId !== null;
+    if (conProforma && !(await proformasAplicado(context.supabase))) {
+      throw new Error(AVISO_MIGRACION_PROFORMAS);
+    }
     const empresa_id = id ? null : await empresaActiva(context.supabase);
 
     // EAN: en la línea, uno que no vale se manda nulo (el aviso ya lo vio la
@@ -304,6 +325,7 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
         unidades_stock: null,
         coste_total_entrada: null,
         coste_unitario_entrada: null,
+        linea_papel: l.linea_papel ?? null,
       };
     });
 
@@ -312,6 +334,8 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
      * `textil_compra_registrar`, como antes de esta obra.
      */
     const caminoViejo = async (): Promise<SalidaRegistroCompra> => {
+      // Red de seguridad: con proforma, el camino viejo duplicaría el stock.
+      if (conProforma) throw new Error(AVISO_MIGRACION_PROFORMAS);
       // Sin la migración: lo nuevo (variantes que crear, packs que entran al
       // stock) no se puede registrar por el camino viejo sin perderlo. Una
       // línea de portes o de descuento sin variante sí: no mueve stock, como
@@ -327,9 +351,17 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
         );
       if (necesitaEscaner) throw new Error(AVISO_MIGRACION_ESCANER);
 
-      // Solo las columnas de siempre: sin proveedor_id ni los campos nuevos de línea.
-      const { proveedor_id: _sinProveedor, ...cabeceraVieja } = cab;
+      // Solo las columnas de siempre: sin proveedor_id, sin las de proformas
+      // (aquí siempre factura sin proforma) ni los campos nuevos de línea.
+      const {
+        proveedor_id: _sinProveedor,
+        tipo_documento: _sinTipo,
+        proforma_id: _sinProforma,
+        ...cabeceraVieja
+      } = cab;
       void _sinProveedor;
+      void _sinTipo;
+      void _sinProforma;
       const { id: guardada } = await guardarBorrador(context.supabase, {
         ...cabeceraVieja,
         id: id ?? undefined,
@@ -351,6 +383,9 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
         aprendidas: 0,
         proveedor_id: null,
         proveedor_nuevo: false,
+        tipo_documento: "factura",
+        proforma_id: null,
+        casado: null,
         atomica: false,
       };
     };
@@ -358,12 +393,13 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
     // El reparto que manda es este, no el del navegador. Sin las migraciones
     // no hay reparto ni comprobación al céntimo: la factura se registra como
     // antes (una que no cuadra con su base no se bloquea por algo que aún no
-    // existe en la base).
+    // existe en la base). La proforma y la factura casada pasan también por el
+    // reparto (contrato, A1); si no cuadra, se dice: nunca camino viejo.
     let conCostes = lineas;
     if (categoria === "textil") {
       const r = conCostesDeEntrada(lineas, cab.base);
       if (r.ok) conCostes = r.lineas;
-      else if (await escanerAplicado(context.supabase)) {
+      else if (conProforma || (await escanerAplicado(context.supabase))) {
         throw new Error(mensajeErrorEscaner(r.errores[0]));
       } else return caminoViejo();
     }
@@ -395,6 +431,8 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
       ...(cab.notas === undefined ? {} : { notas: cab.notas }),
       lectura_ia: lecturaIa,
       lineas: conCostes,
+      tipo_documento: tipoDocumento,
+      proforma_id: proformaId,
     };
 
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -404,6 +442,7 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
       { _compra, _usuario_id: context.userId },
     );
 
+    // Sin la función, el camino viejo; con proforma, caminoViejo lanza el aviso.
     if (faltaLaFuncion(error)) return caminoViejo();
     // Los mensajes de la base ya son para la persona (contrato, 1.4).
     if (error) throw new Error(error.message);
@@ -415,6 +454,9 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
       aprendidas: Number(resultado.aprendidas ?? 0),
       proveedor_id: resultado.proveedor_id ?? null,
       proveedor_nuevo: Boolean(resultado.proveedor_nuevo),
+      tipo_documento: resultado.tipo_documento ?? "factura",
+      proforma_id: resultado.proforma_id ?? null,
+      casado: resultado.casado ?? null,
       atomica: true,
     };
   });
@@ -422,7 +464,7 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
 /**
  * Las compras, con sus líneas. `soloTextil`: solo las de textil (todas, sin
  * la migración de compras generales, que lo son). `generales` dice si la
- * migración está aplicada.
+ * migración está aplicada; `proformas`, si lo están las de proformas.
  */
 export const listCompras = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -438,6 +480,8 @@ export const listCompras = createServerFn({ method: "GET" })
     const cola = !faltaLaColumna(prueba3.error);
     // Con las migraciones 20261028…: revisión con el escáner textil.
     const escaner = await escanerAplicado(context.supabase);
+    // Con las migraciones 20261029…: proformas y casado con su factura.
+    const proformas = await proformasAplicado(context.supabase);
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const { data: compras, error } = await leerTodas<any>((a, b) => {
       let consulta = tabla(context.supabase, "textil_compras").select(
@@ -454,7 +498,39 @@ export const listCompras = createServerFn({ method: "GET" })
         .range(a, b);
     });
     if (error) throw new Error(error.message);
-    return { compras: (compras ?? []) as any[], generales, recibidas, cola, escaner };
+    return {
+      compras: (compras ?? []) as any[],
+      generales,
+      recibidas,
+      cola,
+      escaner,
+      proformas,
+    };
+  });
+
+/**
+ * Lo que metió una proforma en el libro de stock, por variante (ya resuelta a
+ * su destino si se fusionó): para enseñar la comparación talla a talla antes
+ * de registrar su factura. Sin la migración de proformas, nada.
+ */
+export const entradasDeProforma = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ proforma_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<EntradaProforma[]> => {
+    const { data: filas, error } = await llamarRpcConError<Record<string, unknown>[]>(
+      context.supabase,
+      "proforma_entradas",
+      { _proforma_id: data.proforma_id },
+    );
+    if (faltaLaFuncion(error)) return [];
+    if (error) throw new Error(error.message);
+    return (filas ?? []).map((f) => ({
+      stock_id: String(f.stock_id),
+      unidades: Number(f.unidades ?? 0),
+      valor: Number(f.valor ?? 0),
+      coste_unitario: Number(f.coste_unitario ?? 0),
+      devueltas: Number(f.devueltas ?? 0),
+    }));
   });
 
 /**

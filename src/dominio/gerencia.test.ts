@@ -504,3 +504,54 @@ describe("beneficio estimado", () => {
     expect(beneficioEstimado(0, gastos, septiembre, new Date(2026, 7, 20)).gastos).toBe(0);
   });
 });
+
+describe("aviso de proformas sin factura", () => {
+  const base = {
+    tramos: [],
+    variacionVendido: null,
+    webSinPagar: { pedidos: 0, importe: 0, cuentan: true },
+    banco: null,
+  };
+
+  it("desde la primera proforma, el último", () => {
+    const a = avisosGerencia({
+      ...base,
+      webSinPagar: { pedidos: 1, importe: 10, cuentan: true },
+      proformas: {
+        proformas: 2,
+        importe: 181.5,
+        pagadas: 1,
+        importePagado: 121,
+        masAntigua: "2026-10-20",
+        diasMasAntigua: 0,
+      },
+    });
+    expect(a.map((x) => x.tipo)).toEqual(["web_sin_pagar", "proforma_sin_factura"]);
+    expect(a[1]).toEqual({
+      tipo: "proforma_sin_factura",
+      nivel: "medio",
+      proformas: 2,
+      importe: 181.5,
+      masAntigua: "2026-10-20",
+      dias: 0,
+    });
+  });
+
+  it("sin proformas o sin el dato, ningún aviso", () => {
+    expect(avisosGerencia(base)).toEqual([]);
+    expect(avisosGerencia({ ...base, proformas: null })).toEqual([]);
+    expect(
+      avisosGerencia({
+        ...base,
+        proformas: {
+          proformas: 0,
+          importe: 0,
+          pagadas: 0,
+          importePagado: 0,
+          masAntigua: null,
+          diasMasAntigua: null,
+        },
+      }),
+    ).toEqual([]);
+  });
+});

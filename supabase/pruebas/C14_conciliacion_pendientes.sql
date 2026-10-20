@@ -15,6 +15,11 @@
 --
 -- Se vuelve a aplicar la migración: así se prueba que se puede aplicar dos
 -- veces, y 20_auditoria_autor.sql no tapa el REVOKE que se comprueba en la 8.
+-- Antes se borran las dos que 20261029100100 (proformas) recrea con una
+-- columna más: el CREATE OR REPLACE de aquí no puede cambiar su tipo de
+-- retorno. C19 vuelve a poner las de proformas.
+DROP FUNCTION IF EXISTS public.banco_documentos_por_conciliar();
+DROP FUNCTION IF EXISTS public.banco_documentos();
 \ir ../migrations/20261025100000_conciliacion_pendientes.sql
 
 BEGIN;

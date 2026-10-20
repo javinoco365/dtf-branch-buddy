@@ -23,6 +23,7 @@ import {
   useCosteMetroActual,
   useMovimientosAlmacen,
   usePagosProveedores,
+  useProformasPendientes,
 } from "@/lib/gerencia";
 import { useDatosResumen, useDocumentosResumen, type DatosResumen } from "@/lib/resumen-diario";
 import { recuperarRealizadoWoo } from "@/lib/woocommerce.functions";
@@ -55,6 +56,7 @@ import { diaRealizado } from "@/dominio/realizado";
 import { resumenPeriodo, type DocumentoParaResumen, type Resumen } from "@/dominio/resumen-diario";
 import { cuentaAlmacen, type InformeAlmacen } from "@/dominio/cuenta-almacen";
 import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
+import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
 import { ErrorPestana, Nota } from "../comun";
 import { Esquema } from "./Esquema";
 import { Desglose } from "./Desglose";
@@ -182,6 +184,8 @@ function Contenido({
   const movimientosAlmacen = useMovimientosAlmacen();
   const controlesAlmacen = useControlesAlmacen(rango);
   const pagosProveedores = usePagosProveedores();
+  // Sin la migración de proformas, nulo: el informe sale sin esa línea.
+  const proformasPendientes = useProformasPendientes();
   const informeAlmacen = useMemo<InformeAlmacen | null>(() => {
     const movs = movimientosAlmacen.data;
     if (!movs) return null;
@@ -195,12 +199,24 @@ function Contenido({
       valorHoy: controles?.disponible ? controles.valorCache : null,
       controles: resumenControlesAlmacen(controles, movs.movimientos, ahora),
       pagosProveedores: pagos ? { total: pagos.total, facturas: pagos.facturas } : null,
+      proformasSinFactura: proformasPendientes.data
+        ? resumenProformas(proformasSinFactura(proformasPendientes.data, ahora))
+        : null,
     };
-  }, [movimientosAlmacen.data, controlesAlmacen.data, pagosProveedores.data, rango]);
+  }, [
+    movimientosAlmacen.data,
+    controlesAlmacen.data,
+    pagosProveedores.data,
+    proformasPendientes.data,
+    rango,
+  ]);
 
   // Mientras se lee el almacén, el botón espera: «leyendo» no es «sin datos».
   const almacenLeido =
-    !movimientosAlmacen.isPending && !controlesAlmacen.isPending && !pagosProveedores.isPending;
+    !movimientosAlmacen.isPending &&
+    !controlesAlmacen.isPending &&
+    !pagosProveedores.isPending &&
+    !proformasPendientes.isPending;
 
   const error = actual.error ?? docs.error;
   const etiqueta = etiquetaPeriodo(seleccion);

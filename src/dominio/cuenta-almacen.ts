@@ -7,12 +7,14 @@
  * movimientos hasta ese día. El valor de cada movimiento es
  * redondear(cantidad × coste_unitario, 2) (I9) y todas las partidas suman esos
  * mismos valores, así que la identidad es exacta y el descuadre es 0 siempre
- * que los datos sean coherentes.
+ * que los datos sean coherentes. Un `ajuste_coste` (factura casada que cuesta
+ * distinto que su proforma) no mueve unidades y vale su `importe_ajuste`.
  *
  * Lógica pura: sin base de datos ni red.
  */
 
 import type { ResumenControles } from "./controles-almacen";
+import type { ResumenProformas } from "./proformas";
 import { diaEnEspana } from "./fecha-documento";
 import { redondear } from "./importes";
 import type { MotivoStock, Partida } from "./tipos-textil";
@@ -27,6 +29,14 @@ export type MovimientoAlmacen = {
   compra_id?: string | null;
   /** Para separar lo que ya cuesta por pedido («Coste de la ropa») de lo que no. */
   textil_pedido_id?: string | null;
+  /** Solo `ajuste_coste`: su valor, con signo (la cantidad es 0). */
+  importe_ajuste?: number | string | null;
+  /**
+   * Lo pone el servidor en las `devolucion_proveedor` cuyo `compra_id` es una
+   * factura casada con proforma: las unidades de la proforma que la factura no
+   * trae. Corrigen una entrada (van a Compras), no son una pérdida.
+   */
+  regularizacion?: boolean;
 };
 
 const numero = (v: number | string | null | undefined) => {
@@ -47,8 +57,17 @@ export function fechaEfectiva(m: Pick<MovimientoAlmacen, "fecha" | "created_at">
   return "";
 }
 
-/** redondear(cantidad × coste_unitario, 2), con signo (I9). */
-export function valorMovimiento(m: Pick<MovimientoAlmacen, "cantidad" | "coste_unitario">): number {
+/**
+ * redondear(cantidad × coste_unitario, 2), con signo (I9). Un `ajuste_coste`
+ * vale su `importe_ajuste` (P10).
+ */
+export function valorMovimiento(
+  m: Pick<MovimientoAlmacen, "cantidad" | "coste_unitario"> & {
+    motivo?: string;
+    importe_ajuste?: number | string | null;
+  },
+): number {
+  if (m.motivo === "ajuste_coste") return redondear(Number(m.importe_ajuste) || 0, 2);
   return redondear(numero(m.cantidad) * numero(m.coste_unitario), 2);
 }
 
@@ -75,7 +94,7 @@ export type CuentaAlmacen = {
   desde: string;
   hasta: string;
   inicial: Partida; // todo lo anterior a `desde`
-  compras: Partida; // motivo compra en el periodo
+  compras: Partida; // motivo compra, ajuste_coste y salidas de regularización en el periodo
   altas: Partida; // motivo inicial en el periodo
   devolucionesCliente: Partida;
   ventas: Partida; // en positivo: lo que sale
@@ -123,8 +142,15 @@ export function cuentaAlmacen(
       sumar(inicial, m);
       continue;
     }
+    // Las salidas de la regularización corrigen una entrada: Compras, con su signo.
+    const regulariza = m.motivo === "devolucion_proveedor" && m.regularizacion === true;
+    if (regulariza) {
+      sumar(compras, m);
+      continue;
+    }
     switch (m.motivo) {
       case "compra":
+      case "ajuste_coste":
         sumar(compras, m);
         break;
       case "inicial":
@@ -147,7 +173,12 @@ export function cuentaAlmacen(
         // para que la identidad no se rompa.
         sumar(ajustes, m);
     }
-    if (m.motivo !== "compra" && m.motivo !== "inicial" && !cuestaPorPedido(m)) {
+    if (
+      m.motivo !== "compra" &&
+      m.motivo !== "ajuste_coste" &&
+      m.motivo !== "inicial" &&
+      !cuestaPorPedido(m)
+    ) {
       perdidas -= valorMovimiento(m);
     }
   }
@@ -200,4 +231,6 @@ export type InformeAlmacen = {
   valorHoy: number | null;
   controles: ResumenControles | null; // de controles-almacen.ts
   pagosProveedores: { total: number; facturas: number } | null;
+  /** Proformas registradas sin factura (aviso desde el día 1). */
+  proformasSinFactura?: ResumenProformas | null;
 };

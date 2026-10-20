@@ -13,8 +13,8 @@ import {
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
-import { usePagosProveedores } from "@/lib/gerencia";
-import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
+import { usePagosProveedores, useProformasPendientes } from "@/lib/gerencia";
+import { anticiposProveedores, pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { variacion } from "@/dominio/kpis";
 import { desglosePorMetodo, totalizar } from "@/dominio/facturacion";
 import { totalesCaja } from "@/dominio/caja";
@@ -232,6 +232,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
       </div>
 
       <PagosProveedores hoy={d.hoy} />
+      <AnticiposProveedores hoy={d.hoy} />
     </div>
   );
 }
@@ -384,6 +385,102 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
                 </TableFooter>
               </Table>
             </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Lo pagado por adelantado a proveedores con proformas que aún no tienen
+ * factura. No depende del periodo. Sin la migración de proformas, nada.
+ */
+function AnticiposProveedores({ hoy }: { hoy: Date }) {
+  const consulta = useProformasPendientes();
+  const anticipos = useMemo(
+    () => (consulta.data ? anticiposProveedores(consulta.data, hoy) : null),
+    [consulta.data, hoy],
+  );
+  // Sin la migración (null) o mientras se lee, no se enseña nada.
+  if (!consulta.error && !anticipos) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-base">
+          <HandCoins className="h-4 w-4 text-muted-foreground" />
+          Anticipos a proveedores
+          <Explicacion
+            titulo="Anticipos a proveedores"
+            definicion={DEFINICIONES.g_anticipos_proveedores}
+          />
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Proformas pagadas que esperan su factura. No depende del periodo.{" "}
+          <VerDetalle
+            destino={{ to: "/panel/textil/compras", search: { documento: "proformas_pendientes" } }}
+            texto="Ver proformas"
+          />
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {consulta.error ? (
+          <p className="text-sm text-destructive">
+            No se han podido leer las proformas: {consulta.error.message}
+          </p>
+        ) : !anticipos || anticipos.proformas === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay anticipos: ninguna proforma pagada espera su factura.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <span className="text-2xl font-semibold tabular-nums">{eur(anticipos.total)}</span>
+              <span className="text-sm text-muted-foreground">
+                {numero(anticipos.proformas, 0)}{" "}
+                {anticipos.proformas === 1 ? "proforma" : "proformas"}
+                {anticipos.masAntigua &&
+                  ` · el pago más antiguo, del ${fechaCorta(anticipos.masAntigua)}`}
+              </span>
+            </div>
+            <Table movil="tarjetas">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proveedor</TableHead>
+                  <TableHead className="text-right">Proformas</TableHead>
+                  <TableHead className="text-right">Pagado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {anticipos.porProveedor.map((p) => (
+                  <TableRow key={p.clave}>
+                    <TableCell className="font-medium">
+                      {p.nombre}
+                      {p.masAntigua && (
+                        <span className="block text-xs text-muted-foreground">
+                          {p.facturas === 1 ? "Pagada el" : "El pago más antiguo, del"}{" "}
+                          {fechaCorta(p.masAntigua)}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{p.facturas}</TableCell>
+                    <TableCell className="text-right tabular-nums">{eur(p.importe)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="font-bold">Total</TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {numero(anticipos.proformas, 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(anticipos.total)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
           </>
         )}
       </CardContent>

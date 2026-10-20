@@ -10,7 +10,7 @@ import {
 import { normalizarTexto } from "@/dominio/clientes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +65,12 @@ import {
   verFicheroCompra,
 } from "@/lib/compras.functions";
 import { guardarProveedor, listProveedores } from "@/lib/escaner-textil.functions";
-import { AVISO_MIGRACION_ESCANER, lineaDesdeFila, lineaEnvioSimple } from "@/lib/escaner-textil";
+import {
+  AVISO_MIGRACION_ESCANER,
+  AVISO_MIGRACION_PROFORMAS,
+  lineaDesdeFila,
+  lineaEnvioSimple,
+} from "@/lib/escaner-textil";
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
@@ -73,15 +78,37 @@ import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
 import { deCompra, nombreZip } from "@/dominio/archivo";
 import { SubidaFacturas } from "./SubidaFacturas";
 import { ColaRevision } from "./ColaRevision";
+import { ProformasPendientes } from "./ProformasPendientes";
+import { CasarProforma, SelectorTipoDocumento, textoCasado } from "./CasarProforma";
 import {
+  cabecerasLineaPapel,
   Campo,
+  conTipoDocumento,
   FicheroRevision,
+  FilaLineaPapel,
+  pendientesDeProforma,
   RevisarCompraTextil,
+  sugerenciasDeProforma,
   TarjetaQueMirar,
   type ExtraRegistro,
   type Revision,
 } from "./RevisarCompraTextil";
-import { avisosQueImportan, bloqueaRegistro, duplicadosDe } from "@/dominio/cola-compras";
+import {
+  avisosQueImportan,
+  bloqueaRegistro,
+  duplicadosDe,
+  referenciaProformaDe,
+  tipoDocumentoLeido,
+} from "@/dominio/cola-compras";
+import {
+  esProforma,
+  facturasPorProforma,
+  FILTROS_DOCUMENTO,
+  pasaFiltroDocumento,
+  type FiltroDocumento,
+  type ProformaFila,
+} from "@/dominio/proformas";
+import type { ResumenCasado } from "@/dominio/tipos-textil";
 import {
   calcularCompra,
   cambiarLineaCompra,
@@ -157,6 +184,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   // Con la migración del escáner textil: casado automático, reparto de portes
   // y registro en una sola transacción.
   const escaner = data?.escaner === true;
+  // Con las migraciones de proformas: factura o proforma, casado y regularización.
+  // Sin ellas, nada de proformas se ve (ni se manda).
+  const proformas = data?.proformas === true;
   // Los duplicados se buscan entre TODAS las compras, no solo las de esta
   // pantalla: una factura textil puede estar ya registrada en Compras
   // generales con otra categoría (la IA la clasificó mal). En la pantalla
@@ -190,6 +220,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     nota: "",
     concepto: "",
     forma_pago: null,
+    tipo_documento: compra.tipo_documento ?? null,
+    proforma_id: null,
+    sinProforma: false,
   });
   /** Una factura de la cola, para revisarla con lo que leyó la IA. */
   const desdeFila = (c: any): Revision => {
@@ -208,7 +241,11 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         .slice()
         .sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
         .map(lineaDesdeFila),
+      referencia_proforma: referenciaProformaDe(c.lectura_ia),
     };
+    // Lo que dijo la IA (nulo si dudó); si la lectura no lo trae, lo de la fila.
+    const leido =
+      c.lectura_ia && typeof c.lectura_ia === "object" && "tipo_documento" in c.lectura_ia;
     return {
       ...nueva(compra, null),
       id: c.id,
@@ -222,6 +259,13 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       motivos: c.revision_motivo ?? null,
       fichero_huella: c.fichero_huella ?? null,
       otraFactura: false,
+      tipo_documento: leido
+        ? tipoDocumentoLeido(c.lectura_ia)
+        : c.tipo_documento === "proforma" || c.tipo_documento === "factura"
+          ? c.tipo_documento
+          : null,
+      proforma_id: c.proforma_id ?? null,
+      sinProforma: false,
     };
   };
   // Los filtros viven en la dirección.
@@ -238,9 +282,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     trimestre: "todos",
     proveedor: "todos",
     fichero: "todos",
+    documento: "todos",
   });
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
+  // Las proformas que ya tienen su factura (las facturas de la lista que apuntan a ellas).
+  const facturaDe = useMemo(() => facturasPorProforma(compras as ProformaFila[]), [compras]);
+  const casadas = useMemo(() => new Set(facturaDe.keys()), [facturaDe]);
+  const porId = useMemo(
+    () => new Map((compras as any[]).map((c) => [c.id as string, c])),
+    [compras],
+  );
+  const filtroDocumento = (proformas ? filtros.documento : "todos") as FiltroDocumento;
   const filtrados = useMemo(() => {
     const q = normalizarTexto(filtros.q);
     return (compras as any[]).filter(
@@ -255,6 +308,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         (filtros.estado === "todos" ? !c.borrada_en : estadoDe(c) === filtros.estado) &&
         (filtros.categoria === "todas" || (c.categoria ?? "textil") === filtros.categoria) &&
         (filtros.fichero === "todos" || (filtros.fichero === "con") === !!c.fichero_ruta) &&
+        pasaFiltroDocumento(c, filtroDocumento, casadas) &&
         (!q || normalizarTexto(c.proveedor).includes(q) || normalizarTexto(c.numero).includes(q)),
     );
   }, [
@@ -267,12 +321,20 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     filtros.trimestre,
     filtros.proveedor,
     filtros.fichero,
+    filtroDocumento,
+    casadas,
     periodo.rango,
   ]);
   // Los que se están viendo, para descargarlos en un ZIP.
   const docsFiltrados = useMemo(() => (filtrados as any[]).map(deCompra), [filtrados]);
   // El pie: lo que se ve, sin los borradores (no cuentan en Gerencia ni en el IVA).
   const totales = useMemo(() => totalesCompras(filtrados), [filtrados]);
+  // Las proformas sin factura salen siempre, sin filtros ni periodo; las de la
+  // cola, no (aún no están registradas).
+  const paraProformas = useMemo(
+    () => (proformas ? (compras as any[]).filter((c) => !(cola && enCola(c))) : []),
+    [compras, cola, proformas],
+  );
   const enLaCola = useMemo(
     () => (cola ? (compras as any[]).filter((c) => enCola(c) && !c.borrada_en) : []),
     [compras, cola],
@@ -398,6 +460,14 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
             : {}),
           lectura_ia: revisando.lectura,
           proveedor_id: extra?.proveedor_id ?? null,
+          // Con las migraciones de proformas, qué documento es y con qué
+          // proforma se casa. Sin ellas no se manda: la base vieja los ignoraría.
+          ...(proformas
+            ? {
+                tipo_documento: revisando.tipo_documento ?? "factura",
+                proforma_id: revisando.tipo_documento === "factura" ? revisando.proforma_id : null,
+              }
+            : {}),
           lineas:
             extra?.lineas ??
             leidas.map((l, i) =>
@@ -418,7 +488,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       return { ...r, sinFichero };
     },
     onSuccess: (r) => {
-      toast.success(textoRegistrada(r));
+      toast.success(r.casado ? textoCasado(r.casado as ResumenCasado) : textoRegistrada(r));
       if (r.sinFichero) {
         toast.warning(`No se pudo guardar el fichero: ${r.sinFichero}. Adjúntalo desde la lista.`);
       }
@@ -429,6 +499,10 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       qc.invalidateQueries({ queryKey: ["escaner-memoria"] });
       qc.invalidateQueries({ queryKey: ["textil-productos"] });
       qc.invalidateQueries({ queryKey: ["proveedores"] });
+      qc.invalidateQueries({ queryKey: ["proformas-pendientes"] });
+      qc.invalidateQueries({ queryKey: ["almacen-movimientos"] });
+      qc.invalidateQueries({ queryKey: ["almacen-controles"] });
+      qc.invalidateQueries({ queryKey: ["gerencia-pagos-proveedores"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo registrar la compra"),
   });
@@ -452,6 +526,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       toast.success(v.fecha_pago ? "Marcada como pagada" : "Vuelve a estar pendiente de pago");
       setPagando(null);
       qc.invalidateQueries({ queryKey: ["compras"] });
+      qc.invalidateQueries({ queryKey: ["proformas-pendientes"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo cambiar el pago"),
   });
@@ -556,6 +631,15 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         </Card>
       )}
 
+      {data && !proformas && (
+        <Card className="border-amber-500/50">
+          <CardContent className="flex gap-3 py-4 text-sm">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <p>{AVISO_MIGRACION_PROFORMAS}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {cola && (
         <SubidaFacturas
           deshabilitado={lector?.disponible === false}
@@ -570,6 +654,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           onBorrar={(c) => setBorrando(c)}
         />
       )}
+      {proformas && <ProformasPendientes compras={paraProformas} onVerFichero={verFichero} />}
 
       <BarraFiltros>
         <CampoBusqueda
@@ -646,6 +731,15 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           ]}
           ancho="w-[170px]"
         />
+        {proformas && (
+          <SelectFiltro
+            etiqueta="Documento"
+            valor={filtros.documento}
+            alCambiar={(documento) => cambiar({ documento })}
+            opciones={FILTROS_DOCUMENTO.map((f) => ({ valor: f.valor, etiqueta: f.etiqueta }))}
+            ancho="w-[200px] max-md:w-full"
+          />
+        )}
         <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
@@ -709,7 +803,27 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                       )}
                     </TableCell>
                   )}
-                  <TableCell className="font-mono text-xs">{c.numero ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {c.numero ?? "—"}
+                    {esProforma(c) && (
+                      <Badge
+                        variant="outline"
+                        className="ml-1 border-amber-500 font-sans text-amber-700"
+                      >
+                        Proforma
+                      </Badge>
+                    )}
+                    {esProforma(c) && facturaDe.get(c.id) && (
+                      <span className="block font-sans text-xs text-muted-foreground">
+                        Facturada en n.º {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                      </span>
+                    )}
+                    {!esProforma(c) && c.proforma_id && (
+                      <span className="block font-sans text-xs text-muted-foreground">
+                        De la proforma n.º {porId.get(c.proforma_id)?.numero ?? "(sin número)"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">{eur(Number(c.base))}</TableCell>
                   <TableCell className="text-right font-medium">
                     {eur(Number(c.liquido ?? c.total))}
@@ -718,11 +832,21 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     <Badge variant={estadoDe(c) === "registrada" ? "default" : "outline"}>
                       {estadoDe(c)}
                     </Badge>
-                    {general && c.estado_pago === "pagada" && !c.borrada_en && (
-                      <span className="block text-xs text-muted-foreground">
-                        Pagada el {fechaCorta(c.fecha_pago)}
-                      </span>
-                    )}
+                    {esProforma(c) && casadas.has(c.id)
+                      ? // El pago de la proforma casada vive en su factura.
+                        facturaDe.get(c.id)?.estado_pago === "pagada" && (
+                          <span className="block text-xs text-muted-foreground">
+                            Pagada con su factura n.º{" "}
+                            {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                          </span>
+                        )
+                      : (general || esProforma(c)) &&
+                        c.estado_pago === "pagada" &&
+                        !c.borrada_en && (
+                          <span className="block text-xs text-muted-foreground">
+                            Pagada el {fechaCorta(c.fecha_pago)}
+                          </span>
+                        )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex items-center gap-1">
@@ -757,10 +881,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           </Button>
                         )
                       )}
-                      {general &&
+                      {(general || (proformas && esProforma(c))) &&
                         recibidas &&
                         c.estado === "registrada" &&
                         !c.borrada_en &&
+                        // La proforma casada no: su pago pasó a la factura.
+                        !(esProforma(c) && casadas.has(c.id)) &&
                         (c.estado_pago === "pagada" ? (
                           <Button
                             variant="ghost"
@@ -790,7 +916,10 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                         (general &&
                           recibidas &&
                           !c.borrada_en &&
-                          (c.categoria ?? "textil") !== "textil")) && (
+                          (c.categoria ?? "textil") !== "textil" &&
+                          // Un casado no se deshace: ni la factura ni su proforma se borran.
+                          !c.proforma_id &&
+                          !casadas.has(c.id))) && (
                         <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -807,6 +936,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     Total · {totales.facturas} factura{totales.facturas === 1 ? "" : "s"}
                     {totales.borradores > 0 &&
                       ` · sin ${totales.borradores} borrador${totales.borradores === 1 ? "" : "es"}`}
+                    {totales.proformas > 0 &&
+                      ` · sin ${totales.proformas} proforma${totales.proformas === 1 ? "" : "s"}`}
                   </TableCell>
                   <TableCell className="text-right font-bold tabular-nums">
                     {eur(totales.base)}
@@ -876,6 +1007,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           // reparto: ninguna se registra casada a mano y sin ver los costes.
           <RevisarCompraTextil
             conTipos={recibidas}
+            conProformas={proformas}
             todas={paraDuplicados}
             onDescartar={() => {
               const fila = compras.find((c: any) => c.id === revisando.id);
@@ -896,6 +1028,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           <RevisarCompra
             modo={modo}
             conTipos={recibidas}
+            conProformas={proformas}
             todas={paraDuplicados}
             onDescartar={() => {
               const fila = compras.find((c: any) => c.id === revisando.id);
@@ -926,6 +1059,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 function RevisarCompra({
   modo,
   conTipos,
+  conProformas,
   todas,
   onDescartar,
   estado,
@@ -938,6 +1072,8 @@ function RevisarCompra({
   modo: Modo;
   /** Con la migración de facturas recibidas: tipos, cálculo y descuadre. */
   conTipos: boolean;
+  /** Con las migraciones de proformas: factura o proforma, y casado. */
+  conProformas: boolean;
   /** Todas las compras, para avisar de duplicados (vacío sin la cola). */
   todas: any[];
   /** Descartar la factura de la cola (es un duplicado). */
@@ -981,12 +1117,41 @@ function RevisarCompra({
             fecha: compra.fecha,
             liquido: conCalculo ? calculado.liquido : compra.total,
             fichero_huella: estado.fichero_huella,
+            ...(conProformas
+              ? {
+                  tipo_documento: estado.tipo_documento ?? "factura",
+                  proforma_id: estado.proforma_id,
+                }
+              : {}),
           },
           todas,
         )
       : [];
   const duplicadoQueBloquea = duplicados.find(bloqueaRegistro);
   const porConfirmar = duplicados.filter((d) => !bloqueaRegistro(d) && !d.borrada);
+  // Proforma: qué documento es y, si es una factura, de qué proforma.
+  const esProformaRev = conProformas && estado.tipo_documento === "proforma";
+  const sugerencias = sugerenciasDeProforma(
+    conProformas,
+    estado,
+    {
+      id: estado.id ?? null,
+      proveedor: compra.proveedor,
+      nif_proveedor: compra.nif_proveedor,
+      proveedor_id: null,
+      fecha: compra.fecha,
+      base: compra.base,
+      total: compra.total,
+      liquido: conCalculo ? calculado.liquido : null,
+      categoria: estado.categoria || null,
+      referencia_proforma: compra.referencia_proforma ?? null,
+      unidades: null,
+    },
+    todas as ProformaFila[],
+  );
+  const faltaDeProforma = pendientesDeProforma(conProformas, estado, sugerencias);
+  const casadaCon = conProformas && estado.tipo_documento === "factura" && !!estado.proforma_id;
+  const cabeceras = cabecerasLineaPapel(compra.lineas);
   // Se guarda y se registra a la vez: sin fecha no se sabe en qué periodo cuenta.
   const sinFecha = !compra.fecha;
   const sinDescripcion = compra.lineas.some((l) => !l.descripcion.trim());
@@ -995,6 +1160,7 @@ function RevisarCompra({
     sinDescripcion ||
     !!duplicadoQueBloquea ||
     (porConfirmar.length > 0 && !estado.otraFactura) ||
+    faltaDeProforma.length > 0 ||
     (esTextil
       ? compra.lineas.length === 0 || sinCasar > 0
       : sinCategoria || (conCalculo && (estado.tipo_iva === null || descuadreSinResolver)));
@@ -1017,14 +1183,20 @@ function RevisarCompra({
     <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>
-          {general
-            ? "Revisar la factura antes de registrarla"
-            : "Revisar la compra antes de darla de alta"}
+          {esProformaRev
+            ? esTextil
+              ? "Revisar la proforma antes de dar de alta el género"
+              : "Revisar la proforma"
+            : general
+              ? "Revisar la factura antes de registrarla"
+              : "Revisar la compra antes de darla de alta"}
         </DialogTitle>
         <DialogDescription>
-          {esTextil
-            ? "Lo que se registre entra en el libro de stock y no se puede borrar. Comprueba las cantidades y di a qué artículo del catálogo corresponde cada línea."
-            : "Comprueba los importes y di qué es: de eso depende cómo cuenta en Gerencia. Una factura registrada no se borra."}
+          {esProformaRev
+            ? "No cuenta en el IVA ni en Gerencia; su factura se casa con ella cuando llegue."
+            : esTextil
+              ? "Lo que se registre entra en el libro de stock y no se puede borrar. Comprueba las cantidades y di a qué artículo del catálogo corresponde cada línea."
+              : "Comprueba los importes y di qué es: de eso depende cómo cuenta en Gerencia. Una factura registrada no se borra."}
         </DialogDescription>
       </DialogHeader>
 
@@ -1117,6 +1289,12 @@ function RevisarCompra({
         </div>
       )}
 
+      {conProformas && (
+        <SelectorTipoDocumento
+          valor={estado.tipo_documento}
+          onCambiar={(t) => onCambiar(conTipoDocumento(estado, t))}
+        />
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Campo
           etiqueta="Proveedor"
@@ -1165,60 +1343,69 @@ function RevisarCompra({
             </TableRow>
           )}
           {compra.lineas.map((l, i) => (
-            <TableRow key={i}>
-              <TableCell>
-                <Input
-                  value={l.descripcion}
-                  onChange={(e) => setLinea(i, { descripcion: e.target.value })}
+            <Fragment key={i}>
+              {cabeceras.get(i) && (
+                <FilaLineaPapel
+                  grupo={cabeceras.get(i)!}
+                  lineas={compra.lineas}
+                  columnas={esTextil ? 5 : 4}
                 />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="number"
-                  step="any"
-                  className="text-right"
-                  value={l.cantidad}
-                  onChange={(e) => setLinea(i, { cantidad: Number(e.target.value) })}
-                />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="number"
-                  step="any"
-                  className="text-right"
-                  value={l.precio_unitario}
-                  onChange={(e) => setLinea(i, { precio_unitario: Number(e.target.value) })}
-                />
-              </TableCell>
-              <TableCell>
-                <Input
-                  type="number"
-                  step="any"
-                  className="text-right"
-                  value={l.importe}
-                  onChange={(e) => setLinea(i, { importe: Number(e.target.value) })}
-                />
-              </TableCell>
-              {esTextil && (
-                <TableCell>
-                  <Select
-                    value={asignaciones[i] ?? ""}
-                    onValueChange={(v) => setAsignacion(i, v || null)}
-                  >
-                    <SelectTrigger className={asignaciones[i] ? "" : "border-amber-500"}>
-                      <SelectValue placeholder="Sin asignar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stock.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {[s.nombre, s.color, s.talla].filter(Boolean).join(" · ")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
               )}
-            </TableRow>
+              <TableRow>
+                <TableCell>
+                  <Input
+                    value={l.descripcion}
+                    onChange={(e) => setLinea(i, { descripcion: e.target.value })}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    step="any"
+                    className="text-right"
+                    value={l.cantidad}
+                    onChange={(e) => setLinea(i, { cantidad: Number(e.target.value) })}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    step="any"
+                    className="text-right"
+                    value={l.precio_unitario}
+                    onChange={(e) => setLinea(i, { precio_unitario: Number(e.target.value) })}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    step="any"
+                    className="text-right"
+                    value={l.importe}
+                    onChange={(e) => setLinea(i, { importe: Number(e.target.value) })}
+                  />
+                </TableCell>
+                {esTextil && (
+                  <TableCell>
+                    <Select
+                      value={asignaciones[i] ?? ""}
+                      onValueChange={(v) => setAsignacion(i, v || null)}
+                    >
+                      <SelectTrigger className={asignaciones[i] ? "" : "border-amber-500"}>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stock.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {[s.nombre, s.color, s.talla].filter(Boolean).join(" · ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                )}
+              </TableRow>
+            </Fragment>
           ))}
         </TableBody>
         {compra.lineas.length > 0 && (
@@ -1420,6 +1607,20 @@ function RevisarCompra({
         </div>
       )}
 
+      {conProformas && estado.tipo_documento === "factura" && (
+        <CasarProforma
+          sugerencias={sugerencias}
+          proformaId={estado.proforma_id}
+          sinProforma={!!estado.sinProforma}
+          onElegir={(proforma_id) => onCambiar({ ...estado, proforma_id, sinProforma: false })}
+          onNinguna={() =>
+            onCambiar({ ...estado, proforma_id: null, sinProforma: !estado.sinProforma })
+          }
+          liquidoFactura={conCalculo ? calculado.liquido : compra.total}
+          textil={null}
+        />
+      )}
+
       {!estado.id && (
         <FicheroRevision
           fichero={estado.fichero ?? null}
@@ -1428,6 +1629,9 @@ function RevisarCompra({
       )}
 
       <DialogFooter className="items-center gap-3">
+        {faltaDeProforma.length > 0 && (
+          <span className="text-sm text-muted-foreground mr-auto">{faltaDeProforma[0]}</span>
+        )}
         {sinFecha && (
           <span className="text-sm text-muted-foreground mr-auto">
             Falta la fecha de la factura.
@@ -1465,10 +1669,18 @@ function RevisarCompra({
         <Button onClick={onRegistrar} disabled={registrando || bloqueada}>
           {registrando ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : casadaCon ? (
+            <FileText className="h-4 w-4 mr-2" />
           ) : (
             <PackageCheck className="h-4 w-4 mr-2" />
           )}
-          {esTextil ? "Dar de alta en el stock" : "Registrar factura"}
+          {casadaCon
+            ? "Registrar factura casada con la proforma"
+            : esProformaRev && !esTextil
+              ? "Registrar proforma"
+              : esTextil
+                ? "Dar de alta en el stock"
+                : "Registrar factura"}
         </Button>
       </DialogFooter>
     </DialogContent>

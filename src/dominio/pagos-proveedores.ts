@@ -6,12 +6,16 @@
  * retención descontada) o, sin él, el total. Un proveedor es el mismo aunque
  * su NIF venga escrito de dos maneras («ES-B12345678» y «B12345678»).
  *
+ * Una proforma casada con su factura no cuenta: el pago vive en la factura.
+ * Una proforma pagada y sin factura es un anticipo a proveedor.
+ *
  * Lógica pura: sin base de datos ni red.
  */
 
 import { diaEnEspana } from "./fecha-documento";
 import { redondear } from "./importes";
 import { claveNif, claveTexto } from "./normalizar-textil";
+import type { ProformaFila } from "./proformas";
 
 export type CompraPendiente = {
   id: string;
@@ -25,6 +29,10 @@ export type CompraPendiente = {
   estado: string;
   estado_pago?: string | null;
   borrada_en?: string | null;
+  /** «factura» o «proforma»; sin la migración, factura. */
+  tipo_documento?: string | null;
+  /** Proforma ya casada con su factura: el pago está en la factura. */
+  casada?: boolean;
 };
 
 export type TramoPago = {
@@ -47,6 +55,8 @@ export type PagosProveedores = {
   facturas: number;
   porProveedor: DeudaProveedor[];
   tramos: TramoPago[];
+  /** Cuántas de las contadas son proformas. */
+  proformas: number;
 };
 
 const TRAMOS: readonly { clave: TramoPago["clave"]; etiqueta: string; hasta: number }[] = [
@@ -67,7 +77,9 @@ function diasEntre(desde: string | null, hasta: string): number | null {
   return Math.round((b - a) / DIA_MS);
 }
 
-function claveDeProveedor(c: CompraPendiente): string {
+function claveDeProveedor(
+  c: Pick<CompraPendiente, "proveedor_id" | "nif_proveedor" | "proveedor">,
+): string {
   if (c.proveedor_id) return `p:${c.proveedor_id}`;
   const nif = claveNif(c.nif_proveedor);
   if (nif) return `n:${nif}`;
@@ -94,13 +106,16 @@ export function pagosPendientesProveedores(
   const grupos = new Map<string, DeudaProveedor>();
   let total = 0;
   let facturas = 0;
+  let proformas = 0;
 
   for (const c of compras) {
     if (c.estado !== "registrada" || c.borrada_en || c.estado_pago !== "pendiente") continue;
+    if (c.casada === true) continue;
     const bruto = c.liquido ?? c.total;
     const importe = redondear(Number(bruto) || 0);
     total += importe;
     facturas += 1;
+    if (c.tipo_documento === "proforma") proformas += 1;
 
     const dias = diasEntre(c.fecha, dia) ?? 0;
     const i = TRAMOS.findIndex((t) => dias <= t.hasta);
@@ -128,5 +143,64 @@ export function pagosPendientesProveedores(
     facturas,
     porProveedor,
     tramos: tramos.map((t) => ({ ...t, importe: redondear(t.importe) })),
+    proformas,
   };
+}
+
+export type AnticiposProveedores = {
+  total: number;
+  proformas: number;
+  /** `facturas` cuenta proformas; `masAntigua`, por fecha de pago. */
+  porProveedor: DeudaProveedor[];
+  /** El pago más antiguo (fecha_pago). */
+  masAntigua: string | null;
+};
+
+/**
+ * Proformas (tipo_documento "proforma"), registradas (estado "registrada" o
+ * ausente), sin borrar, sin factura casada en la lista y con estado_pago
+ * "pagada": dinero ya salido sin factura. Importe = redondear(liquido ?? total
+ * ?? 0). Agrupa por proveedor como pagosPendientesProveedores. No depende del
+ * periodo: `hoy` se acepta por simetría con pagosPendientesProveedores.
+ */
+export function anticiposProveedores(
+  compras: readonly ProformaFila[],
+  hoy: Date,
+): AnticiposProveedores {
+  void hoy;
+  const casadas = new Set<string>();
+  for (const c of compras) if (c.proforma_id) casadas.add(c.proforma_id);
+
+  const grupos = new Map<string, DeudaProveedor>();
+  let total = 0;
+  let proformas = 0;
+  let masAntigua: string | null = null;
+
+  for (const c of compras) {
+    if (c.tipo_documento !== "proforma") continue;
+    if (c.estado != null && c.estado !== "registrada") continue;
+    if (c.borrada_en || casadas.has(c.id) || c.estado_pago !== "pagada") continue;
+    const importe = redondear(Number(c.liquido ?? c.total ?? 0) || 0);
+    total += importe;
+    proformas += 1;
+    const pago = c.fecha_pago ? c.fecha_pago.slice(0, 10) : null;
+    if (pago && (masAntigua === null || pago < masAntigua)) masAntigua = pago;
+
+    const clave = claveDeProveedor(c);
+    let g = grupos.get(clave);
+    if (!g) {
+      g = { clave, nombre: "", facturas: 0, importe: 0, masAntigua: null };
+      grupos.set(clave, g);
+    }
+    if (!g.nombre) g.nombre = (c.proveedor ?? "").trim() || (c.nif_proveedor ?? "").trim();
+    g.facturas += 1;
+    g.importe += importe;
+    if (pago && (g.masAntigua === null || pago < g.masAntigua)) g.masAntigua = pago;
+  }
+
+  const porProveedor = [...grupos.values()]
+    .map((g) => ({ ...g, nombre: g.nombre || "Sin proveedor", importe: redondear(g.importe) }))
+    .sort((a, b) => b.importe - a.importe || a.nombre.localeCompare(b.nombre, "es"));
+
+  return { total: redondear(total), proformas, porProveedor, masAntigua };
 }

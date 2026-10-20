@@ -348,15 +348,16 @@ export const DEFINICIONES = {
   },
   g_compras_textil: {
     que: "Lo comprado para el textil en el periodo, sin IVA.",
-    calculo: "Suma de la base de las facturas de compra registradas con fecha en el periodo.",
+    calculo:
+      "Suma de la base de las facturas de compra registradas con fecha en el periodo. Las proformas no cuentan: cuenta su factura, por la fecha de la factura.",
     fuente: "Compras del textil subidas al CRM.",
   },
   g_almacen_cuenta: {
     que: "Cómo ha cambiado el almacén textil en el periodo, en unidades y a precio de compra: lo que había, lo que entró, lo que salió y lo que queda.",
     calculo:
-      "Existencias al inicio + compras + altas con existencias + devoluciones de clientes − coste de lo vendido − mermas − devoluciones a proveedores ± ajustes de inventario = existencias al final. Cada movimiento cuenta a su coste: las entradas por compra al de la factura, con portes y descuentos repartidos, y las salidas al coste medio congelado al salir. El valor a una fecha es la suma de todos los movimientos hasta ese día.",
+      "Existencias al inicio + compras + altas con existencias + devoluciones de clientes − coste de lo vendido − mermas − devoluciones a proveedores ± ajustes de inventario = existencias al final. Cada movimiento cuenta a su coste: las entradas por compra al de la factura (o al de la proforma, si el género llegó con ella), con portes y descuentos repartidos; los ajustes de coste de una factura que no coincide con su proforma, en Compras, con su importe; y las unidades de la proforma que la factura no trae, restando en Compras (no son una pérdida). Las salidas, al coste medio congelado al salir. El valor a una fecha es la suma de todos los movimientos hasta ese día.",
     fuente:
-      "Libro de movimientos del almacén textil, por la fecha del movimiento (en las compras, la de la factura). No depende de los filtros de tienda ni canal. El coste de lo vendido va por la fecha de salida y el «Coste de la ropa» de Resultados por la fecha del pedido: en un periodo pueden no coincidir.",
+      "Libro de movimientos del almacén textil, por la fecha del movimiento (en las compras, la del documento con el que entró). No depende de los filtros de tienda ni canal. El coste de lo vendido va por la fecha de salida y el «Coste de la ropa» de Resultados por la fecha del pedido: en un periodo pueden no coincidir.",
   },
   g_almacen_perdidas: {
     que: "Lo que se ha perdido o encontrado en el almacén textil fuera de los pedidos: mermas, recuentos, devoluciones a proveedores y devoluciones de clientes sin pedido.",
@@ -368,7 +369,7 @@ export const DEFINICIONES = {
   g_almacen_controles: {
     que: "Comprobaciones que tienen que dar 0. Si alguna no da 0, hay algo que mirar antes de fiarse de las cifras del almacén.",
     calculo:
-      "1) La base de cada factura textil registrada menos el valor de sus entradas en el stock, con portes y descuentos repartidos: 0,00 €. 2) Variantes cuyas unidades guardadas no coinciden con la suma de su libro: 0. 3) Variantes cuyo reservado no coincide con sus reservas: 0.",
+      "1) La base de cada factura textil registrada menos el valor de sus entradas en el stock, con portes y descuentos repartidos: 0,00 €. Una factura casada con su proforma se comprueba junto con ella: lo que no se pudo llevar al stock (lo ya vendido) se descuenta. Las proformas todavía sin factura se cuentan aparte: no son un descuadre. 2) Variantes cuyas unidades guardadas no coinciden con la suma de su libro: 0. 3) Variantes cuyo reservado no coincide con sus reservas: 0.",
     fuente:
       "Facturas de compra textil registradas con fecha en el periodo y sus entradas enlazadas. Las registradas antes del enlace (migración 20261028100000) no tienen entradas enlazadas: se cuentan aparte y no se pueden comprobar.",
   },
@@ -419,7 +420,17 @@ export const DEFINICIONES = {
     calculo:
       "Suma del líquido (total menos retención) de las facturas de compra registradas, sin borrar y pendientes de pago, de todas las categorías, por proveedor y por antigüedad desde la fecha de la factura.",
     fuente:
-      "Facturas de compra. No depende del periodo. Una factura deja de estar pendiente al marcarla pagada o al conciliarla con el banco.",
+      "Facturas de compra. No depende del periodo. Una factura deja de estar pendiente al marcarla pagada o al conciliarla con el banco. Una proforma casada con su factura no cuenta dos veces: cuenta la factura.",
+  },
+  g_anticipos_proveedores: {
+    que: "Lo pagado a proveedores por proformas que aún no tienen factura.",
+    calculo: "Suma del líquido de las proformas registradas, pagadas y sin factura casada.",
+    fuente: "Compras (proformas), de cualquier fecha. No depende del periodo.",
+  },
+  g_proformas_sin_factura: {
+    que: "Proformas registradas que todavía no tienen su factura.",
+    calculo: "Todas desde el día en que se registran, con los días que llevan.",
+    fuente: "Compras, de cualquier fecha.",
   },
   rd_pedidos: {
     que: "Los pedidos que entraron en el periodo y los metros que se pidieron.",

@@ -7,7 +7,8 @@
  * dinámicamente desde los handlers de `compras.functions.ts`.
  */
 
-import { faltaLaColumna, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
+import { proformasAplicado } from "./escaner-textil";
 import { leerFactura } from "./lector-facturas.server";
 // Reexportado para que compras.functions lo cargue con el mismo import() que
 // el resto: lector-facturas.server ya se importa aquí de forma normal, y
@@ -25,10 +26,111 @@ import {
   type CompraComparable,
   type LecturaIa,
 } from "@/dominio/cola-compras";
+import { claveNif, claveTexto } from "@/dominio/normalizar-textil";
+import { sugerirProformas, type ProformaFila, type SugerenciaProforma } from "@/dominio/proformas";
+import type { TipoDocumentoCompra } from "@/dominio/tipos-textil";
 
-/** Columnas para buscar duplicados. */
-const CAMPOS_DUPLICADO =
+/** Columnas para buscar duplicados (sin las de proformas, sin su migración). */
+const CAMPOS_DUPLICADO_SIEMPRE =
   "id, proveedor, nif_proveedor, numero, fecha, liquido, total, fichero_huella, estado, borrada_en";
+/** Con las migraciones de proformas: el tipo y el casado, para no marcar el par como duplicado. */
+const CAMPOS_DUPLICADO = `${CAMPOS_DUPLICADO_SIEMPRE}, tipo_documento, proforma_id`;
+
+/** Lo que pide `ProformaFila` de una proforma candidata (sin líneas: aún no hay variantes). */
+const CAMPOS_PROFORMA =
+  "id, proveedor, nif_proveedor, proveedor_id, numero, fecha, categoria, base, total, liquido, " +
+  "estado, borrada_en, tipo_documento, estado_pago, fecha_pago";
+
+/** Motivo extra: la IA dice proforma y la base todavía no sabe de proformas. */
+export const MOTIVO_PROFORMA_SIN_MIGRACION =
+  "Es una proforma, pero falta aplicar la migración de proformas: no la registres hasta entonces.";
+
+/**
+ * El proveedor del catálogo, como `leerMemoriaEscaner`: por NIF y, sin NIF,
+ * por nombre. Sin la tabla o sus columnas (migración del escáner), ninguno.
+ */
+async function proveedorDelCatalogo(
+  supabase: unknown,
+  nif: string | null,
+  nombre: string | null,
+): Promise<string | null> {
+  const n = claveNif(nif);
+  const t = claveTexto(nombre);
+  const buscar = () => tabla(supabase, "proveedores").select("id");
+  const r = n
+    ? await buscar().eq("nif_clave", n).limit(2)
+    : t
+      ? await buscar().eq("nombre_clave", t).limit(2)
+      : { data: [], error: null };
+  if (faltaLaTabla(r.error) || faltaLaColumna(r.error)) return null;
+  if (r.error) throw new Error(r.error.message);
+  const filas = (r.data ?? []) as { id: string }[];
+  // Dos con el mismo nombre: no se sabe cuál; se queda en la clave de proveedor.
+  return filas.length === 1 ? filas[0].id : null;
+}
+
+/**
+ * Las proformas registradas, sin borrar y sin factura del mismo proveedor que
+ * el documento, puntuadas por `sugerirProformas`. Nunca casa: propone. Sin la
+ * migración de proformas, ninguna.
+ */
+async function proformasCandidatas(
+  supabase: unknown,
+  id: string,
+  compra: ReturnType<typeof normalizarCompra>,
+  categoria: string | null,
+  clave: string,
+): Promise<SugerenciaProforma[]> {
+  const proveedorId = await proveedorDelCatalogo(supabase, compra.nif_proveedor, compra.proveedor);
+  const condiciones = [
+    ...(clave ? [`proveedor_clave.eq.${clave}`] : []),
+    ...(proveedorId ? [`proveedor_id.eq.${proveedorId}`] : []),
+  ];
+  if (condiciones.length === 0) return [];
+  const r = await tabla(supabase, "textil_compras")
+    .select(CAMPOS_PROFORMA)
+    .eq("tipo_documento", "proforma")
+    .eq("estado", "registrada")
+    .is("borrada_en", null)
+    .neq("id", id)
+    .or(condiciones.join(","));
+  if (faltaLaColumna(r.error)) return [];
+  if (r.error) throw new Error(r.error.message);
+  const filas = (r.data ?? []) as ProformaFila[];
+  if (filas.length === 0) return [];
+
+  // Las que ya tienen factura no se proponen.
+  const casadasR = await tabla(supabase, "textil_compras")
+    .select("proforma_id")
+    .in(
+      "proforma_id",
+      filas.map((f) => f.id),
+    );
+  if (faltaLaColumna(casadasR.error)) return [];
+  if (casadasR.error) throw new Error(casadasR.error.message);
+  const casadas = new Set(
+    ((casadasR.data ?? []) as { proforma_id: string | null }[])
+      .map((f) => f.proforma_id)
+      .filter((v): v is string => !!v),
+  );
+
+  return sugerirProformas(
+    {
+      id,
+      proveedor: compra.proveedor,
+      nif_proveedor: compra.nif_proveedor,
+      proveedor_id: proveedorId,
+      fecha: compra.fecha,
+      base: compra.base,
+      total: compra.total,
+      categoria,
+      referencia_proforma: compra.referencia_proforma ?? null,
+      unidades: null,
+    },
+    filas,
+    casadas,
+  );
+}
 
 /**
  * Lee el fichero y valida la lectura. Si la lectura falla o no tiene la forma
@@ -107,13 +209,17 @@ export async function procesarFactura(
 
     // Las que tienen el mismo proveedor, para buscar duplicados.
     const clave = claveProveedor(compra.nif_proveedor, compra.proveedor);
-    const candidatas = clave
-      ? await tabla(supabase, "textil_compras")
-          .select(CAMPOS_DUPLICADO)
-          .eq("proveedor_clave", clave)
-          .neq("id", id)
-      : { data: [], error: null };
+    const buscarDuplicados = (campos: string) =>
+      tabla(supabase, "textil_compras").select(campos).eq("proveedor_clave", clave).neq("id", id);
+    let candidatas = clave ? await buscarDuplicados(CAMPOS_DUPLICADO) : { data: [], error: null };
+    // Sin las migraciones de proformas: sin tipo ni casado (todas son facturas).
+    if (clave && faltaLaColumna(candidatas.error)) {
+      candidatas = await buscarDuplicados(CAMPOS_DUPLICADO_SIEMPRE);
+    }
     if (candidatas.error) throw new Error(candidatas.error.message);
+
+    // Lo que dijo la IA: factura, proforma o null si dudó.
+    const tipo: TipoDocumentoCompra | null = r.lectura.tipo_documento ?? null;
     const yo: CompraComparable = {
       id,
       proveedor: compra.proveedor,
@@ -121,8 +227,16 @@ export async function procesarFactura(
       numero: compra.numero,
       fecha: compra.fecha,
       total: compra.total,
+      tipo_documento: tipo ?? "factura",
     };
     const duplicados = duplicadosDe(yo, (candidatas.data ?? []) as CompraComparable[]);
+
+    // Una factura (o un documento dudoso) puede ser la de una proforma ya
+    // registrada: se proponen, nunca se casan solas.
+    const proformas =
+      tipo !== "proforma"
+        ? await proformasCandidatas(supabase, id, compra, categoria ?? null, clave)
+        : [];
 
     // Una línea sin cantidad no se puede guardar (la base exige cantidad > 0).
     const lineas = compra.lineas.filter((l) => l.descripcion && l.cantidad > 0);
@@ -135,32 +249,40 @@ export async function procesarFactura(
         tipoIva,
         categoria,
         duplicados,
+        tipoDocumento: tipo,
+        proformas,
       }),
+      ...(tipo === "proforma" && !(await proformasAplicado(supabase))
+        ? [MOTIVO_PROFORMA_SIN_MIGRACION]
+        : []),
       ...(lineas.length < compra.lineas.length
         ? [`${compra.lineas.length - lineas.length} línea(s) sin cantidad no se han guardado.`]
         : []),
     ];
 
-    const { error } = await tabla(supabase, "textil_compras")
-      .update({
-        proveedor: compra.proveedor,
-        nif_proveedor: compra.nif_proveedor,
-        numero: compra.numero,
-        fecha: compra.fecha,
-        concepto: r.lectura.concepto,
-        categoria: categoria ?? "otros",
-        base: compra.base,
-        iva: compra.iva,
-        irpf: compra.irpf,
-        total: compra.total,
-        tipo_iva: tipoIva ?? TIPO_IVA_GENERAL,
-        tipo_irpf: tipoIrpf,
-        confianza: Math.round(r.lectura.confianza * 100) / 100,
-        revision: "pendiente",
-        revision_motivo: motivos.length ? motivos.join("\n") : null,
-        lectura_ia: r.bruto,
-      })
-      .eq("id", id);
+    const cabecera = {
+      proveedor: compra.proveedor,
+      nif_proveedor: compra.nif_proveedor,
+      numero: compra.numero,
+      fecha: compra.fecha,
+      concepto: r.lectura.concepto,
+      categoria: categoria ?? "otros",
+      base: compra.base,
+      iva: compra.iva,
+      irpf: compra.irpf,
+      total: compra.total,
+      tipo_iva: tipoIva ?? TIPO_IVA_GENERAL,
+      tipo_irpf: tipoIrpf,
+      confianza: Math.round(r.lectura.confianza * 100) / 100,
+      revision: "pendiente",
+      revision_motivo: motivos.length ? motivos.join("\n") : null,
+      lectura_ia: r.bruto,
+    };
+    const actualizar = (campos: Record<string, unknown>) =>
+      tabla(supabase, "textil_compras").update(campos).eq("id", id);
+    let { error } = await actualizar({ ...cabecera, tipo_documento: tipo ?? "factura" });
+    // Sin las migraciones de proformas, sin la columna (la duda queda en lectura_ia).
+    if (faltaLaColumna(error)) ({ error } = await actualizar(cabecera));
     if (error) throw new Error(error.message);
 
     const borradas = await tabla(supabase, "textil_compra_lineas").delete().eq("compra_id", id);
@@ -187,7 +309,16 @@ export async function procesarFactura(
         ean: l.ean ?? null,
         unidades_por_pack: l.unidades_por_pack ?? 1,
       }));
-      let { error: errLineas } = await tabla(supabase, "textil_compra_lineas").insert(conEscaner);
+      // Con las migraciones de proformas, además la línea del papel de la que sale.
+      const conProformas = lineas.map((l, i) => ({
+        ...conEscaner[i],
+        linea_papel: l.linea_papel ?? null,
+      }));
+      const insertar = (filas: Record<string, unknown>[]) =>
+        tabla(supabase, "textil_compra_lineas").insert(filas);
+      let { error: errLineas } = await insertar(conProformas);
+      // Sin linea_papel: las del escáner, sin motivo extra.
+      if (faltaLaColumna(errLineas)) ({ error: errLineas } = await insertar(conEscaner));
       if (faltaLaColumna(errLineas)) {
         ({ error: errLineas } = await tabla(supabase, "textil_compra_lineas").insert(deSiempre));
         if (!errLineas) {

@@ -31,6 +31,8 @@ import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
 import { tramosGrafica } from "@/dominio/periodos";
+import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
+import { useProformasPendientes } from "@/lib/gerencia";
 import {
   antiguedadPendientes,
   avanceObjetivo,
@@ -66,6 +68,13 @@ export function Resumen({ d }: { d: DatosGerencia }) {
   const pendienteHoy = d.pendientes.reduce((s, x) => s + Number(x.pendiente ?? 0), 0);
   const sinCostes = d.costeMetro === 0 && c.coste === 0;
 
+  // Las proformas sin factura, de cualquier fecha: no dependen del periodo.
+  const { data: filasProformas } = useProformasPendientes();
+  const proformas = useMemo(
+    () => (filasProformas ? resumenProformas(proformasSinFactura(filasProformas, d.hoy)) : null),
+    [filasProformas, d.hoy],
+  );
+
   const avisos = useMemo(
     () =>
       avisosGerencia({
@@ -73,8 +82,9 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         variacionVendido: frente ? variacion(c.total, p.total) : null,
         webSinPagar: { ...d.webSinPagar, cuentan: d.ajustes.web_sin_pagar_cuenta },
         banco: d.banco ? resumenBanco(d.banco) : null,
+        proformas,
       }),
-    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco],
+    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco, proformas],
   );
 
   const grafica = useMemo(() => {

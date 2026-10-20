@@ -332,10 +332,11 @@ export const FORMAS_PAGO: readonly { valor: string; etiqueta: string }[] = [
  *   impresas.
  * - Sin ella, los que se guardaron (los impresos).
  *
- * Las borradas no cuentan: devuelve nulo.
+ * Las borradas no cuentan: devuelve nulo. Las proformas tampoco: no son
+ * documento fiscal (cuenta su factura, por la fecha de la factura).
  */
 export function importesDeCompra<T extends CompraResumen>(c: T): T | null {
-  if (c.borrada_en) return null;
+  if (c.borrada_en || c.tipo_documento === "proforma") return null;
   if (c.cuota_iva === undefined || c.cuota_iva === null) return c;
   const impresa = c.liquido_origen === "factura";
   return {
