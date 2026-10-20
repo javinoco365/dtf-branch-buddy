@@ -345,7 +345,9 @@ const ETIQUETA_METODO: Record<MetodoCasado, string> = {
  * entrada sume la base de la factura al céntimo.
  *
  * Lo que se registra entra en el libro de stock y no se borra: por eso nada
- * se registra con una línea sin variante ni con un reparto que no cuadra.
+ * se registra con un reparto que no cuadra. Elegir variante es opcional: una
+ * línea sin variante se registra como «variante nueva» con lo que leyó la IA,
+ * y la base usa la que ya exista con el mismo producto, color y talla.
  */
 export function RevisarCompraTextil({
   conTipos,
@@ -506,6 +508,15 @@ export function RevisarCompraTextil({
   const faltan = efectivas
     .map((e, i) => (e.estado === "sin_casar" || e.estado === "sugerida" ? i : -1))
     .filter((i) => i >= 0);
+  // La variante de una línea al registrar: la elegida, o (sin elegir) una
+  // nueva desde lo leído, que la base reutiliza si ya existe igual.
+  const nuevaDe = (i: number): NuevaVariante | null => {
+    const e = efectivas[i];
+    if (e.estado === "nueva") return e.nueva;
+    if (e.estado === "sin_casar" || e.estado === "sugerida")
+      return nuevaVarianteDesdeLinea(paraCasar(lineas[i]), productos);
+    return null;
+  };
 
   // --- Comprobaciones --------------------------------------------------------
   const avisos = avisosQueImportan(revisarCompra(compra), "textil");
@@ -552,7 +563,7 @@ export function RevisarCompraTextil({
     const e = efectivas[i];
     // Una «variante nueva» que ya está en el catálogo: la base la reutiliza
     // (paso 4.6), así que la previsión también.
-    const nueva = e.estado === "nueva" ? e.nueva : null;
+    const nueva = nuevaDe(i);
     articulosFactura.push({
       indice: i,
       stock_id:
@@ -622,10 +633,6 @@ export function RevisarCompraTextil({
   const sinCantidad = lineas.findIndex((l) => !(Number(l.cantidad) > 0));
   if (sinCantidad >= 0)
     pendientes.push(`Línea ${sinCantidad + 1}: la cantidad tiene que ser mayor que cero.`);
-  if (faltan.length > 0)
-    pendientes.push(
-      `${faltan.length} línea${faltan.length === 1 ? "" : "s"} sin variante del almacén.`,
-    );
   if (!reparto.ok) pendientes.push("El reparto no cuadra con la base.");
   if (conTipos && estado.tipo_iva === null) pendientes.push("Elige el tipo de IVA.");
   if (descuadreSinResolver) pendientes.push("El líquido no cuadra: elige cuál vale.");
@@ -637,9 +644,8 @@ export function RevisarCompraTextil({
       return {
         ...lineaEnvioSimple(l, null),
         stock_id: e.estado === "casada" ? e.stock_id : null,
-        nueva_variante: e.estado === "nueva" ? e.nueva : null,
-        casado_metodo:
-          e.estado === "casada" ? e.metodo : e.estado === "nueva" ? ("nueva" as const) : null,
+        nueva_variante: nuevaDe(i),
+        casado_metodo: e.estado === "casada" ? e.metodo : nuevaDe(i) ? ("nueva" as const) : null,
       };
     });
     onRegistrar({ proveedor_id: proveedorConocido?.id ?? null, lineas: envio });
@@ -1104,13 +1110,22 @@ export function RevisarCompraTextil({
       )}
 
       <DialogFooter className="items-center gap-3">
-        {pendientes.length > 0 && (
+        {pendientes.length > 0 ? (
           <span
             className={`text-sm mr-auto ${duplicadoQueBloquea ? "text-destructive" : "text-muted-foreground"}`}
           >
             {pendientes[0]}
             {pendientes.length > 1 && ` (y ${pendientes.length - 1} más)`}
           </span>
+        ) : (
+          faltan.length > 0 &&
+          !casadaCon && (
+            <span className="text-sm mr-auto text-muted-foreground">
+              {faltan.length} línea{faltan.length === 1 ? "" : "s"} sin variante: se crea
+              {faltan.length === 1 ? "" : "n"} sola{faltan.length === 1 ? "" : "s"} con lo leído (o
+              se usa la que ya exista igual).
+            </span>
+          )
         )}
         <Button onClick={registrar} disabled={registrando || pendientes.length > 0}>
           {registrando ? (
@@ -1276,7 +1291,9 @@ function CeldaVariante({
   }
   return (
     <div className="space-y-1">
-      <Badge variant="destructive">Sin casar</Badge>
+      <Badge variant="outline" className="border-amber-500 text-amber-700">
+        Se crea sola
+      </Badge>
       {acciones}
     </div>
   );
