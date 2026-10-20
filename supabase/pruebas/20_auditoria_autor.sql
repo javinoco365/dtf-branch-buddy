@@ -22,6 +22,12 @@ INSERT INTO public.user_roles (user_id, role)
 VALUES ('11111111-1111-1111-1111-111111111111', 'admin')
 ON CONFLICT (user_id, role) DO NOTHING;
 
+-- Desde 20261031200100 escribir exige nivel: «otro» es editor, como los
+-- usuarios que ya existían al aplicar esa migración.
+INSERT INTO public.user_roles (user_id, role)
+VALUES ('22222222-2222-2222-2222-222222222222', 'editor')
+ON CONFLICT DO NOTHING;
+
 CREATE OR REPLACE FUNCTION pg_temp.ultimo_autor() RETURNS TEXT
 LANGUAGE sql AS $$
   SELECT COALESCE(usuario_id::TEXT, 'SIN AUTOR')

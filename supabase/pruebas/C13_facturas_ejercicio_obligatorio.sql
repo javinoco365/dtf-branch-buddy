@@ -70,6 +70,11 @@ SELECT CASE WHEN pg_temp.ejercicio_obligatorio()
 INSERT INTO auth.users (id, email)
 VALUES ('c1300000-0000-4000-8000-000000000001', 'autor@c13.test')
 ON CONFLICT (id) DO NOTHING;
+-- Desde 20261031200100 escribir exige nivel: el autor es editor, como los
+-- usuarios que ya existían al aplicar esa migración.
+INSERT INTO public.user_roles (user_id, role)
+VALUES ('c1300000-0000-4000-8000-000000000001', 'editor')
+ON CONFLICT DO NOTHING;
 INSERT INTO public.tiendas (nombre, slug) VALUES ('Tienda C13', 'tienda-c13');
 INSERT INTO public.tienda_usuarios (tienda_id, user_id)
 SELECT id, 'c1300000-0000-4000-8000-000000000001' FROM public.tiendas WHERE slug = 'tienda-c13';

@@ -164,6 +164,12 @@ INSERT INTO auth.users (id, email) VALUES
   ('c1100000-0000-4000-8000-00000000000c', 'uc@c11.test'),
   ('c1100000-0000-4000-8000-00000000000d', 'adm@c11.test');
 INSERT INTO public.user_roles (user_id, role) VALUES ('c1100000-0000-4000-8000-00000000000d', 'admin');
+-- Desde 20261031200100 escribir exige nivel. Los que no son administradores
+-- son editores, como los usuarios que ya existían al aplicar esa migración.
+INSERT INTO public.user_roles (user_id, role) VALUES
+  ('c1100000-0000-4000-8000-00000000000a', 'editor'),
+  ('c1100000-0000-4000-8000-00000000000b', 'editor'),
+  ('c1100000-0000-4000-8000-00000000000c', 'editor');
 
 SELECT set_config('c11.ua',  'c1100000-0000-4000-8000-00000000000a', true),
        set_config('c11.ub',  'c1100000-0000-4000-8000-00000000000b', true),
