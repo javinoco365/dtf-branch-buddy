@@ -161,6 +161,7 @@ seccion "PDF de presupuestos: plantillas por tienda y de textil" C16_plantillas_
 seccion "Pedidos: cuándo se realizaron y coste real del envío" C17_pedidos_realizado.sql
 seccion "Escáner textil: compras, catálogo, stock y cuentas" C18_escaner_textil.sql
 seccion "Proformas: casar factura, regularizar el stock y pasar el pago" C19_proformas.sql
+seccion "Imágenes de los presupuestos" C20_presupuesto_imagenes.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto

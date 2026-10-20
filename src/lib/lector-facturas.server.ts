@@ -71,7 +71,7 @@ let claveVault: { valor: string | null; hasta: number } | null = null;
  * puesta y, si no, el secreto «facturas_key» del Vault de Supabase (lo lee
  * el rol de servicio; ni el navegador ni un usuario pueden).
  */
-async function claveLector(): Promise<string | null> {
+export async function claveLector(): Promise<string | null> {
   const delEntorno = process.env.ANTHROPIC_API_KEY ?? process.env.FACTURAS_KEY;
   if (delEntorno) return delEntorno;
   if (claveVault && claveVault.hasta > Date.now()) return claveVault.valor;

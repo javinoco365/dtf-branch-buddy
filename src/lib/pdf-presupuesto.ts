@@ -45,6 +45,7 @@ import {
   type EstiloLetra,
   type MedidasTexto,
 } from "@/dominio/maqueta-cabecera";
+import { maquetarImagenes } from "@/dominio/imagenes-presupuesto";
 
 /**
  * El PDF de un presupuesto, en A4: el de las tiendas y el del textil.
@@ -65,6 +66,15 @@ import {
  */
 
 export { colorHex };
+
+/** Una imagen del presupuesto (el diseño, la prenda), lista para incrustar. */
+export type ImagenPDF = {
+  dataUrl: string;
+  formato: "JPEG" | "PNG" | "WEBP";
+  /** En píxeles: solo cuenta la proporción. */
+  ancho: number;
+  alto: number;
+};
 
 export type PresupuestoPDFData = {
   /** PRES-DTFC-2026-0001. Vacío en la vista previa de un ámbito sin presupuestos. */
@@ -96,6 +106,8 @@ export type PresupuestoPDFData = {
     telefono?: string | null;
   };
   notas?: string | null;
+  /** Las imágenes guardadas con el presupuesto: van después de las observaciones. */
+  imagenes?: ImagenPDF[];
   logo?: LogoPDF | null;
   /**
    * El color de la tienda o de la marca. El modelo de la casa no lo usa: los
@@ -1024,6 +1036,35 @@ async function componer(d: PresupuestoPDFData, p: PlantillaPresupuesto, conNumer
         .flatMap((l) => (l.trim() ? partir("normal")(l, W - 2 * M, TAM_NOTAS) : [""])),
       TAM_NOTAS,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Las imágenes del presupuesto: dos por fila, sin deformar
+  // ---------------------------------------------------------------------------
+  const imagenes = d.imagenes ?? [];
+  const filasImagenes = maquetarImagenes(imagenes, W - 2 * M, {
+    columnas: 2,
+    separacion: 6,
+    altoMaximo: 85,
+  });
+  if (filasImagenes.length) {
+    sitio(11.3 + 7.1 + filasImagenes[0].alto);
+    y += 11.3;
+    titulo("Imágenes", M, y, 15);
+    y += 7.1;
+    for (const fila of filasImagenes) {
+      sitio(fila.alto);
+      for (const celda of fila.celdas) {
+        const im = imagenes[celda.indice];
+        try {
+          doc.addImage(im.dataUrl, im.formato, M + celda.x, y, celda.ancho, celda.alto);
+        } catch (error) {
+          // Una imagen que jsPDF no entiende no impide sacar el presupuesto.
+          console.warn("[presupuesto] imagen que no se puede incrustar:", error);
+        }
+      }
+      y += fila.alto + 6;
+    }
   }
 
   // ---------------------------------------------------------------------------

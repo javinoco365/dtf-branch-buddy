@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { FileText, MoreVertical, Plus, Search, X } from "lucide-react";
+import { FileText, MoreVertical, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +45,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { PresupuestoFormDialog } from "@/components/presupuestos/PresupuestoFormDialog";
+import {
+  NuevoPresupuestoMenu,
+  PresupuestoIaDialog,
+  type ModoIa,
+} from "@/components/presupuestos/CrearPresupuestoIa";
+import type { BorradorTienda } from "@/dominio/presupuesto-ia";
 import { eur, fechaCorta } from "@/lib/format";
 import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -105,6 +111,10 @@ function PresupuestosTienda() {
   );
   const [editando, setEditando] = useState<Presupuesto | null>(null);
   const [nuevo, setNuevo] = useState(false);
+  // Con IA: el modo del diálogo y, al volver, el borrador con sus imágenes.
+  const [modoIa, setModoIa] = useState<ModoIa | null>(null);
+  const [borrador, setBorrador] = useState<BorradorTienda | null>(null);
+  const [imagenesIa, setImagenesIa] = useState<File[]>([]);
   const [borrando, setBorrando] = useState<Presupuesto | null>(null);
   const [confirmando, setConfirmando] = useState<Presupuesto | null>(null);
 
@@ -195,9 +205,15 @@ function PresupuestosTienda() {
             Presupuestos de esta tienda, con productos del catálogo o líneas libres.
           </p>
         </div>
-        <Button onClick={() => setNuevo(true)} disabled={data?.disponible === false}>
-          <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
-        </Button>
+        <NuevoPresupuestoMenu
+          disabled={data?.disponible === false}
+          onManual={() => {
+            setBorrador(null);
+            setImagenesIa([]);
+            setNuevo(true);
+          }}
+          onIa={setModoIa}
+        />
       </div>
 
       {data?.disponible === false && (
@@ -397,16 +413,37 @@ function PresupuestosTienda() {
           if (!o) {
             setNuevo(false);
             setEditando(null);
+            setBorrador(null);
+            setImagenesIa([]);
           }
         }}
         tiendaId={tiendaId}
         presupuesto={editando ?? undefined}
+        borrador={editando ? null : borrador}
+        imagenesIniciales={imagenesIa}
         onGuardado={({ id }) => {
           setNuevo(false);
           setEditando(null);
+          setBorrador(null);
+          setImagenesIa([]);
           refrescar();
           // El PDF de lo que se acaba de guardar, listo para mandarlo.
           pdfMut.mutate(id);
+        }}
+      />
+
+      <PresupuestoIaDialog
+        modo={modoIa}
+        ambito="tienda"
+        tiendaId={tiendaId}
+        onCerrar={() => setModoIa(null)}
+        onBorrador={({ propuesta, imagenes }) => {
+          if (propuesta.ambito !== "tienda") return;
+          setModoIa(null);
+          setEditando(null);
+          setBorrador(propuesta.borrador);
+          setImagenesIa(imagenes);
+          setNuevo(true);
         }}
       />
 

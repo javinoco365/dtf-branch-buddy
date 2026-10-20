@@ -32,6 +32,10 @@ import {
 } from "@/components/textil/SelectorClienteTextil";
 import { IVA_GENERAL } from "@/dominio/importes";
 import { totalesPresupuesto, type LineaPresupuesto } from "@/dominio/presupuestos";
+import type { BorradorTienda } from "@/dominio/presupuesto-ia";
+import { ImagenesPresupuesto } from "./ImagenesPresupuesto";
+import { useImagenesPresupuesto } from "./useImagenesPresupuesto";
+import { AvisosIa } from "./CrearPresupuestoIa";
 
 const LIBRE = "__libre__";
 
@@ -77,18 +81,28 @@ function hoy() {
  * generales), que rellena descripción, unidad y precio, o es una línea libre.
  * Lo que se guarda es lo que se ve: los importes los calcula el mismo módulo
  * de dominio aquí y en el servidor.
+ *
+ * Con `borrador` (un presupuesto nuevo montado por la IA), se abre relleno con
+ * él y con sus avisos arriba; se revisa y se guarda igual que uno a mano. Las
+ * imágenes se guardan después del presupuesto y antes de sacar su PDF.
  */
 export function PresupuestoFormDialog({
   open,
   onOpenChange,
   tiendaId,
   presupuesto,
+  borrador,
+  imagenesIniciales,
   onGuardado,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tiendaId: string;
   presupuesto?: Presupuesto;
+  /** Un presupuesto nuevo propuesto por la IA: rellena el formulario. */
+  borrador?: BorradorTienda | null;
+  /** Las imágenes que trae el borrador de la IA. */
+  imagenesIniciales?: File[];
   /** Con el id del presupuesto guardado: la pantalla descarga su PDF. */
   onGuardado: (guardado: { id: string }) => void;
 }) {
@@ -106,6 +120,12 @@ export function PresupuestoFormDialog({
   // Un presupuesto sin IVA (exportación, inversión del sujeto pasivo): todas
   // las líneas al 0 %. Como en los pedidos, un interruptor para el documento.
   const [aplicaIva, setAplicaIva] = useState(true);
+  const imagenes = useImagenesPresupuesto({
+    ambito: "tienda",
+    presupuestoId: presupuesto?.id ?? null,
+    abierto: open,
+    iniciales: presupuesto ? undefined : imagenesIniciales,
+  });
 
   const { data: clientes = [] } = useQuery({
     queryKey: ["presupuesto-clientes"],
@@ -156,6 +176,28 @@ export function PresupuestoFormDialog({
           : [LINEA_VACIA],
       );
       setAplicaIva(presupuesto.items.some((l) => Number(l.iva_rate) > 0));
+    } else if (borrador) {
+      // Lo que la IA no sabe se queda vacío: se rellena a mano antes de guardar.
+      setClienteId(borrador.cliente_id);
+      setClienteNombre(borrador.cliente_nombre);
+      setClienteEmail(borrador.cliente_email);
+      setClienteTelefono(borrador.cliente_telefono);
+      setFecha(borrador.fecha);
+      setValidez(String(borrador.validez_dias));
+      setEnvio(aTexto(borrador.envio));
+      setNotas(borrador.notas);
+      setLineas(
+        borrador.lineas.length
+          ? borrador.lineas.map((l) => ({
+              producto_id: l.producto_id,
+              descripcion: l.descripcion,
+              cantidad: l.cantidad === null ? "" : aTexto(l.cantidad),
+              unidad: l.unidad,
+              precio_unitario: l.precio_unitario === null ? "" : aTexto(l.precio_unitario),
+            }))
+          : [LINEA_VACIA],
+      );
+      setAplicaIva(borrador.aplica_iva);
     } else {
       setClienteId(null);
       setClienteNombre("");
@@ -168,7 +210,7 @@ export function PresupuestoFormDialog({
       setLineas([LINEA_VACIA]);
       setAplicaIva(true);
     }
-  }, [open, presupuesto]);
+  }, [open, presupuesto, borrador]);
 
   const lineasCalculables: LineaPresupuesto[] = useMemo(
     () =>
@@ -213,7 +255,11 @@ export function PresupuestoFormDialog({
       if (validas.some((l) => l.cantidad <= 0)) {
         throw new Error("La cantidad de cada línea tiene que ser mayor que cero");
       }
-      return guardar({
+      // Un precio vacío (el que la IA no ha encontrado) no se guarda como cero sin querer.
+      if (lineas.some((l) => l.descripcion.trim() && !String(l.precio_unitario).trim())) {
+        throw new Error("Falta el precio en alguna línea");
+      }
+      const r = await guardar({
         data: {
           id: presupuesto?.id,
           tienda_id: tiendaId,
@@ -228,6 +274,9 @@ export function PresupuestoFormDialog({
           lineas: validas,
         },
       });
+      const fallos = await imagenes.sincronizar(r.id);
+      if (fallos.length) toast.warning(`Presupuesto guardado, pero: ${fallos.join(" · ")}`);
+      return r;
     },
     onSuccess: (r) => {
       toast.success(presupuesto ? "Presupuesto actualizado" : "Presupuesto creado");
@@ -246,6 +295,7 @@ export function PresupuestoFormDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {!presupuesto && borrador && <AvisosIa avisos={borrador.avisos} />}
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-1 md:col-span-1">
               <Label>Cliente</Label>
@@ -392,6 +442,8 @@ export function PresupuestoFormDialog({
               <Plus className="h-4 w-4 mr-1" /> Añadir línea
             </Button>
           </div>
+
+          <ImagenesPresupuesto estado={imagenes} />
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
