@@ -31,6 +31,8 @@ import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
 import { tramosGrafica } from "@/dominio/periodos";
+import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
+import { useProformasPendientes } from "@/lib/gerencia";
 import {
   antiguedadPendientes,
   avanceObjetivo,
@@ -66,6 +68,13 @@ export function Resumen({ d }: { d: DatosGerencia }) {
   const pendienteHoy = d.pendientes.reduce((s, x) => s + Number(x.pendiente ?? 0), 0);
   const sinCostes = d.costeMetro === 0 && c.coste === 0;
 
+  // Las proformas sin factura, de cualquier fecha: no dependen del periodo.
+  const { data: filasProformas, error: errorProformas } = useProformasPendientes();
+  const proformas = useMemo(
+    () => (filasProformas ? resumenProformas(proformasSinFactura(filasProformas, d.hoy)) : null),
+    [filasProformas, d.hoy],
+  );
+
   const avisos = useMemo(
     () =>
       avisosGerencia({
@@ -73,8 +82,9 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         variacionVendido: frente ? variacion(c.total, p.total) : null,
         webSinPagar: { ...d.webSinPagar, cuentan: d.ajustes.web_sin_pagar_cuenta },
         banco: d.banco ? resumenBanco(d.banco) : null,
+        proformas,
       }),
-    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco],
+    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco, proformas],
   );
 
   const grafica = useMemo(() => {
@@ -178,7 +188,14 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Avisos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          {/* Un fallo no es «ninguna proforma pendiente». */}
+          {errorProformas && (
+            <p className="flex items-start gap-2 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              No se han podido leer las proformas sin factura: {errorProformas.message}
+            </p>
+          )}
           {avisos.length === 0 ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <CheckCircle2 className="h-4 w-4 text-status-completado" />

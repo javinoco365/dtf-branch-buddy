@@ -23,7 +23,9 @@
 import { z } from "zod";
 import { redondear } from "./importes";
 import { CATEGORIAS_COMPRA } from "./compras";
-import { TIPOS_LINEA_COMPRA } from "./tipos-textil";
+import { TIPOS_DOCUMENTO_COMPRA, TIPOS_LINEA_COMPRA } from "./tipos-textil";
+import type { TipoDocumentoCompra } from "./tipos-textil";
+import type { SugerenciaProforma } from "./proformas";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -63,6 +65,10 @@ export type CompraComparable = {
   fichero_huella?: string | null;
   estado?: string | null;
   borrada_en?: string | null;
+  /** Sin la migración, undefined = factura. */
+  tipo_documento?: string | null;
+  /** En una factura casada, su proforma. */
+  proforma_id?: string | null;
 };
 
 export type NivelDuplicado = "archivo" | "factura" | "probable";
@@ -72,9 +78,29 @@ export type Duplicado = {
   de: CompraComparable;
   /** La otra está borrada: se avisa, pero no impide nada. */
   borrada: boolean;
+  /**
+   * Esta es una proforma y la otra, una factura ya registrada sin casar que
+   * parece la suya: registrarla volvería a meter el género.
+   */
+  facturaDeProforma?: boolean;
 };
 
 const importe = (c: CompraComparable) => num(c.liquido ?? c.total);
+
+/** Días entre dos fechas ISO; Infinity si falta alguna. */
+const diasEntre = (a: string | null | undefined, b: string | null | undefined) => {
+  if (!a || !b) return Infinity;
+  const d =
+    (Date.parse(`${a.slice(0, 10)}T00:00:00Z`) - Date.parse(`${b.slice(0, 10)}T00:00:00Z`)) /
+    86_400_000;
+  return Number.isFinite(d) ? Math.abs(d) : Infinity;
+};
+
+/**
+ * Ventana para sospechar que una factura registrada es la de una proforma
+ * (mismo proveedor e importe): la factura llega días o semanas después.
+ */
+export const DIAS_FACTURA_DE_PROFORMA = 90;
 
 /**
  * Las otras compras que parecen la misma, la más segura primero. Cada otra
@@ -89,8 +115,37 @@ export function duplicadosDe(c: CompraComparable, otras: readonly CompraComparab
     const borrada = !!o.borrada_en;
     const mismoProveedor =
       proveedor !== "" && claveProveedor(o.nif_proveedor, o.proveedor) === proveedor;
+    // Una proforma y su factura llevan a menudo el mismo número, fecha e
+    // importe: no son duplicados. Tampoco el par ya casado.
+    const otroDocumento =
+      (c.tipo_documento ?? "factura") !== (o.tipo_documento ?? "factura") ||
+      (!!c.id && o.proforma_id === c.id) ||
+      (!!o.id && c.proforma_id === o.id);
+    // Al revés sí importa: una proforma que llega cuando su factura ya está
+    // registrada (sin casar). El casado solo se hace al registrar la factura,
+    // así que registrar la proforma metería el género dos veces.
+    const facturaDeProforma =
+      c.tipo_documento === "proforma" &&
+      (o.tipo_documento ?? "factura") === "factura" &&
+      !o.proforma_id &&
+      o.estado === "registrada" &&
+      mismoProveedor;
     let nivel: NivelDuplicado | null = null;
     if (c.fichero_huella && o.fichero_huella === c.fichero_huella) nivel = "archivo";
+    else if (facturaDeProforma) {
+      if (numero !== "" && claveNumero(o.numero) === numero) nivel = "factura";
+      else if (
+        diasEntre(o.fecha, c.fecha) <= DIAS_FACTURA_DE_PROFORMA &&
+        importe(c) > 0 &&
+        Math.abs(redondear(importe(o) - importe(c))) < 0.01
+      )
+        nivel = "probable";
+      if (nivel && !borrada) {
+        encontrados.push({ nivel, de: o, borrada, facturaDeProforma: true });
+        continue;
+      }
+      nivel = null;
+    } else if (otroDocumento) nivel = null;
     else if (mismoProveedor && numero !== "" && claveNumero(o.numero) === numero) nivel = "factura";
     else if (
       mismoProveedor &&
@@ -118,8 +173,13 @@ export function avisoDuplicado(d: Duplicado): string {
     .join(" ");
   if (d.borrada) return `Ya la subiste y la borraste: ${cual}.`;
   if (d.nivel === "archivo") return `Este fichero ya está subido: ${cual}.`;
+  if (d.facturaDeProforma)
+    return d.nivel === "factura"
+      ? `Esta proforma parece de la factura ${cual}, ya registrada: no la registres (la factura ya cuenta y, si es textil, su género ya entró).`
+      : `Esta proforma puede ser de la factura ${cual}, ya registrada (mismo proveedor e importe): si lo es, no la registres (la factura ya cuenta y, si es textil, su género ya entró).`;
+  const documento = d.de.tipo_documento === "proforma" ? "proforma" : "factura";
   if (d.nivel === "factura")
-    return `Esta factura ya está ${d.de.estado === "registrada" ? "registrada" : "en la cola"}: ${cual}.`;
+    return `Esta ${documento} ya está ${d.de.estado === "registrada" ? "registrada" : "en la cola"}: ${cual}.`;
   return `Posible duplicado de ${cual} (mismo proveedor, fecha e importe).`;
 }
 
@@ -163,6 +223,15 @@ export const esquemaLectura = z.object({
     (v) => (v === "" ? null : v),
     z.enum(CATEGORIAS_COMPRA.map((c) => c.valor) as [string, ...string[]]).nullable(),
   ),
+  // Factura o proforma. «» = la IA duda: lo elige la persona. Tolerante: un
+  // valor raro o la clave ausente no tiran la lectura, quedan en null.
+  tipo_documento: z
+    .preprocess((v) => (v === "" ? null : v), z.enum(TIPOS_DOCUMENTO_COMPRA).nullable())
+    .optional()
+    .catch(null)
+    .transform((v) => v ?? null),
+  /** El n.º de proforma o pedido que cita una factura, para sugerir el casado. */
+  referencia_proforma: textoOpcional,
   base: texto,
   iva: texto,
   irpf: texto,
@@ -187,6 +256,9 @@ export const esquemaLectura = z.object({
       talla: textoOpcional,
       ean: textoOpcional,
       unidades_por_pack: textoOpcional,
+      // Líneas partidas por talla: el número de la línea del papel y su importe.
+      linea_papel: textoOpcional,
+      importe_linea_papel: textoOpcional,
     }),
   ),
 });
@@ -226,6 +298,8 @@ export const ESQUEMA_LECTURA_JSON = {
     "confianza",
     "dudas",
     "lineas",
+    "tipo_documento",
+    "referencia_proforma",
   ],
   properties: {
     proveedor: tOn,
@@ -240,6 +314,8 @@ export const ESQUEMA_LECTURA_JSON = {
     total: tOn,
     confianza: { type: "number" },
     dudas: { type: "array", items: { type: "string" } },
+    tipo_documento: { type: "string", enum: [...TIPOS_DOCUMENTO_COMPRA, ""] },
+    referencia_proforma: tOn,
     lineas: {
       type: "array",
       items: {
@@ -259,6 +335,8 @@ export const ESQUEMA_LECTURA_JSON = {
           "talla",
           "ean",
           "unidades_por_pack",
+          "linea_papel",
+          "importe_linea_papel",
         ],
         properties: {
           descripcion: { type: "string" },
@@ -274,6 +352,8 @@ export const ESQUEMA_LECTURA_JSON = {
           talla: tOn,
           ean: tOn,
           unidades_por_pack: tOn,
+          linea_papel: tOn,
+          importe_linea_papel: tOn,
         },
       },
     },
@@ -319,9 +399,28 @@ export function motivosRevision(d: {
   tipoIva: number | null;
   categoria: string | null;
   duplicados: readonly Duplicado[];
+  /** Lo que dijo la IA: null si dudó; sin la clave, no se dice nada. */
+  tipoDocumento?: TipoDocumentoCompra | null;
+  /** Proformas que pueden ser de esta factura (sugerirProformas). */
+  proformas?: readonly SugerenciaProforma[];
 }): string[] {
   const motivos: string[] = [];
   for (const dup of d.duplicados) motivos.push(avisoDuplicado(dup));
+  if (d.tipoDocumento === null) motivos.push("La IA no sabe si es factura o proforma: elígelo.");
+  else if (d.tipoDocumento === "proforma")
+    motivos.push(
+      d.categoria === "textil"
+        ? "Es una proforma: mete el género en el stock y no cuenta en el IVA ni en Gerencia."
+        : "Es una proforma: no cuenta en el IVA ni en Gerencia.",
+    );
+  if (d.tipoDocumento !== "proforma") {
+    for (const s of (d.proformas ?? []).slice(0, 3)) {
+      const p = s.proforma;
+      motivos.push(
+        `Puede ser la factura de la proforma ${p.numero ?? "(sin número)"} del ${p.fecha} (${p.proveedor}): cásala al revisarla.`,
+      );
+    }
+  }
   if (d.confianza < UMBRAL_CONFIANZA) {
     motivos.push(
       `La IA no está segura de su lectura (confianza ${Math.round(d.confianza * 100)} %).`,
@@ -350,3 +449,26 @@ export function avisosQueImportan<T extends { linea: number | null; mensaje: str
 
 /** El aviso de `revisarCompra` cuando no hay líneas. */
 export const MENSAJE_SIN_LINEAS = "No se ha leído ninguna línea.";
+
+// ---------------------------------------------------------------------------
+// Factura o proforma, según la IA
+// ---------------------------------------------------------------------------
+
+const campoDe = (lecturaIa: unknown, clave: string): unknown =>
+  lecturaIa && typeof lecturaIa === "object"
+    ? (lecturaIa as Record<string, unknown>)[clave]
+    : undefined;
+
+/** Lo que dijo la IA; null si no lo dijo o dudó («»). */
+export function tipoDocumentoLeido(lecturaIa: unknown): TipoDocumentoCompra | null {
+  const v = campoDe(lecturaIa, "tipo_documento");
+  return (TIPOS_DOCUMENTO_COMPRA as readonly unknown[]).includes(v)
+    ? (v as TipoDocumentoCompra)
+    : null;
+}
+
+/** El n.º de proforma o pedido que cita la factura; null si no cita ninguno. */
+export function referenciaProformaDe(lecturaIa: unknown): string | null {
+  const v = campoDe(lecturaIa, "referencia_proforma");
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}

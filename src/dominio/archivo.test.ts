@@ -232,3 +232,14 @@ describe("resumen e índice", () => {
     expect(filas[2][0]).toBe("(falta el fichero)");
   });
 });
+
+describe("proformas en el archivo", () => {
+  it("la proforma no entra en el ZIP de la gestoría; su factura sí", () => {
+    const p = deCompra({ id: "p", estado: "registrada", tipo_documento: "proforma" });
+    const f = deCompra({ id: "f", estado: "registrada", tipo_documento: "factura" });
+    expect(p.proforma).toBe(true);
+    expect(f.proforma).toBe(false);
+    expect(entraEnArchivo(p)).toBe(false);
+    expect(entraEnArchivo(f)).toBe(true);
+  });
+});

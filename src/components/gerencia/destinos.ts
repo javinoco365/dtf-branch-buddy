@@ -1,4 +1,4 @@
-import { eur, numero } from "@/lib/format";
+import { eur, fechaCorta, numero } from "@/lib/format";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { escribirSeleccion, type Comparacion, type Seleccion } from "@/dominio/periodos";
 import type { CobroConsolidado } from "@/dominio/facturacion";
@@ -145,6 +145,16 @@ export const DESTINO_AJUSTES: Destino = { to: "/panel/gerencia", search: { pesta
 
 export const DESTINO_CONCILIACION: Destino = { to: "/panel/conciliacion" };
 
+/**
+ * Las proformas que esperan su factura, de todas las categorías, en Compras (general): el
+ * aviso de Gerencia y los anticipos de Tesorería cuentan todas. Textil › Compras solo lista
+ * las textiles.
+ */
+export const DESTINO_PROFORMAS_PENDIENTES: Destino = {
+  to: "/panel/compras",
+  search: { documento: "proformas_pendientes" },
+};
+
 /** El texto de cada aviso. Las cifras van formateadas como en el resto del CRM. */
 export function textoAviso(a: Aviso, frente?: string): string {
   switch (a.tipo) {
@@ -156,6 +166,12 @@ export function textoAviso(a: Aviso, frente?: string): string {
       return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). ${a.cuentan ? "Cuentan" : "No cuentan"} en lo vendido (se cambia en Ajustes).`;
     case "banco_sin_casar":
       return `${a.movimientos} ${a.movimientos === 1 ? "entrada del banco está" : "entradas del banco están"} sin casar con una factura (${eur(a.importe)}).`;
+    case "proforma_sin_factura": {
+      const antigua = a.masAntigua
+        ? `; la más antigua, del ${fechaCorta(a.masAntigua)}${a.dias !== null ? ` (${a.dias} ${a.dias === 1 ? "día" : "días"})` : ""}`
+        : "";
+      return `${a.proformas} ${a.proformas === 1 ? "proforma" : "proformas"} sin factura (${eur(a.importe)})${antigua}.`;
+    }
   }
 }
 
@@ -165,6 +181,8 @@ export function destinoAviso(a: Aviso, d: DatosGerencia): Destino {
       return destinoPendientes(d.filtro);
     case "banco_sin_casar":
       return DESTINO_CONCILIACION;
+    case "proforma_sin_factura":
+      return DESTINO_PROFORMAS_PENDIENTES;
     default:
       return destinoPedidos(d.filtro, d.seleccion);
   }

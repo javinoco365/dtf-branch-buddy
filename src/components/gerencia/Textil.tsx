@@ -18,6 +18,7 @@ import {
   resumenControlesAlmacen,
   useControlesAlmacen,
   useMovimientosAlmacen,
+  useProformasPendientes,
   useTextilGerencia,
   type DatosMovimientosAlmacen,
 } from "@/lib/gerencia";
@@ -33,6 +34,7 @@ import { cifrasGerencia, desglose } from "@/dominio/gerencia";
 import { porcentajeMargen } from "@/dominio/margen";
 import { ivaSoportado } from "@/dominio/fiscal";
 import { productosTextil, resumenStock } from "@/dominio/textil";
+import { proformasSinFactura, proformasTextil, resumenProformas } from "@/dominio/proformas";
 import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
@@ -86,6 +88,16 @@ export function Textil({ d }: { d: DatosGerencia }) {
   const compras = useMemo(
     () => (datos.data?.compras ? ivaSoportado(datos.data.compras) : null),
     [datos.data],
+  );
+  // Las proformas textiles sin factura, de cualquier fecha (no dependen del
+  // periodo). Las de otras categorías no son del almacén ni salen en Textil › Compras.
+  const { data: filasProformas, error: errorProformas } = useProformasPendientes();
+  const proformas = useMemo(
+    () =>
+      filasProformas
+        ? resumenProformas(proformasSinFactura(proformasTextil(filasProformas), d.hoy))
+        : null,
+    [filasProformas, d.hoy],
   );
 
   if (fuera) {
@@ -290,6 +302,25 @@ export function Textil({ d }: { d: DatosGerencia }) {
               <p className="text-xs text-muted-foreground">
                 Más {compras.sinRegistrar}{" "}
                 {compras.sinRegistrar === 1 ? "compra subida" : "compras subidas"} sin registrar.
+              </p>
+            )}
+            {errorProformas && (
+              <p className="text-xs text-destructive">
+                No se han podido leer las proformas sin factura: {errorProformas.message}
+              </p>
+            )}
+            {proformas && proformas.proformas > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {proformas.proformas} {proformas.proformas === 1 ? "proforma" : "proformas"} sin
+                factura ({eur(proformas.importe)}): no cuentan en las compras hasta que llegue su
+                factura.{" "}
+                <VerDetalle
+                  destino={{
+                    to: "/panel/textil/compras",
+                    search: { documento: "proformas_pendientes" },
+                  }}
+                  texto="Ver"
+                />
               </p>
             )}
           </div>
@@ -620,6 +651,14 @@ function ControlesDelAlmacen({
                     : undefined
                 }
               />
+              {resumen.proformasSinFactura > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {resumen.proformasSinFactura}{" "}
+                  {resumen.proformasSinFactura === 1 ? "proforma" : "proformas"} sin factura: se
+                  comprueban contra sus propias entradas hasta que llegue su factura. No es un
+                  descuadre.
+                </p>
+              )}
               <Comprobacion
                 etiqueta="Variantes descuadradas"
                 valor={cuenta(resumen.variantesDescuadradas)}
@@ -645,10 +684,28 @@ function ControlesDelAlmacen({
                   {conDescuadre.map((f) => (
                     <TableRow key={f.compra.id}>
                       <TableCell className="font-medium">
-                        {[f.compra.proveedor, f.compra.numero].filter(Boolean).join(" · ") ||
-                          "Sin número"}
+                        {f.tipo === "par"
+                          ? [
+                              f.compra.proveedor,
+                              `Factura n.º ${f.compra.numero ?? "(sin número)"} con su proforma n.º ${
+                                f.proforma?.numero ?? "(sin número)"
+                              }`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : [
+                              f.compra.proveedor,
+                              f.tipo === "proforma_sin_factura" && f.compra.numero
+                                ? `Proforma n.º ${f.compra.numero}`
+                                : f.compra.numero,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "Sin número"}
                         <span className="block text-xs text-muted-foreground">
                           {fechaCorta(f.compra.fecha)}
+                          {f.tipo === "par" && f.sinAplicar !== 0 && (
+                            <> · sin aplicar {eur(f.sinAplicar)}</>
+                          )}
                         </span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{eur(f.base)}</TableCell>

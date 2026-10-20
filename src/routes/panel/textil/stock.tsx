@@ -67,7 +67,8 @@ import {
 } from "@/lib/escaner-textil.functions";
 import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
-import { eur as fmtEUR, eurUnitario, numero } from "@/lib/format";
+import { eur as fmtEUR, eurConSigno, eurUnitario, numero } from "@/lib/format";
+import { comprasParaDevolucion } from "@/dominio/proformas";
 import {
   EXPLICACION_VALOR_STOCK,
   totalesMovimientosStock,
@@ -864,7 +865,8 @@ function OtroMovimientoDialog({
   const [compraId, setCompraId] = useState<string>(SIN_COMPRA);
   const [nota, setNota] = useState("");
 
-  // Las facturas textil registradas, para enlazar una devolución a proveedor.
+  // Las compras textil registradas que metieron género (facturas y proformas;
+  // nunca la factura casada con su proforma), para enlazar una devolución.
   const comprasFn = useServerFn(listCompras);
   const { data: datosCompras } = useQuery({
     queryKey: ["compras", "textil"],
@@ -873,8 +875,8 @@ function OtroMovimientoDialog({
   });
   const compras = useMemo(
     () =>
-      ((datosCompras?.compras ?? []) as any[]).filter(
-        (c) => c.estado === "registrada" && !c.borrada_en && (c.categoria ?? "textil") === "textil",
+      comprasParaDevolucion(
+        ((datosCompras?.compras ?? []) as any[]).filter((c) => c.estado === "registrada"),
       ),
     [datosCompras],
   );
@@ -953,9 +955,15 @@ function OtroMovimientoDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={SIN_COMPRA}>Sin enlazar</SelectItem>
-                  {compras.map((c) => (
+                  {compras.map(({ compra: c, facturadaEn }) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {[c.proveedor, c.numero && `n.º ${c.numero}`, c.fecha]
+                      {[
+                        c.proveedor,
+                        c.tipo_documento === "proforma" ? "proforma" : null,
+                        c.numero && `n.º ${c.numero}`,
+                        c.fecha,
+                        facturadaEn !== null && `facturada en n.º ${facturadaEn}`,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </SelectItem>
@@ -1178,6 +1186,7 @@ const MOTIVO_TEXTO: Record<string, string> = {
   devolucion_proveedor: "Devolución a proveedor",
   ajuste_inventario: "Ajuste de inventario",
   merma: "Merma",
+  ajuste_coste: "Ajuste de coste",
 };
 
 /** Los movimientos que devuelve listMovimientosStock como mucho (su `.limit(200)`). */
@@ -1224,7 +1233,8 @@ function HistorialDialog({ item, onClose }: any) {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Motivo</TableHead>
                 <TableHead className="text-right">Unidades</TableHead>
-                <TableHead className="text-right">Coste unit.</TableHead>
+                {/* El ajuste de coste no tiene coste unitario: lleva el importe total. */}
+                <TableHead className="text-right">Coste unit. / importe</TableHead>
                 <TableHead>Nota</TableHead>
               </TableRow>
             </TableHeader>
@@ -1235,15 +1245,31 @@ function HistorialDialog({ item, onClose }: any) {
                     {new Date(m.created_at).toLocaleString("es-ES")}
                   </TableCell>
                   <TableCell>{MOTIVO_TEXTO[m.motivo] ?? m.motivo}</TableCell>
-                  <TableCell
-                    className={`text-right font-medium ${
-                      Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
-                    }`}
-                  >
-                    {Number(m.cantidad) > 0 ? "+" : ""}
-                    {m.cantidad}
-                  </TableCell>
-                  <TableCell className="text-right">{fmtEUR(Number(m.coste_unitario))}</TableCell>
+                  {m.motivo === "ajuste_coste" ? (
+                    // Revaloriza lo que queda (factura casada con su proforma): sin
+                    // unidades, con su importe.
+                    <>
+                      <TableCell className="text-right text-muted-foreground">—</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {eurConSigno(Number(m.importe_ajuste ?? 0))}{" "}
+                        <span className="text-xs text-muted-foreground">en total</span>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell
+                        className={`text-right font-medium ${
+                          Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
+                        }`}
+                      >
+                        {Number(m.cantidad) > 0 ? "+" : ""}
+                        {m.cantidad}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {fmtEUR(Number(m.coste_unitario))}
+                      </TableCell>
+                    </>
+                  )}
                   <TableCell className="text-xs text-muted-foreground">{m.nota ?? "—"}</TableCell>
                 </TableRow>
               ))}

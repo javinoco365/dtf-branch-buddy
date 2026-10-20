@@ -11,7 +11,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { tabla } from "./rpc";
+import { faltaLaColumna, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
 import { rutaPdfTextil, rutaPdfTienda } from "./rutas-pdf";
@@ -37,6 +37,10 @@ const fecha = z
  *
  * `desde` y `hasta` nulos es «todo».
  */
+/** Columnas de las compras del archivo (sin las de proformas). */
+const COLUMNAS_COMPRA =
+  "id, fecha, proveedor, nif_proveedor, numero, base, iva, total, liquido, estado, borrada_en, fichero_ruta";
+
 export const listarArchivo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ desde: fecha, hasta: fecha }).parse(d))
@@ -50,7 +54,21 @@ export const listarArchivo = createServerFn({ method: "POST" })
       return r;
     };
 
-    const [tiendas, ventas, textil, compras] = await Promise.all([
+    const leerCompras = (columnas: string) =>
+      leerTodas<any>((a, b) =>
+        enRango(
+          tabla(sb, "textil_compras")
+            .select(columnas)
+            .eq("estado", "registrada")
+            .is("borrada_en", null),
+        )
+          .order("fecha")
+          .order("id")
+          .range(a, b),
+      );
+
+    // La proforma no va al archivo: lo filtra entraEnArchivo (dominio).
+    const [tiendas, ventas, textil, comprasConTipo] = await Promise.all([
       tabla(sb, "tiendas").select("id, nombre"),
       leerTodas<any>((a, b) =>
         enRango(
@@ -76,20 +94,12 @@ export const listarArchivo = createServerFn({ method: "POST" })
           .order("id")
           .range(a, b),
       ),
-      leerTodas<any>((a, b) =>
-        enRango(
-          tabla(sb, "textil_compras")
-            .select(
-              "id, fecha, proveedor, nif_proveedor, numero, base, iva, total, liquido, estado, borrada_en, fichero_ruta",
-            )
-            .eq("estado", "registrada")
-            .is("borrada_en", null),
-        )
-          .order("fecha")
-          .order("id")
-          .range(a, b),
-      ),
+      leerCompras(`${COLUMNAS_COMPRA}, tipo_documento`),
     ]);
+    // Sin las migraciones de proformas, sin tipo_documento (todas son facturas).
+    const compras = faltaLaColumna(comprasConTipo.error)
+      ? await leerCompras(COLUMNAS_COMPRA)
+      : comprasConTipo;
     for (const r of [tiendas, ventas, textil, compras]) {
       if (r.error) throw new Error(r.error.message);
     }

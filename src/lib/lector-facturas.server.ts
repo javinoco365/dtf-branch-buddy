@@ -22,18 +22,20 @@ const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/gif", "image/webp"] as c
 type TipoImagen = (typeof TIPOS_IMAGEN)[number];
 const esImagen = (t: string): t is TipoImagen => (TIPOS_IMAGEN as readonly string[]).includes(t);
 
-const INSTRUCCIONES = `Eres un lector de facturas de compra de una empresa española de impresión DTF y textil.
+const INSTRUCCIONES = `Eres un lector de documentos de compra (facturas y proformas) de una empresa española de impresión DTF y textil.
 
-Devuelve los datos de la factura con el esquema que se te pide. Cuando un dato no aparece, escribe un texto vacío ("").
+Devuelve los datos del documento con el esquema que se te pide. Cuando un dato no aparece, escribe un texto vacío ("").
 
 - proveedor: razón social de quien EMITE la factura (no de quien la recibe).
 - nif_proveedor: su NIF o CIF.
-- numero: número de la factura.
+- numero: número del documento (el de la proforma, si es una proforma).
+- tipo_documento: "proforma" si el papel dice Proforma, Factura proforma, Pro-forma, Presupuesto/Pedido con pago por adelantado u Order confirmation; "factura" si es una factura (ordinaria o simplificada); si no está claro, "" y dilo en dudas.
+- referencia_proforma: si es una factura que cita una proforma o un pedido anterior, ese número; si no, "".
 - fecha: fecha de emisión, tal como aparece.
 - concepto: en pocas palabras, qué se compra.
 - categoria: una de ${CATEGORIAS_COMPRA.map((c) => `"${c.valor}" (${c.etiqueta})`).join(", ")}. Si no está claro, "".
 - base, iva, irpf, total: base imponible, cuota de IVA, retención de IRPF y total a pagar.
-- lineas: cada línea del papel con su tipo, cantidad, unidad, precio unitario, importe y los datos de la prenda.
+- lineas: cada línea del papel (o cada talla, si una línea trae varias y se parte) con su tipo, cantidad, unidad, precio unitario, importe y los datos de la prenda.
 - confianza: de 0 a 1, cuánto te fías de tu lectura en conjunto.
 - dudas: cada cosa que no esté clara (un número borroso, un dato que no aparece, dos tipos de IVA…), en castellano y en una frase. Si no hay, una lista vacía.
 
@@ -45,11 +47,15 @@ En cada línea, además:
 - color y talla: tal como aparecen en esa línea. Si la línea no los dice, ""; no los deduzcas de otras líneas.
 - ean: el código de barras (EAN o GTIN, de 8 a 14 cifras) si la línea lo trae; si no, "".
 - unidades_por_pack: si la línea vende packs, cajas o lotes («pack 5», «caja de 10»), cuántas prendas lleva cada uno, tal como está escrito; si se vende por unidades, "".
-- Cada línea del papel es una línea: no juntes tallas ni colores de líneas distintas ni separes una línea en varias. Si una línea lleva varias tallas juntas, déjala así y dilo en dudas.
+- Si una línea del papel trae varias tallas (por ejemplo «S:2 M:3 L:1» o una tabla de tallas en la misma línea), pártela en una línea por prenda, color y talla, con su cantidad, su precio unitario (el de esa talla si el papel lo distingue; si no, el de la línea) y su importe. Las partidas de una línea tienen que sumar EXACTAMENTE el importe de esa línea del papel: si el redondeo no cuadra, ajusta el céntimo en la última partida. En cada partida, linea_papel es el número (1, 2, 3…) de la línea del papel de la que sale. Si el papel no dice cuántas unidades van de cada talla, NO la partas: déjala como está, con linea_papel "", y dilo en dudas. No juntes líneas distintas del papel.
+- linea_papel: "" en las líneas que no se parten.
+- importe_linea_papel: en cada partida, el importe de la línea del papel de la que sale, tal cual está escrito (el mismo en todas las partidas de esa línea); "" en las líneas que no se parten.
 
 Reglas:
 - Copia los importes TAL CUAL están escritos, con su coma decimal si la tienen.
-  No los conviertas ni los recalcules.
+  No los conviertas ni los recalcules, salvo el importe de cada partida cuando
+  partes una línea por tallas (cantidad × precio de esa talla, con el céntimo
+  ajustado en la última); importe_linea_papel sí va tal cual.
 - Si un dato no aparece en el documento, pon "" y dilo en dudas. NO lo
   deduzcas ni lo inventes: un hueco se rellena a mano, un dato inventado no se
   detecta.
@@ -130,7 +136,10 @@ export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<
       messages: [
         {
           role: "user",
-          content: [contenido, { type: "text", text: "Lee esta factura de compra." }],
+          content: [
+            contenido,
+            { type: "text", text: "Lee este documento de compra (factura o proforma)." },
+          ],
         },
       ],
     });

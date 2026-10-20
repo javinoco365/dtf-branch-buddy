@@ -193,6 +193,8 @@ export type CompraResumen = {
   liquido_origen?: string | null;
   /** Borrado lógico: si tiene fecha, no cuenta. */
   borrada_en?: string | null;
+  /** «factura» o «proforma»; sin la migración, factura. La proforma no cuenta. */
+  tipo_documento?: string | null;
 };
 
 export type IvaSoportado = CuentaFiscal & {

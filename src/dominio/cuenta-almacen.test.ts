@@ -177,3 +177,60 @@ describe("valorAFecha", () => {
     expect(valorAFecha(movs, "2026-11-01")).toEqual({ unidades: 11, valor: 29.9 });
   });
 });
+
+describe("ajuste_coste y regularización", () => {
+  it("valorMovimiento de un ajuste_coste es su importe_ajuste", () => {
+    expect(
+      valorMovimiento({
+        motivo: "ajuste_coste",
+        cantidad: 0,
+        coste_unitario: 0,
+        importe_ajuste: "2.505",
+      }),
+    ).toBe(2.51);
+    expect(
+      valorMovimiento({
+        motivo: "ajuste_coste",
+        cantidad: 0,
+        coste_unitario: 0,
+        importe_ajuste: -3,
+      }),
+    ).toBe(-3);
+    expect(valorMovimiento({ motivo: "ajuste_coste", cantidad: 0, coste_unitario: 5 })).toBe(0);
+  });
+
+  const movs: MovimientoAlmacen[] = [
+    mov("2026-09-01", "compra", 10, 5, { compra_id: "p" }),
+    mov("2026-10-02", "venta", -8, 5, { textil_pedido_id: "t1" }),
+    mov("2026-10-05", "compra", 2, 6, { compra_id: "f" }),
+    mov("2026-10-05", "ajuste_coste", 0, 0, { compra_id: "f", importe_ajuste: 2 }),
+    mov("2026-10-05", "devolucion_proveedor", -1, 5.5, { compra_id: "f", regularizacion: true }),
+    mov("2026-10-06", "devolucion_proveedor", -1, 5.5),
+  ];
+
+  it("el ajuste va a compras y no a pérdidas; la salida de regularización, a compras en negativo", () => {
+    const c = cuentaAlmacen(movs, "2026-10-01", "2026-10-31");
+    expect(c.compras).toEqual({ unidades: 1, valor: 8.5 });
+    expect(c.devolucionesProveedor).toEqual({ unidades: 1, valor: 5.5 });
+    // Solo la devolución sin marca es pérdida.
+    expect(c.perdidas).toBe(5.5);
+    expect(costeAlmacenPeriodo(movs, "2026-10-01", "2026-10-31")).toBe(5.5);
+    expect(c.descuadre).toEqual({ unidades: 0, valor: 0 });
+    expect(c.final.valor).toBe(
+      Math.round(
+        (c.inicial.valor + c.compras.valor - c.ventas.valor - c.devolucionesProveedor.valor) * 100,
+      ) / 100,
+    );
+  });
+
+  it("una devolucion_proveedor sin la marca sigue como hoy", () => {
+    const c = cuentaAlmacen(
+      [mov("2026-10-06", "devolucion_proveedor", -2, 4, { compra_id: "f" })],
+      "2026-10-01",
+      "2026-10-31",
+    );
+    expect(c.compras).toEqual({ unidades: 0, valor: 0 });
+    expect(c.devolucionesProveedor).toEqual({ unidades: 2, valor: 8 });
+    expect(c.perdidas).toBe(8);
+  });
+});

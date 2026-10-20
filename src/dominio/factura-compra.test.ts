@@ -181,6 +181,8 @@ describe("normalizarCompra: escáner textil", () => {
       talla: "XL",
       ean: "4006381333931",
       unidades_por_pack: 1,
+      linea_papel: null,
+      importe_linea_papel: null,
     });
   });
 
@@ -311,5 +313,112 @@ describe("revisarCompra: avisos del escáner textil", () => {
       lineas: [{ descripcion: "Camiseta", cantidad: 3, importe: 30, ean: "4006381333931" }],
     });
     expect(revisarCompra(leida)).toEqual([]);
+  });
+});
+
+describe("líneas partidas por talla y factura o proforma", () => {
+  const partida = (
+    talla: string,
+    cantidad: number,
+    importe: string,
+    linea: string,
+    total: string,
+  ) => ({
+    descripcion: `Camiseta ${talla}`,
+    cantidad,
+    precio_unitario: "3,00",
+    importe,
+    talla,
+    linea_papel: linea,
+    importe_linea_papel: total,
+  });
+
+  it("normalizarCompra lee linea_papel, importe_linea_papel y tipo_documento", () => {
+    const c = normalizarCompra({
+      tipo_documento: "proforma",
+      referencia_proforma: " ",
+      lineas: [
+        {
+          descripcion: "a",
+          cantidad: 1,
+          importe: "3",
+          linea_papel: "3",
+          importe_linea_papel: "-18,00",
+        },
+        { descripcion: "b", cantidad: 1, importe: "3", linea_papel: "", importe_linea_papel: "18" },
+        { descripcion: "c", cantidad: 1, importe: "3", linea_papel: "0", importe_linea_papel: "" },
+        { descripcion: "d", cantidad: 1, importe: "3", linea_papel: "2", importe_linea_papel: "" },
+      ],
+    });
+    expect(c.lineas.map((l) => [l.linea_papel, l.importe_linea_papel])).toEqual([
+      [3, -18],
+      [null, null],
+      [null, null],
+      [2, null],
+    ]);
+    expect(c.tipo_documento).toBe("proforma");
+    expect(c.referencia_proforma).toBeNull();
+    expect(normalizarCompra({ tipo_documento: "", lineas: [] }).tipo_documento).toBeNull();
+    expect(normalizarCompra({ tipo_documento: "otra", lineas: [] }).tipo_documento).toBeNull();
+    expect(normalizarCompra({ referencia_proforma: "PF-1" }).referencia_proforma).toBe("PF-1");
+  });
+
+  it("«S:2 M:3 L:1» partida que suma la línea del papel: sin aviso", () => {
+    const c = normalizarCompra({
+      base: "18,00",
+      iva: "0",
+      total: "18,00",
+      lineas: [
+        partida("S", 2, "6,00", "1", "18,00"),
+        partida("M", 3, "9,00", "1", "18,00"),
+        partida("L", 1, "3,00", "1", "18,00"),
+      ],
+    });
+    expect(revisarCompra(c)).toEqual([]);
+  });
+
+  it("si las tallas no suman la línea por un céntimo: aviso de cabecera", () => {
+    const c = normalizarCompra({
+      base: "18,00",
+      iva: "0",
+      total: "18,00",
+      lineas: [
+        partida("S", 2, "6,00", "1", "18,01"),
+        partida("M", 3, "9,00", "1", "18,01"),
+        partida("L", 1, "3,00", "1", "18,01"),
+      ],
+    });
+    expect(revisarCompra(c)).toEqual([
+      { linea: null, mensaje: "Línea 1 del papel: las tallas suman 18 y la línea dice 18.01." },
+    ]);
+  });
+
+  it("importes de línea distintos en el mismo grupo: aviso", () => {
+    const c = normalizarCompra({
+      base: "18,00",
+      iva: "0",
+      total: "18,00",
+      lineas: [
+        partida("S", 2, "6,00", "1", "18,00"),
+        partida("M", 3, "9,00", "1", "19,00"),
+        partida("L", 1, "3,00", "1", "18,00"),
+      ],
+    });
+    expect(revisarCompra(c)).toEqual([
+      {
+        linea: null,
+        mensaje: "Línea 1 del papel: la IA da dos importes distintos para la misma línea.",
+      },
+    ]);
+  });
+
+  it("sin importe de la línea del papel no se comprueba nada", () => {
+    const c = normalizarCompra({
+      base: "18,00",
+      iva: "0",
+      total: "18,00",
+      lineas: [partida("S", 2, "6,00", "1", ""), partida("M", 4, "12,00", "1", "")],
+    });
+    expect(revisarCompra(c)).toEqual([]);
   });
 });

@@ -64,6 +64,8 @@ export type TotalesCompras = {
   /** Lo que se paga: total con IVA menos la retención. El total si no hay líquido. */
   liquido: number;
   borradores: number;
+  /** Proformas (no borrador) apartadas: no son documento fiscal y no suman. */
+  proformas: number;
 };
 
 /**
@@ -80,14 +82,17 @@ export function totalesCompras(
     base?: Valor;
     liquido?: Valor;
     total?: Valor;
+    tipo_documento?: string | null;
   }[],
 ): TotalesCompras {
-  const cuentan = compras.filter((c) => c.estado !== "borrador");
+  const noBorrador = compras.filter((c) => c.estado !== "borrador");
+  const cuentan = noBorrador.filter((c) => c.tipo_documento !== "proforma");
   return {
     facturas: cuentan.length,
     base: sumarImportes(cuentan, (c) => c.base),
     liquido: sumarImportes(cuentan, (c) => c.liquido ?? c.total),
-    borradores: compras.length - cuentan.length,
+    borradores: compras.length - noBorrador.length,
+    proformas: noBorrador.length - cuentan.length,
   };
 }
 

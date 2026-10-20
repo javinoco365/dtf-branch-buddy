@@ -61,6 +61,8 @@ export type DocArchivo = {
   sustituye_a_id?: string | null;
   /** En ventas: el documento que corrige esta rectificativa. */
   rectifica_a_id?: string | null;
+  /** En compras: es una proforma (no es documento fiscal: no va a la gestoría). */
+  proforma?: boolean;
 };
 
 const num = (v: unknown) => {
@@ -318,6 +320,7 @@ export type FilaCompra = {
   estado?: string | null;
   borrada_en?: string | null;
   fichero_ruta?: string | null;
+  tipo_documento?: string | null;
 };
 
 export function deCompra(c: FilaCompra): DocArchivo {
@@ -336,15 +339,18 @@ export function deCompra(c: FilaCompra): DocArchivo {
     estado: c.borrada_en ? "borrada" : String(c.estado ?? ""),
     ext: extensionDe(c.fichero_ruta),
     tieneFichero: !!c.fichero_ruta,
+    proforma: c.tipo_documento === "proforma",
   };
 }
 
 /**
  * Lo que entra en el archivo: nada de borradores (no tienen número) ni de
  * compras borradas o sin registrar (no cuentan). Las facturas anuladas sí
- * entran, junto a su rectificativa: las dos están en el libro.
+ * entran, junto a su rectificativa: las dos están en el libro. Las proformas
+ * no: no son documento fiscal (va su factura).
  */
 export function entraEnArchivo(doc: DocArchivo): boolean {
+  if (doc.proforma) return false;
   if (doc.estado === "borrador" || doc.estado === "borrada") return false;
   if (doc.clase === "compra") return doc.estado === "registrada";
   return true;

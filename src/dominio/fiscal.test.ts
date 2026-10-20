@@ -6,6 +6,7 @@ import {
   type DocumentoDePedido,
   type DocumentoFiscal,
 } from "./fiscal";
+import { comprasQueCuentan } from "./compras";
 import { ventaDeTienda, type Venta } from "./gerencia";
 
 const doc = (
@@ -200,5 +201,32 @@ describe("vendido sin factura", () => {
     );
     // b sin nada, c solo borrador, d anulada: 50 + 30 + 20.
     expect(r).toEqual({ pedidos: 3, vendido: 100 });
+  });
+});
+
+describe("proformas en el IVA", () => {
+  it("una proforma no suma IVA soportado", () => {
+    const r = ivaSoportado(
+      comprasQueCuentan([
+        {
+          id: "f",
+          estado: "registrada",
+          base: 100,
+          iva: 21,
+          total: 121,
+          tipo_documento: "factura",
+        },
+        {
+          id: "p",
+          estado: "registrada",
+          base: 100,
+          iva: 21,
+          total: 121,
+          tipo_documento: "proforma",
+        },
+      ]),
+    );
+    expect(r.documentos).toBe(1);
+    expect(r.iva).toBe(21);
   });
 });

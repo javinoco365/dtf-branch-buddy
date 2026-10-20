@@ -21,8 +21,17 @@ export const MOTIVOS_STOCK = [
   "devolucion_proveedor",
   "ajuste_inventario",
   "merma",
+  "ajuste_coste",
 ] as const;
 export type MotivoStock = (typeof MOTIVOS_STOCK)[number];
+
+/** Qué documento es una compra: la proforma no es documento fiscal (decisión 3). */
+export const TIPOS_DOCUMENTO_COMPRA = ["factura", "proforma"] as const;
+export type TipoDocumentoCompra = (typeof TIPOS_DOCUMENTO_COMPRA)[number];
+export const ETIQUETAS_TIPO_DOCUMENTO: Record<TipoDocumentoCompra, string> = {
+  factura: "Factura",
+  proforma: "Proforma",
+};
 
 export const METODOS_CASADO = [
   "memoria",
@@ -141,6 +150,8 @@ export type LineaRegistro = {
   unidades_stock: number | null;
   coste_total_entrada: number | null;
   coste_unitario_entrada: number | null;
+  /** Número de la línea del papel de la que sale (líneas partidas por talla); null si no. */
+  linea_papel?: number | null;
 };
 
 /**
@@ -173,6 +184,10 @@ export type RegistroCompra = {
   notas?: string | null;
   lectura_ia: unknown;
   lineas: LineaRegistro[];
+  /** Sin la clave, "factura". */
+  tipo_documento?: TipoDocumentoCompra;
+  /** La proforma con la que se casa esta factura (solo facturas). */
+  proforma_id?: string | null;
 };
 
 export type ResultadoRegistro = {
@@ -182,6 +197,60 @@ export type ResultadoRegistro = {
   aprendidas: number;
   proveedor_id: string | null;
   proveedor_nuevo: boolean;
+  tipo_documento: TipoDocumentoCompra;
+  proforma_id: string | null;
+  casado: ResumenCasado | null;
+};
+
+/** Una variante en la regularización (SQL 1.7 c4 y regularizacionPrevista). */
+export type FilaRegularizacion = {
+  /** O "nueva:<indice>", solo en la previsión. */
+  stock_id: string;
+  unidades_proforma: number;
+  unidades_factura: number;
+  coste_unitario_proforma: number | null;
+  coste_unitario_factura: number | null;
+  entran: number;
+  salen: number;
+  unidades_ajustadas: number;
+  importe_ajuste: number;
+  importe_sin_aplicar: number;
+};
+
+export type RegularizacionStock = {
+  variantes: FilaRegularizacion[];
+  entran: number;
+  salen: number;
+  valor_proforma: number;
+  valor_entradas: number;
+  /** ≤ 0. */
+  valor_devoluciones: number;
+  importe_ajustes: number;
+  diferencia_sin_aplicar: number;
+  movimientos: number;
+};
+
+export type PagoTraspasado = {
+  enlaces_movidos: number;
+  grupos: number;
+  grupos_revisar: number;
+  /** El de la factura tras casar. */
+  estado_pago: "pendiente" | "pagada";
+  fecha_pago: string | null;
+  /** Si la proforma estaba pagada. */
+  proforma_pagada?: boolean;
+  /** (liquido ?? total) de la proforma, al céntimo. */
+  liquido_proforma?: number;
+  /** líquido de la factura − liquido_proforma. */
+  diferencia?: number;
+};
+
+/** textil_compras.casado_resumen de la factura casada, y `casado` del resultado del registro. */
+export type ResumenCasado = {
+  proforma_id: string;
+  /** null si no es textil. */
+  stock: RegularizacionStock | null;
+  pago: PagoTraspasado;
 };
 
 /** Una línea de presupuesto o pedido textil en pantalla. */

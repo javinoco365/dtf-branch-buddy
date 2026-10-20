@@ -52,6 +52,18 @@ export const eurUnitario = (n: number | null | undefined) =>
   }).format(Number(n ?? 0));
 
 /**
+ * Un precio unitario con un número fijo de decimales (4 por defecto): 6,8050 €
+ * · 2,1955 €. Para columnas de costes, que quedan alineadas por la coma.
+ */
+export const eurUnitarioFijo = (n: number | null | undefined, decimales = 4) =>
+  new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  }).format(Number(n ?? 0));
+
+/**
  * Un importe con su signo delante, como en los libros de caja: +1.234,00 € ·
  * −56,78 €. El menos es el signo «−», no el guion que escribe eur()
  * (-56,78 €), y el cero lleva «+».

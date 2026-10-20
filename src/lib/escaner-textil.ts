@@ -39,6 +39,24 @@ export async function escanerAplicado(cliente: unknown): Promise<boolean> {
   throw new Error(error.message);
 }
 
+/** La segunda (la grande) de las dos migraciones de proformas. */
+export const MIGRACION_PROFORMAS = "20261029100100";
+
+export const AVISO_MIGRACION_PROFORMAS =
+  "Falta aplicar las migraciones 20261029100000 y 20261029100100 (proformas): hasta entonces no se pueden registrar proformas ni casar facturas con ellas.";
+
+/**
+ * true si existe `proformas_version()` (la última sentencia de 20261029100100:
+ * si está, están las dos migraciones de proformas); false si falta. Cualquier
+ * otro error se lanza: un fallo de red o de permisos no es «falta la migración».
+ */
+export async function proformasAplicado(cliente: unknown): Promise<boolean> {
+  const { error } = await llamarRpcConError<number>(cliente, "proformas_version", {});
+  if (!error) return true;
+  if (faltaLaFuncion(error)) return false;
+  throw new Error(error.message);
+}
+
 /** «Línea N» para una posición 0…n−1. */
 const linea = (e: ErrorEscaner) => `Línea ${(e.linea ?? 0) + 1}`;
 
@@ -97,6 +115,7 @@ export type LineaEnvio = Omit<
 export function lineaDesdeFila(l: Record<string, unknown>): LineaLeida {
   const pack = Number(l.unidades_por_pack);
   const t = l.tipo;
+  const papel = l.linea_papel == null ? NaN : Number(l.linea_papel);
   return {
     descripcion: String(l.descripcion ?? ""),
     cantidad: Number(l.cantidad),
@@ -113,6 +132,7 @@ export function lineaDesdeFila(l: Record<string, unknown>): LineaLeida {
     talla: (l.talla as string | null) ?? null,
     ean: (l.ean as string | null) ?? null,
     unidades_por_pack: Number.isFinite(pack) && pack >= 1 ? pack : 1,
+    linea_papel: Number.isInteger(papel) && papel > 0 ? papel : null,
   };
 }
 
@@ -135,5 +155,6 @@ export function lineaEnvioSimple(l: LineaLeida, stock_id: string | null): LineaE
     stock_id,
     nueva_variante: null,
     casado_metodo: stock_id ? "manual" : null,
+    linea_papel: l.linea_papel ?? null,
   };
 }

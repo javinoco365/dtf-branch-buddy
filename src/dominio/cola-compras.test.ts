@@ -9,9 +9,12 @@ import {
   ESQUEMA_LECTURA_JSON,
   MAXIMO_UNIONES_API,
   motivosRevision,
+  referenciaProformaDe,
+  tipoDocumentoLeido,
   validarLectura,
   type CompraComparable,
 } from "./cola-compras";
+import type { ProformaFila, SugerenciaProforma } from "./proformas";
 
 const c = (id: string, extra: Partial<CompraComparable> = {}): CompraComparable => ({
   id,
@@ -97,6 +100,8 @@ const lecturaBuena = {
   total: "121,00",
   confianza: 0.97,
   dudas: [],
+  tipo_documento: "factura",
+  referencia_proforma: "",
   lineas: [
     {
       descripcion: "Tinta blanca 1L",
@@ -104,6 +109,8 @@ const lecturaBuena = {
       unidad: "ud",
       precio_unitario: "50,00",
       importe: "100,00",
+      linea_papel: "",
+      importe_linea_papel: "",
     },
   ],
 };
@@ -189,6 +196,8 @@ describe("validar la lectura de la IA", () => {
         "talla",
         "ean",
         "unidades_por_pack",
+        "linea_papel",
+        "importe_linea_papel",
       ].sort(),
     );
     expect(Object.keys(lineas.properties).sort()).toEqual([...lineas.required].sort());
@@ -288,5 +297,181 @@ describe("avisos según lo que se compra", () => {
     expect(avisosQueImportan(avisos, "consumibles")).toHaveLength(1);
     expect(avisosQueImportan(avisos, "textil")).toHaveLength(2);
     expect(avisosQueImportan(avisos, "")).toHaveLength(2);
+  });
+});
+
+describe("proformas en la cola", () => {
+  it("el JSON Schema pide tipo_documento, referencia_proforma y linea_papel, sin uniones", () => {
+    expect(ESQUEMA_LECTURA_JSON.required).toContain("tipo_documento");
+    expect(ESQUEMA_LECTURA_JSON.required).toContain("referencia_proforma");
+    expect(ESQUEMA_LECTURA_JSON.properties.lineas.items.required).toContain("linea_papel");
+    expect(ESQUEMA_LECTURA_JSON.properties.lineas.items.required).toContain("importe_linea_papel");
+    expect(ESQUEMA_LECTURA_JSON.properties.tipo_documento).toEqual({
+      type: "string",
+      enum: ["factura", "proforma", ""],
+    });
+    const texto = JSON.stringify(ESQUEMA_LECTURA_JSON);
+    expect(texto).not.toContain("anyOf");
+    expect(texto).not.toMatch(/"type":\[/);
+  });
+
+  it("zod acepta «», «factura» y «proforma»; un valor raro o ausente da null", () => {
+    const leer = (v: unknown) => {
+      const r = validarLectura({ ...lecturaBuena, tipo_documento: v });
+      return r.ok ? r.lectura.tipo_documento : "error";
+    };
+    expect(leer("")).toBeNull();
+    expect(leer("factura")).toBe("factura");
+    expect(leer("proforma")).toBe("proforma");
+    expect(leer("albaran")).toBeNull();
+    const sin: Record<string, unknown> = { ...lecturaBuena };
+    delete sin.tipo_documento;
+    delete sin.referencia_proforma;
+    const r = validarLectura(sin);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.lectura.tipo_documento).toBeNull();
+      expect(r.lectura.referencia_proforma).toBeNull();
+    }
+  });
+
+  it("tipoDocumentoLeido y referenciaProformaDe", () => {
+    expect(tipoDocumentoLeido({ tipo_documento: "proforma" })).toBe("proforma");
+    expect(tipoDocumentoLeido({ tipo_documento: "factura" })).toBe("factura");
+    expect(tipoDocumentoLeido({ tipo_documento: "" })).toBeNull();
+    expect(tipoDocumentoLeido(null)).toBeNull();
+    expect(tipoDocumentoLeido("proforma")).toBeNull();
+    expect(referenciaProformaDe({ referencia_proforma: " PF-12 " })).toBe("PF-12");
+    expect(referenciaProformaDe({ referencia_proforma: "" })).toBeNull();
+    expect(referenciaProformaDe(undefined)).toBeNull();
+  });
+
+  const doc = (extra: Partial<CompraComparable>): CompraComparable => ({
+    proveedor: "Textiles Sur",
+    nif_proveedor: "B12345678",
+    numero: "123",
+    fecha: "2026-10-01",
+    total: 121,
+    estado: "registrada",
+    ...extra,
+  });
+
+  it("duplicadosDe no marca el par proforma ↔ factura, y sí dos proformas con el mismo número", () => {
+    const proforma = doc({ id: "p", tipo_documento: "proforma" });
+    const factura = doc({ id: "f", tipo_documento: "factura" });
+    // Mismo número y misma fecha e importe: no son duplicados (la factura
+    // que llega con su proforma registrada se casa con ella).
+    expect(duplicadosDe(factura, [proforma])).toEqual([]);
+    // La proforma frente a una factura que aún no está registrada, tampoco.
+    expect(duplicadosDe(proforma, [{ ...factura, estado: "borrador" }])).toEqual([]);
+    // Sin columna (undefined) es factura: una proforma tampoco la duplica.
+    expect(duplicadosDe(doc({ id: "v" }), [proforma])).toEqual([]);
+    // El par casado tampoco, aunque por error los dos dijeran factura.
+    expect(duplicadosDe(doc({ id: "f2", proforma_id: "p2" }), [doc({ id: "p2" })])).toEqual([]);
+    // Dos proformas con el mismo número sí.
+    const otra = doc({ id: "p3", tipo_documento: "proforma" });
+    const d = duplicadosDe(otra, [proforma]);
+    expect(d.map((x) => x.nivel)).toEqual(["factura"]);
+    expect(avisoDuplicado(d[0])).toContain("Esta proforma ya está registrada");
+    // El mismo fichero sigue siendo duplicado aunque cambie el tipo.
+    expect(
+      duplicadosDe(doc({ id: "a", fichero_huella: "h" }), [
+        doc({ id: "b", tipo_documento: "proforma", fichero_huella: "h" }),
+      ]).map((x) => x.nivel),
+    ).toEqual(["archivo"]);
+  });
+
+  it("duplicadosDe: una proforma cuya factura ya está registrada sin casar", () => {
+    const proforma = doc({ id: "p", tipo_documento: "proforma", estado: "borrador" });
+    // Mismo número: bloquea (el género ya entró con la factura).
+    const [d] = duplicadosDe(proforma, [doc({ id: "f", tipo_documento: "factura" })]);
+    expect(d).toMatchObject({ nivel: "factura", facturaDeProforma: true });
+    expect(bloqueaRegistro(d)).toBe(true);
+    expect(avisoDuplicado(d)).toContain("Esta proforma parece de la factura");
+    // Otro número, mismo importe y la factura un mes después: hay que confirmarlo.
+    const [p2] = duplicadosDe({ ...proforma, numero: "P-77" }, [
+      doc({ id: "f", tipo_documento: "factura", numero: "F-77", fecha: "2026-10-31" }),
+    ]);
+    expect(p2).toMatchObject({ nivel: "probable", facturaDeProforma: true });
+    expect(bloqueaRegistro(p2)).toBe(false);
+    expect(avisoDuplicado(p2)).toContain("Esta proforma puede ser de la factura");
+    // Otro importe, o ya casada con otra proforma, o de otro proveedor: nada.
+    expect(
+      duplicadosDe({ ...proforma, numero: "P-77" }, [
+        doc({ id: "f", tipo_documento: "factura", numero: "F-77", total: 130 }),
+      ]),
+    ).toEqual([]);
+    expect(
+      duplicadosDe(proforma, [doc({ id: "f", tipo_documento: "factura", proforma_id: "otra" })]),
+    ).toEqual([]);
+    expect(
+      duplicadosDe(proforma, [
+        doc({ id: "f", tipo_documento: "factura", nif_proveedor: "B99999999", proveedor: "Otro" }),
+      ]),
+    ).toEqual([]);
+    // Más de 90 días: no se sospecha.
+    expect(
+      duplicadosDe({ ...proforma, numero: "P-77" }, [
+        doc({ id: "f", tipo_documento: "factura", numero: "F-77", fecha: "2027-02-01" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("motivosRevision: una proforma no textil no dice que mete género", () => {
+    expect(
+      motivosRevision({
+        confianza: 0.95,
+        dudas: [],
+        avisos: [],
+        tipoIva: 0.21,
+        categoria: "material",
+        duplicados: [],
+        tipoDocumento: "proforma",
+      }),
+    ).toEqual(["Es una proforma: no cuenta en el IVA ni en Gerencia."]);
+  });
+
+  it("motivosRevision: tipo dudoso, proforma y proformas sugeridas", () => {
+    const base = {
+      confianza: 0.95,
+      dudas: [] as string[],
+      avisos: [],
+      tipoIva: 0.21,
+      categoria: "textil",
+      duplicados: [],
+    };
+    const pf = (id: string, numero: string | null): SugerenciaProforma => ({
+      proforma: {
+        id,
+        proveedor: "Textiles Sur",
+        nif_proveedor: null,
+        numero,
+        fecha: "2026-10-01",
+        base: 100,
+        total: 121,
+      } as ProformaFila,
+      puntos: 10,
+      motivos: [],
+    });
+    expect(motivosRevision({ ...base, tipoDocumento: null })).toEqual([
+      "La IA no sabe si es factura o proforma: elígelo.",
+    ]);
+    expect(
+      motivosRevision({ ...base, tipoDocumento: "proforma", proformas: [pf("a", "P1")] }),
+    ).toEqual([
+      "Es una proforma: mete el género en el stock y no cuenta en el IVA ni en Gerencia.",
+    ]);
+    expect(
+      motivosRevision({
+        ...base,
+        tipoDocumento: "factura",
+        proformas: [pf("a", "P1"), pf("b", null), pf("c", "P3"), pf("d", "P4")],
+      }),
+    ).toEqual([
+      "Puede ser la factura de la proforma P1 del 2026-10-01 (Textiles Sur): cásala al revisarla.",
+      "Puede ser la factura de la proforma (sin número) del 2026-10-01 (Textiles Sur): cásala al revisarla.",
+      "Puede ser la factura de la proforma P3 del 2026-10-01 (Textiles Sur): cásala al revisarla.",
+    ]);
+    expect(motivosRevision({ ...base, tipoDocumento: undefined })).toEqual([]);
   });
 });

@@ -65,7 +65,7 @@ describe("totalesCompras", () => {
         { estado: "registrada", base: "10.10", liquido: null, total: "12.22" },
         { estado: "borrador", base: 500, liquido: 605, total: 605 },
       ]),
-    ).toEqual({ facturas: 2, base: 110.1, liquido: 118.22, borradores: 1 });
+    ).toEqual({ facturas: 2, base: 110.1, liquido: 118.22, proformas: 0, borradores: 1 });
   });
 });
 
@@ -123,5 +123,18 @@ describe("totalesArchivo", () => {
     const t = totalesArchivo([]);
     expect(t.ventas.documentos).toBe(0);
     expect(t.compras).toEqual({ documentos: 0, total: 0 });
+  });
+});
+
+describe("totalesCompras con proformas", () => {
+  it("las proformas no suman y se cuentan aparte; los borradores, como siempre", () => {
+    expect(
+      totalesCompras([
+        { estado: "registrada", base: 100, liquido: 121, total: 121, tipo_documento: "factura" },
+        { estado: "registrada", base: 50, liquido: 60.5, total: 60.5, tipo_documento: "proforma" },
+        { estado: "borrador", base: 70, liquido: 80, total: 80, tipo_documento: "proforma" },
+        { estado: "registrada", base: 10, total: 12.1 },
+      ]),
+    ).toEqual({ facturas: 2, base: 110, liquido: 133.1, borradores: 1, proformas: 1 });
   });
 });

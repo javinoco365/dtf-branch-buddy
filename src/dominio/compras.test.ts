@@ -342,3 +342,14 @@ describe("líneas de una factura recibida", () => {
     expect(TIPOS_IVA).toContain(TIPO_IVA_GENERAL);
   });
 });
+
+describe("proformas: no son documento fiscal", () => {
+  it("importesDeCompra y comprasQueCuentan apartan las proformas", () => {
+    const factura = compra("f", { tipo_documento: "factura" });
+    const proforma = compra("p", { tipo_documento: "proforma" });
+    const vieja = compra("v", {});
+    expect(importesDeCompra(proforma)).toBeNull();
+    expect(importesDeCompra(factura)).not.toBeNull();
+    expect(comprasQueCuentan([factura, proforma, vieja]).map((c) => c.id)).toEqual(["f", "v"]);
+  });
+});

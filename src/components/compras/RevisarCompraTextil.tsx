@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, Loader2, PackageCheck, Paperclip, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  FileText,
+  Loader2,
+  PackageCheck,
+  Paperclip,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,15 +71,29 @@ import { claveNif, claveTexto } from "@/dominio/normalizar-textil";
 import { repartirCostes, unidadesDeLinea } from "@/dominio/reparto-compra";
 import { aVarianteCatalogo, etiquetaVariante } from "@/dominio/stock-textil";
 import {
+  facturasPorProforma,
+  gruposPorLineaPapel,
+  partidasLineaPapel,
+  sugerirProformas,
+  type ArticuloFactura,
+  grupoDeNueva,
+  varianteDeNueva,
+  type DocumentoParaCasar,
+  type ProformaFila,
+  type StockActual,
+} from "@/dominio/proformas";
+import {
   ETIQUETAS_TIPO_LINEA,
   TIPOS_LINEA_COMPRA,
   type Casado,
   type LineaParaCasar,
   type MetodoCasado,
   type NuevaVariante,
+  type TipoDocumentoCompra,
   type TipoLineaCompra,
   type VarianteCatalogo,
 } from "@/dominio/tipos-textil";
+import { CasarProforma, SelectorTipoDocumento } from "./CasarProforma";
 
 /**
  * Lo que la persona ha decidido sobre el casado de una línea textil.
@@ -112,7 +134,131 @@ export type Revision = {
   fichero?: File | null;
   /** Confirmado que no es un duplicado (mismo proveedor, fecha e importe). */
   otraFactura?: boolean;
+  /**
+   * Factura o proforma (con las migraciones de proformas). Nulo si la IA dudó:
+   * se elige antes de registrar.
+   */
+  tipo_documento: TipoDocumentoCompra | null;
+  /** La proforma con la que se casa esta factura; la elige la persona. */
+  proforma_id: string | null;
+  /** Dicho que no es de ninguna de las proformas sugeridas. */
+  sinProforma?: boolean;
 };
+
+/** Cómo queda la revisión al cambiar de factura a proforma o al revés. */
+export const conTipoDocumento = (r: Revision, tipo: TipoDocumentoCompra): Revision => ({
+  ...r,
+  tipo_documento: tipo,
+  // Una proforma no se casa con otra: el casado es de la factura.
+  proforma_id: tipo === "proforma" ? null : r.proforma_id,
+  sinProforma: tipo === "proforma" ? false : r.sinProforma,
+});
+
+/**
+ * Las proformas que pueden ser de esta factura, entre todas las compras. Vacío
+ * si es una proforma, si aún no se sabe qué es o sin las migraciones.
+ */
+export function sugerenciasDeProforma(
+  conProformas: boolean,
+  estado: Revision,
+  documento: DocumentoParaCasar,
+  todas: readonly ProformaFila[],
+) {
+  if (!conProformas || estado.tipo_documento !== "factura") return [];
+  const casadas = new Set(facturasPorProforma(todas).keys());
+  return sugerirProformas(documento, todas, casadas);
+}
+
+/**
+ * Lo que falta decidir del documento y de su proforma antes de registrar (con
+ * las migraciones de proformas).
+ */
+export function pendientesDeProforma(
+  conProformas: boolean,
+  estado: Revision,
+  sugerencias: readonly { proforma: { id: string } }[],
+): string[] {
+  if (!conProformas) return [];
+  if (estado.tipo_documento === null) return ["Elige si es factura o proforma."];
+  if (estado.tipo_documento !== "factura") return [];
+  if (estado.proforma_id) {
+    return sugerencias.some((x) => x.proforma.id === estado.proforma_id)
+      ? []
+      : ["La proforma elegida ya no encaja con este documento: elige otra."];
+  }
+  // Registrar sin casar, con su proforma ya en el stock, duplica el género, y
+  // el casado solo se puede hacer al registrar.
+  return sugerencias.length > 0 && !estado.sinProforma
+    ? ["Di si esta factura es de una de las proformas sugeridas."]
+    : [];
+}
+
+/**
+ * Las filas de cabecera de las líneas partidas por tallas: en el índice de la
+ * primera partida de cada línea del papel con más de una, su número y sus
+ * partidas.
+ */
+export function cabecerasLineaPapel(
+  lineas: readonly { linea_papel?: number | null }[],
+): Map<number, { linea_papel: number; indices: number[] }> {
+  const mapa = new Map<number, { linea_papel: number; indices: number[] }>();
+  for (const g of gruposPorLineaPapel(lineas)) {
+    if (g.linea_papel !== null && g.indices.length > 1) {
+      mapa.set(g.indices[0], { linea_papel: g.linea_papel, indices: g.indices });
+    }
+  }
+  return mapa;
+}
+
+/** Las clases de la fila y de su primera celda si es una partida. */
+export function clasesPartida(p: { ultima: boolean } | undefined) {
+  if (!p) return { fila: "", celda: "" };
+  return {
+    fila: p.ultima ? "border-b-2 border-b-muted-foreground/30" : "",
+    celda: "border-l-4 border-l-muted-foreground/30",
+  };
+}
+
+/** En el móvil (tarjetas), de qué línea del papel sale esta partida. */
+export function EtiquetaPartida({
+  partida,
+  talla,
+}: {
+  partida: { linea_papel: number } | undefined;
+  talla: string | null | undefined;
+}) {
+  if (!partida) return null;
+  return (
+    <span className="mb-1 block text-xs text-muted-foreground md:hidden">
+      Línea {partida.linea_papel} del papel{talla ? ` · talla ${talla}` : ""}
+    </span>
+  );
+}
+
+/** «Línea 2 del papel · 3 tallas · 45,00 €», encima de sus partidas. */
+export function FilaLineaPapel({
+  grupo,
+  lineas,
+  columnas,
+}: {
+  grupo: { linea_papel: number; indices: number[] };
+  lineas: readonly { importe: number }[];
+  columnas: number;
+}) {
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={columnas} className="py-1 text-xs font-normal text-muted-foreground">
+        Línea {grupo.linea_papel} del papel · {grupo.indices.length} tallas ·{" "}
+        {eur(
+          sumarImportes(
+            grupo.indices.map((i) => lineas[i]),
+            (l) => l.importe,
+          ),
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
 
 /** Lo que añade la revisión textil al registrar. */
 export type ExtraRegistro = { proveedor_id: string | null; lineas: LineaEnvio[] };
@@ -203,6 +349,7 @@ const ETIQUETA_METODO: Record<MetodoCasado, string> = {
  */
 export function RevisarCompraTextil({
   conTipos,
+  conProformas,
   todas,
   onDescartar,
   estado,
@@ -214,6 +361,8 @@ export function RevisarCompraTextil({
 }: {
   /** Con la migración de facturas recibidas: tipos, cálculo y descuadre. */
   conTipos: boolean;
+  /** Con las migraciones de proformas: factura o proforma, y casado. */
+  conProformas: boolean;
   /** Todas las compras, para avisar de duplicados (vacío sin la cola). */
   todas: any[];
   onDescartar: () => void;
@@ -380,6 +529,12 @@ export function RevisarCompraTextil({
             fecha: compra.fecha,
             liquido: conTipos ? calculado.liquido : compra.total,
             fichero_huella: estado.fichero_huella,
+            ...(conProformas
+              ? {
+                  tipo_documento: estado.tipo_documento ?? "factura",
+                  proforma_id: estado.proforma_id,
+                }
+              : {}),
           },
           todas,
         )
@@ -389,8 +544,74 @@ export function RevisarCompraTextil({
   const sinDescripcion = lineas.some((l) => !l.descripcion.trim());
   const sinProveedor = !texto(compra.proveedor) && !texto(compra.nif_proveedor);
 
+  // --- Proforma ---------------------------------------------------------------
+  const esProformaRev = conProformas && estado.tipo_documento === "proforma";
+  const articulosFactura: ArticuloFactura[] = [];
+  lineas.forEach((l, i) => {
+    if (tipoDe(l) !== "articulo") return;
+    const e = efectivas[i];
+    // Una «variante nueva» que ya está en el catálogo: la base la reutiliza
+    // (paso 4.6), así que la previsión también.
+    const nueva = e.estado === "nueva" ? e.nueva : null;
+    articulosFactura.push({
+      indice: i,
+      stock_id:
+        e.estado === "casada"
+          ? e.stock_id
+          : nueva
+            ? varianteDeNueva(nueva, productos, variantes)
+            : null,
+      grupo_nueva: nueva ? grupoDeNueva(nueva) : null,
+      unidades: unidadesDeLinea(l.cantidad, packDe(l)),
+      coste_total: costePorLinea.get(i)?.coste_total ?? 0,
+    });
+  });
+  // Unidades por variante de lo ya casado: un punto más para la proforma que
+  // trajo lo mismo.
+  const unidadesCasadas = new Map<string, number>();
+  for (const a of articulosFactura) {
+    if (a.stock_id)
+      unidadesCasadas.set(a.stock_id, (unidadesCasadas.get(a.stock_id) ?? 0) + a.unidades);
+  }
+  const sugerencias = sugerenciasDeProforma(
+    conProformas,
+    estado,
+    {
+      id: estado.id ?? null,
+      proveedor: compra.proveedor,
+      nif_proveedor: compra.nif_proveedor,
+      proveedor_id: proveedorConocido?.id ?? null,
+      fecha: compra.fecha,
+      base: compra.base,
+      total: compra.total,
+      liquido: conTipos ? calculado.liquido : null,
+      categoria: "textil",
+      referencia_proforma: compra.referencia_proforma ?? null,
+      unidades: unidadesCasadas.size > 0 ? unidadesCasadas : null,
+    },
+    todas as ProformaFila[],
+  );
+  const stockActual = useMemo(
+    () =>
+      new Map<string, StockActual>(
+        (stock as Record<string, unknown>[]).map((s) => [
+          String(s.id),
+          { cantidad: Number(s.cantidad ?? 0), coste_unitario: Number(s.coste_unitario ?? 0) },
+        ]),
+      ),
+    [stock],
+  );
+  const casadaCon = conProformas && estado.tipo_documento === "factura" && !!estado.proforma_id;
+  const cabeceras = cabecerasLineaPapel(lineas);
+  const partidas = partidasLineaPapel(lineas);
+
   const pendientes: string[] = [];
-  if (duplicadoQueBloquea) pendientes.push("Ya está registrada.");
+  if (duplicadoQueBloquea)
+    pendientes.push(
+      duplicadoQueBloquea.facturaDeProforma
+        ? "Su factura ya está registrada."
+        : "Ya está registrada.",
+    );
   if (!duplicadoQueBloquea && porConfirmar.length > 0 && !estado.otraFactura)
     pendientes.push("¿Es un duplicado? Descártala o confirma que es otra factura.");
   if (!compra.fecha) pendientes.push("Falta la fecha de la factura.");
@@ -408,6 +629,7 @@ export function RevisarCompraTextil({
   if (!reparto.ok) pendientes.push("El reparto no cuadra con la base.");
   if (conTipos && estado.tipo_iva === null) pendientes.push("Elige el tipo de IVA.");
   if (descuadreSinResolver) pendientes.push("El líquido no cuadra: elige cuál vale.");
+  pendientes.push(...pendientesDeProforma(conProformas, estado, sugerencias));
 
   const registrar = () => {
     const envio: LineaEnvio[] = lineas.map((l, i) => {
@@ -429,8 +651,15 @@ export function RevisarCompraTextil({
   return (
     <DialogContent className="max-w-[min(96vw,90rem)] max-h-[92vh] overflow-y-auto">
       <DialogHeader>
-        <DialogTitle>Revisar la compra textil antes de darla de alta</DialogTitle>
+        <DialogTitle>
+          {esProformaRev
+            ? "Revisar la proforma antes de dar de alta el género"
+            : "Revisar la compra textil antes de darla de alta"}
+        </DialogTitle>
         <DialogDescription>
+          {esProformaRev
+            ? "No cuenta en el IVA ni en Gerencia; su factura se casa con ella cuando llegue. "
+            : ""}
           Lo que se registre entra en el libro de stock y no se puede borrar. Comprueba las
           cantidades y a qué variante del almacén va cada línea.
         </DialogDescription>
@@ -464,6 +693,12 @@ export function RevisarCompraTextil({
         </Card>
       )}
 
+      {conProformas && (
+        <SelectorTipoDocumento
+          valor={estado.tipo_documento}
+          onCambiar={(t) => onCambiar(conTipoDocumento(estado, t))}
+        />
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Campo
           etiqueta="Proveedor"
@@ -554,143 +789,150 @@ export function RevisarCompraTextil({
             const esArticulo = tipo === "articulo";
             const e = efectivas[i];
             const coste = costePorLinea.get(i);
+            const cabecera = cabeceras.get(i);
+            const partida = partidas.get(i);
+            const marca = clasesPartida(partida);
             return (
-              <TableRow key={i} className="align-top">
-                <TableCell>
-                  <Select
-                    value={tipo}
-                    onValueChange={(v) => setLinea(i, { tipo: v as TipoLineaCompra })}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_LINEA_COMPRA.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {ETIQUETAS_TIPO_LINEA[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={l.descripcion}
-                    onChange={(ev) => setLinea(i, { descripcion: ev.target.value })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={l.referencia ?? ""}
-                    disabled={!esArticulo}
-                    onChange={(ev) => setLinea(i, { referencia: ev.target.value || null })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={l.color ?? ""}
-                    disabled={!esArticulo}
-                    onChange={(ev) => setLinea(i, { color: ev.target.value || null })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    value={l.talla ?? ""}
-                    disabled={!esArticulo}
-                    onChange={(ev) => setLinea(i, { talla: ev.target.value || null })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    inputMode="numeric"
-                    value={l.ean ?? ""}
-                    disabled={!esArticulo}
-                    onChange={(ev) => setLinea(i, { ean: ev.target.value || null })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    step="any"
-                    className="text-right"
-                    value={l.cantidad}
-                    onChange={(ev) => setLinea(i, { cantidad: Number(ev.target.value) })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="1"
-                    className="text-right"
-                    value={packDe(l)}
-                    disabled={!esArticulo}
-                    onChange={(ev) =>
-                      setLinea(i, {
-                        unidades_por_pack: Number(ev.target.value) || 1,
-                        pack_deducido: false,
-                      })
-                    }
-                  />
-                  {e.estado === "casada" &&
-                    e.packMemoria !== null &&
-                    e.packMemoria !== 1 &&
-                    packDe(l) === 1 &&
-                    !l.pack_deducido && (
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-xs whitespace-normal text-left"
-                        onClick={() =>
-                          setLinea(i, {
-                            unidades_por_pack: e.packMemoria ?? 1,
-                            pack_deducido: false,
-                          })
-                        }
-                      >
-                        Pack de la memoria: {numeroJusto(e.packMemoria)} uds · usar
-                      </Button>
-                    )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {esArticulo ? numeroJusto(unidadesDeLinea(l.cantidad, packDe(l))) : "—"}
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    step="any"
-                    className="text-right"
-                    value={l.importe}
-                    onChange={(ev) => setLinea(i, { importe: Number(ev.target.value) })}
-                  />
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {coste ? eurUnitario(coste.coste_unitario) : "—"}
-                </TableCell>
-                <TableCell>
-                  <CeldaVariante
-                    efectiva={e}
-                    porId={porId}
-                    onAceptar={(stock_id) => ponerEleccion(i, { tipo: "sugerencia", stock_id })}
-                    onAuto={() => ponerEleccion(i, { tipo: "auto" })}
-                    onElegir={() => setEligiendo(i)}
-                    onCrear={() => setCreando([i])}
-                    eleccion={eleccionDe(i)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Quitar la línea"
-                    aria-label="Quitar la línea"
-                    onClick={() => quitarLinea(i)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TableCell>
-              </TableRow>
+              <Fragment key={i}>
+                {cabecera && <FilaLineaPapel grupo={cabecera} lineas={lineas} columnas={13} />}
+                <TableRow className={`align-top ${marca.fila}`}>
+                  <TableCell className={marca.celda}>
+                    <EtiquetaPartida partida={partida} talla={l.talla} />
+                    <Select
+                      value={tipo}
+                      onValueChange={(v) => setLinea(i, { tipo: v as TipoLineaCompra })}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIPOS_LINEA_COMPRA.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {ETIQUETAS_TIPO_LINEA[t]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={l.descripcion}
+                      onChange={(ev) => setLinea(i, { descripcion: ev.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={l.referencia ?? ""}
+                      disabled={!esArticulo}
+                      onChange={(ev) => setLinea(i, { referencia: ev.target.value || null })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={l.color ?? ""}
+                      disabled={!esArticulo}
+                      onChange={(ev) => setLinea(i, { color: ev.target.value || null })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={l.talla ?? ""}
+                      disabled={!esArticulo}
+                      onChange={(ev) => setLinea(i, { talla: ev.target.value || null })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      inputMode="numeric"
+                      value={l.ean ?? ""}
+                      disabled={!esArticulo}
+                      onChange={(ev) => setLinea(i, { ean: ev.target.value || null })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="any"
+                      className="text-right"
+                      value={l.cantidad}
+                      onChange={(ev) => setLinea(i, { cantidad: Number(ev.target.value) })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="1"
+                      className="text-right"
+                      value={packDe(l)}
+                      disabled={!esArticulo}
+                      onChange={(ev) =>
+                        setLinea(i, {
+                          unidades_por_pack: Number(ev.target.value) || 1,
+                          pack_deducido: false,
+                        })
+                      }
+                    />
+                    {e.estado === "casada" &&
+                      e.packMemoria !== null &&
+                      e.packMemoria !== 1 &&
+                      packDe(l) === 1 &&
+                      !l.pack_deducido && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs whitespace-normal text-left"
+                          onClick={() =>
+                            setLinea(i, {
+                              unidades_por_pack: e.packMemoria ?? 1,
+                              pack_deducido: false,
+                            })
+                          }
+                        >
+                          Pack de la memoria: {numeroJusto(e.packMemoria)} uds · usar
+                        </Button>
+                      )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {esArticulo ? numeroJusto(unidadesDeLinea(l.cantidad, packDe(l))) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="any"
+                      className="text-right"
+                      value={l.importe}
+                      onChange={(ev) => setLinea(i, { importe: Number(ev.target.value) })}
+                    />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {coste ? eurUnitario(coste.coste_unitario) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <CeldaVariante
+                      efectiva={e}
+                      porId={porId}
+                      onAceptar={(stock_id) => ponerEleccion(i, { tipo: "sugerencia", stock_id })}
+                      onAuto={() => ponerEleccion(i, { tipo: "auto" })}
+                      onElegir={() => setEligiendo(i)}
+                      onCrear={() => setCreando([i])}
+                      eleccion={eleccionDe(i)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Quitar la línea"
+                      aria-label="Quitar la línea"
+                      onClick={() => quitarLinea(i)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              </Fragment>
             );
           })}
         </TableBody>
@@ -774,13 +1016,15 @@ export function RevisarCompraTextil({
           </div>
         )}
         <Campo
-          etiqueta={conTipos ? "IVA según la factura" : "IVA"}
+          etiqueta={conTipos ? `IVA según ${esProformaRev ? "la proforma" : "la factura"}` : "IVA"}
           tipo="number"
           valor={String(compra.iva)}
           onChange={(v) => set({ iva: Number(v) })}
         />
         <Campo
-          etiqueta={conTipos ? "Total según la factura" : "Total"}
+          etiqueta={
+            conTipos ? `Total según ${esProformaRev ? "la proforma" : "la factura"}` : "Total"
+          }
           tipo="number"
           valor={String(compra.total)}
           onChange={(v) => set({ total: Number(v) })}
@@ -830,6 +1074,28 @@ export function RevisarCompraTextil({
         </Card>
       )}
 
+      {conProformas && estado.tipo_documento === "factura" && (
+        <CasarProforma
+          sugerencias={sugerencias}
+          proformaId={estado.proforma_id}
+          sinProforma={!!estado.sinProforma}
+          onElegir={(proforma_id) => onCambiar({ ...estado, proforma_id, sinProforma: false })}
+          onNinguna={() =>
+            onCambiar({ ...estado, proforma_id: null, sinProforma: !estado.sinProforma })
+          }
+          liquidoFactura={conTipos ? calculado.liquido : compra.total}
+          textil={{
+            articulos: reparto.ok ? articulosFactura : null,
+            stock: stockActual,
+            base: compra.base,
+            etiqueta: (id) => {
+              const v = porId.get(id);
+              return v ? etiquetaVariante(v) : "Variante que no está en el almacén";
+            },
+          }}
+        />
+      )}
+
       {!estado.id && (
         <FicheroRevision
           fichero={estado.fichero ?? null}
@@ -849,10 +1115,14 @@ export function RevisarCompraTextil({
         <Button onClick={registrar} disabled={registrando || pendientes.length > 0}>
           {registrando ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : casadaCon ? (
+            <FileText className="h-4 w-4 mr-2" />
           ) : (
             <PackageCheck className="h-4 w-4 mr-2" />
           )}
-          Registrar y dar de alta en el stock
+          {casadaCon
+            ? "Registrar factura (regulariza el stock)"
+            : "Registrar y dar de alta en el stock"}
         </Button>
       </DialogFooter>
 
@@ -1047,12 +1317,18 @@ export function TarjetaQueMirar({
             className={bloqueaRegistro(d) ? "font-medium text-destructive" : "font-medium"}
           >
             {avisoDuplicado(d)}
-            {bloqueaRegistro(d) && " No se puede registrar dos veces."}
+            {bloqueaRegistro(d) && !d.facturaDeProforma && " No se puede registrar dos veces."}
           </p>
         ))}
         {String(motivos ?? "")
           .split("\n")
-          .filter((m) => m && !m.startsWith("Este fichero") && !m.startsWith("Esta factura"))
+          .filter(
+            (m) =>
+              m &&
+              !m.startsWith("Este fichero") &&
+              !m.startsWith("Esta factura") &&
+              !m.startsWith("Esta proforma"),
+          )
           .filter((m) => !m.startsWith("Posible duplicado"))
           .map((m, i) => (
             <p key={i} className="text-muted-foreground">
@@ -1071,7 +1347,9 @@ export function TarjetaQueMirar({
                 variant={otraFactura ? "default" : "outline"}
                 onClick={onOtraFactura}
               >
-                Es otra factura
+                {porConfirmar.every((d) => d.facturaDeProforma)
+                  ? "No es de esa factura"
+                  : "Es otra factura"}
               </Button>
             )}
           </div>

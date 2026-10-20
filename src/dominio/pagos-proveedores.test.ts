@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { pagosPendientesProveedores, type CompraPendiente } from "./pagos-proveedores";
+import {
+  anticiposProveedores,
+  pagadoConProforma,
+  pagosPendientesProveedores,
+  type CompraPendiente,
+} from "./pagos-proveedores";
+import type { ProformaFila } from "./proformas";
 
 const compra = (id: string, extra: Partial<CompraPendiente> = {}): CompraPendiente => ({
   id,
@@ -118,5 +124,114 @@ describe("pagosPendientesProveedores", () => {
       HOY,
     );
     expect(r.porProveedor[0]).toMatchObject({ clave: "t:", nombre: "Sin proveedor" });
+  });
+});
+
+describe("proformas en los pagos", () => {
+  it("la proforma casada no cuenta (cuenta su factura); la que no lo está sí, y se cuenta", () => {
+    const r = pagosPendientesProveedores(
+      [
+        compra("f"),
+        compra("casada", { tipo_documento: "proforma", casada: true }),
+        compra("suelta", { tipo_documento: "proforma", total: 50 }),
+      ],
+      HOY,
+    );
+    expect(r.facturas).toBe(2);
+    expect(r.proformas).toBe(1);
+    expect(r.total).toBe(171);
+  });
+
+  it("factura casada pendiente con su proforma pagada a mano: solo cuenta la diferencia", () => {
+    const pago = (liquidoProforma: number, pagada = true) => ({
+      proforma_id: "p",
+      pago: { proforma_pagada: pagada, liquido_proforma: liquidoProforma, diferencia: 0 },
+    });
+    // Proforma de 1.000 pagada; la factura sale a 1.010: se deben 10.
+    const r = pagosPendientesProveedores(
+      [compra("f", { liquido: 1010, casado_resumen: pago(1000) })],
+      HOY,
+    );
+    expect(r.total).toBe(10);
+    expect(r.facturas).toBe(1);
+    expect(r.porProveedor[0].importe).toBe(10);
+    // Lo pagado cubre la factura (datos de antes de la corrección): no se debe nada.
+    const cubierta = pagosPendientesProveedores(
+      [compra("f", { liquido: 990, casado_resumen: pago(1000) })],
+      HOY,
+    );
+    expect(cubierta.total).toBe(0);
+    expect(cubierta.facturas).toBe(0);
+    // La proforma no estaba pagada: se debe la factura entera.
+    expect(
+      pagosPendientesProveedores(
+        [compra("f", { liquido: 1010, casado_resumen: pago(1000, false) })],
+        HOY,
+      ).total,
+    ).toBe(1010);
+  });
+
+  it("pagadoConProforma: solo con proforma_pagada; cualquier otra forma, 0", () => {
+    expect(pagadoConProforma({ pago: { proforma_pagada: true, liquido_proforma: "121.5" } })).toBe(
+      121.5,
+    );
+    expect(pagadoConProforma({ pago: { proforma_pagada: false, liquido_proforma: 121 } })).toBe(0);
+    expect(pagadoConProforma(null)).toBe(0);
+    expect(pagadoConProforma("x")).toBe(0);
+    expect(pagadoConProforma({ pago: null })).toBe(0);
+  });
+
+  const pf = (id: string, extra: Partial<ProformaFila> = {}): ProformaFila => ({
+    id,
+    tipo_documento: "proforma",
+    estado: "registrada",
+    proveedor: "Textiles Sur S.L.",
+    nif_proveedor: "B12345678",
+    numero: `P-${id}`,
+    fecha: "2026-10-01",
+    base: 100,
+    total: 121,
+    liquido: null,
+    estado_pago: "pagada",
+    fecha_pago: "2026-10-03",
+    ...extra,
+  });
+
+  it("anticiposProveedores: proformas pagadas, registradas, sin borrar y sin factura", () => {
+    const r = anticiposProveedores(
+      [
+        pf("a", { liquido: 100 }),
+        pf("b", { fecha_pago: "2026-09-20", nif_proveedor: "ES-B12345678" }),
+        pf("pendiente", { estado_pago: "pendiente" }),
+        pf("borrador", { estado: "borrador" }),
+        pf("borrada", { borrada_en: "2026-10-05" }),
+        pf("casada"),
+        pf("fac", { tipo_documento: "factura", proforma_id: "casada" }),
+        pf("sin-estado", {
+          estado: undefined,
+          nif_proveedor: null,
+          proveedor: "Otro",
+          total: null,
+        }),
+        pf("factura-pagada", { tipo_documento: "factura" }),
+      ],
+      HOY,
+    );
+    expect(r.proformas).toBe(3);
+    expect(r.total).toBe(221);
+    expect(r.masAntigua).toBe("2026-09-20");
+    expect(r.porProveedor.map((p) => [p.nombre, p.facturas, p.importe, p.masAntigua])).toEqual([
+      ["Textiles Sur S.L.", 2, 221, "2026-09-20"],
+      ["Otro", 1, 0, "2026-10-03"],
+    ]);
+  });
+
+  it("sin anticipos, a cero", () => {
+    expect(anticiposProveedores([], HOY)).toEqual({
+      total: 0,
+      proformas: 0,
+      porProveedor: [],
+      masAntigua: null,
+    });
   });
 });

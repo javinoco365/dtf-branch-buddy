@@ -11,7 +11,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaColumna, faltaLaTabla, llamarRpc, llamarRpcConError, tabla } from "@/lib/rpc";
+import {
+  faltaLaColumna,
+  faltaLaFuncion,
+  faltaLaTabla,
+  filasDeFuncion,
+  llamarRpc,
+  llamarRpcConError,
+  tabla,
+} from "@/lib/rpc";
 import { leerTodas, trozos } from "@/lib/paginar";
 import { leerPorIds } from "@/lib/leer-por-ids";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
@@ -48,6 +56,8 @@ import {
   type EntradaControl,
 } from "@/dominio/controles-almacen";
 import type { CompraPendiente } from "@/dominio/pagos-proveedores";
+import type { ProformaFila } from "@/dominio/proformas";
+import { proformasAplicado } from "@/lib/escaner-textil";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { diaEnEspana } from "@/dominio/fecha-documento";
 
@@ -482,8 +492,14 @@ const CAMPOS_COMPRA = "id, estado, fecha, base, iva, total";
 const CAMPOS_COMPRA_GENERAL = "irpf, categoria, gasto_id";
 /** Columnas de la migración 20261014100000_compras_recibidas. */
 const CAMPOS_COMPRA_RECIBIDA = "cuota_iva, cuota_irpf, liquido, liquido_origen, borrada_en";
-/** De la más nueva a la más vieja: se queda con la primera que la base conoce. */
+/**
+ * De la más nueva a la más vieja: se queda con la primera que la base conoce.
+ * La primera, con las migraciones de proformas (20261029…): `tipo_documento`,
+ * para que la proforma no cuente (importesDeCompra). Va delante de las de
+ * siempre, que se quedan: sin ella, la cadena sigue cayendo a la de recibidas.
+ */
 const CAMPOS_COMPRA_POR_MIGRACION = [
+  `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}, ${CAMPOS_COMPRA_RECIBIDA}, tipo_documento`,
   `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}, ${CAMPOS_COMPRA_RECIBIDA}`,
   `${CAMPOS_COMPRA}, ${CAMPOS_COMPRA_GENERAL}`,
   CAMPOS_COMPRA,
@@ -851,14 +867,32 @@ export function useMovimientosAlmacen() {
           tabla(supabase, "textil_stock_movimientos").select(campos).order("id").range(a, b),
         );
       let conFecha = true;
-      let r = await leer(`${CAMPOS_MOV_ALMACEN}, textil_pedido_id, ${CAMPOS_MOV_ESCANER}`);
+      // Con las migraciones de proformas, además el importe de los ajustes de coste.
+      let r = await leer(
+        `${CAMPOS_MOV_ALMACEN}, textil_pedido_id, ${CAMPOS_MOV_ESCANER}, importe_ajuste`,
+      );
+      if (faltaLaColumna(r.error)) {
+        r = await leer(`${CAMPOS_MOV_ALMACEN}, textil_pedido_id, ${CAMPOS_MOV_ESCANER}`);
+      }
       if (faltaLaColumna(r.error)) {
         conFecha = false;
         r = await leer(`${CAMPOS_MOV_ALMACEN}, textil_pedido_id`);
       }
       if (faltaLaTabla(r.error)) return null;
       if (r.error) throw new Error(r.error.message);
-      return { movimientos: r.data, conFecha };
+
+      // Las «salen» de la regularización (devolución a proveedor enlazada a
+      // una factura casada con su proforma) corrigen una entrada: van a
+      // Compras, no a pérdidas (cuentaAlmacen).
+      const casadas = await facturasCasadas();
+      const movimientos = casadas.size
+        ? r.data.map((m) =>
+            m.motivo === "devolucion_proveedor" && m.compra_id && casadas.has(m.compra_id)
+              ? { ...m, regularizacion: true }
+              : m,
+          )
+        : r.data;
+      return { movimientos, conFecha };
     },
   });
 }
@@ -881,10 +915,43 @@ export type DatosControlesAlmacen =
 
 const CAMPOS_COMPRA_CONTROL = "id, numero, proveedor, fecha, base, estado";
 const CAMPOS_COMPRA_CONTROL_POR_MIGRACION = [
+  // Con las migraciones de proformas: el par proforma + factura se comprueba junto.
+  `${CAMPOS_COMPRA_CONTROL}, categoria, borrada_en, tipo_documento, proforma_id, casado_resumen`,
   `${CAMPOS_COMPRA_CONTROL}, categoria, borrada_en`,
   `${CAMPOS_COMPRA_CONTROL}, categoria`,
   CAMPOS_COMPRA_CONTROL,
 ];
+
+/**
+ * Los ids de las facturas casadas con una proforma, de cualquier fecha.
+ * Vacío sin las migraciones de proformas.
+ */
+async function facturasCasadas(): Promise<Set<string>> {
+  const r = await leerTodas<{ id: string }>((a, b) =>
+    tabla(supabase, "textil_compras")
+      .select("id")
+      .not("proforma_id", "is", null)
+      .order("id")
+      .range(a, b),
+  );
+  if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return new Set();
+  if (r.error) throw new Error(r.error.message);
+  return new Set(r.data.map((f) => f.id));
+}
+
+/** Los ids de las proformas que ya tienen factura, de cualquier fecha. Vacío sin la migración. */
+async function proformasCasadas(): Promise<Set<string>> {
+  const r = await leerTodas<{ id: string; proforma_id: string }>((a, b) =>
+    tabla(supabase, "textil_compras")
+      .select("id, proforma_id")
+      .not("proforma_id", "is", null)
+      .order("id")
+      .range(a, b),
+  );
+  if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return new Set();
+  if (r.error) throw new Error(r.error.message);
+  return new Set(r.data.map((f) => f.proforma_id));
+}
 
 /** Cuántas filas devuelve una función de la base; nulo si no se puede leer. */
 async function contarFilas(funcion: string): Promise<number | null> {
@@ -923,13 +990,59 @@ export function useControlesAlmacen(rango: RangoFechas) {
             .range(a, b),
         );
       let compras = await leerCompras(CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0]);
+      let camposLeidos = CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0];
       for (const campos of CAMPOS_COMPRA_CONTROL_POR_MIGRACION.slice(1)) {
         if (!faltaLaColumna(compras.error)) break;
         compras = await leerCompras(campos);
+        camposLeidos = campos;
       }
       if (compras.error) throw new Error(compras.error.message);
+
+      // Qué consulta de entradas usar se decide aquí y no por el error: sin la
+      // migración 20261029100000, 'ajuste_coste' en el filtro da 22P02 (valor
+      // de enum no válido), que faltaLaColumna no reconoce.
+      const conProformas = await proformasAplicado(supabase);
+
+      // El otro miembro de cada par, aunque su fecha caiga fuera del rango:
+      // la proforma de cada factura casada y la factura de cada proforma.
+      const todas = [...compras.data];
+      if (conProformas && camposLeidos === CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0]) {
+        const yaEstan = new Set(todas.map((c) => c.id));
+        const faltanProformas = todas
+          .map((c) => c.proforma_id)
+          .filter((id): id is string => !!id && !yaEstan.has(id));
+        const proformas = await leerPorIds<CompraControl>(faltanProformas, (trozo, a, b) =>
+          tabla(supabase, "textil_compras")
+            .select(camposLeidos)
+            .in("id", trozo)
+            .order("id")
+            .range(a, b),
+        );
+        if (proformas.error) throw new Error(proformas.error.message);
+        const idsProformas = todas.filter((c) => c.tipo_documento === "proforma").map((c) => c.id);
+        // En trozos de 100, como las entradas.
+        const facturas: CompraControl[] = [];
+        for (const trozo of trozos(idsProformas, 100)) {
+          const f = await leerTodas<CompraControl>((a, b) =>
+            tabla(supabase, "textil_compras")
+              .select(camposLeidos)
+              .eq("estado", "registrada")
+              .in("proforma_id", trozo)
+              .order("id")
+              .range(a, b),
+          );
+          if (f.error) throw new Error(f.error.message);
+          facturas.push(...f.data);
+        }
+        for (const c of [...proformas.data, ...facturas]) {
+          if (!yaEstan.has(c.id)) {
+            yaEstan.add(c.id);
+            todas.push(c);
+          }
+        }
+      }
       // Solo las del textil (sin categoría, de antes de las compras generales, lo son).
-      const delTextil = compras.data.filter((c) => !c.categoria || c.categoria === "textil");
+      const delTextil = todas.filter((c) => !c.categoria || c.categoria === "textil");
 
       const entradas: EntradaControl[] = [];
       // En trozos de 100: una URL con cientos de UUID la corta PostgREST.
@@ -937,14 +1050,21 @@ export function useControlesAlmacen(rango: RangoFechas) {
         delTextil.map((c) => c.id),
         100,
       )) {
-        const r = await leerTodas<EntradaControl & { id: string }>((a, b) =>
-          tabla(supabase, "textil_stock_movimientos")
-            .select("id, motivo, cantidad, coste_unitario, compra_id")
-            .eq("motivo", "compra")
+        const r = await leerTodas<EntradaControl & { id: string }>((a, b) => {
+          const consulta = tabla(supabase, "textil_stock_movimientos");
+          return (
+            conProformas
+              ? consulta
+                  .select("id, motivo, cantidad, coste_unitario, compra_id, importe_ajuste")
+                  .in("motivo", ["compra", "ajuste_coste"])
+              : consulta
+                  .select("id, motivo, cantidad, coste_unitario, compra_id")
+                  .eq("motivo", "compra")
+          )
             .in("compra_id", trozo)
             .order("id")
-            .range(a, b),
-        );
+            .range(a, b);
+        });
         if (r.error) throw new Error(r.error.message);
         entradas.push(...r.data);
       }
@@ -1000,12 +1120,46 @@ export function usePagosProveedores() {
             .order("id")
             .range(a, b),
         );
-      // Con el proveedor del catálogo (20261028100000) si existe; si no, sin él.
-      let r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id`);
+      // Con el tipo de documento y el casado (proformas, 20261029…: lo ya
+      // pagado con la proforma no se debe) y el proveedor del
+      // catálogo (20261028100000) si existen; si no, sin ellos.
+      let r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id, tipo_documento, casado_resumen`);
+      if (faltaLaColumna(r.error)) r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id`);
       if (faltaLaColumna(r.error)) r = await leer(CAMPOS_PAGO_PROVEEDOR);
       if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return null;
       if (r.error) throw new Error(r.error.message);
-      return r.data;
+      // Una proforma casada no cuenta: su pago vive en la factura.
+      const casadas = await proformasCasadas();
+      return casadas.size
+        ? r.data.map((c) => (casadas.has(c.id) ? { ...c, casada: true } : c))
+        : r.data;
+    },
+  });
+}
+
+/**
+ * Proformas registradas, sin borrar y sin factura (`compras_proformas_pendientes()`),
+ * de cualquier fecha: no dependen del periodo. Nulo sin las migraciones de
+ * proformas. Sirve al aviso de Gerencia, a los anticipos de Tesorería, a Textil
+ * y al resumen diario.
+ */
+export function useProformasPendientes() {
+  return useQuery({
+    queryKey: ["proformas-pendientes"],
+    queryFn: async (): Promise<ProformaFila[] | null> => {
+      const r = await leerTodas<ProformaFila>((a, b) =>
+        filasDeFuncion(supabase, "compras_proformas_pendientes")
+          .select(
+            "id, empresa_id, proveedor, nif_proveedor, proveedor_id, numero, fecha, categoria, " +
+              "base, total, liquido, estado_pago, fecha_pago, fichero_ruta",
+          )
+          .order("fecha")
+          .order("id")
+          .range(a, b),
+      );
+      if (faltaLaFuncion(r.error)) return null;
+      if (r.error) throw new Error(r.error.message);
+      return r.data.map((p) => ({ ...p, tipo_documento: "proforma", estado: "registrada" }));
     },
   });
 }

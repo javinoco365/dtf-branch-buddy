@@ -23,7 +23,8 @@
 
 import { redondear } from "./importes";
 import { cifrasEan, eanValido, packDesdeTexto, tipoDeLinea } from "./normalizar-textil";
-import type { TipoLineaCompra } from "./tipos-textil";
+import { TIPOS_DOCUMENTO_COMPRA } from "./tipos-textil";
+import type { TipoDocumentoCompra, TipoLineaCompra } from "./tipos-textil";
 
 /** Lo que se acepta como descuadre. Un céntimo por línea es redondeo del proveedor. */
 export const TOLERANCIA = 0.02;
@@ -55,6 +56,10 @@ export type LineaLeida = {
   cantidad_ajustada?: boolean;
   /** La cantidad que se leyó, si se ajustó. */
   cantidad_leida?: number;
+  /** Línea partida por talla: el número de la línea del papel de la que sale. */
+  linea_papel?: number | null;
+  /** El importe de esa línea del papel (repetido en cada partida), para comprobar la suma. */
+  importe_linea_papel?: number | null;
 };
 
 export type CompraLeida = {
@@ -68,6 +73,10 @@ export type CompraLeida = {
   irpf: number;
   total: number;
   lineas: LineaLeida[];
+  /** Lo que dijo la IA; null si dudó o no lo dijo. */
+  tipo_documento?: TipoDocumentoCompra | null;
+  /** El n.º de proforma o pedido que cita una factura. */
+  referencia_proforma?: string | null;
 };
 
 export type Aviso = {
@@ -192,6 +201,10 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
           ? { unidades_por_pack: packTexto, pack_deducido: true }
           : { unidades_por_pack: 1 };
 
+    const papel = aNumero(x.linea_papel);
+    const linea_papel = papel !== null && Number.isInteger(papel) && papel > 0 ? papel : null;
+    const importe_linea_papel = linea_papel === null ? null : aNumero(x.importe_linea_papel);
+
     return {
       descripcion,
       cantidad,
@@ -207,6 +220,8 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
       ean: cifrasEan(typeof x.ean === "string" || typeof x.ean === "number" ? String(x.ean) : null),
       ...pack,
       ...ajuste,
+      linea_papel,
+      importe_linea_papel,
     };
   });
 
@@ -228,6 +243,10 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
     irpf: Math.abs(irpf ?? 0),
     total: total ?? redondear((base ?? sumaLineas) + (iva ?? 0) - Math.abs(irpf ?? 0)),
     lineas,
+    tipo_documento: (TIPOS_DOCUMENTO_COMPRA as readonly unknown[]).includes(o.tipo_documento)
+      ? (o.tipo_documento as TipoDocumentoCompra)
+      : null,
+    referencia_proforma: texto(o.referencia_proforma),
   };
 }
 
@@ -303,5 +322,43 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
     });
   }
 
+  // Líneas partidas por talla (decisión 9): las partidas suman la línea del papel.
+  for (const g of gruposLineaPapel(c.lineas)) {
+    const importes = g.lineas
+      .map((l) => l.importe_linea_papel)
+      .filter((v): v is number => v !== null && v !== undefined);
+    if (importes.length === 0) continue;
+    if (importes.some((v) => Math.abs(v - importes[0]) >= 0.005)) {
+      avisos.push({
+        linea: null,
+        mensaje: `Línea ${g.linea_papel} del papel: la IA da dos importes distintos para la misma línea.`,
+      });
+      continue;
+    }
+    const sumaGrupo = redondear(g.lineas.reduce((a, l) => a + l.importe, 0));
+    if (Math.abs(sumaGrupo - importes[0]) >= 0.005) {
+      avisos.push({
+        linea: null,
+        mensaje: `Línea ${g.linea_papel} del papel: las tallas suman ${sumaGrupo} y la línea dice ${importes[0]}.`,
+      });
+    }
+  }
+
   return avisos;
+}
+
+/**
+ * Las consecutivas con el mismo `linea_papel` (no nulo), juntas. La misma regla
+ * que `gruposPorLineaPapel` de proformas.ts, aquí para no importarlo (ciclo).
+ */
+function gruposLineaPapel(lineas: readonly LineaLeida[]) {
+  const grupos: { linea_papel: number; lineas: LineaLeida[] }[] = [];
+  let previo: number | null = null;
+  for (const l of lineas) {
+    const n = l.linea_papel ?? null;
+    if (n !== null && n === previo) grupos[grupos.length - 1].lineas.push(l);
+    else if (n !== null) grupos.push({ linea_papel: n, lineas: [l] });
+    previo = n;
+  }
+  return grupos;
 }

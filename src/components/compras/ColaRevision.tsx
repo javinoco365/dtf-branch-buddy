@@ -17,6 +17,7 @@ import {
 import { eur, fechaCorta } from "@/lib/format";
 import { releerFacturaRecibida, verFicheroCompra } from "@/lib/compras.functions";
 import { UMBRAL_CONFIANZA } from "@/dominio/cola-compras";
+import { esProforma } from "@/dominio/proformas";
 import { totalesCola } from "@/dominio/sumatorios-facturas";
 
 /**
@@ -89,6 +90,11 @@ export function ColaRevision({
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">
                     {c.proveedor ?? (error ? "Sin leer" : "—")}
+                    {esProforma(c) && (
+                      <Badge variant="outline" className="ml-1 border-amber-500 text-amber-700">
+                        Proforma
+                      </Badge>
+                    )}
                     <span className="block text-xs font-normal text-muted-foreground">
                       {c.numero ? `N.º ${c.numero}` : String(c.notas ?? "")}
                     </span>
