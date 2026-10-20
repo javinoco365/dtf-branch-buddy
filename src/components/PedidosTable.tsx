@@ -1062,10 +1062,16 @@ function FilaPedido({
   const numeroLabel = numeroVisible(pedido);
   const cancelado = pedido.estado === "cancelado";
   const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
+  // Cobrado entero: fondo verde muy suave, para ver de un vistazo lo que falta.
+  const cobrado = !cancelado && (cobro.estado === "cobrado" || cobro.estado === "excedido");
 
   return (
     <>
-      <TableRow>
+      <TableRow
+        className={
+          cobrado ? "bg-emerald-50/70 hover:bg-emerald-50 dark:bg-emerald-950/20" : undefined
+        }
+      >
         <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
