@@ -221,6 +221,7 @@ function PresupuestosPage() {
    * se puede volver a pedir desde la fila.
    */
   const pdfMut = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (id: string) => pdfFn({ data: { id } }),
     onMutate: () => toast.loading("Generando el PDF…", { id: "pdf-presupuesto-textil" }),
     onSuccess: (r) => {

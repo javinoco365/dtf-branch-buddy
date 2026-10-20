@@ -331,6 +331,7 @@ type DatosBoton = Omit<DatosInformeSocios, "empresa" | "generado">;
  */
 function BotonInforme({ datos }: { datos: DatosBoton | null }) {
   const generar = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: async (d: DatosBoton) => {
       const [{ generarInformeSocios }, empresa] = await Promise.all([
         import("@/lib/pdf-informe-socios"),

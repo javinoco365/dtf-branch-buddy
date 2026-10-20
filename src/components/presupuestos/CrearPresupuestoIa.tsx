@@ -160,6 +160,7 @@ export function PresupuestoIaDialog({
   }, [modo]);
 
   const montar = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: async () => {
       if (modo === "documento" && !documento) throw new Error("Elige el documento.");
       if (modo === "texto" && !texto.trim()) throw new Error("Escribe el presupuesto.");

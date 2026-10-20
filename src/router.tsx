@@ -1,9 +1,10 @@
-import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { crearQueryClient } from "@/lib/cache";
 
 export const getRouter = () => {
-  const queryClient = new QueryClient();
+  // Con la invalidación central tras guardar: ver src/lib/cache.ts.
+  const queryClient = crearQueryClient();
 
   const router = createRouter({
     routeTree,

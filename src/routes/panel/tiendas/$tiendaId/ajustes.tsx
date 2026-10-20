@@ -50,6 +50,7 @@ import {
   Mail,
   Users,
 } from "lucide-react";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
   component: Ajustes,
@@ -351,6 +352,8 @@ function Ajustes() {
                 } catch (e) {
                   toast.error((e as Error).message);
                 } finally {
+                  // También si se cortó: lo ya escrito tiene que verse.
+                  void invalidarTrasGuardar(qc);
                   setSincronizandoClientes(false);
                 }
               }}
@@ -1118,6 +1121,8 @@ function RecuperarEnvios({ tiendaId }: { tiendaId: string }) {
     } catch (e) {
       toast.error((e as Error).message || "No se ha podido consultar WooCommerce");
     } finally {
+      // También si se cortó a medias: lo ya recuperado tiene que verse.
+      void invalidarTrasGuardar(qc);
       setTrabajando(false);
     }
   }

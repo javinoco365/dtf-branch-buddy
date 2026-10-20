@@ -128,6 +128,7 @@ import {
 } from "@/dominio/compras";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { totalesCompras } from "@/dominio/sumatorios-facturas";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -362,6 +363,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 
   const leerFn = useServerFn(leerFacturaCompra);
   const leer = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (fichero: File) => {
       const fd = new FormData();
       fd.append("fichero", fichero);
@@ -647,7 +649,10 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         <SubidaFacturas
           deshabilitado={lector?.disponible === false}
           categoria={general ? undefined : "textil"}
-          alTerminarUna={() => qc.invalidateQueries({ queryKey: ["compras"] })}
+          alTerminarUna={() => {
+            qc.invalidateQueries({ queryKey: ["compras"] });
+            void invalidarTrasGuardar(qc);
+          }}
         />
       )}
       {cola && (

@@ -247,6 +247,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   // sigue hablando de lo que se exportó.
   const exportarAnalisis = useMutation({
     mutationKey: CLAVE_EXPORTAR,
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (tienda: string | undefined) => exportarPedidosParaAnalisis({ tiendaId: tienda }),
     onSuccess: (r) => {
       toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${r.alcance}`, {
