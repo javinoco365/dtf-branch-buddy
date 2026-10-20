@@ -7,6 +7,7 @@ import { LogOut } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { MARCA_DESCRIPCION, MARCA_NOMBRE } from "@/components/Marca";
 import { BotonTema } from "@/components/BotonTema";
+import { MedidorRendimiento } from "@/components/MedidorRendimiento";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <main className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">{children}</main>
         </div>
       </div>
+      <MedidorRendimiento />
     </SidebarProvider>
   );
 }
