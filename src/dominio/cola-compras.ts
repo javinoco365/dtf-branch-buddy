@@ -137,7 +137,14 @@ export const bloqueaRegistro = (d: Duplicado) =>
 /** Por debajo de esta confianza, la IA no se cree a sí misma: hay que mirarla. */
 export const UMBRAL_CONFIANZA = 0.85;
 
-const texto = z.string().nullable();
+/**
+ * Texto o null. La IA escribe «» (texto vacío) cuando un dato no aparece (ver
+ * ESQUEMA_LECTURA_JSON): aquí vale lo mismo que null.
+ */
+const texto = z
+  .string()
+  .nullable()
+  .transform((v) => (v === null || v.trim() === "" ? null : v));
 /** Texto o null; si falta, null. */
 const textoOpcional = texto.optional().transform((v) => v ?? null);
 
@@ -152,7 +159,10 @@ export const esquemaLectura = z.object({
   numero: texto,
   fecha: texto,
   concepto: texto,
-  categoria: z.enum(CATEGORIAS_COMPRA.map((c) => c.valor) as [string, ...string[]]).nullable(),
+  categoria: z.preprocess(
+    (v) => (v === "" ? null : v),
+    z.enum(CATEGORIAS_COMPRA.map((c) => c.valor) as [string, ...string[]]).nullable(),
+  ),
   base: texto,
   iva: texto,
   irpf: texto,
@@ -183,12 +193,21 @@ export const esquemaLectura = z.object({
 
 export type LecturaIa = z.infer<typeof esquemaLectura>;
 
-const tOn = { anyOf: [{ type: "string" }, { type: "null" }] };
+/**
+ * Texto que puede no aparecer: la IA pone «» (vacío). No se usa
+ * `anyOf: [string, null]` porque la API admite como mucho 16 campos con unión
+ * en un esquema (`anyOf` o lista de tipos) y responde 400 si hay más; las
+ * líneas del escáner textil llevaban el total a 21.
+ */
+const tOn = { type: "string" };
+
+/** Máximo de campos con unión (`anyOf` o lista de tipos) que admite la API. */
+export const MAXIMO_UNIONES_API = 16;
 
 /**
  * El mismo esquema en JSON Schema, para pedírselo a la API (salida
  * estructurada). Los rangos (confianza de 0 a 1) no se pueden expresar ahí:
- * los comprueba `validarLectura`.
+ * los comprueba `validarLectura`. Sin uniones: ver `tOn`.
  */
 export const ESQUEMA_LECTURA_JSON = {
   type: "object",
@@ -214,9 +233,7 @@ export const ESQUEMA_LECTURA_JSON = {
     numero: tOn,
     fecha: tOn,
     concepto: tOn,
-    categoria: {
-      anyOf: [{ type: "string", enum: CATEGORIAS_COMPRA.map((c) => c.valor) }, { type: "null" }],
-    },
+    categoria: { type: "string", enum: [...CATEGORIAS_COMPRA.map((c) => c.valor), ""] },
     base: tOn,
     iva: tOn,
     irpf: tOn,
