@@ -262,6 +262,12 @@ export type LineaDocumentoTextil = {
   stock_id?: string | null;
   /** El coste congelado que trae la línea guardada; solo para enseñar. */
   coste_unit_snapshot?: number | null;
+  /**
+   * Solo en el editor: el precio no se sabe (un borrador de la IA sin precio
+   * en el texto ni en el stock). No se guarda hasta que alguien lo escriba,
+   * aunque sea 0 a propósito. No se manda al servidor.
+   */
+  precio_pendiente?: boolean;
 };
 
 export type Partida = { unidades: number; valor: number };

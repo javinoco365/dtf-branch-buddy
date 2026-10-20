@@ -20,18 +20,23 @@ import { claveLector } from "./lector-facturas.server";
 export { hayLectorConfigurado } from "./lector-facturas.server";
 import {
   ESQUEMA_LECTURA_PRESUPUESTO_JSON,
+  revisarDocumentoIa,
   validarLecturaPresupuesto,
   type LecturaPresupuesto,
 } from "@/dominio/presupuesto-ia";
 
 const MODELO = process.env.MODELO_LECTURA ?? "claude-opus-5-5";
-const MAXIMO_BYTES = 10 * 1024 * 1024;
 /** Un texto de chat no necesita más: frena pegar un libro por error. */
 export const MAXIMO_CARACTERES_TEXTO = 20_000;
 
-const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/webp"] as const;
-type TipoImagen = (typeof TIPOS_IMAGEN)[number];
-const esImagen = (t: string): t is TipoImagen => (TIPOS_IMAGEN as readonly string[]).includes(t);
+type TipoImagen = "image/jpeg" | "image/png" | "image/webp";
+
+/**
+ * Un error que no se arregla repitiendo la petición: lo que la API rechaza
+ * (4xx: la petición está mal o el fichero no vale) o lo que falta para
+ * llamarla. No se reintenta.
+ */
+class ErrorSinReintento extends Error {}
 
 export type AmbitoIa = "tienda" | "textil";
 
@@ -77,7 +82,7 @@ async function pedirPresupuesto(e: {
 }): Promise<unknown> {
   const clave = await claveLector();
   if (!clave) {
-    throw new Error(
+    throw new ErrorSinReintento(
       "Falta la clave de la IA: el secreto «facturas_key» en el Vault de Supabase (la misma del lector de facturas). " +
         "Mientras tanto, el presupuesto se puede hacer a mano.",
     );
@@ -85,18 +90,15 @@ async function pedirPresupuesto(e: {
 
   const contenido: Anthropic.Beta.BetaContentBlockParam[] = [];
   if (e.fichero) {
-    if (e.fichero.tipo !== "application/pdf" && !esImagen(e.fichero.tipo)) {
-      throw new Error(
-        `Formato no admitido (${e.fichero.tipo}). Sube un PDF, un JPG, un PNG o un WEBP.`,
-      );
-    }
-    if (e.fichero.bytes.byteLength > MAXIMO_BYTES) {
-      throw new Error("El fichero pesa más de 10 MB. Baja la resolución o divide el PDF.");
-    }
+    const revisado = revisarDocumentoIa(e.fichero.bytes, e.fichero.tipo);
+    if (!revisado.ok) throw new ErrorSinReintento(revisado.error);
     const datos = Buffer.from(e.fichero.bytes).toString("base64");
     contenido.push(
-      esImagen(e.fichero.tipo)
-        ? { type: "image", source: { type: "base64", media_type: e.fichero.tipo, data: datos } }
+      revisado.esImagen
+        ? {
+            type: "image",
+            source: { type: "base64", media_type: e.fichero.tipo as TipoImagen, data: datos },
+          }
         : {
             type: "document",
             source: { type: "base64", media_type: "application/pdf", data: datos },
@@ -137,6 +139,15 @@ async function pedirPresupuesto(e: {
   } catch (err) {
     // El cuerpo del error puede traer la petición entera. Solo el código.
     if (err instanceof Anthropic.APIError) {
+      const status = err.status ?? 0;
+      // Los 4xx no se arreglan repitiendo (los 429 ya los repite el SDK).
+      if (status >= 400 && status < 500) {
+        throw new ErrorSinReintento(
+          status === 413
+            ? "El documento es demasiado grande para la IA. Redúcelo o divídelo."
+            : `La IA ha rechazado la petición (${status}). Revisa el documento: formato, tamaño o páginas.`,
+        );
+      }
       throw new Error(`La IA ha respondido ${err.status ?? "sin código"}.`);
     }
     throw new Error("No se ha podido llegar a la IA.");
@@ -174,6 +185,11 @@ export async function leerPresupuestoConIa(e: {
   if (e.texto.length > MAXIMO_CARACTERES_TEXTO) {
     throw new Error("El texto es demasiado largo: como mucho, 20.000 caracteres.");
   }
+  // Lo que la API va a rechazar no se manda (ni se cobra).
+  if (e.fichero) {
+    const revisado = revisarDocumentoIa(e.fichero.bytes, e.fichero.tipo);
+    if (!revisado.ok) throw new Error(revisado.error);
+  }
   let error = "";
   for (let intento = 1; intento <= 2; intento++) {
     try {
@@ -181,6 +197,7 @@ export async function leerPresupuestoConIa(e: {
       if (v.ok) return v.lectura;
       error = v.error;
     } catch (err) {
+      if (err instanceof ErrorSinReintento) throw new Error(err.message);
       error = err instanceof Error ? err.message : String(err);
     }
   }

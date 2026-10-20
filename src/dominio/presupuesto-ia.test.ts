@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   ESQUEMA_LECTURA_PRESUPUESTO_JSON,
+  MAXIMO_CATALOGO_IA,
+  avisoCatalogoParcial,
   casarCliente,
   catalogoTextilParaIa,
   catalogoTiendaParaIa,
   montarBorradorTextil,
   montarBorradorTienda,
+  ordenarPorPista,
   precioLeido,
+  revisarDocumentoIa,
   unidadNormalizada,
   validarLecturaPresupuesto,
   type LecturaPresupuesto,
@@ -174,6 +178,97 @@ describe("el catálogo que ve la IA", () => {
     expect(catalogoTextilParaIa(variantes)).toBe(
       "v-negra-m | Gildan · Heavy Cotton · Negro · M | SKU G5000-BK-M | 6.5 € | 70 disponibles",
     );
+  });
+});
+
+describe("el catálogo que no cabe entero", () => {
+  const muchas = Array.from({ length: MAXIMO_CATALOGO_IA + 300 }, (_, i) =>
+    variante({
+      id: `v-${String(i).padStart(4, "0")}`,
+      nombre: i === MAXIMO_CATALOGO_IA + 250 ? "Stanley Creator" : `Básica ${i}`,
+      color: i === MAXIMO_CATALOGO_IA + 250 ? "Blanco" : "Gris",
+      talla: "M",
+    }),
+  );
+
+  it("primero lo que se parece a lo que se pide: una variante del final entra", () => {
+    const sinPista = catalogoTextilParaIa(muchas);
+    expect(sinPista).not.toContain("Stanley");
+    expect(sinPista).toContain("(y 300 variantes más que no caben aquí)");
+    const conPista = catalogoTextilParaIa(muchas, "20 camisetas Stanley/Stella blancas M");
+    expect(conPista.split("\n")[0]).toContain("Stanley Creator");
+  });
+
+  it("ordenarPorPista: a igualdad, el orden de siempre; sin tildes ni mayúsculas", () => {
+    const l = ["Camiseta roja", "Sudadera azul", "Camiseta azul"];
+    expect(ordenarPorPista(l, (x) => x, "")).toEqual(l);
+    expect(ordenarPorPista(l, (x) => x, "SUDADERA azúl")).toEqual([
+      "Sudadera azul",
+      "Camiseta azul",
+      "Camiseta roja",
+    ]);
+  });
+
+  it("si se recorta, el borrador lo avisa; si cabe, no", () => {
+    expect(avisoCatalogoParcial(MAXIMO_CATALOGO_IA, "variantes")).toBeNull();
+    const aviso = avisoCatalogoParcial(MAXIMO_CATALOGO_IA + 300, "variantes");
+    expect(aviso).toContain(`${MAXIMO_CATALOGO_IA} de ${MAXIMO_CATALOGO_IA + 300} variantes`);
+    expect(aviso).toContain("sin stock");
+  });
+});
+
+describe("revisarDocumentoIa", () => {
+  const jpeg = (ancho: number, alto: number) =>
+    new Uint8Array([
+      0xff,
+      0xd8,
+      0xff,
+      0xc0,
+      0x00,
+      0x11,
+      8,
+      alto >> 8,
+      alto & 0xff,
+      ancho >> 8,
+      ancho & 0xff,
+      3,
+      1,
+      0x11,
+      0,
+      2,
+      0x11,
+      0,
+      3,
+      0x11,
+      0,
+      0xff,
+      0xd9,
+    ]);
+
+  it("un PDF hasta 10 MB; una foto hasta 5 MB y 8000 px de lado", () => {
+    expect(revisarDocumentoIa(new Uint8Array(10), "application/pdf")).toEqual({
+      ok: true,
+      esImagen: false,
+    });
+    const pdfGrande = revisarDocumentoIa(new Uint8Array(10 * 1024 * 1024 + 1), "application/pdf");
+    expect(pdfGrande.ok).toBe(false);
+    expect(revisarDocumentoIa(jpeg(4000, 3000), "image/jpeg")).toEqual({
+      ok: true,
+      esImagen: true,
+    });
+    const fotoPesada = new Uint8Array(7 * 1024 * 1024);
+    fotoPesada.set(jpeg(4000, 3000));
+    const r = revisarDocumentoIa(fotoPesada, "image/jpeg");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("5 MB");
+    const ancha = revisarDocumentoIa(jpeg(9000, 3000), "image/jpeg");
+    expect(ancha.ok).toBe(false);
+    if (!ancha.ok) expect(ancha.error).toContain("8000");
+  });
+
+  it("ni otros formatos ni una imagen que no es lo que dice", () => {
+    expect(revisarDocumentoIa(new Uint8Array(10), "image/gif").ok).toBe(false);
+    expect(revisarDocumentoIa(jpeg(100, 100), "image/png").ok).toBe(false);
   });
 });
 

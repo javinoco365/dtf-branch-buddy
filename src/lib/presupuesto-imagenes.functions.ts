@@ -11,6 +11,7 @@ import {
 } from "./presupuesto-imagenes-datos";
 import {
   MAXIMO_IMAGENES_PRESUPUESTO,
+  medidasALaVista,
   revisarImagen,
   rutaImagenPresupuesto,
 } from "@/dominio/imagenes-presupuesto";
@@ -118,6 +119,7 @@ export const subirImagenPresupuesto = createServerFn({ method: "POST" })
     const revisada = revisarImagen(bytes, data.fichero.name || "La imagen");
     if (!revisada.ok) throw new Error(revisada.error);
     const { medidas } = revisada;
+    const vista = medidasALaVista(medidas);
 
     const id = crypto.randomUUID();
     const ruta = rutaImagenPresupuesto(p.empresa_id, data.ambito, p.id, id, medidas.tipo);
@@ -135,8 +137,8 @@ export const subirImagenPresupuesto = createServerFn({ method: "POST" })
       nombre: (data.fichero.name || "").slice(0, 200),
       tipo_mime: medidas.tipo,
       bytes: bytes.byteLength,
-      ancho: medidas.ancho,
-      alto: medidas.alto,
+      ancho: vista.ancho,
+      alto: vista.alto,
       orden: filas.length ? Math.max(...filas.map((f) => f.orden)) + 1 : 0,
     });
     if (error) {

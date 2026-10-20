@@ -6,6 +6,7 @@ import { leerTodas } from "./paginar";
 import { pdfEnBase64 } from "./pdf-presupuesto-datos";
 import { diaEnEspana } from "@/dominio/fecha-documento";
 import {
+  avisoCatalogoParcial,
   catalogoTextilParaIa,
   catalogoTiendaParaIa,
   montarBorradorTextil,
@@ -16,7 +17,7 @@ import {
   type ProductoCatalogoIa,
 } from "@/dominio/presupuesto-ia";
 import { extraerJpegsDePdf } from "@/dominio/imagenes-presupuesto";
-import { aVarianteCatalogo } from "@/dominio/stock-textil";
+import { aVarianteCatalogo, utilizable } from "@/dominio/stock-textil";
 
 /**
  * Crear un presupuesto con IA: desde un documento (PDF o imagen) o desde un
@@ -150,27 +151,25 @@ export const proponerPresupuesto = createServerFn({ method: "POST" })
       ]);
       const lectura = await leerPresupuestoConIa({
         ambito: "tienda",
-        catalogo: catalogoTiendaParaIa(productos),
+        catalogo: catalogoTiendaParaIa(productos, data.texto),
         texto: data.texto,
         fichero,
       });
-      return {
-        ambito: "tienda",
-        borrador: montarBorradorTienda(lectura, { productos, clientes, hoy }),
-        extraidas,
-      };
+      const borrador = montarBorradorTienda(lectura, { productos, clientes, hoy });
+      const parcial = avisoCatalogoParcial(productos.length, "productos");
+      if (parcial) borrador.avisos.push(parcial);
+      return { ambito: "tienda", borrador, extraidas };
     }
 
     const [variantes, clientes] = await Promise.all([leerVariantes(sb), leerClientes(sb)]);
     const lectura = await leerPresupuestoConIa({
       ambito: "textil",
-      catalogo: catalogoTextilParaIa(variantes),
+      catalogo: catalogoTextilParaIa(variantes, data.texto),
       texto: data.texto,
       fichero,
     });
-    return {
-      ambito: "textil",
-      borrador: montarBorradorTextil(lectura, { variantes, clientes, hoy }),
-      extraidas,
-    };
+    const borrador = montarBorradorTextil(lectura, { variantes, clientes, hoy });
+    const parcial = avisoCatalogoParcial(variantes.filter(utilizable).length, "variantes");
+    if (parcial) borrador.avisos.push(parcial);
+    return { ambito: "textil", borrador, extraidas };
   });

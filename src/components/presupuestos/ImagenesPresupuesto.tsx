@@ -11,7 +11,21 @@ import type { EstadoImagenesPresupuesto } from "./useImagenesPresupuesto";
 /** La sección del editor: miniaturas con su botón de quitar y «Añadir imágenes». */
 export function ImagenesPresupuesto({ estado }: { estado: EstadoImagenesPresupuesto }) {
   const entrada = useRef<HTMLInputElement>(null);
-  if (!estado.disponible) {
+  if (estado.estado === "cargando") {
+    return estado.nuevas.length > 0 ? (
+      <p className="text-xs text-muted-foreground">Cargando las imágenes…</p>
+    ) : null;
+  }
+  if (estado.estado === "error") {
+    return (
+      <p className="text-xs text-destructive">
+        No se han podido cargar las imágenes ({estado.errorConsulta}).
+        {estado.nuevas.length > 0 &&
+          " Al guardar se vuelve a intentar; si sigue fallando, se avisa de las que no se guardan."}
+      </p>
+    );
+  }
+  if (estado.estado === "no-disponible") {
     return estado.nuevas.length > 0 ? (
       <p className="text-xs text-muted-foreground">
         Las imágenes no se guardarán: falta aplicar la migración 20261030100000.

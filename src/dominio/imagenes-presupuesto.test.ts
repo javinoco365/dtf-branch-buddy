@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  LADO_MAXIMO_SUBIDA,
   LADO_MINIMO_EXTRAIDA,
   MAXIMO_BYTES_IMAGEN,
+  MAXIMO_IMAGENES_PRESUPUESTO,
+  colocacionGirada,
   extraerJpegsDePdf,
+  giroDeOrientacion,
+  medidasALaVista,
+  medidasReducidas,
+  recortarImagenes,
   maquetarImagenes,
   medidasImagen,
   revisarImagen,
@@ -224,5 +231,137 @@ describe("maquetarImagenes", () => {
     expect(fila.celdas[0]).toMatchObject({ x: 0, ancho: 186, alto: 46.5 });
     expect(maquetarImagenes([], 186)).toEqual([]);
     expect(maquetarImagenes([{ ancho: 0, alto: 10 }], 186)).toEqual([]);
+  });
+});
+
+/**
+ * Un JPEG como los del móvil: SOI, APP1 con EXIF (IFD0 con la etiqueta
+ * Orientation), SOF0 con las medidas del sensor y EOI.
+ */
+function jpegConExif(ancho: number, alto: number, orientacion: number, orden: "II" | "MM") {
+  const le = orden === "II";
+  const u16 = (n: number) => (le ? [n & 0xff, n >> 8] : [n >> 8, n & 0xff]);
+  const u32 = (n: number) =>
+    le
+      ? [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, n >>> 24]
+      : [n >>> 24, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  const tiff = [
+    ...Array.from(orden, (c) => c.charCodeAt(0)),
+    ...u16(42),
+    ...u32(8),
+    // IFD0: dos entradas (una cualquiera y Orientation), y el siguiente IFD.
+    ...u16(2),
+    ...u16(0x010f),
+    ...u16(2),
+    ...u32(4),
+    ...Array.from("Ok\0\0", (c) => c.charCodeAt(0)),
+    ...u16(0x0112),
+    ...u16(3),
+    ...u32(1),
+    ...u16(orientacion),
+    0,
+    0,
+    ...u32(0),
+  ];
+  const cuerpo = [...Array.from("Exif\0\0", (c) => c.charCodeAt(0)), ...tiff];
+  const app1 = [0xff, 0xe1, (cuerpo.length + 2) >> 8, (cuerpo.length + 2) & 0xff, ...cuerpo];
+  const base = jpeg(ancho, alto);
+  return new Uint8Array([0xff, 0xd8, ...app1, ...Array.from(base.subarray(2))]);
+}
+
+describe("la orientación EXIF de las fotos del móvil", () => {
+  it("lee Orientation=6 (Intel y Motorola) y da las medidas a la vista cambiadas", () => {
+    for (const orden of ["II", "MM"] as const) {
+      const m = medidasImagen(jpegConExif(4032, 3024, 6, orden));
+      expect(m).toMatchObject({ tipo: "image/jpeg", ancho: 4032, alto: 3024, orientacion: 6 });
+      expect(medidasALaVista(m!)).toEqual({ ancho: 3024, alto: 4032 });
+      expect(giroDeOrientacion(m!.orientacion)).toBe(90);
+    }
+  });
+
+  it("sin EXIF o con orientación 1, nada que girar", () => {
+    expect(medidasImagen(jpeg(800, 600))?.orientacion).toBeUndefined();
+    expect(medidasImagen(jpegConExif(800, 600, 1, "II"))?.orientacion).toBeUndefined();
+    expect(medidasALaVista({ ancho: 800, alto: 600 })).toEqual({ ancho: 800, alto: 600 });
+  });
+
+  it("cada orientación, su giro", () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, undefined].map(giroDeOrientacion)).toEqual([
+      0, 0, 180, 180, 90, 90, 270, 270, 0,
+    ]);
+  });
+
+  it("la colocación para jsPDF ocupa justo el hueco, ya girada", () => {
+    const hueco = { x: 10, y: 50, ancho: 30, alto: 40 };
+    expect(colocacionGirada(hueco, 0)).toEqual({ ...hueco, rotacion: 0 });
+    // jsPDF dibuja con la esquina inferior izquierda en (x, y + alto) y gira
+    // en sentido contrario a las agujas: se comprueba dónde caen las esquinas.
+    for (const giro of [90, 180, 270] as const) {
+      const c = colocacionGirada(hueco, giro);
+      // Lo que escribe jsPDF (writeImageToPDF): trasladar a (x, P − (y + alto)),
+      // girar con [cos sen −sen cos] y escalar el cuadrado unidad. P: alto de página.
+      const P = 297;
+      const rad = (c.rotacion * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const esquinas = [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ].map(([u, v]) => {
+        const U = u * c.ancho;
+        const V = v * c.alto;
+        const xArriba = c.x + cos * U - sin * V;
+        const yArriba = P - (c.y + c.alto) + sin * U + cos * V;
+        return [xArriba, P - yArriba];
+      });
+      const xs = esquinas.map((e) => Math.round(e[0] * 1000) / 1000);
+      const ys = esquinas.map((e) => Math.round(e[1] * 1000) / 1000);
+      expect([Math.min(...xs), Math.max(...xs)]).toEqual([10, 40]);
+      expect([Math.min(...ys), Math.max(...ys)]).toEqual([50, 90]);
+      // El primer píxel del fichero (arriba a la izquierda del sensor: u 0, v 1
+      // en el PDF) cae donde lo pone el giro en el sentido de las agujas.
+      const primero = esquinas[2].map((n) => Math.round(n * 1000) / 1000);
+      const esperado = { 90: [40, 50], 180: [40, 90], 270: [10, 90] }[giro];
+      expect(primero).toEqual(esperado);
+    }
+  });
+});
+
+describe("el tamaño con el que se sube", () => {
+  it("solo se reduce lo que pasa del lado máximo, a la vista y sin deformar", () => {
+    expect(medidasReducidas({ ancho: 1200, alto: 800 })).toBeNull();
+    expect(medidasReducidas({ ancho: 4000, alto: 3000 })).toEqual({
+      ancho: LADO_MAXIMO_SUBIDA,
+      alto: 1200,
+    });
+    // Una foto vertical del móvil (sensor 4032 × 3024, orientación 6).
+    expect(medidasReducidas({ ancho: 4032, alto: 3024, orientacion: 6 })).toEqual({
+      ancho: 1200,
+      alto: LADO_MAXIMO_SUBIDA,
+    });
+  });
+
+  it("un PNG o un WEBP enorme no se admite (se descomprime para el PDF); un JPEG sí", () => {
+    const r = revisarImagen(png(4000, 3000), "maqueta.png");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("4000 × 3000");
+    expect(revisarImagen(webpVp8x(4000, 3000), "maqueta.webp").ok).toBe(false);
+    expect(revisarImagen(png(1600, 1200), "maqueta.png").ok).toBe(true);
+    expect(revisarImagen(jpeg(4000, 3000), "foto.jpg").ok).toBe(true);
+  });
+});
+
+describe("recortarImagenes", () => {
+  it("por orden de preferencia y como mucho el máximo; dice cuántas se quedan fuera", () => {
+    const aMano = ["d1", "d2", "d3"];
+    const documento = ["doc"];
+    const extraidas = Array.from({ length: 8 }, (_, i) => `e${i + 1}`);
+    const r = recortarImagenes([aMano, documento, extraidas]);
+    expect(r.elegidas).toHaveLength(MAXIMO_IMAGENES_PRESUPUESTO);
+    expect(r.elegidas.slice(0, 4)).toEqual(["d1", "d2", "d3", "doc"]);
+    expect(r.fuera).toBe(4);
+    expect(recortarImagenes([["a"], []])).toEqual({ elegidas: ["a"], fuera: 0 });
   });
 });

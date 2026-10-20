@@ -28,6 +28,57 @@ import { IVA_GENERAL, UNIDAD_POR_DEFECTO, redondear } from "./importes";
 import { normalizarNif, normalizarTexto } from "./clientes";
 import { etiquetaVariante, utilizable } from "./stock-textil";
 import type { VarianteCatalogo } from "./tipos-textil";
+import { medidasImagen } from "./imagenes-presupuesto";
+
+// ---------------------------------------------------------------------------
+// El documento que se le manda a la IA
+// ---------------------------------------------------------------------------
+
+/** Un PDF, hasta 10 MB. */
+export const MAXIMO_BYTES_DOCUMENTO_IA = 10 * 1024 * 1024;
+/** Una imagen, hasta 5 MB: la API no admite más (en base64). */
+export const MAXIMO_BYTES_IMAGEN_IA = 5 * 1024 * 1024;
+/** Ni más de tantos píxeles de lado: la API tampoco las admite. */
+export const MAXIMO_LADO_IMAGEN_IA = 8000;
+
+/**
+ * Si el documento se puede mandar a la IA, comprobado antes de llamarla (una
+ * llamada que la API va a rechazar no se hace). El motivo, en castellano.
+ */
+export function revisarDocumentoIa(
+  bytes: Uint8Array,
+  tipo: string,
+): { ok: true; esImagen: boolean } | { ok: false; error: string } {
+  if (tipo === "application/pdf") {
+    if (bytes.byteLength > MAXIMO_BYTES_DOCUMENTO_IA) {
+      return { ok: false, error: "El PDF pesa más de 10 MB. Baja la resolución o divídelo." };
+    }
+    return { ok: true, esImagen: false };
+  }
+  if (tipo !== "image/jpeg" && tipo !== "image/png" && tipo !== "image/webp") {
+    return {
+      ok: false,
+      error: `Formato no admitido (${tipo || "desconocido"}). Sube un PDF, un JPG, un PNG o un WEBP.`,
+    };
+  }
+  if (bytes.byteLength > MAXIMO_BYTES_IMAGEN_IA) {
+    return {
+      ok: false,
+      error: "La foto pesa más de 5 MB: la IA no la admite. Redúcela o guárdala en JPG.",
+    };
+  }
+  const m = medidasImagen(bytes);
+  if (!m || m.tipo !== tipo) {
+    return { ok: false, error: "El fichero no es la imagen que dice ser (JPG, PNG o WEBP)." };
+  }
+  if (Math.max(m.ancho, m.alto) > MAXIMO_LADO_IMAGEN_IA) {
+    return {
+      ok: false,
+      error: `La foto mide más de ${MAXIMO_LADO_IMAGEN_IA} píxeles de lado: la IA no la admite. Redúcela.`,
+    };
+  }
+  return { ok: true, esImagen: true };
+}
 
 // ---------------------------------------------------------------------------
 // Lo que se le pide a la IA
@@ -176,13 +227,59 @@ export const MAXIMO_CATALOGO_IA = 600;
 const limpio = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 const precioTexto = (n: number) => (n > 0 ? `${redondear(n, 4)} €` : "sin precio");
 
+/** Las palabras de un texto que sirven para buscar: en minúsculas, sin tildes, de 3 letras o más. */
+function palabras(t: string): Set<string> {
+  return new Set(
+    normalizarTexto(t)
+      .split(/[^a-z0-9ñ]+/)
+      .filter((p) => p.length >= 3),
+  );
+}
+
+/**
+ * Las entradas del catálogo, primero las que más palabras comparten con lo
+ * que se pide (`pista`: el texto o las indicaciones), y a igualdad, en el
+ * orden en que llegan. Así, si el catálogo no cabe entero, se recorta lo que
+ * menos tiene que ver.
+ */
+export function ordenarPorPista<T>(
+  lista: readonly T[],
+  textoDe: (x: T) => string,
+  pista: string,
+): T[] {
+  const buscadas = palabras(pista);
+  if (buscadas.size === 0) return [...lista];
+  const puntos = (x: T) => {
+    let n = 0;
+    for (const p of palabras(textoDe(x))) if (buscadas.has(p)) n += 1;
+    return n;
+  };
+  return lista
+    .map((x, i) => ({ x, i, n: puntos(x) }))
+    .sort((a, b) => b.n - a.n || a.i - b.i)
+    .map((e) => e.x);
+}
+
+/**
+ * El aviso que va al borrador cuando el catálogo no ha cabido entero en la
+ * petición: si una línea va sin producto, puede ser por eso.
+ */
+export function avisoCatalogoParcial(total: number, que: "productos" | "variantes"): string | null {
+  if (total <= MAXIMO_CATALOGO_IA) return null;
+  return `El catálogo es demasiado grande para pasárselo entero a la IA: ha visto ${MAXIMO_CATALOGO_IA} de ${total} ${que} (las que más se parecen a lo que pides). Si una línea va sin ${que === "productos" ? "producto" : "stock"}, búscalo a mano.`;
+}
+
 /**
  * El catálogo de la tienda, en texto, una entrada por línea:
  * `id | nombre | unidad | precio sin IVA`. La IA elige de aquí el
  * `catalogo_id` de cada línea; si no hay ninguno que encaje, lo deja vacío.
  */
-export function catalogoTiendaParaIa(productos: readonly ProductoCatalogoIa[]): string {
-  const lista = productos.slice(0, MAXIMO_CATALOGO_IA);
+export function catalogoTiendaParaIa(productos: readonly ProductoCatalogoIa[], pista = ""): string {
+  const lista = ordenarPorPista(
+    productos,
+    (p) => `${p.nombre} ${p.descripcion ?? ""}`,
+    pista,
+  ).slice(0, MAXIMO_CATALOGO_IA);
   const filas = lista.map((p) =>
     [
       p.id,
@@ -207,9 +304,13 @@ export function catalogoTiendaParaIa(productos: readonly ProductoCatalogoIa[]): 
  * Las variantes de stock textil que se pueden vender, en texto:
  * `id | marca · modelo · color · talla | SKU | precio de venta sin IVA | disponibles`.
  */
-export function catalogoTextilParaIa(variantes: readonly VarianteCatalogo[]): string {
+export function catalogoTextilParaIa(variantes: readonly VarianteCatalogo[], pista = ""): string {
   const vendibles = variantes.filter(utilizable);
-  const lista = vendibles.slice(0, MAXIMO_CATALOGO_IA);
+  const lista = ordenarPorPista(
+    vendibles,
+    (v) => `${etiquetaVariante(v)} ${v.sku ?? ""}`,
+    pista,
+  ).slice(0, MAXIMO_CATALOGO_IA);
   const filas = lista.map((v) =>
     [
       v.id,

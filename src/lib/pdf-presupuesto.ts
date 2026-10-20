@@ -45,7 +45,7 @@ import {
   type EstiloLetra,
   type MedidasTexto,
 } from "@/dominio/maqueta-cabecera";
-import { maquetarImagenes } from "@/dominio/imagenes-presupuesto";
+import { colocacionGirada, maquetarImagenes } from "@/dominio/imagenes-presupuesto";
 
 /**
  * El PDF de un presupuesto, en A4: el de las tiendas y el del textil.
@@ -71,9 +71,14 @@ export { colorHex };
 export type ImagenPDF = {
   dataUrl: string;
   formato: "JPEG" | "PNG" | "WEBP";
-  /** En píxeles: solo cuenta la proporción. */
+  /** En píxeles y a la vista (ya girada): solo cuenta la proporción. */
   ancho: number;
   alto: number;
+  /**
+   * Lo que hay que girar el fichero (agujas del reloj) para verlo derecho:
+   * una foto JPEG del móvil con orientación EXIF, que el PDF no aplica solo.
+   */
+  giro?: 0 | 90 | 180 | 270;
 };
 
 export type PresupuestoPDFData = {
@@ -1057,7 +1062,21 @@ async function componer(d: PresupuestoPDFData, p: PlantillaPresupuesto, conNumer
       for (const celda of fila.celdas) {
         const im = imagenes[celda.indice];
         try {
-          doc.addImage(im.dataUrl, im.formato, M + celda.x, y, celda.ancho, celda.alto);
+          const c = colocacionGirada(
+            { x: M + celda.x, y, ancho: celda.ancho, alto: celda.alto },
+            im.giro ?? 0,
+          );
+          doc.addImage(
+            im.dataUrl,
+            im.formato,
+            c.x,
+            c.y,
+            c.ancho,
+            c.alto,
+            undefined,
+            undefined,
+            c.rotacion,
+          );
         } catch (error) {
           // Una imagen que jsPDF no entiende no impide sacar el presupuesto.
           console.warn("[presupuesto] imagen que no se puede incrustar:", error);

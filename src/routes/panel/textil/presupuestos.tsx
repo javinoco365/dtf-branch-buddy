@@ -552,7 +552,7 @@ function PresupuestoDialog({
 }: any) {
   const b = borrador as BorradorTextil | null;
   // Un borrador de la IA rellena lo mismo que se rellena a mano; lo que no
-  // sabe (cantidad, precio) se queda a cero y sale en los avisos de arriba.
+  // sabe (cantidad, precio) sale en los avisos de arriba y no se guarda sin rellenar.
   const initial =
     presupuesto ??
     (b
@@ -571,6 +571,8 @@ function PresupuestoDialog({
                 descripcion: l.descripcion,
                 cantidad: l.cantidad ?? 0,
                 precio_unitario: l.precio_unitario ?? 0,
+                // Sin precio ni en el texto ni en el stock: vacío, y no se guarda así.
+                precio_pendiente: l.precio_unitario === null,
                 iva_pct: l.iva_pct,
                 stock_id: l.stock_id,
               }))
@@ -598,6 +600,7 @@ function PresupuestoDialog({
       precio_unitario: Number(it.precio_unitario),
       iva_pct: Number(it.iva_pct),
       stock_id: it.stock_id ?? null,
+      precio_pendiente: it.precio_pendiente === true,
       // El coste congelado de la línea guardada: solo se enseña, no se manda.
       coste_unit_snapshot:
         it.coste_unit_snapshot === null || it.coste_unit_snapshot === undefined
@@ -710,6 +713,11 @@ function PresupuestoDialog({
               // Lo que la IA no ha sabido (la cantidad) no se guarda a cero sin querer.
               if (b && (f.items as Linea[]).some((it) => !(Number(it.cantidad) > 0))) {
                 toast.error("La cantidad de cada línea tiene que ser mayor que cero");
+                return;
+              }
+              // Ni el precio: hay que escribirlo (aunque sea 0 a propósito).
+              if ((f.items as Linea[]).some((it) => it.precio_pendiente)) {
+                toast.error("Falta el precio en alguna línea");
                 return;
               }
               onSave(

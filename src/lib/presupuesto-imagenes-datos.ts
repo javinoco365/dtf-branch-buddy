@@ -12,7 +12,12 @@
 import { faltaLaTabla, tabla } from "./rpc";
 import { pdfEnBase64 } from "./pdf-presupuesto-datos";
 import type { ImagenPDF } from "./pdf-presupuesto";
-import { medidasImagen } from "@/dominio/imagenes-presupuesto";
+import {
+  MAXIMO_PIXELES_SIN_JPEG,
+  giroDeOrientacion,
+  medidasALaVista,
+  medidasImagen,
+} from "@/dominio/imagenes-presupuesto";
 
 export type AmbitoImagenes = "tienda" | "textil";
 
@@ -59,9 +64,19 @@ const FORMATO: Record<string, ImagenPDF["formato"]> = {
 };
 
 /**
+ * Entre todas las imágenes de un PDF, como mucho tantos bytes: el PDF se
+ * hace en el servidor (Cloudflare Workers en producción), con poca memoria.
+ * Las que no caben se quedan fuera y se avisa en el registro.
+ */
+export const MAXIMO_BYTES_IMAGENES_PDF = 16 * 1024 * 1024;
+
+/**
  * Las imágenes de un presupuesto listas para el PDF. Nunca lanza: una imagen
  * que no se puede bajar o no se entiende no impide sacar el presupuesto; se
  * queda fuera y se avisa en el registro del servidor.
+ *
+ * Se bajan una a una, no todas a la vez, para no tenerlas todas en memoria
+ * dos veces (en bruto y en base64) al mismo tiempo.
  */
 export async function imagenesParaPdf(
   sb: unknown,
@@ -76,31 +91,41 @@ export async function imagenesParaPdf(
     return [];
   }
   const storage = (sb as { storage: { from: (b: string) => any } }).storage.from(BUCKET_IMAGENES);
-  const imagenes = await Promise.all(
-    filas.map(async (f): Promise<ImagenPDF | null> => {
-      try {
-        const r = await storage.download(f.ruta);
-        if (r.error || !r.data) {
-          console.warn(`[presupuesto] imagen ${f.ruta}: no se pudo bajar`);
-          return null;
-        }
-        const bytes = new Uint8Array(await (r.data as Blob).arrayBuffer());
-        const medidas = medidasImagen(bytes);
-        if (!medidas) return null;
-        const base64 = await pdfEnBase64(new Blob([bytes]));
-        return {
-          dataUrl: `data:${medidas.tipo};base64,${base64}`,
-          formato: FORMATO[medidas.tipo],
-          ancho: medidas.ancho,
-          alto: medidas.alto,
-        };
-      } catch (e) {
-        console.warn(`[presupuesto] imagen ${f.ruta}:`, e);
-        return null;
+  const imagenes: ImagenPDF[] = [];
+  let usados = 0;
+  for (const f of filas) {
+    try {
+      const r = await storage.download(f.ruta);
+      if (r.error || !r.data) {
+        console.warn(`[presupuesto] imagen ${f.ruta}: no se pudo bajar`);
+        continue;
       }
-    }),
-  );
-  return imagenes.filter((x): x is ImagenPDF => x !== null);
+      const bytes = new Uint8Array(await (r.data as Blob).arrayBuffer());
+      if (usados + bytes.byteLength > MAXIMO_BYTES_IMAGENES_PDF) {
+        console.warn(`[presupuesto] imagen ${f.ruta}: no cabe en el PDF (tope de bytes)`);
+        continue;
+      }
+      const medidas = medidasImagen(bytes);
+      if (!medidas) continue;
+      // Un PNG o un WEBP se descomprime a píxeles en bruto: uno enorme no entra.
+      if (medidas.tipo !== "image/jpeg" && medidas.ancho * medidas.alto > MAXIMO_PIXELES_SIN_JPEG) {
+        console.warn(`[presupuesto] imagen ${f.ruta}: demasiados píxeles para el PDF`);
+        continue;
+      }
+      usados += bytes.byteLength;
+      const vista = medidasALaVista(medidas);
+      imagenes.push({
+        dataUrl: `data:${medidas.tipo};base64,${await pdfEnBase64(new Blob([bytes]))}`,
+        formato: FORMATO[medidas.tipo],
+        ancho: vista.ancho,
+        alto: vista.alto,
+        giro: giroDeOrientacion(medidas.orientacion),
+      });
+    } catch (e) {
+      console.warn(`[presupuesto] imagen ${f.ruta}:`, e);
+    }
+  }
+  return imagenes;
 }
 
 /** Las rutas de los ficheros de un presupuesto, para borrarlos con él. Vacío sin la migración. */

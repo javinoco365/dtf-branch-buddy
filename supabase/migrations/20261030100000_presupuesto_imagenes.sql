@@ -18,6 +18,9 @@
 --                                llegue la que llegue.
 --        ruta                    dónde está el fichero en el bucket
 --                                'presupuestos': <empresa>/<ámbito>/<presupuesto>/<id>.<ext>.
+--                                El mismo trigger exige que sea la carpeta
+--                                de SU presupuesto (si no, check_violation):
+--                                una fila no puede apuntar al fichero de otro.
 --        nombre, tipo_mime, bytes, ancho, alto, orden.
 --      Borrado el presupuesto, sus filas se van en cascada (el fichero lo
 --      borra la aplicación al borrar el presupuesto).
@@ -102,6 +105,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_empresa UUID;
+  v_prefijo TEXT;
 BEGIN
   IF NEW.presupuesto_id IS NOT NULL THEN
     SELECT p.empresa_id INTO v_empresa FROM public.presupuestos p WHERE p.id = NEW.presupuesto_id;
@@ -109,21 +113,33 @@ BEGIN
     SELECT p.empresa_id INTO v_empresa FROM public.textil_presupuestos p
      WHERE p.id = NEW.textil_presupuesto_id;
   END IF;
+  v_prefijo := COALESCE(v_empresa, NEW.empresa_id)::TEXT || '/'
+    || CASE WHEN NEW.presupuesto_id IS NOT NULL THEN 'tienda' ELSE 'textil' END || '/'
+    || COALESCE(NEW.presupuesto_id, NEW.textil_presupuesto_id)::TEXT || '/';
   IF v_empresa IS NOT NULL THEN
     NEW.empresa_id := v_empresa;
+  END IF;
+  -- La ruta es la carpeta de SU presupuesto: <empresa>/<ámbito>/<presupuesto>/.
+  -- Sin esto, quien puede escribir una fila podría apuntarla a un fichero de
+  -- otro presupuesto (u otra empresa) y leerlo: la política de lectura del
+  -- bucket solo mira si hay una fila visible con esa ruta.
+  IF num_nonnulls(NEW.presupuesto_id, NEW.textil_presupuesto_id) = 1
+     AND left(NEW.ruta, length(v_prefijo)) IS DISTINCT FROM v_prefijo THEN
+    RAISE EXCEPTION 'La ruta de la imagen no es la carpeta de su presupuesto (%)', NEW.ruta
+      USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
 END;
 $$;
 
 COMMENT ON FUNCTION public.presupuesto_imagenes_empresa() IS
-  'Trigger: la imagen lleva la empresa de su presupuesto, llegue la que llegue.';
+  'Trigger: la imagen lleva la empresa de su presupuesto, llegue la que llegue, y su ruta tiene que estar en la carpeta de ese presupuesto.';
 
 REVOKE EXECUTE ON FUNCTION public.presupuesto_imagenes_empresa() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS presupuesto_imagenes_empresa ON public.presupuesto_imagenes;
 CREATE TRIGGER presupuesto_imagenes_empresa
-  BEFORE INSERT OR UPDATE OF presupuesto_id, textil_presupuesto_id, empresa_id
+  BEFORE INSERT OR UPDATE OF presupuesto_id, textil_presupuesto_id, empresa_id, ruta
   ON public.presupuesto_imagenes
   FOR EACH ROW EXECUTE FUNCTION public.presupuesto_imagenes_empresa();
 

@@ -11,7 +11,9 @@ import {
   MAXIMO_BYTES_IMAGEN,
   MAXIMO_IMAGENES_PRESUPUESTO,
   esTipoImagenPresupuesto,
+  recortarImagenes,
 } from "@/dominio/imagenes-presupuesto";
+import { reducirImagenParaSubir } from "@/lib/reducir-imagen";
 
 type Ambito = "tienda" | "textil";
 
@@ -23,7 +25,8 @@ type Nueva = { clave: string; fichero: File; url: string };
  * quitar y las nuevas. Nada se escribe hasta guardar: `sincronizar(id)` quita
  * y sube, después de guardar el presupuesto y antes de sacar su PDF.
  *
- * Sin la migración de imágenes, `disponible` es false y la sección no sale.
+ * `estado`: «cargando» mientras se pregunta al servidor, «error» si no ha
+ * contestado, «no-disponible» sin la migración de imágenes y «disponible».
  */
 export function useImagenesPresupuesto({
   ambito,
@@ -42,11 +45,26 @@ export function useImagenesPresupuesto({
   const quitar = useServerFn(quitarImagenPresupuesto);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["presupuesto-imagenes", ambito, presupuestoId],
+  const clave = useMemo(
+    () => ["presupuesto-imagenes", ambito, presupuestoId] as const,
+    [ambito, presupuestoId],
+  );
+  const consultar = useCallback(
+    () => listar({ data: { ambito, presupuestoId } }),
+    [listar, ambito, presupuestoId],
+  );
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: clave,
     enabled: abierto,
-    queryFn: () => listar({ data: { ambito, presupuestoId } }),
+    queryFn: consultar,
   });
+  const estado: "cargando" | "error" | "no-disponible" | "disponible" = data
+    ? data.disponible
+      ? "disponible"
+      : "no-disponible"
+    : isError
+      ? "error"
+      : "cargando";
 
   const [quitadas, setQuitadas] = useState<Set<string>>(new Set());
   const [nuevas, setNuevas] = useState<Nueva[]>([]);
@@ -56,7 +74,14 @@ export function useImagenesPresupuesto({
   useEffect(() => {
     if (!abierto) return;
     setQuitadas(new Set());
-    const lista = (iniciales ?? []).map((fichero) => ({
+    // Las del borrador ya vienen recortadas; por si acaso, nunca más del máximo.
+    const { elegidas, fuera } = recortarImagenes([iniciales ?? []]);
+    if (fuera > 0) {
+      toast.warning(
+        `Como mucho, ${MAXIMO_IMAGENES_PRESUPUESTO} imágenes por presupuesto: ${fuera} se quedan fuera.`,
+      );
+    }
+    const lista = elegidas.map((fichero) => ({
       clave: `n${(contador.current += 1)}`,
       fichero,
       url: URL.createObjectURL(fichero),
@@ -115,7 +140,26 @@ export function useImagenesPresupuesto({
    */
   const sincronizar = useCallback(
     async (id: string): Promise<string[]> => {
-      if (!data?.disponible) return [];
+      if (quitadas.size === 0 && nuevas.length === 0) return [];
+      // Si la consulta aún no ha contestado (o ha fallado), se le pregunta ahora:
+      // nunca se dan por guardadas unas imágenes sin saber si se pueden guardar.
+      let info = data;
+      if (!info) {
+        try {
+          info = await qc.fetchQuery({ queryKey: clave, queryFn: consultar });
+        } catch (e) {
+          return [
+            `las imágenes no se han guardado: no se ha podido consultar el servidor (${(e as Error).message})`,
+          ];
+        }
+      }
+      if (!info?.disponible) {
+        return nuevas.length
+          ? [
+              `las ${nuevas.length} imágenes no se han guardado: falta aplicar la migración 20261030100000`,
+            ]
+          : [];
+      }
       const fallos: string[] = [];
       for (const imagen of quitadas) {
         try {
@@ -128,7 +172,8 @@ export function useImagenesPresupuesto({
         const fd = new FormData();
         fd.set("ambito", ambito);
         fd.set("presupuestoId", id);
-        fd.set("fichero", n.fichero);
+        // Reducida en el navegador si es muy grande: el PDF se hace en el servidor.
+        fd.set("fichero", await reducirImagenParaSubir(n.fichero));
         try {
           await subir({ data: fd });
         } catch (e) {
@@ -138,12 +183,14 @@ export function useImagenesPresupuesto({
       void qc.invalidateQueries({ queryKey: ["presupuesto-imagenes", ambito] });
       return fallos;
     },
-    [data?.disponible, quitadas, nuevas, ambito, quitar, subir, qc],
+    [data, clave, consultar, quitadas, nuevas, ambito, quitar, subir, qc],
   );
 
   return {
-    disponible: data?.disponible ?? false,
+    estado,
+    disponible: estado === "disponible",
     cargando: isLoading,
+    errorConsulta: isError ? ((error as Error | null)?.message ?? "error") : null,
     guardadas,
     nuevas,
     total,

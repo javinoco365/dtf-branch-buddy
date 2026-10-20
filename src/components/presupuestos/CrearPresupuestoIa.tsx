@@ -40,9 +40,12 @@ import {
 } from "@/lib/presupuestos-ia.functions";
 import {
   MAXIMO_BYTES_IMAGEN,
+  MAXIMO_IMAGENES_PRESUPUESTO,
   TIPOS_IMAGEN_PRESUPUESTO,
   esTipoImagenPresupuesto,
+  recortarImagenes,
 } from "@/dominio/imagenes-presupuesto";
+import { MAXIMO_BYTES_DOCUMENTO_IA, MAXIMO_BYTES_IMAGEN_IA } from "@/dominio/presupuesto-ia";
 
 export type ModoIa = "documento" | "texto";
 
@@ -160,6 +163,17 @@ export function PresupuestoIaDialog({
     mutationFn: async () => {
       if (modo === "documento" && !documento) throw new Error("Elige el documento.");
       if (modo === "texto" && !texto.trim()) throw new Error("Escribe el presupuesto.");
+      if (modo === "documento" && documento) {
+        const esFoto = esTipoImagenPresupuesto(documento.type);
+        if (esFoto && documento.size > MAXIMO_BYTES_IMAGEN_IA) {
+          throw new Error(
+            "La foto pesa más de 5 MB: la IA no la admite. Redúcela o guárdala en JPG.",
+          );
+        }
+        if (!esFoto && documento.size > MAXIMO_BYTES_DOCUMENTO_IA) {
+          throw new Error("El PDF pesa más de 10 MB. Baja la resolución o divídelo.");
+        }
+      }
       const fd = new FormData();
       fd.set("ambito", ambito);
       if (tiendaId) fd.set("tiendaId", tiendaId);
@@ -168,18 +182,29 @@ export function PresupuestoIaDialog({
       return proponer({ data: fd });
     },
     onSuccess: (propuesta) => {
-      // Las imágenes del presupuesto: el documento si es una foto, las sacadas
-      // del PDF y las que se añaden aparte. Se pueden quitar en el editor.
-      const fotos: File[] = [];
+      // Las imágenes del presupuesto, por preferencia: las añadidas a mano,
+      // el documento si es una foto y las sacadas del PDF. Como mucho, el
+      // máximo; las demás se avisan. Se pueden quitar en el editor.
+      const delDocumento: File[] = [];
       if (modo === "documento" && documento && esTipoImagenPresupuesto(documento.type)) {
-        if (documento.size <= MAXIMO_BYTES_IMAGEN) fotos.push(documento);
+        if (documento.size <= MAXIMO_BYTES_IMAGEN) delDocumento.push(documento);
         else
           toast.warning("El documento pesa más de 5 MB: no se guarda como imagen del presupuesto.");
       }
-      for (const e of propuesta.extraidas) {
-        fotos.push(ficheroDeBase64(e.base64, e.nombre, "image/jpeg"));
+      const extraidas = propuesta.extraidas.map((e) =>
+        ficheroDeBase64(e.base64, e.nombre, "image/jpeg"),
+      );
+      const { elegidas, fuera } = recortarImagenes([imagenes, delDocumento, extraidas]);
+      if (fuera > 0) {
+        toast.warning(
+          `Como mucho, ${MAXIMO_IMAGENES_PRESUPUESTO} imágenes por presupuesto: ${fuera} ${
+            fuera === 1
+              ? "imagen sacada del documento se queda"
+              : "imágenes sacadas del documento se quedan"
+          } fuera.`,
+        );
       }
-      onBorrador({ propuesta, imagenes: [...fotos, ...imagenes] });
+      onBorrador({ propuesta, imagenes: elegidas });
     },
     onError: (e: Error) => toast.error(e.message || "La IA no ha podido montar el presupuesto"),
   });
@@ -192,7 +217,11 @@ export function PresupuestoIaDialog({
       else if (f.size > MAXIMO_BYTES_IMAGEN) toast.error(`«${f.name}» pesa más de 5 MB.`);
       else buenas.push(f);
     }
-    setImagenes((ims) => [...ims, ...buenas]);
+    const { elegidas, fuera } = recortarImagenes([imagenes, buenas]);
+    if (fuera > 0) {
+      toast.error(`Como mucho, ${MAXIMO_IMAGENES_PRESUPUESTO} imágenes por presupuesto.`);
+    }
+    setImagenes(elegidas);
   };
 
   return (
@@ -213,7 +242,7 @@ export function PresupuestoIaDialog({
         <div className="space-y-4">
           {modo === "documento" && (
             <div className="space-y-1">
-              <Label>Documento (PDF, JPG, PNG o WEBP, hasta 10 MB)</Label>
+              <Label>Documento (PDF de hasta 10 MB, o JPG, PNG o WEBP de hasta 5 MB)</Label>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"

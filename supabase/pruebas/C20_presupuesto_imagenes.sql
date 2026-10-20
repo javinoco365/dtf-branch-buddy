@@ -222,7 +222,29 @@ BEGIN
     v_fallos := v_fallos || 'una ruta fuera de su carpeta aceptada'::TEXT;
   EXCEPTION WHEN check_violation THEN NULL;
   END;
-  PERFORM pg_temp.informar('6. sin presupuesto, con los dos, un GIF, más de 5 MB o una ruta rara: rechazados',
+  BEGIN
+    INSERT INTO public.presupuesto_imagenes (presupuesto_id, ruta, tipo_mime, bytes)
+    VALUES (current_setting('c20.pa')::UUID, pg_temp.ruta('tienda', 'pb'), 'image/jpeg', 10);
+    v_fallos := v_fallos || 'una ruta de otro presupuesto aceptada'::TEXT;
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.presupuesto_imagenes (presupuesto_id, ruta, tipo_mime, bytes)
+    VALUES (current_setting('c20.pa')::UUID,
+            replace(pg_temp.ruta('tienda', 'pa'), current_setting('c20.e'), gen_random_uuid()::TEXT),
+            'image/jpeg', 10);
+    v_fallos := v_fallos || 'una ruta de otra empresa aceptada'::TEXT;
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.presupuesto_imagenes (textil_presupuesto_id, ruta, tipo_mime, bytes)
+    VALUES (current_setting('c20.pt')::UUID,
+            replace(pg_temp.ruta('textil', 'pt'), '/textil/', '/tienda/'), 'image/jpeg', 10);
+    v_fallos := v_fallos || 'una ruta textil en la carpeta de tienda aceptada'::TEXT;
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  PERFORM pg_temp.informar('6. sin presupuesto, con los dos, un GIF, más de 5 MB, una ruta rara o la '
+                           'carpeta de otro presupuesto, empresa o ámbito: rechazados',
                            v_fallos);
 END $$;
 
@@ -269,6 +291,12 @@ SELECT pg_temp.informar('8. UA ve y toca las de su tienda y las del textil de su
   pg_temp.caso('UB no da de alta en el presupuesto de A', 'ub',
     format('INSERT INTO public.presupuesto_imagenes (presupuesto_id, ruta, tipo_mime, bytes) VALUES (%L, %L, %L, 5)',
            current_setting('c20.pa'), pg_temp.ruta('tienda', 'pa'), 'image/jpeg'), 'error 42501'),
+  pg_temp.caso('UA no apunta una suya al fichero de otro presupuesto', 'ua',
+    format('UPDATE public.presupuesto_imagenes SET ruta = %L WHERE presupuesto_id = %L',
+           pg_temp.ruta('tienda', 'pb'), current_setting('c20.pa')), 'error 23514'),
+  pg_temp.caso('UA cambia el orden de una suya', 'ua',
+    format('UPDATE public.presupuesto_imagenes SET orden = 3 WHERE presupuesto_id = %L AND nombre = %L',
+           current_setting('c20.pa'), 'diseño A'), '1'),
   pg_temp.caso('UB no borra las de A', 'ub',
     format('DELETE FROM public.presupuesto_imagenes WHERE presupuesto_id = %L', current_setting('c20.pa')), '0'),
   pg_temp.caso('UA borra una suya', 'ua',

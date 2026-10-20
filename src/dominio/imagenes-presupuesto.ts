@@ -31,6 +31,12 @@ export type MedidasImagen = {
   alto: number;
   /** Solo JPEG: 1 (gris), 3 (color) o 4 (CMYK). */
   componentes?: number;
+  /**
+   * Solo JPEG: la orientación EXIF (1 a 8), si la lleva. `ancho` y `alto`
+   * son los del fichero (los del sensor): con 5 a 8, la foto se ve girada y
+   * sus medidas a la vista son las contrarias (ver `medidasALaVista`).
+   */
+  orientacion?: number;
 };
 
 const u16be = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
@@ -39,6 +45,42 @@ const u32be = (b: Uint8Array, i: number) =>
 const u24le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
 const ascii = (b: Uint8Array, i: number, n: number) =>
   String.fromCharCode(...Array.from(b.subarray(i, i + n)));
+
+/**
+ * La orientación de un segmento APP1 de EXIF (lo que va después de la
+ * longitud): «Exif\0\0», la cabecera TIFF y la etiqueta 0x0112 del IFD0.
+ * null si no la lleva o no se entiende.
+ */
+function orientacionExif(b: Uint8Array, desde: number, hasta: number): number | null {
+  if (
+    hasta - desde < 14 ||
+    ascii(b, desde, 4) !== "Exif" ||
+    b[desde + 4] !== 0 ||
+    b[desde + 5] !== 0
+  ) {
+    return null;
+  }
+  const tiff = desde + 6;
+  const orden = ascii(b, tiff, 2);
+  if (orden !== "II" && orden !== "MM") return null;
+  const le = orden === "II";
+  const u16 = (i: number) => (le ? b[i] | (b[i + 1] << 8) : (b[i] << 8) | b[i + 1]);
+  const u32 = (i: number) =>
+    le ? (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0 : u32be(b, i);
+  if (u16(tiff + 2) !== 42) return null;
+  const ifd = tiff + u32(tiff + 4);
+  if (ifd + 2 > hasta) return null;
+  const entradas = u16(ifd);
+  for (let k = 0; k < entradas; k++) {
+    const e = ifd + 2 + k * 12;
+    if (e + 12 > hasta) return null;
+    if (u16(e) === 0x0112) {
+      const valor = u16(e + 8);
+      return valor >= 1 && valor <= 8 ? valor : null;
+    }
+  }
+  return null;
+}
 
 /**
  * El tipo y las medidas (en píxeles) de una imagen, leídos de sus primeros
@@ -53,9 +95,11 @@ export function medidasImagen(b: Uint8Array): MedidasImagen | null {
     return ancho > 0 && alto > 0 ? { tipo: "image/png", ancho, alto } : null;
   }
 
-  // JPEG: se recorren los segmentos hasta el de las medidas (SOFn).
+  // JPEG: se recorren los segmentos hasta el de las medidas (SOFn); de
+  // camino, la orientación EXIF (APP1), que va antes.
   if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
     let i = 2;
+    let orientacion: number | null = null;
     while (i + 9 < b.length) {
       if (b[i] !== 0xff) return null;
       const marca = b[i + 1];
@@ -70,13 +114,19 @@ export function medidasImagen(b: Uint8Array): MedidasImagen | null {
       }
       const largo = u16be(b, i + 2);
       if (largo < 2) return null;
+      if (marca === 0xe1 && orientacion === null) {
+        orientacion = orientacionExif(b, i + 4, Math.min(b.length, i + 2 + largo));
+      }
       const esSof =
         marca >= 0xc0 && marca <= 0xcf && marca !== 0xc4 && marca !== 0xc8 && marca !== 0xcc;
       if (esSof) {
         const alto = u16be(b, i + 5);
         const ancho = u16be(b, i + 7);
         const componentes = b[i + 9];
-        return ancho > 0 && alto > 0 ? { tipo: "image/jpeg", ancho, alto, componentes } : null;
+        if (!(ancho > 0 && alto > 0)) return null;
+        return orientacion && orientacion !== 1
+          ? { tipo: "image/jpeg", ancho, alto, componentes, orientacion }
+          : { tipo: "image/jpeg", ancho, alto, componentes };
       }
       i += 2 + largo;
     }
@@ -107,6 +157,109 @@ export function medidasImagen(b: Uint8Array): MedidasImagen | null {
 }
 
 /**
+ * Cuánto hay que girar la imagen, en grados y en el sentido de las agujas
+ * del reloj, para verla como se hizo. Las orientaciones con espejo (2, 4, 5
+ * y 7), que las cámaras no usan, se giran igual que su pareja sin espejo: el
+ * espejo se pierde, pero sale derecha y con su proporción.
+ */
+export function giroDeOrientacion(orientacion: number | undefined): 0 | 90 | 180 | 270 {
+  switch (orientacion) {
+    case 3:
+    case 4:
+      return 180;
+    case 5:
+    case 6:
+      return 90;
+    case 7:
+    case 8:
+      return 270;
+    default:
+      return 0;
+  }
+}
+
+/** Las medidas tal como se ve la imagen: con un giro de 90° o 270°, cambiadas. */
+export function medidasALaVista(m: { ancho: number; alto: number; orientacion?: number }): {
+  ancho: number;
+  alto: number;
+} {
+  const g = giroDeOrientacion(m.orientacion);
+  return g === 90 || g === 270
+    ? { ancho: m.alto, alto: m.ancho }
+    : { ancho: m.ancho, alto: m.alto };
+}
+
+/**
+ * Lo que se le pasa a jsPDF (`addImage(…, x, y, ancho, alto, …, rotacion)`)
+ * para que una imagen girada `giro` grados ocupe, ya derecha, el hueco
+ * (x, y, ancho, alto) de la maqueta, medido a la vista.
+ *
+ * jsPDF dibuja la imagen sin girar con su esquina inferior izquierda en
+ * (x, y + alto) y la gira alrededor de ese punto en sentido contrario a las
+ * agujas del reloj: de ahí el signo y el desplazamiento de cada caso.
+ */
+export function colocacionGirada(
+  hueco: { x: number; y: number; ancho: number; alto: number },
+  giro: 0 | 90 | 180 | 270,
+): { x: number; y: number; ancho: number; alto: number; rotacion: number } {
+  const { x, y, ancho, alto } = hueco;
+  switch (giro) {
+    case 90:
+      return { x, y: y - ancho, ancho: alto, alto: ancho, rotacion: -90 };
+    case 180:
+      return { x: x + ancho, y: y - alto, ancho, alto, rotacion: 180 };
+    case 270:
+      return { x: x + ancho, y: y + alto - ancho, ancho: alto, alto: ancho, rotacion: 90 };
+    default:
+      return { x, y, ancho, alto, rotacion: 0 };
+  }
+}
+
+/**
+ * Por encima de tantos píxeles, un PNG o un WEBP no se admite: para el PDF
+ * se descomprime a píxeles en bruto (4 bytes cada uno), y en el servidor la
+ * memoria es poca. Un JPEG entra en el PDF tal cual, sin descomprimir.
+ */
+export const MAXIMO_PIXELES_SIN_JPEG = 4_000_000;
+
+/** El lado más largo con el que se sube una imagen: el navegador la reduce antes. */
+export const LADO_MAXIMO_SUBIDA = 1600;
+
+/**
+ * Las medidas con las que el navegador vuelve a guardar una imagen antes de
+ * subirla (en JPEG), o null si se sube tal cual: solo se reduce la que pasa
+ * de `LADO_MAXIMO_SUBIDA` en su lado más largo. Las medidas son a la vista
+ * (el navegador la dibuja ya girada).
+ */
+export function medidasReducidas(
+  m: { ancho: number; alto: number; orientacion?: number },
+  ladoMaximo = LADO_MAXIMO_SUBIDA,
+): { ancho: number; alto: number } | null {
+  const v = medidasALaVista(m);
+  const lado = Math.max(v.ancho, v.alto);
+  if (lado <= ladoMaximo) return null;
+  const escala = ladoMaximo / lado;
+  return {
+    ancho: Math.max(1, Math.round(v.ancho * escala)),
+    alto: Math.max(1, Math.round(v.alto * escala)),
+  };
+}
+
+/**
+ * Las imágenes que caben en un presupuesto (`maximo`), por orden de
+ * preferencia: primero las del primer grupo, luego las del segundo… Devuelve
+ * las que entran y cuántas se quedan fuera.
+ */
+export function recortarImagenes<T>(
+  grupos: readonly (readonly T[])[],
+  maximo = MAXIMO_IMAGENES_PRESUPUESTO,
+): { elegidas: T[]; fuera: number } {
+  const todas = grupos.flat();
+  const hueco = Math.max(0, maximo);
+  return { elegidas: todas.slice(0, hueco), fuera: Math.max(0, todas.length - hueco) };
+}
+
+/**
  * Si el fichero se puede guardar como imagen de un presupuesto. Devuelve sus
  * medidas, o por qué no, en castellano.
  */
@@ -124,6 +277,12 @@ export function revisarImagen(
     return {
       ok: false,
       error: `«${nombre}» es un JPG en CMYK: guárdalo en RGB para que salga bien en el PDF.`,
+    };
+  }
+  if (medidas.tipo !== "image/jpeg" && medidas.ancho * medidas.alto > MAXIMO_PIXELES_SIN_JPEG) {
+    return {
+      ok: false,
+      error: `«${nombre}» es demasiado grande (${medidas.ancho} × ${medidas.alto} px): redúcela a ${LADO_MAXIMO_SUBIDA} px de lado o guárdala en JPG.`,
     };
   }
   return { ok: true, medidas };
