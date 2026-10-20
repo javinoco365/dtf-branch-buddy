@@ -61,6 +61,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { CobrosPedidoDialog, EstadoCobroTexto } from "@/components/cobros/CobrosPedidoDialog";
 import { DocumentoTextilDialog } from "@/components/textil/DocumentoTextilDialog";
 import { resumenCobros } from "@/dominio/cobros";
+import { claseFilaCobrada } from "@/components/cobros/fila-cobrada";
 import { totalesPedidos } from "@/dominio/sumatorios";
 import { normalizarTexto } from "@/dominio/clientes";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
@@ -341,7 +342,10 @@ function PedidosPage() {
               {filtrados.map((p: any) => {
                 const cobro = resumenCobros(p.total, cobrosPorPedido.get(p.id) ?? []);
                 return (
-                  <TableRow key={p.id}>
+                  <TableRow
+                    key={p.id}
+                    className={claseFilaCobrada(cobro.estado, p.estado === "cancelado")}
+                  >
                     <TableCell className="font-mono text-xs">{p.numero}</TableCell>
                     <TableCell>{fechaCorta(p.fecha)}</TableCell>
                     <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
