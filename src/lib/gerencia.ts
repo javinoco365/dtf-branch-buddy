@@ -61,6 +61,7 @@ import { proformasAplicado } from "@/lib/escaner-textil";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { diaEnEspana } from "@/dominio/fecha-documento";
 import { diasDelRango } from "@/dominio/periodos";
+import { delPeriodoAnterior } from "@/lib/cache";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -71,6 +72,9 @@ const dia = (d: Date) => format(d, "yyyy-MM-dd");
 function useTextilPeriodo(rango: RangoFechas) {
   return useQuery({
     queryKey: ["textil-periodo", dia(rango.desde), dia(rango.hasta)],
+    // Como usePedidosPeriodo: el periodo anterior mientras llega el nuevo,
+    // para que las ventas de Gerencia sean todas del mismo periodo.
+    placeholderData: delPeriodoAnterior<PedidoTextilResumen[]>(() => true),
     queryFn: async (): Promise<PedidoTextilResumen[]> => {
       // Un rango vacío (el del periodo anterior cuando no se compara) no trae
       // nada, igual que usePedidosPeriodo y useCobrosPeriodo. Se corta aquí y
@@ -131,6 +135,8 @@ export function useVentasGerencia(rango: RangoFechas) {
   return {
     data,
     isPending: tiendas.isPending || textil.isPending,
+    /** Son las del periodo anterior mientras llega el nuevo: hay que avisar. */
+    isPlaceholderData: tiendas.isPlaceholderData || textil.isPlaceholderData,
     error: tiendas.error ?? textil.error,
   };
 }

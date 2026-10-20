@@ -86,6 +86,9 @@ import {
   textoSincronizado,
 } from "@/lib/sync-woo";
 import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
+import { delPeriodoAnterior } from "@/lib/cache";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
@@ -269,8 +272,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isPlaceholderData } = useQuery({
     queryKey,
+    // Al cambiar de periodo, los pedidos del anterior hasta que llegan los
+    // nuevos: avisados, atenuados y sin poder actuar sobre ellos (abajo). Al
+    // cambiar de tienda, no: se verían pedidos de la otra.
+    placeholderData: delPeriodoAnterior<Awaited<ReturnType<typeof list>>>(
+      (clave) => clave[1] === (tiendaConsulta ?? "all"),
+    ),
     // Los días del periodo, no los instantes: el servidor filtra por el día
     // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
     queryFn: () =>
@@ -444,7 +453,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuItem onClick={exportar}>
+              <DropdownMenuItem onClick={exportar} disabled={isPlaceholderData}>
                 <Download />
                 <div>
                   <div>CSV</div>
@@ -575,7 +584,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         </Card>
       )}
 
-      <div className="space-y-6">
+      <div {...propsDatosDeAntes(isPlaceholderData, "space-y-6")}>
+        <AvisoActualizando activo={isPlaceholderData} />
         {isLoading && (
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">

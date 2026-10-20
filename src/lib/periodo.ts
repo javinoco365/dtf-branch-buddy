@@ -26,6 +26,7 @@ import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
 import { pedidoEnDias, tramoDeConsulta, type FechaPedido } from "@/dominio/dia-pedido";
 import { diasDelRango } from "@/dominio/periodos";
+import { delPeriodoAnterior } from "@/lib/cache";
 
 const CAMPOS_PEDIDO =
   "id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id";
@@ -45,6 +46,11 @@ function claveRango({ desde, hasta, tiendaId }: Filtro) {
 export function usePedidosPeriodo(filtro: Filtro) {
   return useQuery({
     queryKey: ["pedidos-periodo", ...claveRango(filtro)],
+    // Al cambiar de periodo, los del anterior hasta que llegue el nuevo (la
+    // pantalla avisa con isPlaceholderData); al cambiar de tienda, no.
+    placeholderData: delPeriodoAnterior<PedidoResumen[]>(
+      (clave) => clave[3] === (filtro.tiendaId ?? "todas"),
+    ),
     queryFn: async (): Promise<PedidoResumen[]> => {
       // Un rango vacío (el de las pantallas que no comparan) no trae nada.
       const dias = diasDelRango(filtro);
@@ -132,6 +138,11 @@ const CAMPOS_COBRO = "id, fecha, importe, propina, metodo, previo";
 export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
   return useQuery({
     queryKey: ["cobros-periodo", criterio, rango.desde.toISOString(), rango.hasta.toISOString()],
+    // Al cambiar de periodo, los del anterior hasta que llegue el nuevo (la
+    // pantalla avisa con isPlaceholderData); con otro criterio, no.
+    placeholderData: delPeriodoAnterior<{ disponible: boolean; cobros: CobroConsolidado[] }>(
+      (clave) => clave[1] === criterio,
+    ),
     queryFn: async (): Promise<{ disponible: boolean; cobros: CobroConsolidado[] }> => {
       // Un rango vacío (el de las pantallas que no comparan) no trae nada.
       const dias = diasDelRango(rango);

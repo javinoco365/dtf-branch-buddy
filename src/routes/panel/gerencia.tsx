@@ -21,6 +21,8 @@ import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/Resumen
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import {
   useAjustesGerencia,
   useBancoPeriodo,
@@ -181,6 +183,13 @@ function Gerencia() {
   ];
   // Los ajustes no dependen del periodo ni de los filtros.
   const enAjustes = f.pestana === "ajustes";
+  // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
+  // se atenúan y no se puede actuar sobre ellas.
+  const deAntes =
+    ventas.isPlaceholderData ||
+    ventasPrevias.isPlaceholderData ||
+    cobros.isPlaceholderData ||
+    cobrosPrevios.isPlaceholderData;
 
   return (
     <div className="space-y-6">
@@ -188,7 +197,10 @@ function Gerencia() {
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h1 className="text-2xl font-bold">Gerencia</h1>
           <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
-            <PendienteDocumentar pendiente={datos?.pendiente ?? null} tiendas={tiendas} />
+            <PendienteDocumentar
+              pendiente={deAntes ? null : (datos?.pendiente ?? null)}
+              tiendas={tiendas}
+            />
             <BotonResumenDiario
               tiendas={tiendas}
               gastos={datos?.gastos ?? null}
@@ -229,6 +241,8 @@ function Gerencia() {
         </CardContent>
       </Card>
 
+      <AvisoActualizando activo={deAntes && !enAjustes} />
+
       {ventas.error && !enAjustes && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
@@ -263,7 +277,7 @@ function Gerencia() {
             ))}
           </div>
         ) : (
-          <>
+          <div {...propsDatosDeAntes(deAntes)}>
             <TabsContent value="resumen" className="mt-4">
               <Resumen d={datos} />
             </TabsContent>
@@ -294,7 +308,7 @@ function Gerencia() {
             <TabsContent value="textil" className="mt-4">
               <Textil d={datos} />
             </TabsContent>
-          </>
+          </div>
         )}
       </Tabs>
     </div>

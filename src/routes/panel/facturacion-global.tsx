@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { eur, fechaCorta, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
@@ -208,6 +210,9 @@ function FacturacionGlobal() {
   const hayFiltro =
     filtro.metodo !== "todos" || filtro.tienda !== "todas" || filtro.origen !== "todos";
 
+  // Mientras llegan los del periodo nuevo se ven los del anterior: se avisa,
+  // se atenúan y no se exportan.
+  const deAntes = consultaCobros.isPlaceholderData || consultaPrevia.isPlaceholderData;
   const cargando = consultaCobros.isPending || consultaTiendas.isPending;
   const error = consultaCobros.error ?? consultaTiendas.error;
   const sinCobros = !cargando && !error && disponible && cobros.length === 0;
@@ -281,7 +286,7 @@ function FacturacionGlobal() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={cobros.length === 0}>
+          <Button onClick={exportar} size="sm" disabled={cobros.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
@@ -380,6 +385,8 @@ function FacturacionGlobal() {
         </CardContent>
       </Card>
 
+      <AvisoActualizando activo={deAntes} />
+
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
@@ -418,7 +425,7 @@ function FacturacionGlobal() {
       )}
 
       {!cargando && !error && disponible && !sinCobros && (
-        <>
+        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaTotal
               titulo="Total cobrado"
@@ -741,7 +748,7 @@ function FacturacionGlobal() {
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
@@ -92,6 +94,13 @@ function FacturacionTienda() {
   // El IVA se cobra sobre la base entera: la bruta más el envío.
   const pctIva = k.base === 0 ? 0 : (k.iva / k.base) * 100;
 
+  // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
+  // se atenúan y no se exportan.
+  const deAntes =
+    consultaPedidos.isPlaceholderData ||
+    consultaAnterior.isPlaceholderData ||
+    consultaCobros.isPlaceholderData ||
+    consultaCobrosAnt.isPlaceholderData;
   const cargando = consultaPedidos.isPending;
   const error = consultaPedidos.error;
   const sinDatos = !cargando && !error && pedidos.length === 0;
@@ -131,12 +140,14 @@ function FacturacionTienda() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0}>
+          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
         </div>
       </div>
+
+      <AvisoActualizando activo={deAntes} />
 
       {error && (
         <Card>
@@ -163,7 +174,7 @@ function FacturacionTienda() {
       )}
 
       {!cargando && !error && !sinDatos && (
-        <>
+        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
@@ -338,7 +349,7 @@ function FacturacionTienda() {
               </CardContent>
             </Card>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

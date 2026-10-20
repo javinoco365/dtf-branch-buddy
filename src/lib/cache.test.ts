@@ -1,6 +1,14 @@
 import { QueryObserver, type QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
-import { crearQueryClient, invalidarTrasGuardar } from "./cache";
+import {
+  crearQueryClient,
+  delPeriodoAnterior,
+  invalidarTrasGuardar,
+  reintentar,
+  VIGENCIA,
+  VIGENCIA_HISTORIA,
+  VIGENCIA_REFERENCIA,
+} from "./cache";
 
 // Sin red ni React: el QueryClient de la aplicación con consultas de mentira
 // que cuentan cuántas veces se piden.
@@ -94,5 +102,74 @@ describe("crearQueryClient: invalidación central tras guardar", () => {
     await invalidarTrasGuardar(qc);
     await esperar(30);
     expect(pedidos.n).toBe(2);
+  });
+});
+
+describe("crearQueryClient: vigencia de lo leído", () => {
+  const vigencia = (qc: QueryClient, clave: unknown[]) =>
+    qc.defaultQueryOptions({ queryKey: clave }).staleTime;
+
+  it("un minuto por defecto; diez la referencia; cinco la historia pesada", () => {
+    const qc = crearQueryClient();
+    expect(vigencia(qc, ["pedidos", "all", "a", "b"])).toBe(VIGENCIA);
+    expect(vigencia(qc, ["pedidos-periodo", "a", "b", "todas"])).toBe(60_000);
+    expect(vigencia(qc, ["tiendas"])).toBe(VIGENCIA_REFERENCIA);
+    expect(vigencia(qc, ["tiendas-sidebar", "x"])).toBe(10 * 60_000);
+    expect(vigencia(qc, ["gerencia-ajustes"])).toBe(VIGENCIA_REFERENCIA);
+    // «tienda-dashboard» son datos, no referencia: no casa con «tiendas».
+    expect(vigencia(qc, ["tienda-dashboard", "x"])).toBe(VIGENCIA);
+    expect(vigencia(qc, ["gerencia-fiscal", 2026])).toBe(VIGENCIA_HISTORIA);
+    expect(vigencia(qc, ["almacen-movimientos"])).toBe(5 * 60_000);
+  });
+
+  it("volver a una pantalla antes de un minuto no vuelve a pedir", async () => {
+    const qc = crearQueryClient();
+    const primera = enPantalla(qc, "gerencia-ventas");
+    await esperar(5);
+    limpiar.forEach((f) => f());
+    limpiar = [];
+    // Se vuelve a montar con la misma clave y la misma función.
+    const obs = new QueryObserver(qc, {
+      queryKey: ["gerencia-ventas"],
+      queryFn: async () => ++primera.n,
+    });
+    limpiar.push(obs.subscribe(() => {}));
+    await esperar(5);
+    expect(primera.n).toBe(1);
+  });
+});
+
+describe("reintentar", () => {
+  it("una vez ante un fallo cualquiera, ninguna si es de sesión o permisos", () => {
+    expect(reintentar(0, new Error("fetch failed"))).toBe(true);
+    expect(reintentar(1, new Error("fetch failed"))).toBe(false);
+    expect(reintentar(0, new Error("Unauthorized"))).toBe(false);
+    expect(reintentar(0, new Error("JWT expired"))).toBe(false);
+    expect(reintentar(0, new Error("PGRST301: algo"))).toBe(false);
+    expect(reintentar(0, new Error("permission denied for table pedidos"))).toBe(false);
+  });
+
+  it("un importe o un número de pedido con 4xx no cuenta como error HTTP", () => {
+    expect(reintentar(0, new Error("El pedido 404 no cuadra: 412,50 €"))).toBe(true);
+  });
+});
+
+describe("delPeriodoAnterior", () => {
+  const conservar = delPeriodoAnterior<number[]>((clave) => clave[3] === "tienda-a");
+
+  it("con la misma tienda, los datos del periodo anterior", () => {
+    expect(conservar([1, 2], { queryKey: ["pedidos-periodo", "x", "y", "tienda-a"] })).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it("si cambia la tienda, nada (no se enseñan los de la otra)", () => {
+    expect(
+      conservar([1, 2], { queryKey: ["pedidos-periodo", "x", "y", "tienda-b"] }),
+    ).toBeUndefined();
+  });
+
+  it("sin consulta anterior, nada", () => {
+    expect(conservar(undefined, undefined)).toBeUndefined();
   });
 });
