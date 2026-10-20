@@ -7,6 +7,7 @@ import {
   claveProveedor,
   duplicadosDe,
   ESQUEMA_LECTURA_JSON,
+  MAXIMO_UNIONES_API,
   motivosRevision,
   validarLectura,
   type CompraComparable,
@@ -195,6 +196,44 @@ describe("validar la lectura de la IA", () => {
       type: "string",
       enum: ["articulo", "porte", "descuento", "otro"],
     });
+  });
+
+  it("el JSON Schema cabe en los límites de la API (si no, responde 400)", () => {
+    // Cuenta los campos con unión (anyOf o lista de tipos) y los opcionales.
+    let uniones = 0;
+    let opcionales = 0;
+    const recorrer = (nodo: unknown) => {
+      if (!nodo || typeof nodo !== "object") return;
+      const n = nodo as Record<string, unknown>;
+      if (n.anyOf || Array.isArray(n.type)) uniones += 1;
+      if (n.properties && typeof n.properties === "object") {
+        const requeridos = new Set((n.required as string[] | undefined) ?? []);
+        for (const [clave, hijo] of Object.entries(n.properties)) {
+          if (!requeridos.has(clave)) opcionales += 1;
+          recorrer(hijo);
+        }
+      }
+      if (n.items) recorrer(n.items);
+      if (Array.isArray(n.anyOf)) n.anyOf.forEach(recorrer);
+    };
+    recorrer(ESQUEMA_LECTURA_JSON);
+    expect(uniones).toBeLessThanOrEqual(MAXIMO_UNIONES_API);
+    expect(opcionales).toBeLessThanOrEqual(24);
+  });
+
+  it("un texto vacío de la IA vale lo mismo que null", () => {
+    const r = validarLectura({
+      ...lecturaBuena,
+      numero: "",
+      categoria: "",
+      lineas: [{ ...lecturaBuena.lineas[0], unidad: " ", marca: "", talla: "XL" }],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.lectura.numero).toBeNull();
+      expect(r.lectura.categoria).toBeNull();
+      expect(r.lectura.lineas[0]).toMatchObject({ unidad: null, marca: null, talla: "XL" });
+    }
   });
 
   it("el JSON Schema pide los mismos campos que el esquema", () => {
