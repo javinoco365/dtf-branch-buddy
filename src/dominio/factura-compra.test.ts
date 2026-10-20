@@ -146,3 +146,170 @@ describe("revisarCompra", () => {
     expect(avisos.some((a) => a.mensaje.includes("ninguna línea"))).toBe(true);
   });
 });
+
+describe("normalizarCompra: escáner textil", () => {
+  it("lee tipo, referencia, marca, modelo, color, talla, EAN y pack", () => {
+    const c = normalizarCompra({
+      lineas: [
+        {
+          descripcion: " Camiseta Gildan 5000 Negro XL ",
+          cantidad: "10",
+          precio_unitario: "3,00",
+          importe: "30,00",
+          tipo: "articulo",
+          referencia: " 5000 ",
+          marca: "Gildan",
+          modelo: "Heavy Cotton",
+          color: "Negro",
+          talla: "XL",
+          ean: "4006 3813 3393 1",
+          unidades_por_pack: "1",
+        },
+      ],
+    });
+    expect(c.lineas[0]).toEqual({
+      descripcion: "Camiseta Gildan 5000 Negro XL",
+      cantidad: 10,
+      precio_unitario: 3,
+      importe: 30,
+      unidad: null,
+      tipo: "articulo",
+      referencia: "5000",
+      marca: "Gildan",
+      modelo: "Heavy Cotton",
+      color: "Negro",
+      talla: "XL",
+      ean: "4006381333931",
+      unidades_por_pack: 1,
+    });
+  });
+
+  it("sin tipo de la IA, lo deduce: porte, descuento o artículo", () => {
+    const c = normalizarCompra({
+      lineas: [
+        { descripcion: "Portes", cantidad: 1, importe: "10,00" },
+        { descripcion: "Dto. pronto pago", cantidad: 1, importe: "-5,00" },
+        { descripcion: "Camiseta", cantidad: 1, importe: "5,00", tipo: "rarito" },
+      ],
+    });
+    expect(c.lineas.map((l) => l.tipo)).toEqual(["porte", "descuento", "articulo"]);
+  });
+
+  it("pack: el de la IA si es entero ≥ 1; si no, el del texto (deducido); si no, 1", () => {
+    const c = normalizarCompra({
+      lineas: [
+        { descripcion: "Calcetín pack 5", cantidad: 2, importe: 10, unidades_por_pack: "3" },
+        { descripcion: "Calcetín pack 5", cantidad: 2, importe: 10, unidades_por_pack: "2,5" },
+        { descripcion: "Calcetín pack 5", cantidad: 2, importe: 10 },
+        { descripcion: "Camiseta", cantidad: 2, importe: 10, unidades_por_pack: "0" },
+      ],
+    });
+    expect(c.lineas.map((l) => [l.unidades_por_pack, l.pack_deducido ?? false])).toEqual([
+      [3, false],
+      [5, true],
+      [5, true],
+      [1, false],
+    ]);
+  });
+
+  it("EAN: solo cifras, aunque no sea válido (lo avisa revisarCompra)", () => {
+    const c = normalizarCompra({
+      lineas: [
+        { descripcion: "A", cantidad: 1, importe: 1, ean: "EAN: 123" },
+        { descripcion: "B", cantidad: 1, importe: 1, ean: "" },
+      ],
+    });
+    expect(c.lineas.map((l) => l.ean)).toEqual(["123", null]);
+  });
+
+  it("una línea con importe y cantidad negativa no se pierde: 1 × importe, y pasa a descuento", () => {
+    const c = normalizarCompra({
+      lineas: [
+        {
+          descripcion: "Abono camisetas",
+          cantidad: "-2",
+          precio_unitario: "10,00",
+          importe: "-20,00",
+          tipo: "articulo",
+        },
+      ],
+    });
+    expect(c.lineas[0]).toMatchObject({
+      cantidad: 1,
+      precio_unitario: -20,
+      importe: -20,
+      tipo: "descuento",
+      cantidad_ajustada: true,
+      cantidad_leida: -2,
+    });
+  });
+
+  it("cantidad sin leer o 0 con importe: 1 × importe", () => {
+    const c = normalizarCompra({
+      lineas: [
+        { descripcion: "Portes", cantidad: null, importe: "7,50" },
+        { descripcion: "Camiseta", cantidad: "0", importe: "12,00" },
+      ],
+    });
+    expect(
+      c.lineas.map((l) => [l.cantidad, l.precio_unitario, l.importe, l.tipo, l.cantidad_ajustada]),
+    ).toEqual([
+      [1, 7.5, 7.5, "porte", true],
+      [1, 12, 12, "articulo", true],
+    ]);
+  });
+
+  it("un porte con cantidad negativa sigue siendo porte (solo el artículo pasa a descuento)", () => {
+    const c = normalizarCompra({
+      lineas: [{ descripcion: "Portes", cantidad: -1, importe: "-4,00", tipo: "porte" }],
+    });
+    expect(c.lineas[0]).toMatchObject({ tipo: "porte", cantidad: 1, importe: -4 });
+  });
+
+  it("cantidad 0 e importe 0: se queda como está (y revisarCompra avisa)", () => {
+    const c = normalizarCompra({ lineas: [{ descripcion: "Nada", cantidad: 0, importe: 0 }] });
+    expect(c.lineas[0].cantidad).toBe(0);
+    expect(c.lineas[0].cantidad_ajustada).toBeUndefined();
+  });
+});
+
+describe("revisarCompra: avisos del escáner textil", () => {
+  const cabecera = {
+    proveedor: "Textiles del Sur S.L.",
+    nif_proveedor: "B12345678",
+    numero: "F-1",
+    fecha: "2026-09-01",
+    base: 30,
+    iva: 6.3,
+    irpf: 0,
+    total: 36.3,
+  };
+
+  it("EAN no válido, pack deducido y cantidad ajustada", () => {
+    const leida = normalizarCompra({
+      ...cabecera,
+      base: "30",
+      iva: "6,30",
+      total: "36,30",
+      lineas: [
+        { descripcion: "Camiseta", cantidad: 1, importe: 10, ean: "4006381333932" },
+        { descripcion: "Calcetín pack 5", cantidad: 1, importe: 10 },
+        { descripcion: "Gorra", cantidad: -1, importe: 10 },
+      ],
+    });
+    const avisos = revisarCompra(leida);
+    expect(avisos).toEqual([
+      { linea: 0, mensaje: "el EAN 4006381333932 no es válido." },
+      { linea: 1, mensaje: "pack deducido del texto (5 uds): compruébalo." },
+      { linea: 2, mensaje: "tenía cantidad -1; queda como 1 × importe: compruébalo." },
+    ]);
+  });
+
+  it("un EAN válido no avisa", () => {
+    const leida = normalizarCompra({
+      ...cabecera,
+      lineas: [{ descripcion: "Camiseta", cantidad: 3, importe: 30, ean: "4006381333931" }],
+    });
+    expect(revisarCompra(leida)).toEqual([]);
+  });
+});

@@ -13,13 +13,14 @@ import {
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, fechaCorta, numero } from "@/lib/format";
-import { useFiscal, usePrimeraVenta } from "@/lib/gerencia";
+import { useFiscal, useMovimientosAlmacen, usePrimeraVenta } from "@/lib/gerencia";
 import {
   DEFINICIONES,
   definicionImpuestosTrimestre,
   TEXTO_SIN_PRIMERA_VENTA,
 } from "@/dominio/definiciones";
-import { enRango } from "@/dominio/periodos";
+import { diaDeFecha, enRango } from "@/dominio/periodos";
+import { costeAlmacenPeriodo } from "@/dominio/cuenta-almacen";
 import {
   facturadoSinPedido,
   gastosFijosPorGrupo,
@@ -67,9 +68,23 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     () => gastosFijosPorGrupo(d.gastos, d.rango, d.hoy),
     [d.gastos, d.rango, d.hoy],
   );
+  // Mermas, ajustes y devoluciones a proveedor del almacén textil: van en A.
+  // Sin la tabla de movimientos (null) o si no se pudo leer, 0 y se dice.
+  const movimientos = useMovimientosAlmacen();
+  const desdeDia = diaDeFecha(d.rango.desde);
+  const hastaDia = diaDeFecha(d.rango.hasta);
+  const almacen = useMemo(
+    () =>
+      movimientos.data
+        ? costeAlmacenPeriodo(movimientos.data.movimientos, desdeDia, hastaDia)
+        : movimientos.data === null || movimientos.error
+          ? 0
+          : null,
+    [movimientos.data, movimientos.error, desdeDia, hastaDia],
+  );
   const cuentas = useMemo(
     () =>
-      fiscal.data && d.documentados
+      fiscal.data && d.documentados && almacen !== null
         ? resultadosPorGrupo({
             ventas: d.ventasTodas,
             documentados: d.documentados,
@@ -81,10 +96,12 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             costesFijos: { a: fijos.a, b: fijos.b },
             compras: fijos.compras,
             amortizacion: fijos.amortizacion,
+            almacen,
             tipoIs: d.ajustes.tipo_is,
           })
         : null,
     [
+      almacen,
       fiscal.data,
       referencias,
       d.documentados,
@@ -175,6 +192,9 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     ...(cuentas.total.amortizacion !== 0
       ? [["Amortizaciones", "amortizacion", "resta"] as (typeof filas)[number]]
       : []),
+    ...(cuentas.total.almacen !== 0
+      ? [["Mermas y ajustes de almacén", "almacen", "resta"] as (typeof filas)[number]]
+      : []),
     ["Beneficio antes de impuestos", "bai", "total"],
     [`Sociedades (${numero(d.ajustes.tipo_is, 0)} %)`, "sociedades", "resta"],
     ["Beneficio neto", "neto", "total"],
@@ -255,6 +275,13 @@ export function Resultados({ d }: { d: DatosGerencia }) {
         />
       </div>
 
+      {movimientos.error && (
+        <Nota>
+          No se han podido leer los movimientos del almacén textil ({movimientos.error.message}): la
+          cuenta sale sin las mermas y ajustes de almacén.
+        </Nota>
+      )}
+
       {!d.gastos.some((g) => (g.origen ?? "gasto") === "gasto") && (
         <Nota>
           Sin gastos apuntados, el beneficio no descuenta alquiler, sueldos ni cuotas.{" "}
@@ -295,6 +322,14 @@ export function Resultados({ d }: { d: DatosGerencia }) {
                     <TableCell className={clase === "total" ? "" : "text-muted-foreground"}>
                       {clase === "resta" ? "− " : ""}
                       {etiqueta}
+                      {campo === "almacen" && (
+                        <span className="ml-1.5 inline-flex align-middle">
+                          <Explicacion
+                            titulo="Mermas y ajustes de almacén"
+                            definicion={DEFINICIONES.g_almacen_perdidas}
+                          />
+                        </span>
+                      )}
                     </TableCell>
                     {columnas.map((c) => {
                       const valor = cuentas[c.clave][campo];

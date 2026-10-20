@@ -52,17 +52,18 @@ Fecha: 19-10-2026. Migraciones con prefijo `20261028…`.
 
 ### 0.3 Invariantes que tiene que cumplir el conjunto
 
-| Id  | Invariante                                                                                                                                                                                                                                         | Quién lo garantiza                                                               |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| I1  | En una compra textil registrada con el escáner, Σ coste de entrada de sus artículos = base de la factura, **al céntimo**.                                                                                                                          | Dominio calcula (`repartirCostes`), servidor recalcula, SQL comprueba y rechaza. |
-| I2  | Toda entrada de stock con motivo `compra` lleva `compra_id` y `compra_linea_id` (FK).                                                                                                                                                              | SQL (CHECK `NOT VALID`, las antiguas quedan como están).                         |
-| I3  | `textil_stock.cantidad` y `textil_stock.coste_unitario` solo cambian por movimientos.                                                                                                                                                              | SQL (guardián).                                                                  |
-| I4  | Una compra registrada no cambia proveedor, NIF, número, fecha, importes, categoría, gasto ni líneas, no vuelve a borrador y no se borra (las no textil admiten borrado lógico).                                                                    | SQL (triggers).                                                                  |
-| I5  | Una devolución de cliente entra al coste al que salió en ese pedido.                                                                                                                                                                               | SQL (`stock_aplicar_movimiento`).                                                |
-| I6  | Únicos: proveedor por (empresa, NIF normalizado) o, sin NIF, por (empresa, nombre normalizado); producto por (empresa, marca, referencia); variante activa por (producto, color, talla); EAN por empresa; memoria por (empresa, proveedor, clave). | SQL (índices únicos).                                                            |
-| I7  | La base y el dominio normalizan igual (claves de texto, tallas, NIF, memoria).                                                                                                                                                                     | Vectores de prueba compartidos (2.2 y 7.1).                                      |
-| I8  | Sin datos no hay cifra: ni precio recomendado, ni coste, ni margen inventados.                                                                                                                                                                     | Dominio devuelve `null`; la interfaz enseña «—» o estado vacío.                  |
-| I9  | El valor de un movimiento es `redondear(cantidad × coste_unitario, 2)`; todas las cuentas del almacén suman esos valores.                                                                                                                          | Dominio (`valorMovimiento`).                                                     |
+| Id  | Invariante                                                                                                                                                                                                                                         | Quién lo garantiza                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| I1  | En una compra textil registrada con el escáner, Σ coste de entrada de sus artículos = base de la factura, **al céntimo**.                                                                                                                          | Dominio calcula (`repartirCostes`), servidor recalcula, SQL comprueba y rechaza.                             |
+| I2  | Toda entrada de stock con motivo `compra` lleva `compra_id` y `compra_linea_id` (FK).                                                                                                                                                              | SQL (CHECK `NOT VALID`, las antiguas quedan como están; E-STK-2: solo las anotan las funciones de registro). |
+| I3  | `textil_stock.cantidad` y `textil_stock.coste_unitario` solo cambian por movimientos.                                                                                                                                                              | SQL (guardián).                                                                                              |
+| I4  | Una compra registrada no cambia proveedor, NIF, número, fecha, importes, categoría, gasto ni líneas, no vuelve a borrador y no se borra (las no textil admiten borrado lógico). Solo pasa a registrada por sus funciones (E-CAB-6).                | SQL (triggers).                                                                                              |
+| I5  | Una devolución de cliente entra al coste al que salió en ese pedido.                                                                                                                                                                               | SQL (`stock_aplicar_movimiento`).                                                                            |
+| I6  | Únicos: proveedor por (empresa, NIF normalizado) o, sin NIF, por (empresa, nombre normalizado); producto por (empresa, marca, referencia); variante activa por (producto, color, talla); EAN por empresa; memoria por (empresa, proveedor, clave). | SQL (índices únicos).                                                                                        |
+| I7  | La base y el dominio normalizan igual (claves de texto, tallas, NIF, memoria).                                                                                                                                                                     | Vectores de prueba compartidos (2.2 y 7.1).                                                                  |
+| I8  | Sin datos no hay cifra: ni precio recomendado, ni coste, ni margen inventados.                                                                                                                                                                     | Dominio devuelve `null`; la interfaz enseña «—» o estado vacío.                                              |
+| I9  | El valor de un movimiento es `redondear(cantidad × coste_unitario, 2)`; todas las cuentas del almacén suman esos valores.                                                                                                                          | Dominio (`valorMovimiento`).                                                                                 |
+| I10 | Toda salida de stock sale al coste medio vigente (1.3.4), y compras + altas − Δ almacén = coste de lo vendido con pedido + pérdidas (2.7), por valor y en cualquier periodo.                                                                       | SQL (`stock_aplicar_movimiento`) y dominio (`cuentaAlmacen`).                                                |
 
 ### 0.4 Glosario
 
@@ -88,6 +89,10 @@ Los cinco equipos empiezan a la vez. Para no esperarse:
 2. SQL no depende de nadie. SERVIDOR depende de los nombres SQL de la sección 1 y de los tipos
    de 2.1. INTERFAZ depende de las server functions de la sección 3. CUENTAS depende de las
    columnas SQL y del dominio de 2.7–2.9.
+   INTERFAZ usa las claves `g_precio_recomendado` y `m_margen_previsto` de
+   `src/dominio/definiciones.ts`, que son de CUENTAS: CUENTAS las añade **lo primero** (5.3), para
+   que la interfaz compile desde el principio. SERVIDOR entrega igual de pronto
+   `mensajeErrorEscaner` (3.1), que usan la interfaz y el propio servidor.
 3. Si un equipo necesita algo de un fichero que no es suyo, lo pide al equipo dueño con la firma
    exacta; no lo escribe él.
 
@@ -129,7 +134,33 @@ Por eso, **obligatorio**:
 3. Ninguna FK nueva hacia `empresas` puede ser `ON DELETE CASCADE` (`99_empresa_no_se_borra`
    falla): todas `ON DELETE RESTRICT`.
 4. `C18` vuelve a aplicar las tres migraciones al empezar (restaura las funciones que pisó `C1`)
-   y va entero dentro de `BEGIN … ROLLBACK`.
+   y va dentro de `BEGIN … ROLLBACK`, **salvo** el caso de reversión (7.1, caso 24), que va
+   después del `ROLLBACK` (las reversiones llevan su propio `BEGIN … COMMIT`, como las demás de
+   `supabase/reversiones/`).
+5. `C1` deja puesta la versión **vieja** de `textil_compra_registrar` (sin enlace a la línea)
+   hasta que `C18` vuelve a aplicar las migraciones. Ninguna prueba entre `C1` y `C18` registra
+   una compra **textil con líneas** (C3, C5 y C14 registran `consumibles`/`otros` sin líneas):
+   que siga así. Por eso las reglas que dependen de quién escribe (E-CAB-6, E-STK-2) miran el
+   rol que ejecuta (`current_user`), no una bandera que la versión vieja no pondría.
+6. Las migraciones no llevan `BEGIN`/`COMMIT` de nivel superior (las pruebas las incluyen con
+   `\ir` dentro de una transacción) y terminan con `NOTIFY pgrst, 'reload schema';`, como
+   `20261026100000`, para que PostgREST vea las tablas, columnas y funciones nuevas sin esperar.
+7. **Idempotencia de restricciones.** Volver a añadir una `UNIQUE` o `PRIMARY KEY` con el mismo
+   nombre no da `duplicate_object` sino `duplicate_table` (42P07: crea un índice con ese
+   nombre). El bloque es `EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL`, o mejor,
+   comprobar antes en `pg_constraint`. Vale para `compra_linea_id_compra`.
+8. **`ON CONFLICT` con índices parciales.** Los únicos de proveedores, productos y variantes son
+   parciales: el `INSERT … ON CONFLICT` tiene que repetir el predicado del índice, o Postgres
+   responde «there is no unique or exclusion constraint matching the ON CONFLICT
+   specification». Ejemplos exactos:
+   `ON CONFLICT (empresa_id, nif_clave) WHERE nif_clave <> '' DO NOTHING`;
+   `ON CONFLICT (empresa_id, nombre_clave) WHERE nif_clave = '' DO NOTHING`;
+   `ON CONFLICT (empresa_id, marca_clave, referencia_clave) WHERE referencia_clave <> '' DO NOTHING`;
+   `ON CONFLICT (empresa_id, marca_clave, nombre_clave) WHERE referencia_clave = '' DO NOTHING`;
+   `ON CONFLICT (producto_id, color_clave, talla_clave) WHERE activa AND NOT repetida DO NOTHING`.
+   Después de cada `DO NOTHING`, se vuelve a buscar la fila (en `READ COMMITTED` la ve aunque
+   la haya insertado otra transacción que acaba de confirmar): así dos registros simultáneos
+   no crean dos veces el mismo proveedor, producto o variante.
 
 ### 1.1 `20261028100000_escaner_textil_esquema.sql`
 
@@ -181,10 +212,19 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public AS $$
     WHEN public.textil_clave(_referencia) <> '' THEN
       'r:' || public.textil_clave(_referencia) || '|' || public.textil_clave(_color)
            || '|' || public.textil_clave_talla(_talla)
-    WHEN public.textil_clave(_descripcion) <> '' THEN 'd:' || public.textil_clave(_descripcion)
+    WHEN public.textil_clave(_descripcion) <> '' THEN
+      'd:' || public.textil_clave(_descripcion)
+           || CASE WHEN public.textil_clave(_color) <> '' OR public.textil_clave_talla(_talla) <> ''
+                   THEN '|' || public.textil_clave(_color) || '|' || public.textil_clave_talla(_talla)
+                   ELSE '' END
     ELSE '' END
 $$;
 ```
+
+Sin referencia, la clave lleva el color y la talla **si la línea los trae**: con solo la
+descripción («Camiseta Heavy»), todas las tallas de una factura darían la misma clave y la
+memoria mandaría las cinco tallas a la misma variante. Con color y talla vacíos queda
+`'d:' || descripción`, que es la forma de la memoria migrada (1.2 D).
 
 #### 1.1.2 `public.proveedores` (nueva)
 
@@ -229,13 +269,23 @@ WHERE referencia_clave <> ''`; `textil_productos_nombre_unico` UNIQUE
 
 #### 1.1.4 `public.textil_stock`: columnas nuevas
 
-| Columna       | Tipo                                                                 | Notas                                                              |
-| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `producto_id` | `UUID REFERENCES textil_productos(id) ON DELETE RESTRICT`            | nulo aquí; `NOT NULL` en la migración de reglas                    |
-| `ean`         | `TEXT`                                                               | CHECK `textil_stock_ean_formato` `ean IS NULL OR ean ~ '^([0-9]{8} | [0-9]{12,14})$'` (el dígito de control lo valida el dominio) |
-| `repetida`    | `BOOLEAN NOT NULL DEFAULT false`                                     | duplicado heredado: no se casa, no se vende, se fusiona            |
-| `color_clave` | `TEXT GENERATED ALWAYS AS (public.textil_clave(color)) STORED`       |                                                                    |
-| `talla_clave` | `TEXT GENERATED ALWAYS AS (public.textil_clave_talla(talla)) STORED` |                                                                    |
+| Columna        | Tipo                                                                 | Notas                                                              |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `producto_id`  | `UUID REFERENCES textil_productos(id) ON DELETE RESTRICT`            | nulo aquí; `NOT NULL` en la migración de reglas                    |
+| `ean`          | `TEXT`                                                               | CHECK `textil_stock_ean_formato` (texto exacto debajo de la tabla) |
+| `repetida`     | `BOOLEAN NOT NULL DEFAULT false`                                     | duplicado heredado: no se casa, no se vende, se fusiona            |
+| `color_clave`  | `TEXT GENERATED ALWAYS AS (public.textil_clave(color)) STORED`       |                                                                    |
+| `talla_clave`  | `TEXT GENERATED ALWAYS AS (public.textil_clave_talla(talla)) STORED` |                                                                    |
+| `fusionada_en` | `UUID REFERENCES textil_stock(id) ON DELETE SET NULL`                | variante en la que se fusionó esta (1.3.9); nulo si no             |
+
+CHECK exacto (fuera de la tabla para que el `|` no se lea como columna):
+
+```sql
+CONSTRAINT textil_stock_ean_formato CHECK (ean IS NULL OR ean ~ '^([0-9]{8}|[0-9]{12,14})$')
+```
+
+El dígito de control lo valida el dominio; en la base solo entran EAN ya normalizados (2.2:
+`normalizarEan` devuelve 8, 13 o 14 cifras).
 
 Índice `textil_stock_por_producto (producto_id)`.
 
@@ -286,8 +336,15 @@ Y la restricción `compra_linea_id_compra UNIQUE (id, compra_id)` (la necesita l
 - FK `stock_mov_linea_de_su_compra (compra_linea_id, compra_id) REFERENCES
 textil_compra_lineas (id, compra_id) ON DELETE RESTRICT` (MATCH SIMPLE: sin línea no se
   comprueba).
+- CHECK `stock_linea_con_compra CHECK (compra_linea_id IS NULL OR compra_id IS NOT NULL)`.
+  Sin ella, con MATCH SIMPLE, un movimiento con `compra_linea_id` y `compra_id` nulo se salta
+  la FK entera y puede apuntar a una línea que no existe.
 - `fecha DATE` (**sin** valor por defecto en el `ADD COLUMN`: las filas viejas quedan en nulo y
-  se leen por su `created_at`; las nuevas las rellena el trigger, 1.3.4).
+  se leen por su `created_at`; las nuevas las rellena el trigger, 1.3.4). Es una fecha
+  **contable de calendario** (la de la factura en las compras), del mismo tipo que
+  `textil_compras.fecha`; no es un instante, por eso no es `timestamptz` (el instante sigue en
+  `created_at`). Excepción justificada a la regla de CLAUDE.md, dicha en la cabecera de la
+  migración.
 - Índices `textil_stock_mov_por_compra (compra_id) WHERE compra_id IS NOT NULL` y
   `textil_stock_mov_por_fecha (empresa_id, fecha)`.
 
@@ -359,10 +416,12 @@ Pasos, en este orden:
     proveedor.
 - **D. Memoria desde lo ya registrado.** Para cada línea de compra **textil registrada** con
   `proveedor_id` y `stock_id` de una variante activa y no repetida:
-  `clave = textil_clave_memoria(NULL, NULL, NULL, descripcion)`; por
-  `(empresa_id, proveedor_id, clave)` gana la variante de la compra más reciente;
-  `veces` = cuántas líneas de ese proveedor con esa clave fueron a esa variante;
-  `origen = 'migracion'`; `ON CONFLICT DO NOTHING`.
+  `clave = textil_clave_memoria(NULL, NULL, NULL, descripcion)` (forma `'d:' || descripción`);
+  por `(empresa_id, proveedor_id, clave)`: si **todas** las líneas con esa clave fueron a la
+  misma variante, se aprende con `veces` = cuántas fueron; si fueron a **más de una** variante
+  (descripción sin talla ni color, por ejemplo), la clave es ambigua y **no se aprende**;
+  `origen = 'migracion'`; `ON CONFLICT DO NOTHING`. Antes decía «gana la más reciente»: con una
+  descripción sin talla, eso enseñaba a mandar todas las tallas a la última.
 
 Devuelve `{"productos": n, "variantes_enlazadas": n, "repetidas": n, "proveedores": n,
 "compras_enlazadas": n, "memoria": n}` (lo hecho en esta llamada).
@@ -390,8 +449,9 @@ WHERE ean IS NOT NULL`.
 
 #### 1.3.2 Cabecera de compra registrada inmutable
 
-Función `public.compra_registrada_cabecera()` (`plpgsql`, `SET search_path = public`), usada por
-dos triggers:
+Función `public.compra_registrada_cabecera()` (`plpgsql`, `SET search_path = public`, **sin**
+`SECURITY DEFINER`: mira `current_user`, que dentro de una función `SECURITY DEFINER` sería el
+dueño y no quien escribe), usada por dos triggers:
 
 - `textil_compras_registrada_inmutable AFTER UPDATE ON textil_compras FOR EACH ROW` (AFTER para
   ver ya calculadas las columnas generadas).
@@ -401,22 +461,31 @@ Lógica:
 
 ```text
 DELETE: si OLD.estado = 'registrada' → error E-CAB-1. Si no, RETURN OLD.
-UPDATE: si OLD.estado <> 'registrada' → RETURN NEW (borrador: todo se puede).
+UPDATE: si OLD.estado <> 'registrada':
+          si NEW.estado = 'registrada' y current_user IN ('authenticated', 'anon') → E-CAB-6
+            (registrar solo lo hacen textil_compra_registrar y
+             textil_compra_guardar_y_registrar, que son SECURITY DEFINER: dentro de ellas
+             current_user es el dueño; un UPDATE directo desde PostgREST, no).
+          RETURN NEW (borrador: todo lo demás se puede).
         si NEW.estado <> 'registrada' → error E-CAB-2.
         v_viejo := to_jsonb(OLD); v_nuevo := to_jsonb(NEW);
         para cada k en {empresa_id, proveedor, nif_proveedor, numero, fecha, base, iva, irpf,
-                        total, categoria, gasto_id, lectura_ia, cuota_iva, cuota_irpf, liquido}:
+                        total, categoria, lectura_ia, cuota_iva, cuota_irpf, liquido}:
           si (v_viejo -> k) IS DISTINCT FROM (v_nuevo -> k) → error E-CAB-3 con k.
         proveedor_id, fichero_ruta, fichero_huella: solo de nulo a un valor (si no, E-CAB-3).
+        gasto_id: solo de un valor a nulo (si no, E-CAB-3). Es lo que hace la FK
+                  ON DELETE SET NULL al borrar un gasto fijo (gerencia.functions.ts lo
+                  permite hoy; la prueba C1 3b lo comprueba).
         borrada_en: si OLD.categoria = 'textil' y cambia → E-CAB-4;
                     si pasa de un valor a nulo → E-CAB-5.
         RETURN NEW.
 ```
 
 Lo que sí cambia en una registrada: `estado_pago`, `fecha_pago`, `forma_pago`, `notas`,
-`revision`, `revision_motivo`, `confianza`, `tipo_iva`/`tipo_irpf` **solo si no cambian las
-cuotas** (así pasa la reaplicación de `C2`, cuando las cuotas aún no existen), `updated_at`, y
-`borrada_en` de nulo a fecha en las no textil.
+`concepto`, `nota_descuadre`, `revision`, `revision_motivo` y `confianza` (el CHECK
+`compra_registrada_revisada` sigue obligando a `revisada`), `tipo_iva`/`tipo_irpf` **solo si
+no cambian las cuotas** (así pasa la reaplicación de `C2`, cuando las cuotas aún no existen),
+`gasto_id` a nulo, `updated_at`, y `borrada_en` de nulo a fecha en las no textil.
 
 #### 1.3.3 El coste medio solo por movimientos
 
@@ -434,14 +503,29 @@ variante nueva no tiene historia).
 2. Entradas sin coste:
    - `motivo = 'devolucion_cliente'`, `cantidad > 0`, `coste_unitario = 0`: si hay
      `textil_pedido_id`, coste = `sum(-cantidad × coste_unitario) / sum(-cantidad)` de los
-     movimientos `venta` de **ese pedido y esa variante**; si no hay ventas o no hay pedido, el
-     coste medio vigente.
+     movimientos `venta` de **ese pedido** en **esa variante o en las fusionadas en ella**
+     (`stock_id = NEW.stock_id OR stock_id IN (SELECT id FROM textil_stock WHERE fusionada_en =
+NEW.stock_id)`): tras una fusión, las líneas del pedido apuntan al destino pero la venta
+     salió del origen; si no hay ventas o no hay pedido, el coste medio vigente.
    - `motivo = 'ajuste_inventario'`, `cantidad > 0`, `coste_unitario = 0`: el coste medio
      vigente.
 3. Recalcular la media cuando `cantidad > 0 AND (coste_unitario > 0 OR motivo = 'compra')`. Una
    compra a coste 0 (regalo, 100 % de descuento) **sí** baja la media. Con saldo ≤ 0, manda la
    entrada (como hoy).
-4. Salidas con coste 0: congelan el coste medio vigente (como hoy).
+4. **Toda** salida (`cantidad < 0`) se congela al coste medio vigente, traiga el coste que
+   traiga (antes solo las de coste 0). Con coste medio ponderado no existe una salida a otro
+   coste: si una merma o una devolución a proveedor entrase a un coste escrito a mano, el valor
+   del libro y el de la caché (unidades × coste medio) dejarían de coincidir sin que nada lo
+   explique. Hoy todas las salidas de la aplicación llegan con coste 0; la fusión (1.3.9) usa el
+   coste medio, que es el mismo.
+
+Además, trigger nuevo `textil_stock_mov_compra_solo_registro BEFORE INSERT ON
+textil_stock_movimientos` con la función `public.stock_compra_solo_por_registro()` (`plpgsql`,
+**sin** `SECURITY DEFINER`): si `NEW.motivo = 'compra'` y `current_user IN ('authenticated',
+'anon')` → E-STK-2. Las entradas por compra solo las anotan las funciones de registro
+(`SECURITY DEFINER`); sin esto, cualquiera con sesión podría anotar por PostgREST una entrada
+`compra` enlazada a la línea de una factura ya registrada y duplicarla (la FK y la CHECK de 1.3.5
+se cumplirían).
 
 #### 1.3.5 Entradas por compra, siempre con su factura
 
@@ -459,8 +543,11 @@ Restricciones en `textil_stock_movimientos` (dentro de `DO … duplicate_object`
 
 - INSERT: si `coste_unit_snapshot IS NULL AND stock_id IS NOT NULL` →
   `NULLIF(coste_unitario, 0)` de la variante (nulo si no tiene coste).
-- UPDATE: si `OLD.coste_unit_snapshot IS NOT NULL AND NEW.stock_id IS NOT DISTINCT FROM
-OLD.stock_id` → se conserva el de `OLD`. Si cambia la variante, se toma el de la nueva.
+- UPDATE: si `OLD.coste_unit_snapshot IS NOT NULL` y además `NEW.stock_id IS NOT DISTINCT FROM
+OLD.stock_id`, o `NEW.stock_id IS NULL` (la FK `ON DELETE SET NULL` al retirar la variante), o
+  `current_setting('app.fusion_variantes', true) = '1'` (1.3.9) → se conserva el de `OLD`. Solo
+  si la persona cambia la línea a **otra** variante se toma el coste de la nueva. Sin estas dos
+  excepciones, retirar o fusionar una variante reescribiría costes ya congelados.
 
 #### 1.3.7 `public.textil_compra_guardar_y_registrar(_compra JSONB, _usuario_id UUID) RETURNS JSONB`
 
@@ -490,31 +577,40 @@ Pasos:
 _usuario_id::text, true)`. Empresa = la de la compra existente o la del JSON;
    `NOT es_miembro_empresa(_usuario_id, empresa)` → E-REG-2.
 1. **Cabecera.** Si hay `id`: `SELECT … FOR UPDATE`; no existe → E-REG-3; `estado =
-'registrada'` → E-REG-4. `fecha` nula → E-REG-5. Se escribe la cabecera (UPDATE o INSERT) en
-   `estado = 'borrador'`.
-2. **Proveedor.** Con `proveedor_id`: tiene que ser de la empresa (si no, E-REG-6). Sin él: por
-   `nif_clave(nif_proveedor)` si no es `''`; si no, por `textil_clave(proveedor)` entre los sin
-   NIF; si no existe, se crea (`origen = 'escaner'`, `nombre` = texto de la factura o el NIF;
-   `ON CONFLICT DO NOTHING` y se vuelve a buscar). Categoría `textil` sin proveedor posible →
-   E-REG-7. En otras categorías puede quedar nulo.
+'registrada'` → E-REG-4. `fecha` nula → E-REG-5. `fecha` posterior a hoy en Madrid → E-REG-23
+   (una fecha mal leída, 2062 por 2026, escondería las entradas de stock de todas las cuentas
+   del almacén hasta ese año). Se escribe la cabecera (UPDATE o INSERT) en `estado = 'borrador'`.
+2. **Proveedor.** Con `proveedor_id`: tiene que ser de la empresa (si no, E-REG-6) y, si el
+   proveedor tiene NIF y la factura también, tienen que coincidir por `nif_clave` (si no,
+   E-REG-25: la persona corrigió el NIF en la revisión y el `proveedor_id` es del NIF viejo).
+   Sin él: por `nif_clave(nif_proveedor)` si no es `''`; si no lo encuentra y hay un proveedor
+   **sin NIF** con el mismo `nombre_clave`, se le pone el NIF de la factura y se usa ese (así un
+   proveedor que primero llegó sin NIF no se parte en dos, con la memoria repartida); si la
+   factura no trae NIF, por `textil_clave(proveedor)` entre los sin NIF; si no existe, se crea
+   (`origen = 'escaner'`, `nombre` = texto de la factura o el NIF; `ON CONFLICT … WHERE …
+DO NOTHING` (1.0.8) y se vuelve a buscar). Categoría `textil` sin proveedor posible → E-REG-7.
+   En otras categorías puede quedar nulo.
 3. **Líneas.** `DELETE` de las líneas del borrador e `INSERT` de `lineas[]` con
    `orden = posición` (0…n−1) y todas las columnas de 1.1.6. «Línea N» en los mensajes es
    `orden + 1`. Fuera de textil, `stock_id`, `nueva_variante`, `unidades_stock` y `coste_*` se
    ignoran (nulos).
 4. **Solo `categoria = 'textil'`.**
    1. Al menos un `articulo` → si no, E-REG-8.
-   2. Por cada artículo: `importe < 0` → E-REG-9; `unidades_stock` ≠ `cantidad ×
-unidades_por_pack`, no entero o ≤ 0 → E-REG-10; `coste_total_entrada` o
+   2. Por cada artículo: `importe < 0` → E-REG-9; `unidades_stock` ≠ `round(cantidad ×
+unidades_por_pack, 6)`, no entero o ≤ 0 → E-REG-10; `coste_total_entrada` o
       `coste_unitario_entrada` nulos o < 0 → E-REG-11;
       `abs(unidades_stock × coste_unitario_entrada − coste_total_entrada) >= 0.005` → E-REG-12.
    3. `porte` con `importe < 0` o `descuento` con `importe > 0` → E-REG-13. Las líneas que no son
       artículo nunca llevan variante (se ignoran `stock_id` y `nueva_variante`).
-   4. `abs(Σ importe de todas las líneas − base) > 0.02` → E-REG-14.
+   4. `abs(Σ round(importe, 2) de todas las líneas − round(base, 2)) > 0.02` → E-REG-14 (redondeo
+      por línea, igual que el dominio, 2.3 paso 3: si no, un importe leído con tres decimales
+      haría que el navegador y la base discreparan justo en el borde).
    5. `Σ coste_total_entrada de los artículos <> round(base, 2)` → E-REG-15 (I1).
    6. Variante de cada artículo:
       - con `stock_id`: tiene que existir, ser de la empresa (E-REG-16), estar activa (E-REG-17)
         y no ser repetida (E-REG-18);
-      - sin `stock_id` y con `nueva_variante`: producto = `nueva_variante.producto_id` (de la
+      - sin `stock_id` y con `nueva_variante`: si trae `producto_id` y `producto` nulos a la vez →
+        E-REG-20. Producto = `nueva_variante.producto_id` (de la
         empresa) o se busca/crea con `nueva_variante.producto`: si `textil_clave(referencia) <>
 ''`, por `(empresa, marca_clave, referencia_clave)`; si no, por `(empresa, marca_clave,
 nombre_clave)` con `referencia_clave = ''`; se crea con `origen = 'escaner'`. Variante =
@@ -531,13 +627,20 @@ nombre_clave)` con `referencia_clave = ''`; se crea con `origen = 'escaner'`. Va
 stock_id, motivo 'compra', cantidad = unidades_stock, coste_unitario =
 coste_unitario_entrada, compra_id, compra_linea_id, fecha = fecha de la compra, nota =
 'Compra <numero|(sin número)> de <proveedor> · línea N')`.
-   9. **Memoria:** por artículo con `clave = textil_clave_memoria(referencia, color, talla,
-descripcion) <> ''` y proveedor: `INSERT … ON CONFLICT (empresa_id, proveedor_id, clave) DO
-UPDATE SET veces = CASE WHEN misma variante THEN veces + 1 ELSE 1 END, stock_id,
-unidades_por_pack, ultima_compra_id, origen = 'escaner', updated_at = now()`.
+   9. **Memoria:** se agrupan los artículos con `clave = textil_clave_memoria(referencia, color,
+talla, descripcion) <> ''` (y proveedor) **por clave**:
+      - si todos los de una clave van a la **misma** variante: **un** `INSERT … ON CONFLICT
+(empresa_id, proveedor_id, clave) DO UPDATE SET veces = CASE WHEN misma variante THEN
+veces + 1 ELSE 1 END, stock_id, unidades_por_pack, ultima_compra_id, origen = 'escaner',
+updated_at = now()` por clave y factura (`veces` cuenta facturas, no líneas);
+      - si van a **variantes distintas**, la clave es ambigua: no se aprende y se **borra** la
+        entrada que hubiera con esa clave (ya no es de fiar). `aprendidas` no la cuenta.
 5. **Registrar.** `UPDATE textil_compras SET estado = 'registrada', revision = 'revisada',
-revision_motivo = NULL, proveedor_id = v_proveedor`. Si salta `unique_violation` (factura ya
-   registrada) → E-REG-21.
+revision_motivo = NULL, proveedor_id = v_proveedor`, en su **propio** bloque
+   `BEGIN … EXCEPTION WHEN unique_violation`: solo si el `CONSTRAINT_NAME` (`GET STACKED
+DIAGNOSTICS`) es `textil_compras_factura_unica` → E-REG-21; cualquier otro, se relanza tal
+   cual. Un `unique_violation` de un EAN, una variante o la memoria no puede salir como «factura
+   ya registrada».
 6. **Devuelve** `{"id", "movidas", "variantes_creadas", "aprendidas", "proveedor_id",
 "proveedor_nuevo"}`.
 
@@ -547,6 +650,10 @@ Misma firma, mismos permisos (`authenticated`, `service_role`). Es el camino vie
 reparto) y se mantiene por compatibilidad y por las pruebas viejas:
 
 - Bloquea, falla si ya está registrada (como hoy).
+- **Acceso** (nuevo): si `auth.uid()` no es nulo y `NOT es_miembro_empresa(auth.uid(),
+empresa_id de la compra)` → E-REG-2. Es `SECURITY DEFINER` y la puede llamar `authenticated`:
+  hoy registra la compra de cualquier empresa que se le pase. Sin `auth.uid()` (superusuario de
+  las pruebas, `service_role`) no se comprueba.
 - Textil: si alguna línea no es `articulo` → E-REG-22 (`restrict_violation`); si alguna no tiene
   `stock_id` → el mensaje de hoy, con `ERRCODE = 'restrict_violation'` (lo espera `C1`).
 - Movimiento por línea con `cantidad × unidades_por_pack`, coste
@@ -566,18 +673,28 @@ reparto) y se mantiene por compatibilidad y por las pruebas viejas:
 <destino>'` / `'Fusión: viene de <origen>'`.
 3. Reservas del origen → al destino (sumando si ya había una del mismo pedido) y se borran las
    del origen.
-4. `textil_pedido_items` y `textil_presupuesto_items` con `stock_id = origen` → destino;
-   `textil_referencias_proveedor` igual. Las líneas de compras registradas y de facturas no se
-   tocan (son historia).
+4. Con `set_config('app.fusion_variantes', '1', true)` (para que 1.3.6 conserve el coste
+   congelado de cada línea) y quitándola al acabar: `textil_pedido_items` y
+   `textil_presupuesto_items` con `stock_id = origen` → destino; `textil_referencias_proveedor`
+   igual; y las líneas de compras **en borrador** (si no, al registrarlas darían E-REG-17). Las
+   líneas de compras registradas y de facturas no se tocan (son historia).
 5. Si el destino no tiene EAN y el origen sí, pasa (primero se quita del origen).
-6. Origen: `activa = false`, `repetida = false`.
+6. Origen: `activa = false`, `repetida = false`, `fusionada_en = destino` (lo usa 1.3.4 para
+   devolver al coste de la venta las devoluciones de pedidos que salieron del origen).
 7. Devuelve `{"unidades": q, "reservas": n, "lineas": n}`.
 
 #### 1.3.10 `public.escaner_textil_version() RETURNS INT`
 
 `LANGUAGE sql STABLE`, devuelve `1`. `GRANT EXECUTE … TO authenticated, service_role`. Es la
-última sentencia de la migración: si existe, las tres están aplicadas. La usa
-`escanerAplicado()` (3.1).
+última sentencia de la migración (antes del `NOTIFY pgrst`): si existe, las tres están
+aplicadas. La usa `escanerAplicado()` (3.1).
+
+#### 1.3.11 Diagnóstico de migraciones
+
+`supabase/pruebas/estado_migraciones_octubre.sql` (SQL) añade tres filas, una por migración:
+`20261028100000` → `to_regclass('public.textil_referencias_proveedor') IS NOT NULL`;
+`20261028100100` → existe `escaner_textil_migrar_datos()`; `20261028100200` → existe
+`escaner_textil_version()`. Javier lo usa para comprobar que entraron las tres.
 
 ### 1.4 Errores (mensaje exacto, en castellano)
 
@@ -590,7 +707,9 @@ reparto) y se mantiene por compatibilidad y por las pruebas viejas:
 | E-CAB-3  | `La factura % ya está registrada: «%» no se puede cambiar.`                                                                                                    | restrict_violation |
 | E-CAB-4  | `La compra textil % movió stock y no se borra: para corregir, haz un ajuste de inventario.`                                                                    | restrict_violation |
 | E-CAB-5  | `Una factura borrada no vuelve a contar.`                                                                                                                      | restrict_violation |
+| E-CAB-6  | `Una compra se registra desde su revisión, no cambiando su estado a mano.`                                                                                     | restrict_violation |
 | E-STK-1  | `El coste medio no se escribe a mano: lo calcula el libro de movimientos. Para corregirlo, anota un ajuste de inventario.`                                     | restrict_violation |
+| E-STK-2  | `Las entradas por compra solo las anota el registro de su factura (Textil › Compras).`                                                                         | restrict_violation |
 | E-REG-1  | `Sin usuario: la compra necesita un autor.`                                                                                                                    | 22023              |
 | E-REG-2  | `Sin acceso a esta empresa.`                                                                                                                                   | 42501              |
 | E-REG-3  | `La compra no existe.`                                                                                                                                         | P0002              |
@@ -613,6 +732,8 @@ reparto) y se mantiene por compatibilidad y por las pruebas viejas:
 | E-REG-20 | `Línea %: falta la variante del catálogo. Elige una o crea una nueva.`                                                                                         | restrict_violation |
 | E-REG-21 | `Esta factura (mismo proveedor y número) ya está registrada. Si es un duplicado, bórrala.`                                                                     | unique_violation   |
 | E-REG-22 | `Esta compra tiene portes, descuentos u otros cargos: regístrala desde la revisión de Textil › Compras para repartirlos.`                                      | restrict_violation |
+| E-REG-23 | `La fecha de la factura (%) es posterior a hoy: revisa que esté bien leída.`                                                                                   | 22023              |
+| E-REG-25 | `El NIF de la factura (%) no es el del proveedor elegido (%). Vuelve a elegir el proveedor.`                                                                   | 22023              |
 | E-FUS-1  | `No se fusiona una variante consigo misma.`                                                                                                                    | 22023              |
 | E-FUS-2  | `Las dos variantes tienen que ser de la misma empresa.`                                                                                                        | 42501              |
 | E-FUS-3  | `La variante de destino tiene que estar activa y no repetida.`                                                                                                 | restrict_violation |
@@ -624,7 +745,8 @@ Solo con autorización expresa de Javier (borran tablas y columnas).
 
 1. `supabase/reversiones/20261028100200_escaner_textil_reglas.sql`: quita
    `escaner_textil_version()`, `textil_compra_guardar_y_registrar(jsonb, uuid)`,
-   `textil_stock_fusionar(uuid, uuid, uuid)`, los triggers y funciones de 1.3.1, 1.3.2 y 1.3.6,
+   `textil_stock_fusionar(uuid, uuid, uuid)`, los triggers y funciones de 1.3.1, 1.3.2 y 1.3.6
+   y el trigger `textil_stock_mov_compra_solo_registro` con su función (1.3.4),
    los índices `textil_stock_variante_unica` y `textil_stock_ean_unico`, el `NOT NULL` de
    `producto_id` y las tres CHECK de 1.3.5. Repone **copiadas tal cual**
    `stock_aplicar_movimiento()` y `stock_cantidad_solo_por_movimiento()` de
@@ -639,9 +761,13 @@ Solo con autorización expresa de Javier (borran tablas y columnas).
    `escaner_textil_migrar_datos()`.
 3. `supabase/reversiones/20261028100000_escaner_textil_esquema.sql`: repone las políticas
    `USING (true)` de `textil_compras` y `textil_compra_lineas` copiadas de
-   `20260903260000_compras_textil.sql`; quita las columnas nuevas (1.1.4, 1.1.6, 1.1.7, 1.1.8),
-   la restricción `compra_linea_id_compra`, las tablas `textil_referencias_proveedor`,
+   `20260903260000_compras_textil.sql`; quita las columnas nuevas (1.1.4 con `fusionada_en`,
+   1.1.6, 1.1.7, 1.1.8) **antes** que las funciones de 1.1.1 de las que dependen sus columnas
+   generadas, la CHECK `stock_linea_con_compra`, la restricción `compra_linea_id_compra`, las
+   tablas `textil_referencias_proveedor`,
    `textil_productos` y `proveedores` y las cuatro funciones de 1.1.1.
+
+Cada reversión termina con `NOTIFY pgrst, 'reload schema';` (dentro de su `BEGIN … COMMIT`).
 
 Qué se pierde al revertir: el catálogo de productos y proveedores, la memoria, el tipo, la
 referencia, el color, la talla y el EAN de las líneas, el enlace movimiento → compra, la fecha
@@ -653,8 +779,16 @@ pierde: las unidades y el coste medio del stock, los movimientos y las compras r
 ## 2. Dominio puro (`src/dominio/`)
 
 Todo sin red ni base de datos, con pruebas `vitest` en `<fichero>.test.ts`. Se importa solo de
-otros módulos de dominio (`importes.ts`, `fecha-documento.ts`, `compras.ts`…). Nombres de
-funciones y tipos **exactos**: los usan los otros equipos.
+otros módulos de dominio (`importes.ts`, `fecha-documento.ts`, `compras.ts`, `margen.ts`…), con
+rutas relativas como el resto de `src/dominio/`. Nombres de funciones y tipos **exactos**: los
+usan los otros equipos.
+
+**Errores del dominio, sin formatear.** El dominio no formatea números (CLAUDE.md: el formato
+solo con `src/lib/format.ts`, y hoy ningún módulo de `src/dominio/` importa de `src/lib/`). Por
+eso los errores de 2.3 y 2.10 no llevan texto: llevan `codigo` (el id de 1.4) y `datos`
+(números y textos crudos), con el tipo `ErrorEscaner` de 2.1. El texto lo compone
+`mensajeErrorEscaner` (3.1) con `src/lib/format.ts`, con los mismos textos de la tabla 1.4.
+Desaparece el `numeroEs` interno que proponía 2.3.
 
 ### 2.1 `tipos-textil.ts` (nuevo, se entrega primero, tal cual)
 
@@ -851,6 +985,24 @@ export type LineaDocumentoTextil = {
 };
 
 export type Partida = { unidades: number; valor: number };
+
+/** Los ids de la tabla 1.4 que puede dar también el dominio. */
+export type CodigoErrorEscaner =
+  | "E-REG-8"
+  | "E-REG-9"
+  | "E-REG-10"
+  | "E-REG-14"
+  | "E-REP-1" // «Línea %: el descuento deja el artículo en negativo; revisa el descuento.»
+  | "E-EAN-1"; // «Línea %: el EAN % no es válido.»
+
+/** Un error del dominio, sin texto: el texto lo pone mensajeErrorEscaner (3.1). */
+export type ErrorEscaner = {
+  /** Posición (0…n−1) de la línea; null si es de la factura entera. */
+  linea: number | null;
+  codigo: CodigoErrorEscaner;
+  /** Los números y textos que van en el mensaje, en crudo y en orden. */
+  datos: (number | string)[];
+};
 ```
 
 ### 2.2 `normalizar-textil.ts` (nuevo)
@@ -858,16 +1010,24 @@ export type Partida = { unidades: number; valor: number };
 ```ts
 export function claveTexto(t: string | null | undefined): string; // = textil_clave
 export function claveTalla(t: string | null | undefined): string; // = textil_clave_talla
-export function normalizarNif(t: string | null | undefined): string; // = nif_clave
+/** = nif_clave. NO se llama normalizarNif: ese nombre ya existe en src/dominio/clientes.ts
+ *  con otra regla (no quita el prefijo ES); dos funciones iguales de nombre y distintas de
+ *  efecto acaban importándose la que no es. */
+export function claveNif(t: string | null | undefined): string;
 export function claveMemoria(l: {
   referencia: string | null | undefined;
   color: string | null | undefined;
   talla: string | null | undefined;
   descripcion: string | null | undefined;
 }): string; // = textil_clave_memoria
+/** La clave de solo descripción ("d:" + claveTexto(descripción)); "" si no hay. Es la forma de
+ *  la memoria migrada y el segundo intento del casado (2.4). */
+export function claveMemoriaDescripcion(descripcion: string | null | undefined): string;
 /** Solo cifras; null si queda vacío. No valida. */
 export function cifrasEan(t: string | null | undefined): string | null;
-/** GTIN-8/12/13/14 con dígito de control correcto; si no, null. */
+/** GTIN-8/12/13/14 con dígito de control correcto, en forma canónica: un UPC-A de 12 cifras
+ *  pasa a EAN-13 con un 0 delante y un GTIN-14 que empieza por 0 pierde ese 0 (es el mismo
+ *  artículo y el dígito de control no cambia). Devuelve 8, 13 o 14 cifras; si no vale, null. */
 export function normalizarEan(t: string | null | undefined): string | null;
 export function eanValido(t: string | null | undefined): boolean;
 /** Tipo de línea: el que diga la IA si es válido; si no, importe < 0 → descuento;
@@ -892,31 +1052,34 @@ después `/[^A-Za-z0-9]/g → ""`, después `toLowerCase()` o `toUpperCase()`. *
 
 **Vectores compartidos con la prueba SQL** (los dos lados tienen que dar exactamente esto):
 
-| Función       | Entrada                                                                   | Salida                    |
-| ------------- | ------------------------------------------------------------------------- | ------------------------- |
-| claveTexto    | `"  Camiseta Básica  Ñandú "`                                             | `"camisetabasicanandu"`   |
-| claveTexto    | `null`                                                                    | `""`                      |
-| claveTexto    | `"B&C #E190"`                                                             | `"bce190"`                |
-| claveTalla    | `"xxl"`                                                                   | `"2XL"`                   |
-| claveTalla    | `"Talla M"`                                                               | `"M"`                     |
-| claveTalla    | `"3-4 años"`                                                              | `"34"`                    |
-| claveTalla    | `"T.U."`                                                                  | `"UNICA"`                 |
-| claveTalla    | `"One Size"`                                                              | `"UNICA"`                 |
-| claveTalla    | `"Única"`                                                                 | `"UNICA"`                 |
-| claveTalla    | `"XXXL"`                                                                  | `"3XL"`                   |
-| claveTalla    | `"2XL"`                                                                   | `"2XL"`                   |
-| claveTalla    | `null`                                                                    | `""`                      |
-| normalizarNif | `"es-b12.345.678"`                                                        | `"B12345678"`             |
-| normalizarNif | `"B-12345678"`                                                            | `"B12345678"`             |
-| normalizarNif | `" 12345678z "`                                                           | `"12345678Z"`             |
-| normalizarNif | `"ESX1234567L"`                                                           | `"X1234567L"`             |
-| normalizarNif | `null`                                                                    | `""`                      |
-| claveMemoria  | ref `"5000"`, color `"Black"`, talla `"XXL"`, desc `"Camiseta"`           | `"r:5000\|black\|2XL"`    |
-| claveMemoria  | ref `null`, color `"Negro"`, talla `"L"`, desc `"Camiseta Heavy Negro L"` | `"d:camisetaheavynegrol"` |
-| claveMemoria  | todo vacío                                                                | `""`                      |
+| Función      | Entrada                                                                   | Salida                              |
+| ------------ | ------------------------------------------------------------------------- | ----------------------------------- |
+| claveTexto   | `"  Camiseta Básica  Ñandú "`                                             | `"camisetabasicanandu"`             |
+| claveTexto   | `null`                                                                    | `""`                                |
+| claveTexto   | `"B&C #E190"`                                                             | `"bce190"`                          |
+| claveTalla   | `"xxl"`                                                                   | `"2XL"`                             |
+| claveTalla   | `"Talla M"`                                                               | `"M"`                               |
+| claveTalla   | `"3-4 años"`                                                              | `"34"`                              |
+| claveTalla   | `"T.U."`                                                                  | `"UNICA"`                           |
+| claveTalla   | `"One Size"`                                                              | `"UNICA"`                           |
+| claveTalla   | `"Única"`                                                                 | `"UNICA"`                           |
+| claveTalla   | `"XXXL"`                                                                  | `"3XL"`                             |
+| claveTalla   | `"2XL"`                                                                   | `"2XL"`                             |
+| claveTalla   | `null`                                                                    | `""`                                |
+| claveNif     | `"es-b12.345.678"`                                                        | `"B12345678"`                       |
+| claveNif     | `"B-12345678"`                                                            | `"B12345678"`                       |
+| claveNif     | `" 12345678z "`                                                           | `"12345678Z"`                       |
+| claveNif     | `"ESX1234567L"`                                                           | `"X1234567L"`                       |
+| claveNif     | `null`                                                                    | `""`                                |
+| claveMemoria | ref `"5000"`, color `"Black"`, talla `"XXL"`, desc `"Camiseta"`           | `"r:5000\|black\|2XL"`              |
+| claveMemoria | ref `null`, color `"Negro"`, talla `"L"`, desc `"Camiseta Heavy Negro L"` | `"d:camisetaheavynegrol\|negro\|L"` |
+| claveMemoria | ref `null`, color `null`, talla `null`, desc `"Camiseta Heavy Negro L"`   | `"d:camisetaheavynegrol"`           |
+| claveMemoria | ref `null`, color `null`, talla `"M"`, desc `"Sudadera"`                  | `"d:sudadera\|\|M"`                 |
+| claveMemoria | todo vacío                                                                | `""`                                |
 
 Pruebas de `normalizar-textil.test.ts`: la tabla entera; EAN `4006381333931` y `96385074`
-válidos, `4006381333932` no; `"4006 3813 3393 1"` → `"4006381333931"`; `tipoDeLinea` con tipo
+válidos, `4006381333932` no; `"4006 3813 3393 1"` → `"4006381333931"`; UPC-A `"036000291452"` →
+`"0036000291452"` y GTIN-14 `"00036000291452"` → `"0036000291452"`; `tipoDeLinea` con tipo
 de la IA, con importe negativo, con «Portes» y con una camiseta; `packDesdeTexto` con los siete
 patrones y con «Camiseta 5000» (→ null); `palabras` quita las STOPWORDS.
 
@@ -949,7 +1112,7 @@ export type ResultadoReparto =
       aRepartir: number;
       criterio: "importe" | "unidades";
     }
-  | { ok: false; errores: { linea: number | null; mensaje: string }[] };
+  | { ok: false; errores: ErrorEscaner[] };
 export function unidadesDeLinea(cantidad: number, unidadesPorPack: number): number;
 export function repartirCostes(
   lineas: readonly LineaParaRepartir[],
@@ -959,32 +1122,30 @@ export function repartirCostes(
 export function conCostesDeEntrada(
   lineas: readonly LineaRegistro[],
   base: number,
-):
-  | { ok: true; lineas: LineaRegistro[] }
-  | { ok: false; errores: { linea: number | null; mensaje: string }[] };
+): { ok: true; lineas: LineaRegistro[] } | { ok: false; errores: ErrorEscaner[] };
 ```
 
 Algoritmo, todo en céntimos enteros:
 
-1. Artículos = líneas `articulo`. Ninguno → error (`linea: null`) con el texto de E-REG-8.
-2. Cada artículo: `importe < 0` → texto de E-REG-9; `unidades = redondear(cantidad ×
-unidades_por_pack, 6)` no entera o ≤ 0 → texto de E-REG-10.
+1. Artículos = líneas `articulo`. Ninguno → `{ linea: null, codigo: "E-REG-8", datos: [] }`.
+2. Cada artículo: `importe < 0` → `E-REG-9`; `unidades = redondear(cantidad ×
+unidades_por_pack, 6)` no entera o ≤ 0 → `E-REG-10` con `datos: [cantidad, unidades_por_pack, unidades]`.
 3. `baseC = round(base × 100)`, `sumaC = Σ round(importe × 100)` de todas las líneas;
-   `|baseC − sumaC| > 2` → texto de E-REG-14.
+   `|baseC − sumaC| > 2` → `E-REG-14` con `datos: [sumaC / 100, baseC / 100]`.
 4. `Sa = Σ` céntimos de los artículos; `R = baseC − Sa` (portes + descuentos + otros + redondeo).
 5. Pesos `w_i` = céntimos del artículo si `Sa > 0` (`criterio "importe"`); si `Sa = 0`, sus
    unidades (`criterio "unidades"`).
 6. Mayor resto sobre `|R|`: `parte_i = floor(|R| × w_i / W)`; lo que falta (`|R| − Σ parte_i`)
    se reparte de céntimo en céntimo a los de mayor resto (`|R| × w_i mod W`); empate: mayor
    `w_i`, luego menor `indice`. Se aplica el signo de `R`.
-7. `coste_total_i = (céntimos_i + parte_i) / 100`; si < 0 → error «Línea N: el descuento deja
-   el artículo en negativo; revisa el descuento.».
+7. `coste_total_i = (céntimos_i + parte_i) / 100`; si < 0 → `E-REP-1` («Línea N: el descuento deja
+   el artículo en negativo; revisa el descuento.»).
 8. `coste_unitario_i = redondear(coste_total_i / unidades_i, DECIMALES_COSTE_ENTRADA)`.
 9. Garantiza `Σ coste_total = base` en céntimos (I1) y `|unidades × coste_unitario −
 coste_total| < 0,005`.
 
-Los mensajes de error son los de 1.4 (mismo texto, con los números formateados con coma y dos
-decimales a mano en dominio: `numeroEs(n)` interno; nada de `src/lib/format.ts`).
+Los errores van sin texto (`ErrorEscaner`, 2.1); el texto, el de 1.4, lo pone
+`mensajeErrorEscaner` (3.1). Las pruebas comprueban `codigo`, `linea` y `datos`.
 
 Pruebas obligatorias:
 
@@ -993,7 +1154,7 @@ Pruebas obligatorias:
 - R2: tres artículos de 10,00 y porte 1,00 → 10,34 / 10,33 / 10,33 (el céntimo al primero).
 - R3: artículos 10,00 y 20,00, descuento −1,00 → 9,67 y 19,33.
 - R4: base 0,01 por encima de las líneas → se reparte y Σ = base.
-- R5: base 0,50 por encima → error con el texto de E-REG-14.
+- R5: base 0,50 por encima → error `E-REG-14`.
 - R6: sin artículos → error. R7: artículo negativo → error. R8: 1,5 unidades → error.
 - R9: artículos a 0 € con porte 5,00 → criterio «unidades».
 - R10: descuento mayor que los artículos → error.
@@ -1041,20 +1202,30 @@ Orden de `casarLinea` (solo variantes `activa && !repetida`):
 
 1. `tipo !== "articulo"` → `no_aplica`.
 2. **Memoria**: `claveMemoria(linea)` no vacía y entrada con esa clave cuya variante es
-   utilizable → `casada / memoria` con su `unidades_por_pack`. Si apunta a una variante
-   inactiva o repetida, se sigue con el paso siguiente.
+   utilizable → `casada / memoria` con su `unidades_por_pack`. Si no hay entrada, la línea no
+   trae referencia y `claveMemoriaDescripcion(descripcion)` tiene entrada (memoria migrada),
+   vale **solo si** la variante es compatible con lo que trae la línea: si la línea trae color,
+   `mismoColor`; si trae talla, `claveTalla` igual. Si apunta a una variante inactiva o
+   repetida, o no es compatible, se sigue con el paso siguiente.
 3. **EAN**: `normalizarEan(linea.ean)` válido y una variante con ese `ean` → `casada / ean`.
-4. **Referencia**: `claveTexto(referencia)` no vacía y: una variante con
-   `claveTexto(sku)` igual → `casada / referencia`; si no, variantes cuyo
-   `claveTexto(producto.referencia)` coincide y además `mismoColor` y `claveTalla` iguales:
-   exactamente una → `casada / referencia`; más de una → `sugerida` con ellas.
-5. **Parecido** (solo sugerencia, nunca casa sola): `puntos = round(60 × jaccard(palabras de
+4. **Referencia**: `claveTexto(referencia)` no vacía y: **exactamente una** variante con
+   `claveTexto(sku)` igual y compatible en color y talla (como en el paso 2) → `casada /
+referencia` (un SKU puesto a nivel de modelo, «5000», no puede mandar todas las tallas a la
+   misma variante); si no, variantes cuyo `claveTexto(producto.referencia)` coincide y además
+   `mismoColor` y `claveTalla` iguales: exactamente una → `casada / referencia`; más de una →
+   `sugerida` con ellas.
+
+**Veto por EAN** (pasos 2 y 4): si la línea trae un EAN válido y la variante propuesta tiene
+**otro** EAN, esa propuesta no vale (el casado es de otra prenda) y se sigue con el paso
+siguiente. El EAN de la factura manda sobre la memoria y la referencia. 5. **Parecido** (solo sugerencia, nunca casa sola): `puntos = round(60 × jaccard(palabras de
 descripción + marca + modelo + referencia, palabras de producto.marca + producto.referencia +
 producto.nombre + nombre + sku)) + (mismoColor ? 20 : 0) + (tallas iguales ? 20 : 0)`;
-   candidatas con `jaccard > 0` y `puntos ≥ 40`, de más a menos puntos (empate por etiqueta),
-   máximo 3 → `sugerida`; ninguna → `sin_casar`.
+candidatas con `jaccard > 0` y `puntos ≥ 40`, de más a menos puntos (empate por etiqueta),
+máximo 3 → `sugerida`; ninguna → `sin_casar`.
 
-Pruebas: memoria gana a EAN; memoria a variante inactiva cae a EAN; EAN; referencia por SKU;
+Pruebas: memoria gana a EAN; memoria a variante inactiva cae a EAN; memoria vetada por un EAN
+distinto cae a EAN; memoria migrada (`d:` sin color ni talla) solo casa si color y talla
+cuadran; SKU repetido en dos variantes no casa; EAN; referencia por SKU;
 referencia + «Black»/«Negro» + «XXL»/«2XL»; referencia ambigua → sugerida; parecido nunca da
 `casada`; porte → `no_aplica`; repetidas nunca salen; `productoParaLinea` por marca+referencia;
 `nombreProductoDesdeLinea("Camiseta Gildan 5000 Negro XL", color Negro, talla XL, marca Gildan,
@@ -1120,7 +1291,7 @@ export type MargenPrevisto = {
   base: number; // base de las líneas con coste conocido
   coste: number;
   margen: number;
-  porcentaje: number | null; // margen / base × 100; null si base 0
+  porcentaje: number | null; // porcentajeMargen(margen, base) de margen.ts (un decimal; null si base 0): no se reescribe
   lineasSinCoste: number;
   baseSinCoste: number;
 };
@@ -1177,6 +1348,8 @@ export type MovimientoAlmacen = {
   coste_unitario: number | string;
   stock_id?: string | null;
   compra_id?: string | null;
+  /** Para separar lo que ya cuesta por pedido («Coste de la ropa») de lo que no. */
+  textil_pedido_id?: string | null;
 };
 /** fecha si la hay; si no, el día de created_at en Madrid (diaEnEspana). */
 export function fechaEfectiva(m: Pick<MovimientoAlmacen, "fecha" | "created_at">): string;
@@ -1196,7 +1369,12 @@ export type CuentaAlmacen = {
   devolucionesProveedor: Partida; // en positivo
   ajustes: Partida; // con signo: + entra, − sale
   final: Partida; // todo hasta `hasta`
-  /** mermas + devolucionesProveedor − ajustes (valor): lo que cuesta en Resultados. */
+  /**
+   * Lo que cuesta en Resultados y no cuesta ya por pedido: −Σ valorMovimiento de los
+   * movimientos del periodo que no son `compra` ni `inicial` ni (`venta` o
+   * `devolucion_cliente`) con `textil_pedido_id`. Es decir: mermas + devoluciones a
+   * proveedor − ajustes − devoluciones de cliente sin pedido + ventas sin pedido.
+   */
   perdidas: number;
   /** final − (inicial + compras + altas + devCli − ventas − mermas − devProv + ajustes); 0 siempre que los datos sean coherentes. */
   descuadre: Partida;
@@ -1224,9 +1402,17 @@ export type InformeAlmacen = {
 Unidades: suma de `cantidad` con signo (en las partidas de salida, en positivo). Valores: suma
 de `valorMovimiento` (I9), así la identidad es exacta y `descuadre` es `{0, 0}`.
 
+Por qué `perdidas` no es solo «mermas + devoluciones a proveedor − ajustes»: una devolución de
+cliente **sin pedido** (la permite «Otro movimiento», 4.5) mete valor en el almacén y no resta
+en «Coste de la ropa» (que solo mira movimientos con pedido, `costePorPedido`); sin contarla
+aquí, el almacén crecería sin que Resultados lo viera. Con esta definición se cumple, por
+valor y en el periodo: compras + altas − (final − inicial) = coste de lo vendido con pedido +
+`perdidas`. `costeAlmacenPeriodo` devuelve `perdidas`.
+
 Pruebas: identidad con los siete motivos; inicial = lo anterior a `desde`; movimiento sin
 `fecha` con `created_at = "2026-10-31T23:30:00Z"` cuenta el `2026-11-01`; `perdidas` con merma
-de 2 a 4 € (+8), devolución a proveedor de 1 a 5 € (+5) y ajuste +1 a 3 € (−3) = 10;
+de 2 a 4 € (+8), devolución a proveedor de 1 a 5 € (+5) y ajuste +1 a 3 € (−3) = 10; una
+devolución de cliente sin pedido de 1 a 2 € resta 2 y una con pedido no cuenta;
 `valorAFecha` coincide con `final` de la cuenta que termina ese día.
 
 ### 2.8 `controles-almacen.ts` (nuevo)
@@ -1271,17 +1457,28 @@ export type ResumenControles = {
   comprasSinEnlace: number;
   variantesDescuadradas: number | null; // filas de stock_descuadres(); null si no se pudo leer
   reservasDescuadradas: number | null; // filas de stock_reservas_descuadres()
-  todoEnCero: boolean; // descuadres 0, diferencia 0 y las dos de arriba 0
+  /**
+   * Informativa, NO cuenta para todoEnCero: valor de la caché (Σ cantidad × coste_unitario
+   * de textil_stock, redondeado por variante) − valor del libro a hoy (valorAFecha). Con
+   * coste medio ponderado y todas las salidas al coste medio (1.3.4) solo la mueven los
+   * redondeos y los saldos negativos (con saldo ≤ 0 la entrada manda). null sin datos.
+   */
+  diferenciaValorCache: number | null;
+  /** descuadres 0, diferencia 0 y las dos de arriba 0. Si alguna es null (no se pudo leer),
+   *  false: «no comprobado» no es «en cero». */
+  todoEnCero: boolean;
 };
 export function resumenControles(
   c: ControlCompras | null,
   variantes: number | null,
   reservas: number | null,
+  diferenciaValorCache?: number | null,
 ): ResumenControles;
 ```
 
 Pruebas: una que cuadra, una con 0,01 de diferencia, una sin enlace (no cuenta como
-descuadre), una borrada y una no textil fuera, `todoEnCero`.
+descuadre), una borrada y una no textil fuera, `todoEnCero`; `todoEnCero` es `false` si
+`variantes` o `reservas` son `null`; `diferenciaValorCache` no lo cambia.
 
 ### 2.9 `pagos-proveedores.ts` (nuevo)
 
@@ -1318,7 +1515,7 @@ export type PagosProveedores = {
   porProveedor: DeudaProveedor[];
   tramos: TramoPago[];
 };
-/** Registradas, sin borrar y con estado_pago "pendiente"; importe = liquido ?? total; por proveedor_id, si no por NIF normalizado, si no por nombre; antigüedad desde la fecha. */
+/** Registradas, sin borrar y con estado_pago "pendiente"; importe = liquido ?? total; por proveedor_id, si no por claveNif(nif_proveedor), si no por claveTexto(proveedor); antigüedad desde la fecha. */
 export function pagosPendientesProveedores(
   compras: readonly CompraPendiente[],
   hoy: Date,
@@ -1335,13 +1532,21 @@ los bordes (30, 31, 60, 61, 90, 91 días); `liquido` nulo usa `total`; lista vac
   `unidades_por_pack?: number` y `pack_deducido?: boolean`. `normalizarCompra`: `tipo` con
   `tipoDeLinea`; textos con `texto()`; `ean` con `cifrasEan` (la validez la avisa
   `revisarCompra`); `unidades_por_pack` = el de la IA si es entero ≥ 1, si no
-  `packDesdeTexto(descripcion)` (con `pack_deducido: true`), si no 1; en líneas que no son
-  artículo con cantidad nula o 0: `cantidad 1` y `precio_unitario = importe`. `revisarCompra`
-  avisa «Línea N: el EAN X no es válido.» y «Línea N: pack deducido del texto (X uds): compruébalo.».
+  `packDesdeTexto(descripcion)` (con `pack_deducido: true`), si no 1. **Ninguna línea con
+  importe distinto de 0 se pierde por su cantidad**: si la cantidad es nula, 0 **o negativa**
+  (los abonos vienen a menudo como «−2 × 10,00 = −20,00»), queda `cantidad 1` y
+  `precio_unitario = importe`, y si además era `articulo` con importe negativo pasa a
+  `descuento`; se marca `cantidad_ajustada: true` (campo opcional nuevo de `LineaLeida`). Hoy
+  esas líneas las tira el filtro `cantidad > 0` de `procesarFactura` y la base deja de cuadrar
+  sin decir por qué. `revisarCompra` avisa «Línea N: el EAN X no es válido.», «Línea N: pack
+  deducido del texto (X uds): compruébalo.» y «Línea N: tenía cantidad X; queda como 1 ×
+  importe: compruébalo.».
   Pruebas nuevas para todo esto; las de antes siguen pasando.
-- `cola-compras.ts`: `esquemaLectura.lineas[]` añade `tipo: z.enum(TIPOS_LINEA_COMPRA)` y
-  `referencia`, `marca`, `modelo`, `color`, `talla`, `ean`, `unidades_por_pack` como `texto`
-  (string o null). `ESQUEMA_LECTURA_JSON`: esas ocho claves en `required` y en `properties`
+- `cola-compras.ts`: `esquemaLectura.lineas[]` añade `tipo: z.enum(TIPOS_LINEA_COMPRA).nullable().optional()` y
+  `referencia`, `marca`, `modelo`, `color`, `talla`, `ean`, `unidades_por_pack` como
+  `texto.optional()` (string o null; si falta, null). En zod son **tolerantes** a propósito: si
+  el modelo se deja una de estas claves o pone un tipo raro, no se pierde la lectura entera de
+  la factura (el tipo lo decide luego `tipoDeLinea`). `ESQUEMA_LECTURA_JSON`: esas ocho claves en `required` y en `properties`
   (`tipo: { type: "string", enum: [...TIPOS_LINEA_COMPRA] }`, el resto `tOn`). Pruebas
   actualizadas.
 - `compras.ts`: `lineaCompraNueva()` devuelve además `tipo: "articulo"` y
@@ -1356,13 +1561,19 @@ los bordes (30, 31, 60, 61, 90, 91 días); `liquido` nulo usa `total`; lista vac
 ```ts
 export const MIGRACION_ESCANER = "20261028100000";
 export const AVISO_MIGRACION_ESCANER =
-  "Falta aplicar la migración 20261028100000 (escáner textil: esquema, datos y reglas). " +
-  "Hasta entonces, Textil › Compras funciona como antes: casado a mano y sin repartir portes.";
+  "Faltan aplicar las migraciones 20261028100000, 20261028100100 y 20261028100200 " +
+  "(escáner textil: esquema, datos y reglas), en ese orden. Hasta entonces, Textil › Compras " +
+  "funciona como antes: casado a mano y sin repartir portes.";
 /** true si existe escaner_textil_version(); false si falta la migración; lanza otros errores. */
 export async function escanerAplicado(cliente: unknown): Promise<boolean>;
+/** El texto de 1.4 para un ErrorEscaner del dominio (2.1), con los números de
+ *  src/lib/format.ts («Línea 3: …», 1.234,56). Lo usan el servidor al lanzar y la interfaz. */
+export function mensajeErrorEscaner(e: ErrorEscaner): string;
 ```
 
-Se importa **solo** de forma estática (desde `*.functions.ts` y desde `gerencia.ts`).
+Se importa **solo** de forma estática (desde `*.functions.ts`, `gerencia.ts` y los componentes).
+El aviso nombra las tres migraciones: `escanerAplicado` mira la función de la **última**, así
+que con solo la primera aplicada decía «falta la 20261028100000» y no era verdad.
 
 ### 3.2 `src/lib/compras.functions.ts`
 
@@ -1372,23 +1583,27 @@ Se importa **solo** de forma estática (desde `*.functions.ts` y desde `gerencia
 - **Nueva** `guardarYRegistrarCompra` (POST). Entrada (zod, primera línea del validador):
 
   ```ts
-  const nuevaVarianteSchema = z.object({
-    producto_id: z.string().uuid().nullable(),
-    producto: z
-      .object({
-        marca: z.string().nullable(),
-        referencia: z.string().nullable(),
-        nombre: z.string().trim().min(1),
-        categoria: z.string().nullable(),
-      })
-      .nullable(),
-    color: z.string().nullable(),
-    talla: z.string().nullable(),
-    ean: z.string().nullable(),
-    sku: z.string().nullable(),
-    precio_venta: z.number().min(0),
-    cantidad_minima: z.number().min(0),
-  });
+  const nuevaVarianteSchema = z
+    .object({
+      producto_id: z.string().uuid().nullable(),
+      producto: z
+        .object({
+          marca: z.string().nullable(),
+          referencia: z.string().nullable(),
+          nombre: z.string().trim().min(1),
+          categoria: z.string().nullable(),
+        })
+        .nullable(),
+      color: z.string().nullable(),
+      talla: z.string().nullable(),
+      ean: z.string().nullable(),
+      sku: z.string().nullable(),
+      precio_venta: z.number().min(0),
+      cantidad_minima: z.number().min(0),
+    })
+    .refine((v) => v.producto_id !== null || v.producto !== null, {
+      message: "La variante nueva necesita un producto: elige uno o escribe el nuevo.",
+    });
   const lineaRegistroSchema = z.object({
     descripcion: z.string().trim().min(1),
     cantidad: z.number().positive(),
@@ -1418,9 +1633,9 @@ Se importa **solo** de forma estática (desde `*.functions.ts` y desde `gerencia
   2. EAN de cada línea y de cada `nueva_variante` con `normalizarEan`; si venía escrito y no es
      válido: en la línea se manda `null`; en `nueva_variante` → error «Línea N: el EAN X no es
      válido.».
-  3. Si `categoria === "textil"`: `conCostesDeEntrada(lineas, base)`; si no `ok`, error con el
-     primer mensaje. **El reparto del servidor es el que manda**; el del navegador solo se
-     enseña.
+  3. Si `categoria === "textil"`: `conCostesDeEntrada(lineas, base)`; si no `ok`, error con
+     `mensajeErrorEscaner(errores[0])`. **El reparto del servidor es el que manda**; el del
+     navegador solo se enseña.
   4. `const { adminComoUsuario } = await import("@/integrations/supabase/client.server")`;
      `llamarRpcConError<ResultadoRegistro>(adminComoUsuario(context.userId),
 "textil_compra_guardar_y_registrar", { _compra, _usuario_id: context.userId })`.
@@ -1436,7 +1651,19 @@ false }`.
 - `subirFacturaRecibida`: acepta en el `FormData` el campo opcional `categoria` (solo
   `"textil"`; otro valor → error). Con él, la fila nace con `categoria: "textil"` y se llama a
   `procesarFactura(…, { categoria: "textil" })`.
-- `listCompras`: devuelve además `escaner: boolean` (`escanerAplicado(context.supabase)`).
+- `listCompras`: devuelve además `escaner: boolean` (`escanerAplicado(context.supabase)`). El
+  `select` de las líneas pasa a `"*, lineas:textil_compra_lineas!compra_id(*)"` (pista por
+  columna; vale con y sin la migración). Con la migración, `textil_stock_movimientos` tiene FK a
+  `textil_compras` **y** a `textil_compra_lineas`: según la versión de PostgREST puede verla
+  como tabla puente y responder `PGRST201` («more than one relationship») al incrustar sin
+  pista, y la lista de compras dejaría de cargar.
+- **Todas** las pantallas registran con `guardarYRegistrarCompra`, también `RevisarCompra`
+  (categorías no textil, y textil sin la migración): mapea cada línea con `tipo: l.tipo ??
+"articulo"`, `referencia`/`marca`/`modelo`/`color`/`talla`/`ean` de la lectura o `null`,
+  `unidades_por_pack: l.unidades_por_pack ?? 1`, `nueva_variante: null` y `casado_metodo:
+stock_id ? "manual" : null`. Las server functions `guardarCompra` y `registrarCompra` se
+  quedan (compatibilidad), pero la interfaz deja de llamarlas.
+- **Nueva** `guardarProveedor` (POST, en `escaner-textil.functions.ts`, 3.5).
 
 ### 3.3 `src/lib/cola-compras.server.ts`
 
@@ -1473,15 +1700,16 @@ En cada línea, además:
 Todas con `requireSupabaseAuth`, zod en la primera línea, lecturas con `context.supabase` y
 `tabla()`. Tolerantes: sin la migración devuelven `disponible: false` y listas vacías.
 
-| Función                 | Método | Entrada                                                                                                                               | Salida                                                                                                                                                                                                                                             |
-| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `estadoEscanerTextil`   | GET    | —                                                                                                                                     | `{ aplicada: boolean }`                                                                                                                                                                                                                            |
-| `leerMemoriaEscaner`    | POST   | `{ proveedor_id?: uuid \| null, nif?: string \| null, proveedor?: string \| null }`                                                   | `{ disponible: boolean; proveedor: (Proveedor & { compras: number }) \| null; entradas: EntradaMemoria[] }` (resuelve por id; si no, por `nif_clave = normalizarNif(nif)`; si no, por `nombre_clave = claveTexto(proveedor)` con `nif_clave = ''`) |
-| `olvidarMemoriaEscaner` | POST   | `{ id: uuid }`                                                                                                                        | `{ ok: true }` (DELETE con `context.supabase`)                                                                                                                                                                                                     |
-| `listProveedores`       | GET    | —                                                                                                                                     | `{ disponible: boolean; proveedores: Proveedor[] }`                                                                                                                                                                                                |
-| `listProductosTextil`   | GET    | —                                                                                                                                     | `{ disponible: boolean; productos: ProductoTextil[] }`                                                                                                                                                                                             |
-| `guardarProductoTextil` | POST   | `{ id?: uuid, marca: string \| null, referencia: string \| null, nombre: string min 1, categoria: string \| null, activo?: boolean }` | `{ id }`; `unique_violation` → «Ya existe un producto con esa marca y referencia (o ese nombre).»                                                                                                                                                  |
-| `fusionarVariantes`     | POST   | `{ origen: uuid, destino: uuid }`                                                                                                     | resultado de `textil_stock_fusionar` vía `adminComoUsuario(context.userId)` con `_usuario_id`; sin la función → error `AVISO_MIGRACION_ESCANER`                                                                                                    |
+| Función                 | Método | Entrada                                                                                                                               | Salida                                                                                                                                                                                                                                                                                                 |
+| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `estadoEscanerTextil`   | GET    | —                                                                                                                                     | `{ aplicada: boolean }`                                                                                                                                                                                                                                                                                |
+| `leerMemoriaEscaner`    | POST   | `{ proveedor_id?: uuid \| null, nif?: string \| null, proveedor?: string \| null }`                                                   | `{ disponible: boolean; proveedor: (Proveedor & { compras: number }) \| null; entradas: EntradaMemoria[] }` (resuelve por id; si no, por `nif_clave = claveNif(nif)`; si no, por `nombre_clave = claveTexto(proveedor)` con `nif_clave = ''`)                                                          |
+| `olvidarMemoriaEscaner` | POST   | `{ id: uuid }`                                                                                                                        | `{ ok: true }` (DELETE con `context.supabase`)                                                                                                                                                                                                                                                         |
+| `listProveedores`       | GET    | —                                                                                                                                     | `{ disponible: boolean; proveedores: Proveedor[] }`                                                                                                                                                                                                                                                    |
+| `listProductosTextil`   | GET    | —                                                                                                                                     | `{ disponible: boolean; productos: ProductoTextil[] }`                                                                                                                                                                                                                                                 |
+| `guardarProductoTextil` | POST   | `{ id?: uuid, marca: string \| null, referencia: string \| null, nombre: string min 1, categoria: string \| null, activo?: boolean }` | `{ id }`; `unique_violation` → «Ya existe un producto con esa marca y referencia (o ese nombre).»                                                                                                                                                                                                      |
+| `fusionarVariantes`     | POST   | `{ origen: uuid, destino: uuid }`                                                                                                     | resultado de `textil_stock_fusionar` vía `adminComoUsuario(context.userId)` con `_usuario_id`; sin la función → error `AVISO_MIGRACION_ESCANER`                                                                                                                                                        |
+| `guardarProveedor`      | POST   | `{ id: uuid, nombre: string min 1, nif: string \| null, activo: boolean }`                                                            | `{ ok: true }` con `context.supabase` (autor por JWT); `unique_violation` → «Ya hay otro proveedor con ese NIF (o ese nombre, sin NIF).». Sirve para corregir un NIF o un nombre mal leídos; no toca las compras (conservan el texto de su factura). Fusionar dos proveedores queda fuera (sección 8). |
 
 ### 3.6 `src/lib/textil.functions.ts`
 
@@ -1491,11 +1719,19 @@ Todas con `requireSupabaseAuth`, zod en la primera línea, lecturas con `context
 - `upsertStockItem`: el esquema acepta además `producto_id: uuid nullable optional` y
   `ean: string nullable optional` (normalizado con `normalizarEan`; escrito y no válido → error
   «El EAN X no es válido.»). Al **editar** nunca manda `cantidad` ni `coste_unitario`. Si el
-  `update`/`insert` falla con `faltaLaColumna`, se repite sin `producto_id` ni `ean`. Al crear,
-  igual que hoy (movimiento `inicial` si hay existencias). `unique_violation` del EAN → «Ese EAN
-  ya lo tiene otra variante.».
+  `update`/`insert` falla con `faltaLaColumna`, se repite sin `producto_id` ni `ean`.
+  **Al crear, la variante nace sin existencias y sin coste** (`cantidad 0`, `coste_unitario 0`,
+  sin movimiento `inicial`): decisión 3, «todo entra por factura». El esquema deja de aceptar
+  `cantidad` y `coste_unitario` (los ignora si llegan, para no romper un cliente viejo). Lo que
+  aparezca en el almacén sin factura entra por «Recuento» (`ajuste_inventario`), que se ve en
+  Resultados (5.2). Un coste escrito a mano en una variante sin historia, además, alimentaría
+  el precio recomendado (2.6) con un dato inventado. `unique_violation` del EAN → «Ese EAN ya lo
+  tiene otra variante.»; el de `textil_stock_variante_unica` → «Ya hay una variante activa de
+  ese producto con ese color y esa talla.».
 - `registrarMovimientoStock`: `motivo` ∈ {`merma`, `ajuste_inventario`, `devolucion_cliente`,
-  `devolucion_proveedor`} (fuera `compra`); acepta `compra_id: uuid nullable optional` (solo con
+  `devolucion_proveedor`} (fuera `compra`); **sin `coste_unitario`**: siempre manda 0 y el coste
+  lo pone la base (1.3.4: salidas al coste medio; devolución de cliente al de su venta o al
+  medio; ajuste al alza al medio). Acepta `compra_id: uuid nullable optional` (solo con
   `devolucion_proveedor`; si la columna no existe, se manda sin él).
 - `upsertPresupuesto`: **no lanza** por falta de stock. Devuelve `{ id, avisos: string[] }`
   (mismos textos que hoy: «Camiseta …: solicitado 5, disponible 3»). Para eso,
@@ -1506,6 +1742,8 @@ Todas con `requireSupabaseAuth`, zod en la primera línea, lecturas con `context
   `coste_unit_snapshot` de la línea anterior con el mismo `stock_id` (si lo tenía);
   `confirmarPresupuestoTextil` copia el de cada línea del presupuesto. Si no hay anterior, se
   deja nulo y lo pone el trigger. El cliente **no** manda el coste (`itemSchema` no cambia).
+  Las líneas anteriores se leen **antes** del `delete` (hoy `itemsDelPedido` solo lee
+  `stock_id, cantidad`: tiene que leer también `coste_unit_snapshot` cuando la columna existe).
 
 ---
 
@@ -1526,14 +1764,22 @@ página; las tablas anchas, dentro de su contenedor con scroll).
 - Con ella, toda compra con `categoria === "textil"` (en Textil y en Compras generales) se revisa
   con **`RevisarCompraTextil`** y se registra con `guardarYRegistrarCompra`. Las demás categorías
   siguen con `RevisarCompra`, pero también registran con `guardarYRegistrarCompra` (atómico).
+  Si en `RevisarCompra` se cambia la categoría **a** textil, se cierra y se abre
+  `RevisarCompraTextil` con lo ya editado (cabecera y líneas); en `RevisarCompraTextil` la
+  categoría es fija y «Cambiar categoría» hace lo contrario. Así ninguna factura textil se
+  registra con el casado a mano y sin ver el reparto.
+- Botón «Proveedores» (diálogo, sin ruta nueva) en las dos pantallas de compras, con escáner:
+  lista de `listProveedores` y edición de nombre, NIF y activo con `guardarProveedor`.
 
 **Flujo: revisar y registrar una factura textil**
 
 1. Pulsar «Revisar» en la cola (o «A mano»). Se abre `RevisarCompraTextil` (diálogo ancho).
 2. Arriba: proveedor y NIF leídos (editables), número, fecha, base, tipo de IVA, total; si
    `leerMemoriaEscaner` lo encuentra: «Proveedor conocido: X · N compras · M referencias
-   aprendidas»; si no: «Proveedor nuevo: se dará de alta al registrar». Los motivos de revisión y
-   los duplicados, como en `RevisarCompra`.
+   aprendidas»; si no: «Proveedor nuevo: se dará de alta al registrar». Si la persona cambia el
+   NIF o el nombre, se vuelve a llamar a `leerMemoriaEscaner` y se recalcula el casado (el
+   `proveedor_id` viejo no se manda: daría E-REG-25). Los motivos de revisión y los duplicados,
+   como en `RevisarCompra`.
 3. Tabla de líneas (una fila por línea; en móvil, tarjetas): Tipo (`Select` con
    `ETIQUETAS_TIPO_LINEA`), Descripción, Referencia, Color, Talla, EAN, Cantidad, Uds/pack,
    Unidades (calculadas), Importe, **Coste de entrada por unidad** (del reparto) y **Variante**.
@@ -1548,6 +1794,10 @@ página; las tablas anchas, dentro de su contenedor con scroll).
      texto de la línea ya buscado) y «Crear variante» (abre `CrearVarianteDialog` con
      `nuevaVarianteDesdeLinea`). Si la memoria apuntaba a otra variante y se cambia, al registrar
      se reaprende sola (no hace falta «olvidar»).
+     **Pack de la memoria:** si el casado es `memoria` con `unidades_por_pack ≠ 1` y la línea
+     trae pack 1 sin haberlo leído ni deducido, se propone el de la memoria **a la vista**
+     («Pack de la memoria: 5 uds»), cambiable; nunca en silencio, porque cambia las unidades que
+     entran.
 5. Botón «Crear las variantes que faltan (N)»: el mismo diálogo en forma de tabla, una fila por
    línea sin casar, con el producto agrupado por marca + referencia.
 6. Pie del reparto (de `repartirCostes`, en vivo): «Portes, descuentos y otros: +12,50 €
@@ -1608,8 +1858,13 @@ Diálogo con dos modos: `"cantidades"` (presupuesto y pedido) y `"una"` (casado 
   guarda igual).
 - **Desde el stock**: si la dirección trae `?desde_stock=<id>,<id>,…` y el stock está cargado,
   se abre el diálogo de nuevo documento con `lineasDesdeStock(variantes elegidas)` y se quita el
-  parámetro (`navigate({ to: ".", search: …, replace: true })`). Ids que no existan se ignoran
-  con un aviso.
+  parámetro (`navigate({ to: ".", search: …, replace: true })`). Ids que no existan, inactivos
+  o repetidos se ignoran con un aviso.
+- Las dos rutas declaran `validateSearch: (s) => ({ desde_stock: typeof s.desde_stock ===
+"string" ? s.desde_stock : undefined })` en su `createFileRoute` (hoy no tienen
+  `validateSearch`, y sin él `navigate({ search: { desde_stock } })` desde `stock.tsx` no
+  compila). Es un cambio dentro del fichero de la ruta: **no** toca `src/routeTree.gen.ts`. El
+  parámetro es opcional, así que los `Link` que ya apuntan a estas rutas no cambian.
 
 ### 4.5 Textil › Stock (`src/routes/panel/textil/stock.tsx`)
 
@@ -1620,14 +1875,19 @@ Diálogo con dos modos: `"cantidades"` (presupuesto y pedido) y `"una"` (casado 
   Crear pedido · Quitar selección» → navega a `/panel/textil/presupuestos` o
   `/panel/textil/pedidos` con `search: { desde_stock: ids.join(",") }`.
 - `StockDialog`: producto (existente o nuevo, con `guardarProductoTextil` antes de guardar la
-  variante), EAN, precio de venta con «Recomendado…» (ⓘ `g_precio_recomendado`). Al **editar**,
-  el coste medio se ve pero **no se edita** («Lo calcula el libro de movimientos»).
+  variante; el `nombre` de la variante nueva se propone con el del producto y se puede
+  cambiar), EAN, precio de venta con «Recomendado…» (ⓘ `g_precio_recomendado`). **Al crear**,
+  sin campos de existencias ni de coste: debajo, «Las existencias entran con su factura (Textil ›
+  Compras) o con un recuento» (3.6). Al **editar**, el coste medio se ve pero **no se edita**
+  («Lo calcula el libro de movimientos»).
 - `EntradaDialog` (entrada por compra) **desaparece**. En su lugar, «Otro movimiento»:
   merma, devolución a proveedor (con la compra textil del proveedor, opcional), devolución de
-  cliente sin pedido y ajuste; cantidad positiva y el signo lo pone el motivo; sin coste (lo
-  congela la base). Debajo: «Las entradas por compra se registran con su factura en Textil ›
+  cliente sin pedido y ajuste; cantidad positiva y el signo lo pone el motivo (en el ajuste,
+  la persona elige «Sobran» o «Faltan»); sin coste (lo congela la base). Debajo: «Las entradas por compra se registran con su factura en Textil ›
   Compras».
-- Sin migración: sin columnas Producto/EAN/Repetida ni fusión; con el aviso.
+- Sin migración: sin columnas Producto/EAN/Repetida ni fusión; con el aviso. La pantalla lo sabe
+  con `estadoEscanerTextil` (3.5): `listStock` sigue devolviendo una lista (la usan también
+  `PaginaCompras`, presupuestos, pedidos y la portada de Textil) y no cambia de forma.
 
 ---
 
@@ -1635,22 +1895,22 @@ Diálogo con dos modos: `"cantidades"` (presupuesto y pedido) y `"una"` (casado 
 
 ### 5.1 Datos (`src/lib/gerencia.ts`, navegador, `tabla()` + `leerTodas`)
 
-| Gancho                               | Qué lee                                                                                                                                                                                                                                                                   | Tolerancia                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `useMovimientosAlmacen(hasta: Date)` | **Todos** los movimientos (paginado): `stock_id, motivo, cantidad, coste_unitario, created_at, fecha, compra_id`; el filtro por fecha efectiva lo hace el dominio. Devuelve `{ movimientos: MovimientoAlmacen[]; conFecha: boolean }`.                                    | `faltaLaColumna` → sin `fecha` ni `compra_id`, `conFecha: false`; `faltaLaTabla` → `null`. |
-| `useControlesAlmacen(rango)`         | Compras textil registradas con fecha en el rango (`id, numero, proveedor, fecha, base, categoria, estado` y `borrada_en` si existe); entradas `motivo = 'compra'` con `compra_id` en esas; `rpc('stock_descuadres')` y `rpc('stock_reservas_descuadres')` (contar filas). | Sin `compra_id`: `{ disponible: false }` y el aviso.                                       |
-| `usePagosProveedores()`              | Compras con `estado = 'registrada'` y `estado_pago = 'pendiente'` (cualquier fecha y categoría): `id, proveedor, nif_proveedor, proveedor_id, numero, fecha, liquido, total, estado, estado_pago, borrada_en`.                                                            | Sin `proveedor_id`, sin él; sin `estado_pago` (`20261014100000`), `null`.                  |
+| Gancho                               | Qué lee                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Tolerancia                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `useMovimientosAlmacen(hasta: Date)` | **Todos** los movimientos (paginado): `stock_id, motivo, cantidad, coste_unitario, created_at, fecha, compra_id, textil_pedido_id`; el filtro por fecha efectiva lo hace el dominio. Devuelve `{ movimientos: MovimientoAlmacen[]; conFecha: boolean }`.                                                                                                                                                                                                         | `faltaLaColumna` → sin `fecha` ni `compra_id`, `conFecha: false`; `faltaLaTabla` → `null`. |
+| `useControlesAlmacen(rango)`         | Compras textil registradas con fecha en el rango (`id, numero, proveedor, fecha, base, categoria, estado` y `borrada_en` si existe); entradas `motivo = 'compra'` con `compra_id` en esas (el `.in()` en trozos de 100 ids: una URL con cientos de UUID la corta PostgREST); `rpc('stock_descuadres')` y `rpc('stock_reservas_descuadres')` (contar filas); `textil_stock` (`cantidad, coste_unitario`) para `diferenciaValorCache` contra `valorAFecha` de hoy. | Sin `compra_id`: `{ disponible: false }` y el aviso.                                       |
+| `usePagosProveedores()`              | Compras con `estado = 'registrada'` y `estado_pago = 'pendiente'` (cualquier fecha y categoría): `id, proveedor, nif_proveedor, proveedor_id, numero, fecha, liquido, total, estado, estado_pago, borrada_en`.                                                                                                                                                                                                                                                   | Sin `proveedor_id`, sin él; sin `estado_pago` (`20261014100000`), `null`.                  |
 
 ### 5.2 Dónde va cada cifra
 
-| Sitio                                                                                                     | Qué se ve                                                                                                                                                                                                                  | Cálculo                                                      | ⓘ                                 |
-| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------- |
-| Gerencia › Textil, tarjeta nueva «Cuenta del almacén»                                                     | Tabla unidades / valor: Existencias al «desde» · + Compras · + Altas con existencias · + Devoluciones de clientes · − Coste de lo vendido · − Mermas · − Devoluciones a proveedores · ± Ajustes · = Existencias al «hasta» | `cuentaAlmacen(movs, desde, hasta)`                          | `g_almacen_cuenta`                |
-| Gerencia › Textil, tarjeta nueva «Controles del almacén»                                                  | Tres filas con ✓ o la cifra en rojo: compras textil frente a entradas (diferencia €, nº con descuadre, nº «anteriores al enlace»), variantes descuadradas, reservas descuadradas; lista de las compras con descuadre       | `controlComprasEntradas` + `resumenControles`                | `g_almacen_controles`             |
-| Gerencia › Textil, KPI «Valor del almacén»                                                                | Igual que hoy (caché, hoy)                                                                                                                                                                                                 | `resumenStock`                                               | `g_stock_valor` (texto ampliado)  |
-| Gerencia › Resultados, fila nueva «Mermas y ajustes de almacén» (detrás de «Amortizaciones», solo si ≠ 0) | Resta en A y en el total; 0 en B                                                                                                                                                                                           | `costeAlmacenPeriodo` → `resultadosPorGrupo({ …, almacen })` | `g_almacen_perdidas`              |
-| Gerencia › Tesorería, tarjeta nueva «Pagos pendientes a proveedores»                                      | KPI total y nº de facturas; tabla por proveedor (top 10 + «resto»); tramos 0–30 / 31–60 / 61–90 / +90 días; enlace «Ver facturas de compra» a `/panel/compras`                                                             | `pagosPendientesProveedores`                                 | `g_pagos_proveedores`             |
-| Informe PDF de socios, página nueva «Almacén» (después de «Gastos del periodo»)                           | La cuenta del almacén del periodo, el valor de hoy, los controles con ✓/✗ y los pagos pendientes a proveedores. Sin datos: «Sin datos del almacén para este periodo.»                                                      | `InformeAlmacen`                                             | textos de las mismas definiciones |
+| Sitio                                                                                                     | Qué se ve                                                                                                                                                                                                                                                                                                                                                                        | Cálculo                                                      | ⓘ                                 |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------- |
+| Gerencia › Textil, tarjeta nueva «Cuenta del almacén»                                                     | Tabla unidades / valor: Existencias al «desde» · + Compras · + Altas con existencias · + Devoluciones de clientes · − Coste de lo vendido · − Mermas · − Devoluciones a proveedores · ± Ajustes · = Existencias al «hasta»                                                                                                                                                       | `cuentaAlmacen(movs, desde, hasta)`                          | `g_almacen_cuenta`                |
+| Gerencia › Textil, tarjeta nueva «Controles del almacén»                                                  | Tres filas con ✓ o la cifra en rojo (o «No comprobado» si no se pudo leer): compras textil frente a entradas (diferencia €, nº con descuadre, nº «anteriores al enlace»), variantes descuadradas, reservas descuadradas; lista de las compras con descuadre; debajo, en gris y sin ✓/✗, «Valor según caché − valor según libro: X €» con su explicación (`diferenciaValorCache`) | `controlComprasEntradas` + `resumenControles`                | `g_almacen_controles`             |
+| Gerencia › Textil, KPI «Valor del almacén»                                                                | Igual que hoy (caché, hoy)                                                                                                                                                                                                                                                                                                                                                       | `resumenStock`                                               | `g_stock_valor` (texto ampliado)  |
+| Gerencia › Resultados, fila nueva «Mermas y ajustes de almacén» (detrás de «Amortizaciones», solo si ≠ 0) | Resta en A y en el total; 0 en B                                                                                                                                                                                                                                                                                                                                                 | `costeAlmacenPeriodo` → `resultadosPorGrupo({ …, almacen })` | `g_almacen_perdidas`              |
+| Gerencia › Tesorería, tarjeta nueva «Pagos pendientes a proveedores»                                      | KPI total y nº de facturas; tabla por proveedor (top 10 + «resto»); tramos 0–30 / 31–60 / 61–90 / +90 días; enlace «Ver facturas de compra» a `/panel/compras`                                                                                                                                                                                                                   | `pagosPendientesProveedores`                                 | `g_pagos_proveedores`             |
+| Informe PDF de socios, página nueva «Almacén» (después de «Gastos del periodo»)                           | La cuenta del almacén del periodo, el valor de hoy, los controles con ✓/✗ y los pagos pendientes a proveedores. Sin datos: «Sin datos del almacén para este periodo.»                                                                                                                                                                                                            | `InformeAlmacen`                                             | textos de las mismas definiciones |
 
 `grupos.ts`: `ColumnaResultados` añade `almacen: number`; `resultadosPorGrupo` acepta
 `almacen?: number` (va a A, como compras y amortizaciones) y
@@ -1669,8 +1929,8 @@ g_almacen_cuenta: {
   fuente: "Libro de movimientos del almacén textil, por la fecha del movimiento (en las compras, la de la factura). No depende de los filtros de tienda ni canal. El coste de lo vendido va por la fecha de salida y el «Coste de la ropa» de Resultados por la fecha del pedido: en un periodo pueden no coincidir.",
 },
 g_almacen_perdidas: {
-  que: "Lo que se ha perdido o encontrado en el almacén textil: mermas, recuentos y devoluciones a proveedores.",
-  calculo: "Mermas + devoluciones a proveedores − ajustes de inventario, cada movimiento a su coste congelado: un recuento que encuentra prendas resta coste y uno que no las encuentra lo suma. Va en A: la ropa se compró con factura.",
+  que: "Lo que se ha perdido o encontrado en el almacén textil fuera de los pedidos: mermas, recuentos, devoluciones a proveedores y devoluciones de clientes sin pedido.",
+  calculo: "Mermas + devoluciones a proveedores − ajustes de inventario − devoluciones de clientes sin pedido, cada movimiento a su coste congelado: un recuento que encuentra prendas resta coste y uno que no las encuentra lo suma. Lo que sale o vuelve con un pedido ya está en «Coste de la ropa» y no se cuenta aquí. Va en A: la ropa se compró con factura.",
   fuente: "Libro de movimientos del almacén textil con fecha en el periodo. El CRM todavía no recoge abonos de proveedor: una devolución cuesta aquí hasta que exista el abono.",
 },
 g_almacen_controles: {
@@ -1709,18 +1969,28 @@ Cambios en definiciones que ya existen:
 
 Ningún fichero está en dos equipos. Lo que no está en la tabla no se toca.
 
-| Equipo         | Ficheros (exactos)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **SQL**        | `supabase/migrations/20261028100000_escaner_textil_esquema.sql` (nuevo) · `supabase/migrations/20261028100100_escaner_textil_datos.sql` (nuevo) · `supabase/migrations/20261028100200_escaner_textil_reglas.sql` (nuevo) · `supabase/reversiones/20261028100000_escaner_textil_esquema.sql` (nuevo) · `supabase/reversiones/20261028100100_escaner_textil_datos.sql` (nuevo) · `supabase/reversiones/20261028100200_escaner_textil_reglas.sql` (nuevo) · `supabase/pruebas/C18_escaner_textil.sql` (nuevo) · `supabase/pruebas/probar-migraciones.sh` · `supabase/pruebas/60_stock_movimientos.sql` · `supabase/pruebas/70_stock_reservas.sql`                                       |
-| **DOMINIO**    | `src/dominio/tipos-textil.ts` (nuevo) · `src/dominio/normalizar-textil.ts` + `.test.ts` (nuevos) · `src/dominio/reparto-compra.ts` + `.test.ts` (nuevos) · `src/dominio/casado-textil.ts` + `.test.ts` (nuevos) · `src/dominio/stock-textil.ts` + `.test.ts` (nuevos) · `src/dominio/precio-recomendado.ts` + `.test.ts` (nuevos) · `src/dominio/cuenta-almacen.ts` + `.test.ts` (nuevos) · `src/dominio/controles-almacen.ts` + `.test.ts` (nuevos) · `src/dominio/pagos-proveedores.ts` + `.test.ts` (nuevos) · `src/dominio/factura-compra.ts` + `factura-compra.test.ts` · `src/dominio/cola-compras.ts` + `cola-compras.test.ts` · `src/dominio/compras.ts` + `compras.test.ts` |
-| **SERVIDOR**   | `src/lib/escaner-textil.ts` (nuevo) · `src/lib/escaner-textil.functions.ts` (nuevo) · `src/lib/compras.functions.ts` · `src/lib/cola-compras.server.ts` · `src/lib/lector-facturas.server.ts` · `src/lib/textil.functions.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **INTERFAZ**   | `src/components/compras/RevisarCompraTextil.tsx` (nuevo) · `src/components/textil/CrearVarianteDialog.tsx` (nuevo) · `src/components/textil/SelectorStockTextil.tsx` (nuevo) · `src/components/compras/PaginaCompras.tsx` · `src/components/compras/SubidaFacturas.tsx` · `src/components/compras/ColaRevision.tsx` · `src/components/textil/LineasEditor.tsx` · `src/routes/panel/textil/stock.tsx` · `src/routes/panel/textil/presupuestos.tsx` · `src/routes/panel/textil/pedidos.tsx`                                                                                                                                                                                            |
-| **CUENTAS**    | `src/lib/gerencia.ts` · `src/components/gerencia/Textil.tsx` · `src/components/gerencia/Resultados.tsx` · `src/components/gerencia/Tesoreria.tsx` · `src/components/gerencia/resumen-diario/ResumenDiario.tsx` · `src/lib/pdf-informe-socios.ts` · `src/dominio/definiciones.ts` · `src/dominio/grupos.ts` + `src/dominio/grupos.test.ts`                                                                                                                                                                                                                                                                                                                                            |
-| **ARQUITECTO** | `docs/escaner-textil/contrato.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Equipo         | Ficheros (exactos)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SQL**        | `supabase/migrations/20261028100000_escaner_textil_esquema.sql` (nuevo) · `supabase/migrations/20261028100100_escaner_textil_datos.sql` (nuevo) · `supabase/migrations/20261028100200_escaner_textil_reglas.sql` (nuevo) · `supabase/reversiones/20261028100000_escaner_textil_esquema.sql` (nuevo) · `supabase/reversiones/20261028100100_escaner_textil_datos.sql` (nuevo) · `supabase/reversiones/20261028100200_escaner_textil_reglas.sql` (nuevo) · `supabase/pruebas/C18_escaner_textil.sql` (nuevo) · `supabase/pruebas/probar-migraciones.sh` · `supabase/pruebas/60_stock_movimientos.sql` · `supabase/pruebas/70_stock_reservas.sql` · `supabase/pruebas/estado_migraciones_octubre.sql` |
+| **DOMINIO**    | `src/dominio/tipos-textil.ts` (nuevo) · `src/dominio/normalizar-textil.ts` + `.test.ts` (nuevos) · `src/dominio/reparto-compra.ts` + `.test.ts` (nuevos) · `src/dominio/casado-textil.ts` + `.test.ts` (nuevos) · `src/dominio/stock-textil.ts` + `.test.ts` (nuevos) · `src/dominio/precio-recomendado.ts` + `.test.ts` (nuevos) · `src/dominio/cuenta-almacen.ts` + `.test.ts` (nuevos) · `src/dominio/controles-almacen.ts` + `.test.ts` (nuevos) · `src/dominio/pagos-proveedores.ts` + `.test.ts` (nuevos) · `src/dominio/factura-compra.ts` + `factura-compra.test.ts` · `src/dominio/cola-compras.ts` + `cola-compras.test.ts` · `src/dominio/compras.ts` + `compras.test.ts`               |
+| **SERVIDOR**   | `src/lib/escaner-textil.ts` (nuevo) · `src/lib/escaner-textil.functions.ts` (nuevo) · `src/lib/compras.functions.ts` · `src/lib/cola-compras.server.ts` · `src/lib/lector-facturas.server.ts` · `src/lib/textil.functions.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **INTERFAZ**   | `src/components/compras/RevisarCompraTextil.tsx` (nuevo) · `src/components/textil/CrearVarianteDialog.tsx` (nuevo) · `src/components/textil/SelectorStockTextil.tsx` (nuevo) · `src/components/compras/PaginaCompras.tsx` · `src/components/compras/SubidaFacturas.tsx` · `src/components/compras/ColaRevision.tsx` · `src/components/textil/LineasEditor.tsx` · `src/routes/panel/textil/stock.tsx` · `src/routes/panel/textil/presupuestos.tsx` · `src/routes/panel/textil/pedidos.tsx`                                                                                                                                                                                                          |
+| **CUENTAS**    | `src/lib/gerencia.ts` · `src/components/gerencia/Textil.tsx` · `src/components/gerencia/Resultados.tsx` · `src/components/gerencia/Tesoreria.tsx` · `src/components/gerencia/resumen-diario/ResumenDiario.tsx` · `src/lib/pdf-informe-socios.ts` · `src/dominio/definiciones.ts` · `src/dominio/grupos.ts` + `src/dominio/grupos.test.ts`                                                                                                                                                                                                                                                                                                                                                          |
+| **ARQUITECTO** | `docs/escaner-textil/contrato.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Cambios en ficheros de pruebas viejos (SQL): en `60_stock_movimientos.sql` (casos 1 y 2) y
 `70_stock_reservas.sql` (la entrada inicial) el motivo `'compra'` pasa a `'inicial'` y el texto
-«compra» de los mensajes a «entrada»; nada más. Es lo que exige I2.
+«compra» de los mensajes a «entrada»; nada más. Es lo que exige I2 (las pruebas corren como
+superusuario, así que E-STK-2 no las para; las para la CHECK de 1.3.5).
+
+Ficheros que **nadie** toca (y por qué no hace falta): `src/routes/panel/textil/compras.tsx` y
+`src/routes/panel/compras.tsx` (solo montan `PaginaCompras`); `src/routes/panel/textil/index.tsx`
+(sigue con `listStock`, que no cambia de forma; el «bajo mínimo» con físico va a la sección 8);
+`src/dominio/textil.ts` (`costePorPedido`, `resumenStock`: no cambian); `src/lib/resumen-diario.ts`
+(lee columnas que siguen existiendo); `src/integrations/supabase/types.ts` (se sigue con
+`tabla()` y `llamarRpc`); `src/routeTree.gen.ts` (nunca); `supabase/pruebas/90_compras_textil.sql`,
+`C1`, `C2`, `C3`, `C5`, `C14` (tienen que pasar sin tocarlas: si alguna falla, el error está en
+la migración, no en la prueba).
 
 ---
 
@@ -1733,7 +2003,8 @@ En `probar-migraciones.sh`, al final de la lista:
 
 Estructura como `C17`: `BEGIN;`, `SET client_min_messages = warning;`, `\ir` de las **tres**
 migraciones **dos veces** (y en orden), `RESET client_min_messages;`, casos que imprimen
-`BIEN  n.` o `MAL   n.`, y `ROLLBACK;` al final. Usuario de prueba en `auth.users` +
+`BIEN  n.` o `MAL   n.`, y `ROLLBACK;` antes del caso 24, que va **fuera** de la transacción
+(1.0.4) y es lo último del fichero. Usuario de prueba en `auth.users` +
 `user_roles` admin; las llamadas a funciones de solo `service_role` se hacen como el
 superusuario de la prueba con ese `_usuario_id`; las de RLS con
 `set_config('request.jwt.claim.sub', …)` + `SET LOCAL ROLE authenticated` (como `C11`).
@@ -1801,8 +2072,31 @@ Casos (cada uno, al menos una línea BIEN/MAL):
 22. Auditoría: `proveedores`, `textil_productos` y `textil_referencias_proveedor` con un solo
     trigger `<tabla>_auditoria` y `tgtype & 127 = 29`. Ninguna FK nueva a `empresas` en cascada.
 23. `escaner_textil_version() = 1`.
-24. Reversión: aplicar las tres reversiones (200, 100, 000) y después las tres migraciones
-    (000, 100, 200) sin error; las columnas vuelven.
+24. Reversión (después del `ROLLBACK`): aplicar las tres reversiones (200, 100, 000) y después
+    las tres migraciones (000, 100, 200) sin error; las columnas vuelven y
+    `escaner_textil_version() = 1`. La base queda como tras aplicar todas las migraciones (con
+    la versión nueva de `textil_compra_registrar`, no la que dejó `C1`).
+25. Registrar a mano: como `authenticated`, `UPDATE textil_compras SET estado = 'registrada'`
+    de un borrador → E-CAB-6; `textil_compra_registrar` de la misma compra → bien.
+26. Entrada `compra` a mano: como `authenticated`, `INSERT` en `textil_stock_movimientos` con
+    motivo `compra` y la `compra_linea_id` de una línea ya registrada → E-STK-2; movimiento con
+    `compra_linea_id` y `compra_id` nulo → `check_violation` (`stock_linea_con_compra`).
+27. Gasto fijo: compra `servicios` registrada con `gasto_id`; borrar el gasto → bien y
+    `gasto_id` nulo; `UPDATE gasto_id` a otro gasto → E-CAB-3.
+28. Salida con coste escrito: merma −1 con `coste_unitario = 99` → queda al coste medio.
+29. Devolución tras fusión: venta −2 del pedido P desde la variante A a 4,00; fusionar A en B
+    (B a 9,00); devolución +1 del pedido P en B sin coste → queda a 4,00; las líneas del pedido
+    conservan su `coste_unit_snapshot`.
+30. Memoria ambigua: factura con dos artículos sin referencia, misma descripción, sin color ni
+    talla, a dos variantes distintas → `aprendidas` no los cuenta y no queda entrada con esa
+    clave; y la migración de datos no aprende una descripción que fue a dos variantes.
+31. Fecha futura → E-REG-23; `proveedor_id` de un proveedor con otro NIF → E-REG-25; factura sin
+    NIF de un proveedor que ya existía sin NIF con el mismo nombre y ahora trae NIF → no crea
+    otro: le pone el NIF.
+32. Acceso: usuario no miembro llama a `textil_compra_registrar` de una compra de otra empresa
+    → E-REG-2.
+33. Dos registros seguidos que crean la misma variante nueva (mismo producto, color y talla)
+    → la segunda la reutiliza (comprueba el `ON CONFLICT … WHERE` de 1.0.8).
 
 Además, con las migraciones nuevas, **todas** las pruebas viejas siguen en verde (en especial
 `60`, `70`, `90`, `99`, `C1`, `C2`, `C3`, `C5`, `C11`, `C14`) y el veredicto final dice «TODO
@@ -1819,7 +2113,9 @@ Antes de aplicar las migraciones (la aplicación ya desplegada):
 
 1. Textil › Compras, Stock, Presupuestos, Pedidos y Gerencia funcionan como antes, con el aviso
    de la migración donde toca. Un presupuesto con más cantidad que el disponible se guarda con
-   aviso (antes daba error).
+   aviso (antes daba error). Cambios a propósito que se notan ya: una variante nueva nace sin
+   existencias ni coste (entran con su factura o con un recuento) y «Entrada por compra»
+   desaparece de Stock.
 
 Después de aplicar `20261028100000`, `20261028100100` y `20261028100200` (en ese orden):
 
@@ -1870,3 +2166,249 @@ Después de aplicar `20261028100000`, `20261028100100` y `20261028100200` (en es
 9. La revisión de una factura no guarda el casado a medias: si se cierra sin registrar, al
    volver a abrirla se recalcula (la memoria lo recupera casi todo).
 10. Los consumibles (tinta, film) no tienen inventario; solo se comparan.
+11. `proveedor_clave` (columna generada de `20261015100000`, la que usa el índice de factura
+    duplicada) no quita el prefijo `ES` del NIF y `nif_clave` sí: «ESB12345678» y «B12345678»
+    son el mismo proveedor en `proveedores` pero no en la detección de duplicados.
+12. `costePorPedido` (`src/dominio/textil.ts`) redondea por pedido y la cuenta del almacén por
+    movimiento (I9): «Coste de la ropa» y «Coste de lo vendido» pueden diferir unos céntimos,
+    además de por la fecha (pedido frente a salida).
+13. `guardarPedidoTextil` no impide guardar líneas con variantes inactivas o repetidas (la
+    interfaz no las ofrece, pero el servidor no lo comprueba).
+14. No hay forma de fusionar dos proveedores (un NIF mal leído que creó uno de más): se corrige
+    el NIF con `guardarProveedor`, pero las compras y la memoria del sobrante no se pasan.
+15. `textil_stock_ean_unico` incluye las variantes desactivadas: un EAN de una variante retirada
+    no se puede usar en otra nueva hasta quitárselo o reactivarla.
+
+---
+
+## 9. Revisión del crítico (19-10-2026)
+
+Contrastado con el código y las migraciones de la rama. Cada cambio ya está aplicado arriba;
+aquí, el qué y el porqué.
+
+### Pérdida de información y descuadres
+
+1. **Clave de memoria sin talla** (1.1.1, 2.2, 1.2 D, 1.3.7 paso 4.9). Sin referencia, la clave
+   era solo la descripción: una factura con «Camiseta Heavy» en cinco tallas enseñaba a la
+   memoria a mandar las cinco a la última variante, y la siguiente factura entraba todo en una
+   talla. Ahora la clave `d:` lleva color y talla cuando la línea los trae; la memoria migrada y
+   la del registro **no aprenden** claves que fueron a variantes distintas (y el registro borra
+   la entrada que hubiera); `veces` cuenta facturas, no líneas; el casado solo usa la clave de
+   solo descripción si color y talla son compatibles.
+2. **Salidas a coste escrito** (1.3.4 paso 4, 3.6). `registrarMovimientoStock` aceptaba
+   `coste_unitario` y el trigger lo respetaba en las salidas: una merma a coste inventado
+   desligaba el valor del libro del de la caché. Ahora toda salida sale al coste medio y el
+   servidor ya no manda coste.
+3. **Devoluciones de cliente sin pedido no costaban en ningún sitio** (2.7, 5.3). Metían valor
+   en el almacén sin pasar por Resultados. `perdidas` pasa a ser todo lo que no es compra,
+   alta ni movimiento con pedido; se añade `textil_pedido_id` a `MovimientoAlmacen` y al
+   gancho; invariante nueva I10 y definición `g_almacen_perdidas` corregida.
+4. **Alta con existencias** (3.6, 4.5, 7.3). Crear una variante con cantidad y coste metía
+   stock sin factura y un coste inventado (que además alimentaba el precio recomendado):
+   contradice la decisión 3. La variante nace a 0; lo encontrado entra por recuento.
+5. **Líneas con cantidad negativa se perdían** (2.10). Un abono «−2 × 10,00» lo tiraba el filtro
+   `cantidad > 0` de la cola y la base dejaba de cuadrar sin explicación. Ahora queda como
+   `1 × importe`, pasa a descuento si era artículo negativo y se avisa.
+6. **Lectura de la IA frágil** (2.10). `tipo` como `z.enum` obligatorio hacía que un tipo raro
+   tirase la lectura entera de la factura. Ahora es tolerante y decide `tipoDeLinea`.
+7. **Fecha futura** (1.3.7, E-REG-23). Una fecha mal leída (2062) escondía las entradas de stock
+   de toda cuenta del almacén hasta ese año.
+8. **Proveedor partido en dos** (1.3.7 paso 2). Si llegaba primero sin NIF y luego con NIF, se
+   creaban dos y la memoria quedaba repartida. Ahora se completa el NIF del que ya existía. Y
+   `guardarProveedor` (3.5, 4.1) para corregir un NIF o nombre mal leídos.
+9. **Coste congelado reescrito** (1.3.6, 1.3.9). Retirar una variante (FK `SET NULL`) o
+   fusionarla cambiaba el `stock_id` de las líneas y el trigger tomaba el coste de la nueva.
+   Ahora se conserva en esos dos casos.
+10. **Devolución tras una fusión** (1.1.4, 1.3.4, 1.3.9). Las líneas del pedido pasan al destino
+    pero la venta salió del origen: la devolución no encontraba la venta y entraba al coste
+    medio. Columna nueva `fusionada_en` y búsqueda en las fusionadas. La fusión también mueve
+    las líneas de compras en borrador (si no, daban E-REG-17).
+11. **Diferencia de valor caché − libro** (2.8, 5.2). El control «caché vs libro» solo miraba
+    unidades; ahora se enseña también la diferencia de valor, informativa, y «no comprobado» ya
+    no cuenta como «en cero».
+
+### Agujeros de seguridad y de integridad
+
+12. **Registrar sin pasar por el registro** (1.3.2, E-CAB-6). Con la política `compras edicion`
+    cualquiera con sesión podía hacer `UPDATE … SET estado = 'registrada'` y dejar una compra
+    textil registrada sin stock ni reparto. Ahora solo pasa a registrada dentro de las
+    funciones `SECURITY DEFINER` (se mira `current_user`, no una bandera, para que la versión
+    vieja que deja `C1` siga funcionando en las pruebas).
+13. **Entradas `compra` a mano enlazadas a una línea** (1.3.4, E-STK-2). La FK y la CHECK
+    dejaban duplicar por PostgREST la entrada de una línea ya registrada. Ahora solo las
+    funciones de registro anotan entradas `compra`.
+14. **FK compuesta con `MATCH SIMPLE`** (1.1.7). Con `compra_id` nulo la FK no se comprobaba:
+    CHECK `stock_linea_con_compra`.
+15. **`textil_compra_registrar` sin control de empresa** (1.3.8). Es `SECURITY DEFINER` y la
+    ejecuta `authenticated`: registraba compras de cualquier empresa. Ahora comprueba
+    `es_miembro_empresa(auth.uid(), …)` cuando hay usuario.
+16. **`unique_violation` mal traducido** (1.3.7 paso 5). Cualquier único (EAN, variante,
+    memoria) habría salido como «factura ya registrada». Ahora solo el del índice
+    `textil_compras_factura_unica`, en su propio bloque.
+17. **NIF corregido con el proveedor viejo** (1.3.7, E-REG-25, 4.1). Si la persona corregía el NIF
+    en la revisión, se mandaba el `proveedor_id` del NIF anterior y la compra quedaba con el
+    proveedor equivocado.
+
+### Cosas que rompían lo que ya funciona
+
+18. **Borrar un gasto fijo** (1.3.2). `gasto_id` era inmutable en las registradas, pero la FK
+    `ON DELETE SET NULL` lo pone a nulo y `gerencia.functions.ts` borra gastos fijos: habría
+    fallado con E-CAB-3. Ahora se admite de un valor a nulo, y nada más.
+19. **Lista de compras con PostgREST** (3.2). Con la FK doble de movimientos a compras y
+    líneas, incrustar `textil_compra_lineas` sin pista puede dar `PGRST201`. Pista por columna
+    `!compra_id`.
+20. **`desde_stock` sin `validateSearch`** (4.4). Las rutas no declaran parámetros de búsqueda y
+    `navigate({ search: { desde_stock } })` no compila. `validateSearch` opcional en cada ruta,
+    sin tocar `routeTree.gen.ts`.
+21. **`RevisarCompra` y el registro nuevo** (3.2, 4.1). El esquema de `guardarYRegistrarCompra`
+    pide campos que `RevisarCompra` no tiene: se dice cómo rellenarlos. Y cambiar a textil desde
+    `RevisarCompra` abre `RevisarCompraTextil`.
+22. **Aviso de migración engañoso** (3.1). Con solo la primera migración aplicada decía que
+    faltaba esa. Ahora nombra las tres.
+
+### SQL que no habría pasado o no sería repetible
+
+23. **Regex del EAN rota por la tabla** (1.1.4). El `|` de la expresión se leía como separador de
+    columna y quedaba `'^([0-9]{8} | [0-9]{12,14})$'` (con espacios): copiada tal cual, ningún
+    EAN válido entraba. El CHECK va ahora en un bloque de código.
+24. **Reaplicar una `UNIQUE`** (1.0.7). Da `duplicate_table`, no `duplicate_object`: la
+    migración no se podía aplicar dos veces (C18 lo hace).
+25. **`ON CONFLICT` con índices parciales** (1.0.8). Sin repetir el predicado, Postgres no
+    encuentra el índice y el `INSERT` falla. Se dan las cinco formas exactas.
+26. **Reversiones dentro de `BEGIN … ROLLBACK`** (1.0.4, 7.1). Las reversiones llevan su
+    `COMMIT`: dentro de C18 habrían confirmado a medias la transacción de la prueba. El caso 24
+    va después del `ROLLBACK`.
+27. **`NOTIFY pgrst`** (1.0.6, 1.5). Sin recargar el esquema, PostgREST no ve las funciones
+    nuevas y el servidor caería al camino viejo creyendo que falta la migración.
+28. Casos nuevos 25–33 en C18 para todo lo anterior; diagnóstico de las tres migraciones en
+    `estado_migraciones_octubre.sql` (1.3.11, asignado a SQL).
+
+### Conflictos de nombres, capas y reparto
+
+29. **`normalizarNif`** ya existe en `src/dominio/clientes.ts` con otra regla (no quita `ES`).
+    El nuevo se llama `claveNif` (como `nif_clave` en SQL).
+30. **Formato en el dominio** (2, 2.3, 3.1). El contrato pedía un `numeroEs` propio en dominio:
+    duplicaba `src/lib/format.ts` contra CLAUDE.md. Los errores del dominio van sin texto
+    (`ErrorEscaner`) y el texto lo pone `mensajeErrorEscaner` con `format.ts`.
+31. **`margenPrevisto`** reutiliza `porcentajeMargen` de `margen.ts` (regla 7 de CLAUDE.md).
+32. **EAN canónico** (2.2). UPC-A de 12 cifras y GTIN-14 con 0 delante son el mismo artículo que
+    su EAN-13: sin normalizar, el casado por EAN fallaba según cómo lo imprima cada proveedor.
+33. **Casado por SKU** (2.4). Un SKU de modelo («5000») casaba todas las tallas con una variante.
+    Ahora tiene que ser único y compatible en color y talla, y un EAN distinto en la factura veta
+    la propuesta de la memoria o de la referencia.
+34. **Dependencias entre equipos** (0.5). `definiciones.ts` es de CUENTAS y lo usa INTERFAZ:
+    CUENTAS añade sus claves lo primero. Lista explícita de ficheros que nadie toca (6).
+35. **`fecha DATE` en movimientos** (1.1.7). Choca con «timestamptz siempre» de CLAUDE.md; se
+    deja como excepción justificada (fecha contable de calendario, igual que
+    `textil_compras.fecha`) y se dice en la cabecera de la migración.
+
+### Lo que se ha comprobado y está bien
+
+Que las pruebas `C2` y `C3` siguen pasando con el trigger de cabecera (el `UPDATE` de `C2` se
+hace cuando las cuotas aún no existen; ninguna prueba vieja escribe `estado = 'registrada'` a
+mano); que `C5` y `C14` solo registran compras sin líneas; que ninguna prueba vieja hace salidas
+con coste escrito; que `C11` no toca las políticas de compras; que `redondear` es simétrico
+(los dos ajustes de una fusión suman 0); los vectores de normalización de 2.2 contra el SQL de
+1.1.1; los repartos R1–R3 a mano; que `escaner-textil.ts`, `cola-compras.server` y
+`pdf-informe-socios` respetan la regla de importaciones mixtas.
+
+---
+
+## 10. Cambios durante la obra
+
+### DOMINIO (19-10-2026)
+
+1. **`tipo` tolerante en `esquemaLectura`** (2.10). `z.enum(TIPOS_LINEA_COMPRA).nullable().optional()`
+   rechaza un tipo raro y tiraba la lectura entera, contra lo que pide el mismo párrafo. Se
+   añade `.catch(null)`: un tipo desconocido queda en `null` y lo decide `tipoDeLinea`. Las otras
+   siete claves son `texto.optional().transform(v => v ?? null)` (si faltan, `null`).
+2. **Avisos de línea de `revisarCompra` sin «Línea N:»** (2.10). `motivosRevision` ya antepone
+   `Línea ${linea + 1}: ` a todo aviso con `linea`; con el prefijo dentro saldría dos veces. Los
+   mensajes son «el EAN X no es válido.», «pack deducido del texto (X uds): compruébalo.» y
+   «tenía cantidad X; queda como 1 × importe: compruébalo.», y en pantalla quedan exactamente
+   como pide el contrato.
+3. **`LineaLeida.cantidad_leida?: number`** (nuevo, opcional). Lo necesita el aviso de cantidad
+   ajustada para decir la X original. Solo se rellena junto con `cantidad_ajustada: true`.
+4. **`puntosParecido`**: el +20 de color y el +20 de talla solo cuentan si la línea **trae**
+   color o talla. Con `mismoColor(null, null) = true` (dos sin color son el mismo, y así lo
+   necesita el paso 4 de referencia), una línea sin color ni talla daba 40 puntos regalados a
+   cualquier variante sin color ni talla que compartiera una sola palabra.
+5. **Parecido y EAN**: el veto por EAN (pasos 2 y 4) también se aplica a las sugerencias del
+   paso 5: una variante con otro EAN válido no se sugiere.
+6. **Referencia ambigua**: las sugeridas del paso 4 llevan los puntos de `puntosParecido`, el
+   motivo «Misma referencia, color y talla» y como mucho `MAX_SUGERENCIAS`.
+7. **Memoria migrada**: el intento con `claveMemoriaDescripcion` solo se hace si no hay entrada
+   con la clave completa (al pie de la letra de 2.4); si la hay y su variante no vale (inactiva,
+   repetida o vetada por EAN), se pasa al EAN sin probar la migrada.
+8. **`nuevaVarianteDesdeLinea`**: `sku: null` (no se copia la referencia: un SKU de modelo no
+   casa, 2.4) y `ean` = `normalizarEan(linea.ean)` (un EAN que no vale no se propone; la base
+   solo admite EAN normalizados).
+9. **`agruparPorProducto`** sin `incluirInactivas` deja fuera también las **repetidas** (no se
+   venden). **`buscarProductos`** con varias palabras exige que estén todas (cada una por
+   «claveTexto contiene»).
+10. **`fechaEfectiva`** devuelve `""` si no hay `fecha` ni `created_at` válidos: cuenta como
+    anterior a cualquier fecha (existencias iniciales), en vez de perderse.
+11. **`cuentaAlmacen`**: un motivo desconocido va a `ajustes` (con signo) para que la identidad
+    no se rompa.
+12. **`pagosPendientesProveedores`**: las etiquetas de tramo son «Hasta 30 días», «De 31 a 60
+    días», «De 61 a 90 días» y «Más de 90 días»; una compra sin fecha (no debería: E-REG-5) va al
+    primer tramo; sin nombre ni NIF, el proveedor se llama «Sin proveedor». La antigüedad se
+    cuenta en días de calendario desde el día de `hoy` en Madrid.
+13. **`controlComprasEntradas`**: en una fila `sin_enlace`, `diferencia` = 0 − base (informativa);
+    no entra en `diferenciaTotal`. Orden: descuadres, sin enlace, cuadradas; dentro, la más
+    reciente primero.
+14. **`normalizar-textil.ts`** exporta además `ACENTOS` y `SIN_ACENTOS`; **`stock-textil.ts`**
+    exporta además `utilizable(v)` (activa y no repetida), que usa el casado.
+
+### SQL (19-10-2026)
+
+Ninguno impedía implementar el contrato; son huecos que se han cerrado en el SQL. El banco
+(`probar-migraciones.sh`, con `C18`) da «TODO EN VERDE».
+
+1. **Fusión con coste 0 en el origen** (1.3.4, 1.3.9). Con la regla 2 de 1.3.4, la entrada
+   `ajuste_inventario` del destino a coste 0 tomaba el coste medio del destino: los dos ajustes
+   de la fusión no sumaban 0 y entraba valor de la nada. La fusión pone `app.fusion_variantes`
+   desde el paso 2 (no solo en el 4) y, con ella, `stock_aplicar_movimiento` deja la entrada al
+   coste del origen (aunque sea 0) y **siempre** recalcula la media. Los dos ajustes suman 0 y
+   la caché sigue valiendo lo mismo que el libro.
+2. **Coste congelado al editar una línea sin coste** (1.3.6). En `UPDATE`, mientras la línea siga
+   en la misma variante (o la variante se retire o se fusione), se conserva el coste de `OLD`
+   **también si era nulo**: así una línea vieja no se «rellena» desde el maestro al editarla. Solo
+   al pasar a otra variante se toma el coste de la nueva.
+3. **Nombre en blanco** (1.2 A, 1.3.1). Una variante con `nombre` en blanco daría un producto que
+   no cumple `producto_nombre` y la migración no podría poner `NOT NULL`. Esas variantes van al
+   producto «(sin nombre)», en la migración y en el trigger.
+4. **Mensajes que no estaban en 1.4**: `Línea %: el producto no es de esta empresa.` (42501, la
+   `nueva_variante.producto_id` es de otra empresa) y `La variante no existe.` (P0002, en la
+   fusión). `textil_compra_registrar` da `La compra no existe.` con P0002 (antes P0001).
+5. **E-REG-19 también al reutilizar** (1.3.7 paso 4.6): si la `nueva_variante` cae en una
+   variante que ya existía y su EAN lo tiene **otra**, error; si la que existía no tiene EAN, se le
+   pone.
+6. **Números en los mensajes**: coma decimal y sin separador de miles (`trim_scale` para unidades
+   y costes unitarios, dos decimales para importes); la fecha de E-REG-23, `DD/MM/AAAA`.
+7. **Memoria migrada** (1.2 D): la ambigüedad se mira sobre todas las líneas de la clave, con la
+   variante «resuelta» (`COALESCE(fusionada_en, id)`), y solo se aprende si esa variante está
+   activa y no repetida. El pack y la última compra son los de la línea más reciente.
+8. **Reversión de datos** (1.5.2): «compra registrada con el escáner» = tiene entradas de stock
+   con `compra_id` o líneas con `casado_metodo`; esas conservan su proveedor de migración.
+9. **Pruebas**: C18 también comprueba E-REG-1, 11, 12, 13 y 7, E-CAB-5, la FK compuesta con una
+   línea de otra compra, la RLS de borrado y que el libro y las reservas cuadran al final.
+
+### INTEGRADOR (20-10-2026)
+
+1. **Sin las migraciones, una factura textil con portes se podía dejar de registrar** (3.2,
+   paso 5). El camino viejo bloqueaba con `AVISO_MIGRACION_ESCANER` toda factura textil con una
+   línea que no fuera artículo, y la IA ya marca los portes y descuentos: hasta aplicar las
+   migraciones no se habría podido registrar ninguna factura textil con portes, que hoy sí se
+   registra. Ahora solo bloquea lo que el camino viejo perdería: una `nueva_variante`, o una
+   línea **casada con una variante** que no sea artículo o tenga `unidades_por_pack ≠ 1`. Los
+   portes y descuentos sin variante no mueven stock, como siempre.
+2. **Sin las migraciones, el reparto no bloquea** (3.2, paso 3). Si `conCostesDeEntrada` da error
+   (por ejemplo, las líneas no suman la base: E-REG-14), el servidor mira `escanerAplicado`: con
+   las migraciones, lanza el error; sin ellas, registra por el camino viejo, como hoy (sin
+   reparto ni comprobación al céntimo, que la base aún no tiene).
+3. **`lineaDesdeFila`, `lineaEnvioSimple`, `tipoDe`, `packDe`, `textoONulo` y el tipo
+   `LineaEnvio`** pasan de `RevisarCompraTextil.tsx` a `src/lib/escaner-textil.ts`: un fichero
+   de componentes que exporta funciones rompe el refresco en caliente (dos avisos nuevos de
+   `react-refresh/only-export-components`). `compras.functions.ts` y
+   `escaner-textil.functions.ts` usan el mismo `textoONulo` en vez de una copia cada uno.

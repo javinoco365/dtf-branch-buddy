@@ -332,6 +332,8 @@ describe("líneas de una factura recibida", () => {
   it("una línea nueva cuadra desde el principio", () => {
     const nueva = lineaCompraNueva();
     expect(nueva).toMatchObject({ cantidad: 1, precio_unitario: 0, importe: 0 });
+    // Escáner textil: una línea a mano es un artículo suelto.
+    expect(nueva).toMatchObject({ tipo: "articulo", unidades_por_pack: 1 });
     expect(cambiarLineaCompra(nueva, { precio_unitario: 12.4 }).importe).toBe(12.4);
   });
 

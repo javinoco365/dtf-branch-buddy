@@ -199,6 +199,8 @@ export type ColumnaResultados = {
   /** Facturas de compra que cuestan el día de la factura. */
   compras: number;
   amortizacion: number;
+  /** Mermas, ajustes y devoluciones a proveedor del almacén textil (siempre A). */
+  almacen: number;
   bai: number;
   sociedades: number;
   neto: number;
@@ -208,7 +210,8 @@ export type ColumnaResultados = {
  * La cuenta de resultados en tres columnas: A, B y el total.
  *
  * - A: las ventas con documento y lo facturado sin pedido, los gastos con
- *   justificante, las compras y amortizaciones (todas llevan factura) y el
+ *   justificante, las compras, las amortizaciones y las mermas y ajustes del
+ *   almacén textil (todo lleva factura: la ropa se compró con ella) y el
  *   Impuesto sobre Sociedades, que se calcula solo sobre A.
  * - B: las ventas sin documento, su coste variable y los gastos sin
  *   justificante. Sin impuesto.
@@ -224,6 +227,8 @@ export function resultadosPorGrupo(d: {
   /** Compras y amortizaciones del periodo, sin IVA: van en A. */
   compras?: number;
   amortizacion?: number;
+  /** Mermas y ajustes del almacén textil del periodo (`costeAlmacenPeriodo`): van en A. */
+  almacen?: number;
   tipoIs: number;
 }): { a: ColumnaResultados; b: ColumnaResultados; total: ColumnaResultados } {
   const columna = (
@@ -232,6 +237,7 @@ export function resultadosPorGrupo(d: {
     fijos: number,
     compras: number,
     amortizacion: number,
+    almacen: number,
     conIs: boolean,
   ) => {
     const c = cifrasGerencia(ventas, d.costeActual);
@@ -239,7 +245,7 @@ export function resultadosPorGrupo(d: {
     // la agencia, gasto: los ingresos son la base entera, con el envío.
     const ingresos = redondear(c.base + extra);
     const margen = redondear(ingresos - c.coste - c.costeEnvios);
-    const bai = redondear(margen - fijos - compras - amortizacion);
+    const bai = redondear(margen - fijos - compras - amortizacion - almacen);
     const sociedades = conIs && bai > 0 ? redondear((bai * d.tipoIs) / 100) : 0;
     return {
       ingresos,
@@ -250,6 +256,7 @@ export function resultadosPorGrupo(d: {
       costesFijos: redondear(fijos),
       compras: redondear(compras),
       amortizacion: redondear(amortizacion),
+      almacen: redondear(almacen),
       bai,
       sociedades,
       neto: redondear(bai - sociedades),
@@ -261,9 +268,18 @@ export function resultadosPorGrupo(d: {
     d.costesFijos.a,
     d.compras ?? 0,
     d.amortizacion ?? 0,
+    d.almacen ?? 0,
     true,
   );
-  const b = columna(ventasDelGrupo(d.ventas, d.documentados, "b"), 0, d.costesFijos.b, 0, 0, false);
+  const b = columna(
+    ventasDelGrupo(d.ventas, d.documentados, "b"),
+    0,
+    d.costesFijos.b,
+    0,
+    0,
+    0,
+    false,
+  );
   const suma = (k: keyof ColumnaResultados) => redondear(a[k] + b[k]);
   const total: ColumnaResultados = {
     ingresos: suma("ingresos"),
@@ -274,6 +290,7 @@ export function resultadosPorGrupo(d: {
     costesFijos: suma("costesFijos"),
     compras: suma("compras"),
     amortizacion: suma("amortizacion"),
+    almacen: suma("almacen"),
     bai: suma("bai"),
     sociedades: a.sociedades,
     neto: redondear(suma("bai") - a.sociedades),

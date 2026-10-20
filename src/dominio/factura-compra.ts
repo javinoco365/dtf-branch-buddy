@@ -22,6 +22,8 @@
  */
 
 import { redondear } from "./importes";
+import { cifrasEan, eanValido, packDesdeTexto, tipoDeLinea } from "./normalizar-textil";
+import type { TipoLineaCompra } from "./tipos-textil";
 
 /** Lo que se acepta como descuadre. Un céntimo por línea es redondeo del proveedor. */
 export const TOLERANCIA = 0.02;
@@ -33,6 +35,26 @@ export type LineaLeida = {
   importe: number;
   /** Lo que dijera el proveedor: "ud", "m", "cajas"… Informativo. */
   unidad?: string | null;
+  /** Artículo, porte, descuento u otro cargo (escáner textil). */
+  tipo?: TipoLineaCompra;
+  referencia?: string | null;
+  marca?: string | null;
+  modelo?: string | null;
+  color?: string | null;
+  talla?: string | null;
+  /** Solo cifras; puede no ser válido (lo avisa `revisarCompra`). */
+  ean?: string | null;
+  /** Unidades de cada pack, caja o lote. 1 si se vende suelto. */
+  unidades_por_pack?: number;
+  /** El pack no lo dijo la IA: se sacó de la descripción. Hay que comprobarlo. */
+  pack_deducido?: boolean;
+  /**
+   * La cantidad leída era nula, 0 o negativa con un importe distinto de 0: queda
+   * como 1 × importe para no perder la línea. Hay que comprobarlo.
+   */
+  cantidad_ajustada?: boolean;
+  /** La cantidad que se leyó, si se ajustó. */
+  cantidad_leida?: number;
 };
 
 export type CompraLeida = {
@@ -135,7 +157,7 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
 
   const lineas: LineaLeida[] = lineasBrutas.map((l) => {
     const x = (l ?? {}) as Record<string, unknown>;
-    const cantidad = aNumero(x.cantidad) ?? 0;
+    let cantidad = aNumero(x.cantidad) ?? 0;
     let precio = aNumero(x.precio_unitario);
     let importe = aNumero(x.importe);
 
@@ -146,12 +168,45 @@ export function normalizarCompra(bruto: unknown): CompraLeida {
       importe = redondear(cantidad * precio);
     }
 
+    const descripcion = String(x.descripcion ?? "").trim();
+    let tipo = tipoDeLinea(x.tipo, descripcion, importe ?? 0);
+
+    // Ninguna línea con importe se pierde por su cantidad: «−2 × 10,00 = −20,00»
+    // (un abono) o una cantidad sin leer quedan como 1 × importe, y se avisa.
+    const ajuste: Pick<LineaLeida, "cantidad_ajustada" | "cantidad_leida"> = {};
+    if (cantidad <= 0 && importe !== null && importe !== 0) {
+      ajuste.cantidad_ajustada = true;
+      ajuste.cantidad_leida = cantidad;
+      cantidad = 1;
+      precio = importe;
+      if (tipo === "articulo" && importe < 0) tipo = "descuento";
+    }
+
+    const packIa = aNumero(x.unidades_por_pack);
+    const packValido = packIa !== null && Number.isInteger(packIa) && packIa >= 1;
+    const packTexto = packValido ? null : packDesdeTexto(descripcion);
+    const pack: Pick<LineaLeida, "unidades_por_pack" | "pack_deducido"> =
+      packValido && packIa !== null
+        ? { unidades_por_pack: packIa }
+        : packTexto !== null
+          ? { unidades_por_pack: packTexto, pack_deducido: true }
+          : { unidades_por_pack: 1 };
+
     return {
-      descripcion: String(x.descripcion ?? "").trim(),
+      descripcion,
       cantidad,
       precio_unitario: precio ?? 0,
       importe: importe ?? 0,
-      unidad: typeof x.unidad === "string" && x.unidad.trim() ? x.unidad.trim() : null,
+      unidad: texto(x.unidad),
+      tipo,
+      referencia: texto(x.referencia),
+      marca: texto(x.marca),
+      modelo: texto(x.modelo),
+      color: texto(x.color),
+      talla: texto(x.talla),
+      ean: cifrasEan(typeof x.ean === "string" || typeof x.ean === "number" ? String(x.ean) : null),
+      ...pack,
+      ...ajuste,
     };
   });
 
@@ -197,6 +252,23 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
   }
 
   c.lineas.forEach((l, i) => {
+    // Los avisos de línea van sin «Línea N:»: lo pone quien los enseña
+    // (motivosRevision), con la posición de `linea`.
+    if (l.ean && !eanValido(l.ean)) {
+      avisos.push({ linea: i, mensaje: `el EAN ${l.ean} no es válido.` });
+    }
+    if (l.pack_deducido) {
+      avisos.push({
+        linea: i,
+        mensaje: `pack deducido del texto (${l.unidades_por_pack} uds): compruébalo.`,
+      });
+    }
+    if (l.cantidad_ajustada) {
+      avisos.push({
+        linea: i,
+        mensaje: `tenía cantidad ${l.cantidad_leida ?? 0}; queda como 1 × importe: compruébalo.`,
+      });
+    }
     if (!l.descripcion) {
       avisos.push({ linea: i, mensaje: "Línea sin descripción." });
     }

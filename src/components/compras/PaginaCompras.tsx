@@ -48,21 +48,24 @@ import {
   PackageCheck,
   Paperclip,
   Trash2,
+  Users,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { revisarCompra, type CompraLeida } from "@/dominio/factura-compra";
 import {
   adjuntarFicheroCompra,
   borrarCompra,
-  guardarCompra,
+  guardarYRegistrarCompra,
   hayLector,
   leerFacturaCompra,
   listCompras,
   pagarCompra,
-  registrarCompra,
   verFicheroCompra,
 } from "@/lib/compras.functions";
+import { guardarProveedor, listProveedores } from "@/lib/escaner-textil.functions";
+import { AVISO_MIGRACION_ESCANER, lineaDesdeFila, lineaEnvioSimple } from "@/lib/escaner-textil";
 import { listStock } from "@/lib/textil.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
@@ -71,11 +74,14 @@ import { deCompra, nombreZip } from "@/dominio/archivo";
 import { SubidaFacturas } from "./SubidaFacturas";
 import { ColaRevision } from "./ColaRevision";
 import {
-  avisoDuplicado,
-  avisosQueImportan,
-  bloqueaRegistro,
-  duplicadosDe,
-} from "@/dominio/cola-compras";
+  Campo,
+  FicheroRevision,
+  RevisarCompraTextil,
+  TarjetaQueMirar,
+  type ExtraRegistro,
+  type Revision,
+} from "./RevisarCompraTextil";
+import { avisosQueImportan, bloqueaRegistro, duplicadosDe } from "@/dominio/cola-compras";
 import {
   calcularCompra,
   cambiarLineaCompra,
@@ -100,34 +106,6 @@ import { totalesCompras } from "@/dominio/sumatorios-facturas";
  * y, si es el recibo de un gasto fijo, el gasto al que corresponde.
  */
 type Modo = "textil" | "general";
-
-type Revision = {
-  compra: CompraLeida;
-  asignaciones: (string | null)[];
-  lectura: string | null;
-  /** Vacía hasta que se elige: no se adivina qué es una factura. */
-  categoria: string;
-  gasto_id: string | null;
-  /** En tanto por uno. Nulo si la cuota leída no la explica ningún tipo: se elige. */
-  tipo_iva: number | null;
-  tipo_irpf: number;
-  /** Si el líquido no cuadra, cuál vale. Nulo hasta que se elige. */
-  origen: "calculado" | "factura" | null;
-  nota: string;
-  concepto: string;
-  forma_pago: string | null;
-  /** Si viene de la cola: la fila que se confirma, y por qué había que mirarla. */
-  id?: string;
-  motivos?: string | null;
-  fichero_huella?: string | null;
-  /**
-   * El fichero de la factura, para guardarlo al registrar: el que se leyó o el
-   * que se adjunta a mano. Las de la cola ya tienen el suyo guardado.
-   */
-  fichero?: File | null;
-  /** Confirmado que no es un duplicado (mismo proveedor, fecha e importe). */
-  otraFactura?: boolean;
-};
 
 /** Está en la cola: la leyó la IA y nadie la ha confirmado, o no se pudo leer. */
 const enCola = (c: any) => c.revision === "pendiente" || c.revision === "error";
@@ -174,7 +152,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   // Con la migración de facturas recibidas, la base calcula los importes.
   const recibidas = data?.recibidas === true;
   // Con la migración de la cola: subir varias, revisarlas y avisar de duplicados.
-  const cola = general && data?.cola === true;
+  // En Textil › Compras también: las que se suben ahí nacen como textil.
+  const cola = data?.cola === true;
+  // Con la migración del escáner textil: casado automático, reparto de portes
+  // y registro en una sola transacción.
+  const escaner = data?.escaner === true;
+  const [viendoProveedores, setViendoProveedores] = useState(false);
   const ajustesFn = useServerFn(leerAjustesGerencia);
   const { data: ajustes } = useQuery({
     queryKey: ["gerencia-ajustes"],
@@ -207,16 +190,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       iva: Number(c.iva ?? 0),
       irpf: Number(c.irpf ?? 0),
       total: Number(c.total ?? 0),
+      // Con la migración del escáner, cada línea trae su tipo, referencia,
+      // color, talla, EAN y pack; sin ella, quedan como artículo suelto.
       lineas: (c.lineas ?? [])
         .slice()
         .sort((a: any, b: any) => (a.orden ?? 0) - (b.orden ?? 0))
-        .map((l: any) => ({
-          descripcion: l.descripcion,
-          cantidad: Number(l.cantidad),
-          precio_unitario: Number(l.precio_unitario),
-          importe: Number(l.importe),
-          unidad: l.unidad ?? null,
-        })),
+        .map(lineaDesdeFila),
     };
     return {
       ...nueva(compra, null),
@@ -322,8 +301,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     onError: (e: any) => toast.error(e?.message ?? "No se pudo leer la factura"),
   });
 
-  const registrarFn = useServerFn(registrarCompra);
-  const guardarFn = useServerFn(guardarCompra);
+  const registrarFn = useServerFn(guardarYRegistrarCompra);
   const adjuntarFn = useServerFn(adjuntarFicheroCompra);
   const adjuntar = (id: string, fichero: File) => {
     const fd = new FormData();
@@ -356,35 +334,42 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       toast.error(e?.message ?? "No se pudo abrir el fichero");
     }
   }
+  /**
+   * Guarda y registra en una sola llamada (una transacción en la base). La
+   * revisión textil manda sus líneas casadas y el proveedor que encontró; la
+   * de siempre, las suyas con el casado a mano.
+   */
   const registrar = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (extra: ExtraRegistro | null) => {
       if (!revisando) throw new Error("Nada que registrar");
-      const { irpf, ...compra } = revisando.compra;
+      if (!revisando.compra.fecha) throw new Error("Falta la fecha de la factura.");
+      const { irpf, lineas: leidas, ...compra } = revisando.compra;
       const calculado = calcularCompra({
         base: compra.base,
         tipo_iva: revisando.tipo_iva ?? TIPO_IVA_GENERAL,
         tipo_irpf: revisando.tipo_irpf,
       });
       const descuadre = descuadreLiquido(calculado.liquido, compra.total) !== null;
-      const { id } = (await guardarFn({
+      const textil = revisando.categoria === "textil";
+      const r = await registrarFn({
         data: {
           ...compra,
+          fecha: revisando.compra.fecha,
           // De la cola: se confirma la fila que leyó la IA.
           ...(revisando.id ? { id: revisando.id } : {}),
           ...(revisando.otraFactura
             ? { notas: "Confirmada como factura distinta (mismo proveedor, fecha e importe)." }
             : {}),
-          // Las columnas nuevas solo se mandan desde la pantalla general.
-          ...(general
-            ? { irpf, categoria: revisando.categoria, gasto_id: revisando.gasto_id }
-            : {}),
+          categoria: revisando.categoria,
+          // Las columnas de compras generales solo se mandan desde esa pantalla.
+          ...(general ? { irpf, gasto_id: revisando.gasto_id } : {}),
           // Los tipos, con la migración de facturas recibidas: la base calcula
           // los importes con ellos.
           ...(recibidas
             ? {
                 tipo_iva: revisando.tipo_iva ?? TIPO_IVA_GENERAL,
                 tipo_irpf: revisando.tipo_irpf,
-                ...(general
+                ...(general || textil
                   ? {
                       liquido_origen:
                         descuadre && revisando.origen === "factura"
@@ -392,40 +377,36 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           : ("calculado" as const),
                       nota_descuadre:
                         descuadre && revisando.origen === "factura" ? revisando.nota : null,
-                      concepto: revisando.concepto || null,
-                      forma_pago: revisando.forma_pago,
                     }
+                  : {}),
+                ...(general
+                  ? { concepto: revisando.concepto || null, forma_pago: revisando.forma_pago }
                   : {}),
               }
             : {}),
           lectura_ia: revisando.lectura,
-          lineas: revisando.compra.lineas.map((l, i) => ({
-            descripcion: l.descripcion,
-            cantidad: l.cantidad,
-            precio_unitario: l.precio_unitario,
-            importe: l.importe,
-            unidad: l.unidad ?? null,
-            stock_id: revisando.categoria === "textil" ? revisando.asignaciones[i] : null,
-          })),
+          proveedor_id: extra?.proveedor_id ?? null,
+          lineas:
+            extra?.lineas ??
+            leidas.map((l, i) =>
+              lineaEnvioSimple(l, textil ? (revisando.asignaciones[i] ?? null) : null),
+            ),
         },
-      })) as { id: string };
-      const r = await registrarFn({ data: { id } });
+      });
       // El fichero, después de registrar: si falla, la compra ya está bien
       // registrada y el fichero se adjunta desde la lista.
       let sinFichero: string | null = null;
       if (revisando.fichero) {
         try {
-          await adjuntar(id, revisando.fichero);
+          await adjuntar(r.id, revisando.fichero);
         } catch (e: any) {
           sinFichero = e?.message ?? "error desconocido";
         }
       }
       return { ...r, sinFichero };
     },
-    onSuccess: (r: any) => {
-      toast.success(
-        r.movidas > 0 ? `${r.movidas} línea(s) dadas de alta en el stock` : "Factura registrada",
-      );
+    onSuccess: (r) => {
+      toast.success(textoRegistrada(r));
       if (r.sinFichero) {
         toast.warning(`No se pudo guardar el fichero: ${r.sinFichero}. Adjúntalo desde la lista.`);
       }
@@ -433,6 +414,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       qc.invalidateQueries({ queryKey: ["compras"] });
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
       qc.invalidateQueries({ queryKey: ["gerencia-compras"] });
+      qc.invalidateQueries({ queryKey: ["escaner-memoria"] });
+      qc.invalidateQueries({ queryKey: ["textil-productos"] });
+      qc.invalidateQueries({ queryKey: ["proveedores"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "No se pudo registrar la compra"),
   });
@@ -516,6 +500,11 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           >
             A mano
           </Button>
+          {escaner && (
+            <Button variant="outline" onClick={() => setViendoProveedores(true)}>
+              <Users className="h-4 w-4 mr-2" /> Proveedores
+            </Button>
+          )}
         </div>
       </div>
 
@@ -546,9 +535,19 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         </Card>
       )}
 
+      {!general && data && !escaner && (
+        <Card className="border-amber-500/50">
+          <CardContent className="flex gap-3 py-4 text-sm">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <p>{AVISO_MIGRACION_ESCANER}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {cola && (
         <SubidaFacturas
           deshabilitado={lector?.disponible === false}
+          categoria={general ? undefined : "textil"}
           alTerminarUna={() => qc.invalidateQueries({ queryKey: ["compras"] })}
         />
       )}
@@ -857,8 +856,31 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         )}
       </Dialog>
 
+      {viendoProveedores && <ProveedoresDialog onCerrar={() => setViendoProveedores(false)} />}
+
       <Dialog open={!!revisando} onOpenChange={(o) => !o && setRevisando(null)}>
-        {revisando && (
+        {revisando && escaner && revisando.categoria === "textil" && (
+          // Con el escáner, toda factura textil se revisa con el casado y el
+          // reparto: ninguna se registra casada a mano y sin ver los costes.
+          <RevisarCompraTextil
+            conTipos={recibidas}
+            todas={cola ? compras : []}
+            onDescartar={() => {
+              const fila = compras.find((c: any) => c.id === revisando.id);
+              setRevisando(null);
+              if (fila) setBorrando(fila);
+            }}
+            estado={revisando}
+            stock={stock}
+            onCambiar={setRevisando}
+            onRegistrar={(extra) => registrar.mutate(extra)}
+            registrando={registrar.isPending}
+            onCambiarCategoria={
+              general ? () => setRevisando({ ...revisando, categoria: "" }) : undefined
+            }
+          />
+        )}
+        {revisando && !(escaner && revisando.categoria === "textil") && (
           <RevisarCompra
             modo={modo}
             conTipos={recibidas}
@@ -872,7 +894,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
             gastos={gastos}
             stock={stock}
             onCambiar={setRevisando}
-            onRegistrar={() => registrar.mutate()}
+            onRegistrar={() => registrar.mutate(null)}
             registrando={registrar.isPending}
           />
         )}
@@ -953,7 +975,12 @@ function RevisarCompra({
       : [];
   const duplicadoQueBloquea = duplicados.find(bloqueaRegistro);
   const porConfirmar = duplicados.filter((d) => !bloqueaRegistro(d) && !d.borrada);
+  // Se guarda y se registra a la vez: sin fecha no se sabe en qué periodo cuenta.
+  const sinFecha = !compra.fecha;
+  const sinDescripcion = compra.lineas.some((l) => !l.descripcion.trim());
   const bloqueada =
+    sinFecha ||
+    sinDescripcion ||
     !!duplicadoQueBloquea ||
     (porConfirmar.length > 0 && !estado.otraFactura) ||
     (esTextil
@@ -989,53 +1016,14 @@ function RevisarCompra({
         </DialogDescription>
       </DialogHeader>
 
-      {(estado.motivos || duplicados.length > 0) && (
-        <Card className={duplicadoQueBloquea ? "border-destructive/60" : "border-amber-500/50"}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              Qué mirar antes de registrarla
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {duplicados.map((d, i) => (
-              <p
-                key={`d${i}`}
-                className={bloqueaRegistro(d) ? "font-medium text-destructive" : "font-medium"}
-              >
-                {avisoDuplicado(d)}
-                {bloqueaRegistro(d) && " No se puede registrar dos veces."}
-              </p>
-            ))}
-            {String(estado.motivos ?? "")
-              .split("\n")
-              .filter((m) => m && !m.startsWith("Este fichero") && !m.startsWith("Esta factura"))
-              .filter((m) => !m.startsWith("Posible duplicado"))
-              .map((m, i) => (
-                <p key={i} className="text-muted-foreground">
-                  {m}
-                </p>
-              ))}
-            {duplicados.length > 0 && estado.id && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button type="button" size="sm" variant="outline" onClick={onDescartar}>
-                  Es la misma: descartar
-                </Button>
-                {porConfirmar.length > 0 && !duplicadoQueBloquea && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={estado.otraFactura ? "default" : "outline"}
-                    onClick={() => onCambiar({ ...estado, otraFactura: !estado.otraFactura })}
-                  >
-                    Es otra factura
-                  </Button>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <TarjetaQueMirar
+        motivos={estado.motivos ?? null}
+        duplicados={duplicados}
+        conId={!!estado.id}
+        otraFactura={!!estado.otraFactura}
+        onDescartar={onDescartar}
+        onOtraFactura={() => onCambiar({ ...estado, otraFactura: !estado.otraFactura })}
+      />
 
       {avisos.length > 0 && (
         <Card className="border-amber-500/50">
@@ -1428,6 +1416,14 @@ function RevisarCompra({
       )}
 
       <DialogFooter className="items-center gap-3">
+        {sinFecha && (
+          <span className="text-sm text-muted-foreground mr-auto">
+            Falta la fecha de la factura.
+          </span>
+        )}
+        {sinDescripcion && (
+          <span className="text-sm text-muted-foreground mr-auto">Hay líneas sin descripción.</span>
+        )}
         {sinCasar > 0 && (
           <span className="text-sm text-muted-foreground mr-auto">
             {sinCasar} línea(s) sin asignar a un artículo.
@@ -1467,56 +1463,6 @@ function RevisarCompra({
   );
 }
 
-/**
- * El fichero de la factura que se va a registrar. Se guarda al registrar; sin
- * él se puede registrar igual (un recibo que no llegó, una compra antigua) y
- * adjuntarlo después desde la lista.
- */
-function FicheroRevision({
-  fichero,
-  onCambiar,
-}: {
-  fichero: File | null;
-  onCambiar: (f: File | null) => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
-      <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="flex-1 min-w-0 truncate">
-        {fichero ? (
-          <>
-            Se guardará el fichero <span className="font-medium">{fichero.name}</span>
-          </>
-        ) : (
-          <span className="text-muted-foreground">
-            Sin fichero. Puedes adjuntarlo ahora o después desde la lista.
-          </span>
-        )}
-      </span>
-      <input
-        ref={ref}
-        type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) onCambiar(f);
-        }}
-      />
-      <Button size="sm" variant="outline" onClick={() => ref.current?.click()}>
-        {fichero ? "Cambiar" : "Adjuntar fichero"}
-      </Button>
-      {fichero && (
-        <Button size="sm" variant="ghost" onClick={() => onCambiar(null)}>
-          Quitar
-        </Button>
-      )}
-    </div>
-  );
-}
-
 /** Cómo cuenta en Gerencia una factura de esa categoría, en una línea. */
 function explicarTrato(categoria: string): string {
   const c = categoriaCompra(categoria);
@@ -1532,26 +1478,146 @@ function explicarTrato(categoria: string): string {
   }
 }
 
-function Campo({
-  etiqueta,
-  valor,
-  onChange,
-  tipo = "text",
-}: {
-  etiqueta: string;
-  valor: string;
-  onChange: (v: string) => void;
-  tipo?: string;
-}) {
+/** «Registrada: 12 líneas al stock, 3 variantes nuevas, 9 referencias aprendidas». */
+function textoRegistrada(r: { movidas: number; variantes_creadas: number; aprendidas: number }) {
+  if (r.movidas <= 0) return "Factura registrada";
+  const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
+  const partes = [plural(r.movidas, "línea al stock", "líneas al stock")];
+  if (r.variantes_creadas > 0)
+    partes.push(plural(r.variantes_creadas, "variante nueva", "variantes nuevas"));
+  if (r.aprendidas > 0)
+    partes.push(plural(r.aprendidas, "referencia aprendida", "referencias aprendidas"));
+  return `Registrada: ${partes.join(", ")}`;
+}
+
+/**
+ * Los proveedores de las compras: corregir un NIF o un nombre mal leídos, o
+ * dejar de usar uno. Las compras ya registradas conservan el texto de su
+ * factura; esto no las toca.
+ */
+function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(listProveedores);
+  const { data, isLoading } = useQuery({ queryKey: ["proveedores"], queryFn: () => listFn() });
+  const guardarFn = useServerFn(guardarProveedor);
+  const [editando, setEditando] = useState<{
+    id: string;
+    nombre: string;
+    nif: string;
+    activo: boolean;
+  } | null>(null);
+  const guardar = useMutation({
+    mutationFn: (p: { id: string; nombre: string; nif: string | null; activo: boolean }) =>
+      guardarFn({ data: p }),
+    onSuccess: () => {
+      toast.success("Proveedor guardado");
+      setEditando(null);
+      qc.invalidateQueries({ queryKey: ["proveedores"] });
+      qc.invalidateQueries({ queryKey: ["escaner-memoria"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar el proveedor"),
+  });
+  const proveedores = data?.proveedores ?? [];
+
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{etiqueta}</Label>
-      <Input
-        type={tipo}
-        step={tipo === "number" ? "any" : undefined}
-        value={valor}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </div>
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Proveedores</DialogTitle>
+          <DialogDescription>
+            Se dan de alta solos al registrar una factura textil. Aquí se corrige un NIF o un nombre
+            mal leídos; las facturas ya registradas conservan el texto que traían.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : data?.disponible === false ? (
+          <p className="text-sm text-muted-foreground">{AVISO_MIGRACION_ESCANER}</p>
+        ) : proveedores.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Todavía no hay proveedores: nacen al registrar la primera factura textil.
+          </p>
+        ) : (
+          <Table movil="tarjetas">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>NIF</TableHead>
+                <TableHead>Activo</TableHead>
+                <TableHead aria-label="Acciones" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {proveedores.map((p) =>
+                editando?.id === p.id ? (
+                  <TableRow key={p.id}>
+                    <TableCell>
+                      <Input
+                        value={editando.nombre}
+                        onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={editando.nif}
+                        onChange={(e) => setEditando({ ...editando, nif: e.target.value })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={editando.activo}
+                        onCheckedChange={(activo) => setEditando({ ...editando, activo })}
+                        aria-label="Activo"
+                      />
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Button
+                        size="sm"
+                        disabled={!editando.nombre.trim() || guardar.isPending}
+                        onClick={() =>
+                          guardar.mutate({
+                            id: editando.id,
+                            nombre: editando.nombre.trim(),
+                            nif: editando.nif.trim() || null,
+                            activo: editando.activo,
+                          })
+                        }
+                      >
+                        Guardar
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditando(null)}>
+                        Cancelar
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.nombre}</TableCell>
+                    <TableCell className="font-mono text-xs">{p.nif ?? "—"}</TableCell>
+                    <TableCell>{p.activo ? "Sí" : <Badge variant="outline">No</Badge>}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setEditando({
+                            id: p.id,
+                            nombre: p.nombre,
+                            nif: p.nif ?? "",
+                            activo: p.activo,
+                          })
+                        }
+                      >
+                        Editar
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

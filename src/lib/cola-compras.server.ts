@@ -7,7 +7,7 @@
  * dinámicamente desde los handlers de `compras.functions.ts`.
  */
 
-import { tabla } from "./rpc";
+import { faltaLaColumna, tabla } from "./rpc";
 import { leerFactura } from "./lector-facturas.server";
 // Reexportado para que compras.functions lo cargue con el mismo import() que
 // el resto: lector-facturas.server ya se importa aquí de forma normal, y
@@ -62,6 +62,18 @@ export type Resultado =
   | { resultado: "pendiente"; id: string; motivos: string[] }
   | { resultado: "error"; id: string; motivo: string };
 
+/** Motivo de revisión cuando la base todavía no tiene las columnas de línea del escáner. */
+export const MOTIVO_SIN_COLUMNAS_ESCANER =
+  "Falta aplicar la migración 20261028100000: se han guardado las líneas sin tipo, talla, color ni referencia.";
+
+export type OpcionesProcesar = {
+  /**
+   * La factura se subió desde Textil › Compras: es textil, lo diga o no la IA
+   * (y no sale el motivo «La IA no sabe qué es»).
+   */
+  categoria?: "textil";
+};
+
 /**
  * Lee la factura de una fila de la cola y la deja pendiente de revisión, con
  * lo leído y sus motivos; o como error, con el motivo. La fila ya existe:
@@ -73,6 +85,7 @@ export async function procesarFactura(
   bytes: Uint8Array,
   tipoMime: string,
   aviso: string | null,
+  opciones?: OpcionesProcesar,
 ): Promise<Resultado> {
   const marcarError = async (motivo: string): Promise<Resultado> => {
     await tabla(supabase, "textil_compras")
@@ -86,7 +99,9 @@ export async function procesarFactura(
 
   try {
     const compra = normalizarCompra(r.lectura);
-    const avisos = avisosQueImportan(revisarCompra(compra), r.lectura.categoria);
+    // Subida desde Textil: la categoría no la decide la IA.
+    const categoria = opciones?.categoria ?? r.lectura.categoria;
+    const avisos = avisosQueImportan(revisarCompra(compra), categoria);
     const tipoIva = compra.base > 0 ? tipoProbable(compra.base, compra.iva) : null;
     const tipoIrpf = (compra.base > 0 && tipoIrpfProbable(compra.base, compra.irpf)) || 0;
 
@@ -118,7 +133,7 @@ export async function procesarFactura(
         dudas: r.lectura.dudas,
         avisos,
         tipoIva,
-        categoria: r.lectura.categoria,
+        categoria,
         duplicados,
       }),
       ...(lineas.length < compra.lineas.length
@@ -133,7 +148,7 @@ export async function procesarFactura(
         numero: compra.numero,
         fecha: compra.fecha,
         concepto: r.lectura.concepto,
-        categoria: r.lectura.categoria ?? "otros",
+        categoria: categoria ?? "otros",
         base: compra.base,
         iva: compra.iva,
         irpf: compra.irpf,
@@ -151,17 +166,38 @@ export async function procesarFactura(
     const borradas = await tabla(supabase, "textil_compra_lineas").delete().eq("compra_id", id);
     if (borradas.error) throw new Error(borradas.error.message);
     if (lineas.length > 0) {
-      const { error: errLineas } = await tabla(supabase, "textil_compra_lineas").insert(
-        lineas.map((l, i) => ({
-          compra_id: id,
-          descripcion: l.descripcion,
-          cantidad: l.cantidad,
-          precio_unitario: l.precio_unitario,
-          importe: l.importe,
-          unidad: l.unidad ?? null,
-          orden: i,
-        })),
-      );
+      const deSiempre = lineas.map((l, i) => ({
+        compra_id: id,
+        descripcion: l.descripcion,
+        cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario,
+        importe: l.importe,
+        unidad: l.unidad ?? null,
+        orden: i,
+      }));
+      // Con la migración 20261028100000, además lo que la IA leyó de la prenda.
+      const conEscaner = lineas.map((l, i) => ({
+        ...deSiempre[i],
+        tipo: l.tipo ?? "articulo",
+        referencia: l.referencia ?? null,
+        marca: l.marca ?? null,
+        modelo: l.modelo ?? null,
+        color: l.color ?? null,
+        talla: l.talla ?? null,
+        ean: l.ean ?? null,
+        unidades_por_pack: l.unidades_por_pack ?? 1,
+      }));
+      let { error: errLineas } = await tabla(supabase, "textil_compra_lineas").insert(conEscaner);
+      if (faltaLaColumna(errLineas)) {
+        ({ error: errLineas } = await tabla(supabase, "textil_compra_lineas").insert(deSiempre));
+        if (!errLineas) {
+          motivos.push(MOTIVO_SIN_COLUMNAS_ESCANER);
+          const { error: errMotivo } = await tabla(supabase, "textil_compras")
+            .update({ revision_motivo: motivos.join("\n") })
+            .eq("id", id);
+          if (errMotivo) throw new Error(errMotivo.message);
+        }
+      }
       if (errLineas) throw new Error(errLineas.message);
     }
     return { resultado: "pendiente", id, motivos };

@@ -310,7 +310,7 @@ export function cambiarLineaCompra<L extends LineaLeida>(linea: L, cambios: Part
 /** Una línea en blanco para escribirla a mano: una unidad a 0 €. */
 export function lineaCompraNueva(): LineaLeida {
   const linea = { descripcion: "", cantidad: 1, precio_unitario: 0, unidad: null };
-  return { ...linea, importe: importeLineaCompra(linea) };
+  return { ...linea, importe: importeLineaCompra(linea), tipo: "articulo", unidades_por_pack: 1 };
 }
 
 export const FORMAS_PAGO: readonly { valor: string; etiqueta: string }[] = [
