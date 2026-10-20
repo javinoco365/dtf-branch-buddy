@@ -10,6 +10,7 @@ import {
   pagoPrevisto,
   pasaFiltroDocumento,
   proformasSinFactura,
+  proformasTextil,
   PUNTOS_PROFORMA,
   regularizacionPrevista,
   resumenProformas,
@@ -420,6 +421,63 @@ describe("regularizacionPrevista", () => {
   });
 });
 
+describe("regularizacionPrevista con género de otra compra después de la proforma", () => {
+  it("la proforma ya vendida y 10 de otra factura a 2 €: no se ajusta nada (−50 sin aplicar)", () => {
+    const r = regularizacionPrevista({
+      proforma: [{ ...pro("s1", 10, 100), posteriores: 10 }],
+      factura: [art(0, "s1", 10, 50)],
+      stock: stock([["s1", 10, 2]]),
+      base_factura: 50,
+    });
+    expect(r.variantes[0]).toMatchObject({
+      unidades_ajustadas: 0,
+      importe_ajuste: 0,
+      importe_sin_aplicar: -50,
+    });
+    expect(r.movimientos).toBe(0);
+    expect(r.diferencia_sin_aplicar).toBe(-50);
+    expect(cuadra(r, 50)).toBe(true);
+  });
+
+  it("al revés (sube): tampoco se carga sobre el género de otro proveedor", () => {
+    const r = regularizacionPrevista({
+      proforma: [{ ...pro("s1", 10, 100), posteriores: 10 }],
+      factura: [art(0, "s1", 10, 110)],
+      stock: stock([["s1", 10, 2]]),
+      base_factura: 110,
+    });
+    expect(r.variantes[0]).toMatchObject({ unidades_ajustadas: 0, importe_sin_aplicar: 10 });
+  });
+
+  it("quedan 6, 4 de otra compra posterior: solo se ajustan las 2 de la proforma", () => {
+    const r = regularizacionPrevista({
+      proforma: [{ ...pro("s1", 10, 50), posteriores: 4 }],
+      factura: [art(0, "s1", 10, 60)],
+      stock: stock([["s1", 6, 5]]),
+      base_factura: 60,
+    });
+    expect(r.variantes[0]).toMatchObject({
+      unidades_ajustadas: 2,
+      importe_ajuste: 2,
+      importe_sin_aplicar: 8,
+    });
+    expect(cuadra(r, 60)).toBe(true);
+  });
+});
+
+describe("proformasTextil", () => {
+  it("deja solo las textiles; sin categoría cuenta como textil", () => {
+    const filas = [
+      fila("t1"),
+      fila("c1", { categoria: "consumibles" }),
+      fila("n1", { categoria: null }),
+      fila("m1", { categoria: "material" }),
+    ];
+    expect(proformasTextil(filas).map((f) => f.id)).toEqual(["t1", "n1"]);
+    expect(resumenProformas(proformasSinFactura(proformasTextil(filas), HOY)).proformas).toBe(2);
+  });
+});
+
 describe("devueltasAntesDeFactura", () => {
   it("solo las variantes con devueltas > 0", () => {
     expect(
@@ -475,7 +533,13 @@ describe("pagoPrevisto", () => {
         { estado_pago: "pagada", fecha_pago: "2026-10-02", liquido: 121, total: 121 },
         121,
       ),
-    ).toEqual({ pagada: true, fecha: "2026-10-02", diferencia: 0, revisarSiEnlazada: false });
+    ).toEqual({
+      pagada: true,
+      fecha: "2026-10-02",
+      diferencia: 0,
+      revisarSiEnlazada: false,
+      pendienteSiAMano: false,
+    });
   });
 
   it("pagada con otro líquido: el enlace quedaría por revisar", () => {
@@ -484,13 +548,24 @@ describe("pagoPrevisto", () => {
         { estado_pago: "pagada", fecha_pago: "2026-10-02", liquido: 121, total: 121 },
         125.5,
       ),
-    ).toMatchObject({ pagada: true, diferencia: 4.5, revisarSiEnlazada: true });
+    ).toMatchObject({
+      pagada: true,
+      diferencia: 4.5,
+      revisarSiEnlazada: true,
+      pendienteSiAMano: true,
+    });
   });
 
   it("pendiente con otro líquido (usa el total sin líquido): también por revisar si hay enlace", () => {
     expect(
       pagoPrevisto({ estado_pago: "pendiente", fecha_pago: null, liquido: null, total: "100" }, 99),
-    ).toEqual({ pagada: false, fecha: null, diferencia: -1, revisarSiEnlazada: true });
+    ).toEqual({
+      pagada: false,
+      fecha: null,
+      diferencia: -1,
+      revisarSiEnlazada: true,
+      pendienteSiAMano: false,
+    });
   });
 });
 

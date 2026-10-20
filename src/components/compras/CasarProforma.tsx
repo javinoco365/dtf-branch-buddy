@@ -269,6 +269,13 @@ function LineaPago({
           banco, ese enlace quedará por revisar.
         </p>
       )}
+      {pago.pendienteSiAMano && (
+        <p className="text-xs text-amber-700">
+          Si la proforma se marcó pagada a mano (sin enlace en el banco), la factura quedará
+          pendiente de pago: la diferencia de {eur(pago.diferencia)} no estaría pagada. Márcala
+          pagada cuando la pagues.
+        </p>
+      )}
     </div>
   );
 }
@@ -460,8 +467,11 @@ export function textoCasado(casado: ResumenCasado): string {
       `${p.grupos_revisar} conciliación${p.grupos_revisar === 1 ? "" : "es"} por revisar`,
     );
   }
-  partes.push(
-    p.estado_pago === "pagada" ? "la factura queda pagada" : "la factura queda pendiente",
-  );
+  if (p.estado_pago === "pagada") partes.push("la factura queda pagada");
+  else if (p.proforma_pagada && p.diferencia)
+    partes.push(
+      `la factura queda pendiente: la proforma se pagó a mano y el líquido difiere en ${eur(p.diferencia)}`,
+    );
+  else partes.push("la factura queda pendiente");
   return `Factura casada con su proforma: ${partes.join(", ")}.`;
 }

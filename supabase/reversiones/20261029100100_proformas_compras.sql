@@ -15,8 +15,8 @@
 -- Repone, copiadas tal cual: compra_registrada_cabecera(),
 -- stock_aplicar_movimiento(), stock_compra_solo_por_registro(),
 -- textil_compra_guardar_y_registrar() y textil_compra_registrar() de
--- 20261028100200_escaner_textil_reglas.sql; banco_enlazar_como() de
--- 20261017100000_conciliacion_motor.sql; banco_documentos(),
+-- 20261028100200_escaner_textil_reglas.sql; banco_enlazar_como() y
+-- banco_aplicar_efectos() de 20261017100000_conciliacion_motor.sql; banco_documentos(),
 -- banco_documentos_por_conciliar() (borrar y crear: cambia el tipo de
 -- retorno) y banco_enlaces() de 20261025100000_conciliacion_pendientes.sql;
 -- con sus permisos. Repone los CHECK stock_movimiento_no_cero,
@@ -1101,7 +1101,7 @@ GRANT EXECUTE ON FUNCTION public.banco_documentos_por_conciliar() TO authenticat
 GRANT EXECUTE ON FUNCTION public.banco_enlaces() TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- Copiada tal cual de 20261017100000_conciliacion_motor.sql
+-- Copiadas tal cual de 20261017100000_conciliacion_motor.sql
 -- ---------------------------------------------------------------------------
 -- _documentos: [{"tipo": "compra" | "factura" | "textil", "id": "…"}]
 CREATE OR REPLACE FUNCTION public.banco_enlazar_como(
@@ -1241,6 +1241,39 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.banco_enlazar_como(UUID, UUID[], JSONB, TEXT, TEXT)
   FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.banco_aplicar_efectos(_usuario_id UUID, _grupo UUID)
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_fecha DATE;
+  r RECORD;
+BEGIN
+  SELECT max(m.fecha) INTO v_fecha
+    FROM public.banco_conciliaciones c JOIN public.banco_movimientos m ON m.id = c.movimiento_id
+   WHERE c.grupo = _grupo;
+
+  FOR r IN SELECT DISTINCT compra_id FROM public.banco_conciliaciones
+            WHERE grupo = _grupo AND compra_id IS NOT NULL LOOP
+    UPDATE public.textil_compras SET estado_pago = 'pagada', fecha_pago = v_fecha
+     WHERE id = r.compra_id AND estado_pago = 'pendiente';
+    UPDATE public.banco_conciliaciones SET marco_pagada = FOUND
+     WHERE grupo = _grupo AND compra_id = r.compra_id;
+  END LOOP;
+
+  FOR r IN SELECT DISTINCT c.factura_id, f.estado
+             FROM public.banco_conciliaciones c JOIN public.facturas f ON f.id = c.factura_id
+            WHERE c.grupo = _grupo LOOP
+    IF r.estado IN ('emitida', 'vencida') THEN
+      PERFORM public.factura_cambiar_estado_cobro(_usuario_id, r.factura_id, 'pagada');
+    END IF;
+    UPDATE public.banco_conciliaciones SET marco_pagada = r.estado IN ('emitida', 'vencida')
+     WHERE grupo = _grupo AND factura_id = r.factura_id;
+  END LOOP;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.banco_aplicar_efectos(UUID, UUID) FROM PUBLIC, anon, authenticated;
 
 NOTIFY pgrst, 'reload schema';
 

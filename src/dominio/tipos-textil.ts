@@ -234,8 +234,15 @@ export type PagoTraspasado = {
   enlaces_movidos: number;
   grupos: number;
   grupos_revisar: number;
+  /** El de la factura tras casar. */
   estado_pago: "pendiente" | "pagada";
   fecha_pago: string | null;
+  /** Si la proforma estaba pagada. */
+  proforma_pagada?: boolean;
+  /** (liquido ?? total) de la proforma, al céntimo. */
+  liquido_proforma?: number;
+  /** líquido de la factura − liquido_proforma. */
+  diferencia?: number;
 };
 
 /** textil_compras.casado_resumen de la factura casada, y `casado` del resultado del registro. */

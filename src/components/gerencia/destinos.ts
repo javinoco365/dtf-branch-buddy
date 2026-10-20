@@ -145,9 +145,13 @@ export const DESTINO_AJUSTES: Destino = { to: "/panel/gerencia", search: { pesta
 
 export const DESTINO_CONCILIACION: Destino = { to: "/panel/conciliacion" };
 
-/** Las proformas que esperan su factura, en Textil › Compras. */
+/**
+ * Las proformas que esperan su factura, de todas las categorías, en Compras (general): el
+ * aviso de Gerencia y los anticipos de Tesorería cuentan todas. Textil › Compras solo lista
+ * las textiles.
+ */
 export const DESTINO_PROFORMAS_PENDIENTES: Destino = {
-  to: "/panel/textil/compras",
+  to: "/panel/compras",
   search: { documento: "proformas_pendientes" },
 };
 

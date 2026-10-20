@@ -56,7 +56,7 @@ import { diaRealizado } from "@/dominio/realizado";
 import { resumenPeriodo, type DocumentoParaResumen, type Resumen } from "@/dominio/resumen-diario";
 import { cuentaAlmacen, type InformeAlmacen } from "@/dominio/cuenta-almacen";
 import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
-import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
+import { proformasSinFactura, proformasTextil, resumenProformas } from "@/dominio/proformas";
 import { ErrorPestana, Nota } from "../comun";
 import { Esquema } from "./Esquema";
 import { Desglose } from "./Desglose";
@@ -199,8 +199,9 @@ function Contenido({
       valorHoy: controles?.disponible ? controles.valorCache : null,
       controles: resumenControlesAlmacen(controles, movs.movimientos, ahora),
       pagosProveedores: pagos ? { total: pagos.total, facturas: pagos.facturas } : null,
+      // Es el bloque del almacén textil: solo las proformas textiles.
       proformasSinFactura: proformasPendientes.data
-        ? resumenProformas(proformasSinFactura(proformasPendientes.data, ahora))
+        ? resumenProformas(proformasSinFactura(proformasTextil(proformasPendientes.data), ahora))
         : null,
     };
   }, [

@@ -530,6 +530,7 @@ export const entradasDeProforma = createServerFn({ method: "POST" })
       valor: Number(f.valor ?? 0),
       coste_unitario: Number(f.coste_unitario ?? 0),
       devueltas: Number(f.devueltas ?? 0),
+      posteriores: Number(f.posteriores ?? 0),
     }));
   });
 

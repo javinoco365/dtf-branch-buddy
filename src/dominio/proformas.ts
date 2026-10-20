@@ -112,6 +112,15 @@ export function proformasSinFactura<T extends ProformaFila>(
     }));
 }
 
+/**
+ * Solo las proformas textiles (sin categoría cuenta como textil, como en la lista de compras):
+ * lo que se enseña como cosa del almacén textil y lo que lista Textil › Compras.
+ * compras_proformas_pendientes() da las de todas las categorías.
+ */
+export function proformasTextil<T extends { categoria?: string | null }>(filas: readonly T[]): T[] {
+  return filas.filter((f) => (f.categoria ?? "textil") === "textil");
+}
+
 export type ResumenProformas = {
   proformas: number;
   /** Σ importe */
@@ -288,13 +297,16 @@ export function sugerirProformas<T extends ProformaFila>(
 // ---------------------------------------------------------------------------
 
 /** Una fila de proforma_entradas() (SQL 1.5). `devueltas`: uds devueltas a mano al proveedor
- *  enlazadas a la proforma; NO entran en la regularización (A2), solo se avisa. */
+ *  enlazadas a la proforma; NO entran en la regularización (A2), solo se avisa.
+ *  `posteriores`: uds que entraron en la variante de otros documentos después de la proforma
+ *  (sin el dato, 0). */
 export type EntradaProforma = {
   stock_id: string;
   unidades: number;
   valor: number;
   coste_unitario: number;
   devueltas: number;
+  posteriores?: number;
 };
 
 /** Un artículo de la factura con su coste de entrada ya repartido (reparto-compra.ts). */
@@ -322,8 +334,12 @@ function costeTrasEntrada(saldo: number, coste: number, cantidad: number, costeE
 /**
  * La regularización que hará la base (SQL 1.7), calculada antes para enseñarla.
  * Mismas reglas, mismos redondeos: cP = valor/unidades (8 dec.), cF = Σcoste/Σunidades (8 dec.),
- * entran/salen, m = min(P, F), teorico = round(m×d, 2), u = min(m, max(saldo0 − salen, 0)) con
- * saldo0 = cantidad actual (ANTES de entran: lo que entra ya va al coste de la factura),
+ * entran/salen, m = min(P, F), teorico = round(m×d, 2),
+ * u = min(m, max(saldo0 − posteriores − salen, 0)) con
+ * saldo0 = cantidad actual (ANTES de entran: lo que entra ya va al coste de la factura) y
+ * posteriores = lo que entró de otros documentos después de la proforma (lo que queda en el
+ * almacén es lo más nuevo: si la proforma ya se vendió, su diferencia no va al género de otra
+ * compra; decisión 7),
  * importe = round(u×d, 2), tope de coste ≥ 0 con −floor(saldo × cm × 100)/100, donde
  * saldo = saldo0 + entran − salen y cm = coste medio tras la entrada, ponderado y a 4 decimales
  * como el trigger (si saldo0 ≤ 0, cm = cF), diferencia_sin_aplicar con el valor
@@ -338,11 +354,13 @@ export function regularizacionPrevista(datos: {
   stock: ReadonlyMap<string, StockActual>;
   base_factura: number;
 }): RegularizacionStock {
-  const pro = new Map<string, { unidades: number; valor: number }>();
+  const pro = new Map<string, { unidades: number; valor: number; posteriores: number }>();
   for (const e of datos.proforma) {
-    const p = pro.get(e.stock_id) ?? { unidades: 0, valor: 0 };
+    const p = pro.get(e.stock_id) ?? { unidades: 0, valor: 0, posteriores: 0 };
     p.unidades += num(e.unidades);
     p.valor += num(e.valor);
+    // Es un dato de la variante, no de cada entrada: no se suma.
+    p.posteriores = Math.max(p.posteriores, num(e.posteriores));
     pro.set(e.stock_id, p);
   }
   const fac = new Map<string, { unidades: number; coste: number }>();
@@ -370,6 +388,7 @@ export function regularizacionPrevista(datos: {
   for (const v of claves) {
     const P = pro.get(v)?.unidades ?? 0;
     const valorP = pro.get(v)?.valor ?? 0;
+    const posteriores = pro.get(v)?.posteriores ?? 0;
     const F = fac.get(v)?.unidades ?? 0;
     const valorF = fac.get(v)?.coste ?? 0;
     const cP = P !== 0 ? redondear(valorP / P, 8) : null;
@@ -402,7 +421,7 @@ export function regularizacionPrevista(datos: {
     let importe = 0;
     if (teorico !== 0) {
       const saldo = saldo0 + entran - salen;
-      u = Math.min(m, Math.max(saldo0 - salen, 0));
+      u = Math.min(m, Math.max(saldo0 - posteriores - salen, 0));
       importe = redondear(u * d);
       if (saldo > 0 && saldo * cm + importe < 0) {
         importe = -Math.floor(redondear(saldo * cm * 100, 6)) / 100;
@@ -477,19 +496,29 @@ export function estadoFilaRegularizacion(f: FilaRegularizacion): EstadoFilaRegul
  * Lo que pasará con el pago al casar (línea informativa de la revisión).
  * diferencia = redondear(liquidoFactura − (liquido ?? total) de la proforma);
  * revisarSiEnlazada = diferencia ≠ 0. La pantalla no sabe si el pago está enlazado en el banco
- * (la base pone el grupo en `revisar` solo si hay enlace, esté la proforma pagada o no; una
- * pagada a mano sin enlace no deja nada por revisar): el texto es condicional.
+ * (la base pone el grupo en `revisar` solo si hay enlace, esté la proforma pagada o no): el texto
+ * es condicional. La factura hereda «pagada» si el pago está enlazado o si el líquido es el mismo;
+ * una proforma pagada a mano (sin enlace) con otro líquido deja la factura pendiente
+ * (`pendienteSiAMano`), como hace la base, para que la diferencia no se pierda.
  */
 export function pagoPrevisto(
   proforma: Pick<ProformaFila, "estado_pago" | "fecha_pago" | "liquido" | "total">,
   liquidoFactura: number,
-): { pagada: boolean; fecha: string | null; diferencia: number; revisarSiEnlazada: boolean } {
+): {
+  pagada: boolean;
+  fecha: string | null;
+  diferencia: number;
+  revisarSiEnlazada: boolean;
+  pendienteSiAMano: boolean;
+} {
   const diferencia = redondear(liquidoFactura - num(proforma.liquido ?? proforma.total));
+  const pagada = proforma.estado_pago === "pagada";
   return {
-    pagada: proforma.estado_pago === "pagada",
+    pagada,
     fecha: proforma.fecha_pago ?? null,
     diferencia,
     revisarSiEnlazada: diferencia !== 0,
+    pendienteSiAMano: pagada && diferencia !== 0,
   };
 }
 

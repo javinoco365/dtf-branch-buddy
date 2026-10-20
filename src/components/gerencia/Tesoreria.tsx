@@ -26,6 +26,7 @@ import {
   destinoCobros,
   destinoPendientes,
   DESTINO_CONCILIACION,
+  DESTINO_PROFORMAS_PENDIENTES,
   type DatosGerencia,
 } from "./destinos";
 import { NotaGrupo, VerDetalle } from "./comun";
@@ -418,10 +419,7 @@ function AnticiposProveedores({ hoy }: { hoy: Date }) {
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Proformas pagadas que esperan su factura. No depende del periodo.{" "}
-          <VerDetalle
-            destino={{ to: "/panel/textil/compras", search: { documento: "proformas_pendientes" } }}
-            texto="Ver proformas"
-          />
+          <VerDetalle destino={DESTINO_PROFORMAS_PENDIENTES} texto="Ver proformas" />
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

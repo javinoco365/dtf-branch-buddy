@@ -48,13 +48,18 @@
 --      el stock como una factura) y, con proforma_id, casa la factura con su
 --      proforma en la misma transacción: no vuelve a meter el stock, regulariza
 --      la diferencia por variante (entran, salen y ajuste de coste), pasa los
---      enlaces del banco de la proforma a la factura y hereda su pago.
+--      enlaces del banco de la proforma a la factura y hereda su pago (salvo
+--      una proforma pagada a mano, sin enlace, con otro líquido: la factura
+--      queda pendiente). Bloquea las filas del banco antes que las compras,
+--      como el motor de conciliación.
 --   7. textil_compra_registrar() (camino viejo): rechaza proformas y facturas
 --      casadas.
 --   8. Conciliación: banco_documentos() y banco_documentos_por_conciliar() se
 --      recrean con una última columna tipo_documento, y la proforma casada
 --      deja de ser conciliable; banco_enlaces() la lleva en sus documentos;
 --      banco_enlazar_como() no concilia una proforma casada.
+--      banco_aplicar_efectos() no borra marco_pagada de un enlace que ya marcó
+--      pagada su compra (el de la proforma, movido a la factura casada).
 --   9. proformas_version(): si existe, las dos migraciones están puestas.
 --
 -- NO HAY TABLAS NUEVAS: RLS, políticas por operación y auditoría ya existen en
@@ -499,28 +504,51 @@ COMMENT ON FUNCTION public.textil_stock_destino(UUID) IS
 -- valor y coste: solo motivo 'compra'), y las unidades devueltas a mano al
 -- proveedor enlazadas a ella, solo para avisar (no cambian la comparación).
 -- Una variante con devoluciones y sin 'compra' no sale.
--- (Solo los literales 'compra' y 'devolucion_proveedor': una función LANGUAGE
--- sql se valida al crearla y 'ajuste_coste' no puede salir en ninguna.)
-CREATE OR REPLACE FUNCTION public.proforma_entradas(_proforma_id UUID)
+-- `posteriores`: las unidades que entraron en esa variante (compra, inicial o
+-- devolución de cliente, de otro documento) DESPUÉS de la última entrada de la
+-- proforma. Lo que queda en el almacén se cuenta como lo más nuevo (lo más
+-- antiguo sale antes): de la proforma solo sigue ahí saldo − posteriores, y el
+-- ajuste de coste no se lleva al género de otra compra (decisión 7). Los
+-- ajustes de inventario no cuentan: la fusión de variantes se anota así y no
+-- es género nuevo.
+-- (Solo los literales 'compra', 'inicial', 'devolucion_cliente' y
+-- 'devolucion_proveedor': una función LANGUAGE sql se valida al crearla y
+-- 'ajuste_coste' no puede salir en ninguna.)
+-- Se borra y se crea: cambia el tipo de retorno (la columna posteriores).
+DROP FUNCTION IF EXISTS public.proforma_entradas(UUID);
+CREATE FUNCTION public.proforma_entradas(_proforma_id UUID)
 RETURNS TABLE (stock_id UUID, unidades NUMERIC, valor NUMERIC, coste_unitario NUMERIC,
-               devueltas NUMERIC)
+               devueltas NUMERIC, posteriores NUMERIC)
 LANGUAGE sql STABLE SET search_path = public AS $$
-  SELECT public.textil_stock_destino(m.stock_id),
-         sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'),
-         sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra'),
-         round(sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra')
-               / NULLIF(sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'), 0), 8),
-         COALESCE(-sum(m.cantidad) FILTER (WHERE m.motivo = 'devolucion_proveedor'), 0)
-    FROM public.textil_stock_movimientos m
-   WHERE m.compra_id = _proforma_id AND m.motivo IN ('compra', 'devolucion_proveedor')
-   GROUP BY 1
-  HAVING sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') > 0
+  WITH e AS (
+    SELECT public.textil_stock_destino(m.stock_id) AS stock_id,
+           sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') AS unidades,
+           sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra') AS valor,
+           round(sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra')
+                 / NULLIF(sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'), 0), 8) AS coste_unitario,
+           COALESCE(-sum(m.cantidad) FILTER (WHERE m.motivo = 'devolucion_proveedor'), 0) AS devueltas,
+           max(m.id) FILTER (WHERE m.motivo = 'compra') AS ultima,
+           min(m.empresa_id::TEXT)::UUID AS empresa_id
+      FROM public.textil_stock_movimientos m
+     WHERE m.compra_id = _proforma_id AND m.motivo IN ('compra', 'devolucion_proveedor')
+     GROUP BY 1
+    HAVING sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') > 0
+  )
+  SELECT e.stock_id, e.unidades, e.valor, e.coste_unitario, e.devueltas,
+         COALESCE((SELECT sum(o.cantidad)
+                     FROM public.textil_stock_movimientos o
+                    WHERE o.empresa_id = e.empresa_id AND o.id > e.ultima
+                      AND o.motivo IN ('compra', 'inicial', 'devolucion_cliente') AND o.cantidad > 0
+                      AND o.compra_id IS DISTINCT FROM _proforma_id
+                      AND public.textil_stock_destino(o.stock_id) = e.stock_id), 0)
+    FROM e
 $$;
 
 COMMENT ON FUNCTION public.proforma_entradas(UUID) IS
   'Lo que metió una proforma en el libro de stock, por variante de destino (fusiones '
-  'resueltas): unidades, valor y coste unitario de sus entradas compra, y unidades devueltas '
-  'a mano al proveedor enlazadas a ella (solo para avisar). Con la RLS de quien llama.';
+  'resueltas): unidades, valor y coste unitario de sus entradas compra, unidades devueltas '
+  'a mano al proveedor enlazadas a ella (solo para avisar) y unidades que entraron después '
+  'de otros documentos (posteriores). Con la RLS de quien llama.';
 
 -- Proformas registradas, sin borrar y sin factura: el aviso y los anticipos.
 CREATE OR REPLACE FUNCTION public.compras_proformas_pendientes()
@@ -643,6 +671,8 @@ DECLARE
   v_grupo UUID;
   v_grupos_tocados UUID[];
   v_dif NUMERIC;
+  v_liquido_pro NUMERIC;
+  v_hereda BOOLEAN := false;
 BEGIN
   -- 0. Autor y acceso -----------------------------------------------------
   IF _usuario_id IS NULL THEN
@@ -665,8 +695,15 @@ BEGIN
   END IF;
 
   -- Bloqueo en orden de id (la factura, si ya existe, y su proforma): dos
-  -- registros que se cruzan no se bloquean entre sí.
+  -- registros que se cruzan no se bloquean entre sí. Antes, las filas de los
+  -- grupos del banco de la proforma: banco_confirmar y banco_desenlazar_como
+  -- bloquean primero las filas del grupo y después la compra; con el mismo
+  -- orden aquí, casar a la vez que se confirma o se deshace no se interbloquea.
   IF v_proforma_id IS NOT NULL THEN
+    PERFORM 1 FROM public.banco_conciliaciones
+     WHERE grupo IN (SELECT c.grupo FROM public.banco_conciliaciones c
+                      WHERE c.compra_id = v_proforma_id)
+     ORDER BY id FOR UPDATE;
     PERFORM 1 FROM public.textil_compras
      WHERE id IN (v_id, v_proforma_id) ORDER BY id FOR UPDATE;
   END IF;
@@ -1180,7 +1217,7 @@ BEGIN
 
       FOR v_rg IN
         WITH p AS (
-          SELECT pe.stock_id, pe.unidades, pe.coste_unitario
+          SELECT pe.stock_id, pe.unidades, pe.coste_unitario, pe.posteriores
             FROM public.proforma_entradas(v_pro.id) pe
         ), f AS (
           SELECT l.stock_id,
@@ -1196,7 +1233,8 @@ BEGIN
                p.coste_unitario AS cp,
                COALESCE(f.unidades, 0) AS uf,
                round(f.valor / NULLIF(f.unidades, 0), 8) AS cf,
-               f.linea
+               f.linea,
+               COALESCE(p.posteriores, 0) AS posteriores
           FROM p FULL OUTER JOIN f ON f.stock_id = p.stock_id
          ORDER BY 1   -- orden fijo de bloqueo de las variantes
       LOOP
@@ -1245,8 +1283,11 @@ BEGIN
           SELECT cantidad, coste_unitario INTO v_saldo, v_cm
             FROM public.textil_stock WHERE id = v_rg.stock_id FOR UPDATE;
           -- Unidades de la proforma que siguen en el almacén. No se usa v_saldo:
-          -- incluye las que entraron en c1, ya al coste de la factura.
-          v_u := least(v_m, greatest(v_saldo0 - v_salen, 0));
+          -- incluye las que entraron en c1, ya al coste de la factura. Tampoco
+          -- cuenta lo que entró de otros documentos después de la proforma
+          -- (posteriores): lo que queda es lo más nuevo, y si la proforma ya
+          -- se vendió, su diferencia no se carga sobre el género de otra compra.
+          v_u := least(v_m, greatest(v_saldo0 - v_rg.posteriores - v_salen, 0));
           v_importe := round(v_u * v_d, 2);
           IF v_saldo > 0 AND v_saldo * v_cm + v_importe < 0 THEN
             v_importe := -floor(v_saldo * v_cm * 100) / 100;
@@ -1339,10 +1380,16 @@ BEGIN
   -- cada grupo se recalcula: si no cuadra, el grupo queda en «revisar». La
   -- proforma no se toca: conserva su pago como historia y deja de contar
   -- porque está casada. estado_pago y fecha_pago pasan en el paso 5.
+  -- La factura hereda «pagada» si el pago está enlazado en el banco (si el
+  -- líquido difiere, su grupo queda en «revisar» con la diferencia) o si su
+  -- líquido es el que se pagó por la proforma, al céntimo. Una proforma pagada
+  -- a mano, sin enlace, con otro líquido: la factura queda pendiente (nada
+  -- diría que falta pagar la diferencia) y casado_resumen.pago lo anota.
   IF v_proforma_id IS NOT NULL THEN
     SELECT liquido INTO v_liquido FROM public.textil_compras WHERE id = v_id;
 
-    -- Orden de bloqueo: la proforma (paso 0) y después estas filas.
+    -- Ya bloqueadas en el paso 0, antes de la proforma (el orden del motor).
+    -- Otra vez por si entre medias se enlazó un grupo nuevo (ya confirmado).
     PERFORM 1 FROM public.banco_conciliaciones
      WHERE grupo IN (SELECT c.grupo FROM public.banco_conciliaciones c WHERE c.compra_id = v_pro.id)
      ORDER BY id FOR UPDATE;
@@ -1378,12 +1425,19 @@ BEGIN
       END IF;
     END LOOP;
 
+    v_liquido_pro := round(COALESCE(v_pro.liquido, v_pro.total, 0)::NUMERIC, 2);
+    v_hereda := v_pro.estado_pago = 'pagada'
+                AND (v_enlaces > 0 OR round(v_liquido, 2) = v_liquido_pro);
+
     v_pago := jsonb_build_object(
       'enlaces_movidos', v_enlaces,
       'grupos', v_grupos,
       'grupos_revisar', v_grupos_revisar,
-      'estado_pago', v_pro.estado_pago,
-      'fecha_pago', v_pro.fecha_pago);
+      'estado_pago', CASE WHEN v_hereda THEN 'pagada' ELSE 'pendiente' END,
+      'fecha_pago', CASE WHEN v_hereda THEN v_pro.fecha_pago END,
+      'proforma_pagada', v_pro.estado_pago = 'pagada',
+      'liquido_proforma', v_liquido_pro,
+      'diferencia', round(v_liquido - v_liquido_pro, 2));
     v_casado := jsonb_build_object(
       'proforma_id', v_proforma_id,
       'stock', v_stock_res,
@@ -1406,8 +1460,8 @@ BEGIN
          SET estado = 'registrada', revision = 'revisada', revision_motivo = NULL,
              proveedor_id = v_prov_id,
              proforma_id = v_proforma_id,
-             estado_pago = v_pro.estado_pago,
-             fecha_pago = v_pro.fecha_pago,
+             estado_pago = CASE WHEN v_hereda THEN 'pagada' ELSE 'pendiente' END,
+             fecha_pago = CASE WHEN v_hereda THEN v_pro.fecha_pago END,
              casado_resumen = v_casado
        WHERE id = v_id;
     END IF;
@@ -1886,6 +1940,47 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.banco_enlazar_como(UUID, UUID[], JSONB, TEXT, TEXT)
   FROM PUBLIC, anon, authenticated;
+
+-- banco_aplicar_efectos(): copia de 20261017100000 con un cambio. Un enlace
+-- que ya marcó pagada su compra lo sigue diciendo (marco_pagada OR FOUND).
+-- Solo pasa con el casado: el enlace de la proforma, que ya la marcó pagada,
+-- pasa a la factura (que hereda el pago) y su grupo puede quedar en
+-- «revisar». Al confirmarlo, la factura ya está pagada y FOUND sale false: sin
+-- esto, marco_pagada pasaba a false y deshacer el enlace ya no devolvía la
+-- factura a pendiente. Un enlace nuevo nace con marco_pagada = false, así que
+-- para todo lo demás no cambia nada.
+CREATE OR REPLACE FUNCTION public.banco_aplicar_efectos(_usuario_id UUID, _grupo UUID)
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_fecha DATE;
+  r RECORD;
+BEGIN
+  SELECT max(m.fecha) INTO v_fecha
+    FROM public.banco_conciliaciones c JOIN public.banco_movimientos m ON m.id = c.movimiento_id
+   WHERE c.grupo = _grupo;
+
+  FOR r IN SELECT DISTINCT compra_id FROM public.banco_conciliaciones
+            WHERE grupo = _grupo AND compra_id IS NOT NULL LOOP
+    UPDATE public.textil_compras SET estado_pago = 'pagada', fecha_pago = v_fecha
+     WHERE id = r.compra_id AND estado_pago = 'pendiente';
+    UPDATE public.banco_conciliaciones SET marco_pagada = marco_pagada OR FOUND
+     WHERE grupo = _grupo AND compra_id = r.compra_id;
+  END LOOP;
+
+  FOR r IN SELECT DISTINCT c.factura_id, f.estado
+             FROM public.banco_conciliaciones c JOIN public.facturas f ON f.id = c.factura_id
+            WHERE c.grupo = _grupo LOOP
+    IF r.estado IN ('emitida', 'vencida') THEN
+      PERFORM public.factura_cambiar_estado_cobro(_usuario_id, r.factura_id, 'pagada');
+    END IF;
+    UPDATE public.banco_conciliaciones SET marco_pagada = r.estado IN ('emitida', 'vencida')
+     WHERE grupo = _grupo AND factura_id = r.factura_id;
+  END LOOP;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.banco_aplicar_efectos(UUID, UUID) FROM PUBLIC, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 9. Versión: si existe, las dos migraciones de proformas están puestas

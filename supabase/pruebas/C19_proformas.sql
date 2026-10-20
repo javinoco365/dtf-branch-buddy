@@ -381,7 +381,9 @@ SELECT pg_temp.ok('9c. casado_resumen.pago: 1 enlace movido, 1 grupo, ninguno a 
                   (c.casado_resumen -> 'pago' ->> 'enlaces_movidos')::INT = 1
                   AND (c.casado_resumen -> 'pago' ->> 'grupos')::INT = 1
                   AND (c.casado_resumen -> 'pago' ->> 'grupos_revisar')::INT = 0
-                  AND c.casado_resumen -> 'pago' ->> 'estado_pago' = 'pagada',
+                  AND c.casado_resumen -> 'pago' ->> 'estado_pago' = 'pagada'
+                  AND (c.casado_resumen -> 'pago' ->> 'proforma_pagada')::BOOLEAN
+                  AND (c.casado_resumen -> 'pago' ->> 'diferencia')::NUMERIC = 0,
                   (c.casado_resumen -> 'pago')::TEXT)
 FROM public.textil_compras c WHERE c.id = pg_temp.id('fa1');
 SELECT pg_temp.ok('9d. el UPDATE del enlace queda en la auditoría con su autor',
@@ -506,6 +508,36 @@ SELECT pg_temp.ok('16. vendidas 6: ajuste de 4,00 sobre las 4 que quedan, 6,00 s
 FROM (SELECT pg_temp.fila(pg_temp.id('fa4'), pg_temp.id('vh')) AS f) x;
 
 -- ---------------------------------------------------------------------------
+-- 16b. La proforma ya vendida y otra compra después: el ajuste no la toca
+-- ---------------------------------------------------------------------------
+-- Proforma 10 a 10 €, vendidas las 10; después entra otra factura de 10 a 2 €.
+-- La factura de la proforma las cobra a 5 €: las 10 que quedan son de la otra
+-- compra, así que no se ajusta nada (−50,00 sin aplicar) y el coste sigue en 2.
+SELECT pg_temp.variante('vo', 'Polo C19', 'Gris', 'S');
+SELECT pg_temp.reg('pf13', pg_temp.compra('C19-PF13', 100, jsonb_build_array(
+         pg_temp.art('Polo gris S', 10, 100, 100, pg_temp.id('vo'))), '{"tipo_documento": "proforma"}'::JSONB)) IS NOT NULL AS pf13;
+SELECT pg_temp.venta(pg_temp.id('vo'), 10);
+SELECT pg_temp.reg('fb13', pg_temp.compra('C19-FB13', 20, jsonb_build_array(
+         pg_temp.art('Polo gris S', 10, 20, 20, pg_temp.id('vo'))))) IS NOT NULL AS fb13;
+SELECT pg_temp.ok('16b-1. proforma_entradas(): 10 posteriores (la otra factura)',
+                  sum(posteriores) = 10 AND sum(unidades) = 10,
+                  string_agg(unidades || ' / ' || posteriores, '; '))
+FROM public.proforma_entradas(pg_temp.id('pf13'));
+SELECT pg_temp.reg('fa13', pg_temp.compra('C19-FA13', 50, jsonb_build_array(
+         pg_temp.art('Polo gris S', 10, 50, 50, pg_temp.id('vo'))),
+         jsonb_build_object('proforma_id', pg_temp.id('pf13')))) IS NOT NULL AS fa13;
+SELECT pg_temp.ok('16b-2. sin ajuste_coste: 0 uds ajustadas, −50,00 sin aplicar y el coste sigue en 2 (10 uds)',
+                  (f ->> 'unidades_ajustadas')::NUMERIC = 0 AND (f ->> 'importe_ajuste')::NUMERIC = 0
+                  AND (f ->> 'importe_sin_aplicar')::NUMERIC = -50
+                  AND s.cantidad = 10 AND s.coste_unitario = 2
+                  AND NOT EXISTS (SELECT 1 FROM public.textil_stock_movimientos
+                                   WHERE compra_id = pg_temp.id('fa13') AND motivo = 'ajuste_coste')
+                  AND pg_temp.p7(pg_temp.id('fa13')) = 'cuadra',
+                  f::TEXT || ' / ' || s.cantidad || ' a ' || s.coste_unitario || ' / ' || pg_temp.p7(pg_temp.id('fa13')))
+FROM (SELECT pg_temp.fila(pg_temp.id('fa13'), pg_temp.id('vo')) AS f) x,
+     public.textil_stock s WHERE s.id = pg_temp.id('vo');
+
+-- ---------------------------------------------------------------------------
 -- 17. Una bajada que dejaría el coste medio en negativo: tope
 -- ---------------------------------------------------------------------------
 -- 10 a coste 0 de antes + 10 de la proforma a 10 € (media 5); se venden 15
@@ -575,6 +607,27 @@ SELECT pg_temp.ok('19. el grupo queda en revisar con diferencia = movimiento −
 FROM public.banco_conciliaciones b, public.banco_movimientos m, public.textil_compras f
 WHERE b.grupo = pg_temp.id('g6') AND m.id = pg_temp.id('m6') AND f.id = pg_temp.id('fa6');
 
+SELECT pg_temp.ok('19b. la factura hereda el pago (enlazado en el banco) y el enlace sigue con marco_pagada',
+                  f.estado_pago = 'pagada' AND f.fecha_pago = current_date - 2 AND b.marco_pagada
+                  AND (f.casado_resumen -> 'pago' ->> 'diferencia')::NUMERIC = 6.05,
+                  f.estado_pago || ' / ' || b.marco_pagada || ' / ' || (f.casado_resumen -> 'pago')::TEXT)
+FROM public.textil_compras f, public.banco_conciliaciones b
+WHERE f.id = pg_temp.id('fa6') AND b.grupo = pg_temp.id('g6');
+SELECT pg_temp.guarda('confirma19', NULL, to_jsonb(pg_temp.como(pg_temp.adm(),
+         format('SELECT public.banco_confirmar(%L)::INT', pg_temp.id('g6'))))) IS NOT NULL AS confirma19;
+SELECT pg_temp.ok('19c. confirmar el grupo (authenticated): conciliada y marco_pagada sigue en true',
+                  pg_temp.j('confirma19') #>> '{}' = '1' AND b.estado = 'conciliada' AND b.marco_pagada,
+                  (pg_temp.j('confirma19') #>> '{}') || ' / ' || b.estado || ' / ' || b.marco_pagada)
+FROM public.banco_conciliaciones b
+WHERE b.grupo = pg_temp.id('g6');
+SELECT pg_temp.ok('19d. deshacer el enlace después: la factura vuelve a pendiente y sin enlaces',
+                  public.banco_desenlazar_como(pg_temp.adm(), pg_temp.id('g6')) = 1);
+SELECT pg_temp.ok('19e. (la factura, pendiente y sin fecha de pago)',
+                  f.estado_pago = 'pendiente' AND f.fecha_pago IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM public.banco_conciliaciones WHERE compra_id = f.id),
+                  f.estado_pago || ' ' || COALESCE(f.fecha_pago::TEXT, '-'))
+FROM public.textil_compras f WHERE f.id = pg_temp.id('fa6');
+
 -- ---------------------------------------------------------------------------
 -- 20. Proforma pagada a mano (sin banco)
 -- ---------------------------------------------------------------------------
@@ -592,6 +645,24 @@ SELECT pg_temp.ok('20b. la factura nace pagada con esa fecha; ningún enlace mov
                   AND (f.casado_resumen -> 'pago' ->> 'fecha_pago')::DATE = current_date - 1,
                   f.estado_pago || ' / ' || (f.casado_resumen -> 'pago')::TEXT)
 FROM public.textil_compras f WHERE f.id = pg_temp.id('fa7');
+
+SELECT pg_temp.reg('pf14', pg_temp.compra('C19-PF14', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+         '{"tipo_documento": "proforma", "categoria": "material"}'::JSONB)) IS NOT NULL AS pf14;
+SELECT pg_temp.como(pg_temp.adm(), format(
+  'UPDATE public.textil_compras SET estado_pago = ''pagada'', fecha_pago = current_date - 1 WHERE id = %L',
+  pg_temp.id('pf14'))) AS pf14_pagada;
+SELECT pg_temp.reg('fa14', pg_temp.compra('C19-FA14', 110, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 110)),
+         jsonb_build_object('proforma_id', pg_temp.id('pf14'), 'categoria', 'material'))) IS NOT NULL AS fa14;
+SELECT pg_temp.ok('20c. pagada a mano y la factura con más líquido: queda pendiente y casado_resumen anota la diferencia',
+                  f.estado_pago = 'pendiente' AND f.fecha_pago IS NULL
+                  AND f.casado_resumen -> 'pago' ->> 'estado_pago' = 'pendiente'
+                  AND (f.casado_resumen -> 'pago' -> 'fecha_pago') = 'null'::JSONB
+                  AND (f.casado_resumen -> 'pago' ->> 'proforma_pagada')::BOOLEAN
+                  AND (f.casado_resumen -> 'pago' ->> 'liquido_proforma')::NUMERIC = 121
+                  AND (f.casado_resumen -> 'pago' ->> 'diferencia')::NUMERIC = 12.10
+                  AND (f.casado_resumen -> 'pago' ->> 'enlaces_movidos')::INT = 0,
+                  f.estado_pago || ' / ' || (f.casado_resumen -> 'pago')::TEXT)
+FROM public.textil_compras f WHERE f.id = pg_temp.id('fa14');
 
 -- ---------------------------------------------------------------------------
 -- 21. El pago de una proforma casada no se cambia
@@ -755,7 +826,8 @@ INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, canti
 VALUES (pg_temp.empresa(), pg_temp.id('vl'), 'devolucion_proveedor', -1, pg_temp.id('pf11'), 'Devolución a mano C19');
 SELECT pg_temp.ok('29. la variante fusionada sale en su destino; la devolución a mano, en devueltas sin cambiar unidades',
                   count(*) = 1 AND min(stock_id::TEXT)::UUID = pg_temp.id('vl') AND sum(unidades) = 5
-                  AND sum(valor) = 25 AND sum(coste_unitario) = 5 AND sum(devueltas) = 1,
+                  AND sum(valor) = 25 AND sum(coste_unitario) = 5 AND sum(devueltas) = 1
+                  AND sum(posteriores) = 0,
                   string_agg(stock_id || ' ' || unidades || ' ' || valor || ' ' || devueltas, '; '))
 FROM public.proforma_entradas(pg_temp.id('pf11'));
 
@@ -838,6 +910,7 @@ SELECT CASE WHEN (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conn
              AND (SELECT prosrc NOT LIKE '%proforma%' FROM pg_proc WHERE proname = 'textil_compra_guardar_y_registrar')
              AND (SELECT prosrc NOT LIKE '%ajuste_coste%' FROM pg_proc WHERE proname = 'stock_aplicar_movimiento')
              AND (SELECT prosrc NOT LIKE '%proforma%' FROM pg_proc WHERE proname = 'banco_enlazar_como')
+             AND (SELECT prosrc NOT LIKE '%marco_pagada OR FOUND%' FROM pg_proc WHERE proname = 'banco_aplicar_efectos')
             THEN 'BIEN  31b. y repone los CHECK, el índice y las funciones de antes'
             ELSE 'MAL   31b. la reversión no dejó lo de antes' END;
 SET client_min_messages = warning;

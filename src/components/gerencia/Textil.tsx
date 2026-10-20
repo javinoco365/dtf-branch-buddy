@@ -34,7 +34,7 @@ import { cifrasGerencia, desglose } from "@/dominio/gerencia";
 import { porcentajeMargen } from "@/dominio/margen";
 import { ivaSoportado } from "@/dominio/fiscal";
 import { productosTextil, resumenStock } from "@/dominio/textil";
-import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
+import { proformasSinFactura, proformasTextil, resumenProformas } from "@/dominio/proformas";
 import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
@@ -89,10 +89,14 @@ export function Textil({ d }: { d: DatosGerencia }) {
     () => (datos.data?.compras ? ivaSoportado(datos.data.compras) : null),
     [datos.data],
   );
-  // Las proformas sin factura, de cualquier fecha (no dependen del periodo).
+  // Las proformas textiles sin factura, de cualquier fecha (no dependen del
+  // periodo). Las de otras categorías no son del almacén ni salen en Textil › Compras.
   const { data: filasProformas } = useProformasPendientes();
   const proformas = useMemo(
-    () => (filasProformas ? resumenProformas(proformasSinFactura(filasProformas, d.hoy)) : null),
+    () =>
+      filasProformas
+        ? resumenProformas(proformasSinFactura(proformasTextil(filasProformas), d.hoy))
+        : null,
     [filasProformas, d.hoy],
   );
 
