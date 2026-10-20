@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
 import { TIPOS_GASTO } from "@/dominio/impuestos";
 import {
@@ -155,7 +156,7 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora no válida (hh:mm)");
 
 export const guardarAjustesGerencia = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -199,7 +200,7 @@ export const guardarAjustesGerencia = createServerFn({ method: "POST" })
 const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida");
 
 export const guardarGastoFijo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -260,7 +261,7 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
   });
 
 export const borrarGastoFijo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -273,7 +274,7 @@ export const borrarGastoFijo = createServerFn({ method: "POST" })
   });
 
 export const guardarObjetivo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -309,7 +310,7 @@ export const guardarObjetivo = createServerFn({ method: "POST" })
   });
 
 export const borrarObjetivo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");

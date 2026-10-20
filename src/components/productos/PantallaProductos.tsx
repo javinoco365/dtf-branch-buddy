@@ -36,6 +36,7 @@ import { eur } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { tabla } from "@/lib/rpc";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
+import { SiPuede } from "@/components/SiPuede";
 
 export type Producto = {
   id: string;
@@ -190,10 +191,12 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
               : "Productos de la empresa, disponibles en todas las tiendas para pedidos y presupuestos."}
           </p>
         </div>
-        <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo producto
-        </Button>
+        <SiPuede accion="escribir">
+          <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo producto
+          </Button>
+        </SiPuede>
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -285,22 +288,26 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Editar"
-                        onClick={() => setEditing(p)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Borrar"
-                        onClick={() => setBorrando(p)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                      <SiPuede accion="escribir">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Editar"
+                          onClick={() => setEditing(p)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </SiPuede>
+                      <SiPuede accion="borrar">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Borrar"
+                          onClick={() => setBorrando(p)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 );

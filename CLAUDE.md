@@ -69,9 +69,40 @@ DTI S.L. está sujeta a Verifactu desde el **1 de enero de 2027**. No son negoci
   productor de SIF, con responsabilidad legal propia. Si un cambio te lleva por ahí, para y
   avisa.
 
+## Usuarios y niveles
+
+Cada usuario tiene **un** nivel en `user_roles` (desde 20261031200000-200300):
+
+- **admin**: todo, incluida la gestión de usuarios. `info@ronocadesarrollos.com` es admin.
+- **editor**: ve todo, crea y modifica; **no borra** ni gestiona usuarios.
+- **visor**: solo ve; no crea, no cambia, no borra.
+
+Sin fila en `user_roles`, o con `activo = false`, no se escribe nada (se deniega por defecto).
+Los usuarios no se borran: se desactivan (`activo = false` y ban en Supabase Auth) para conservar
+su rastro en la auditoría. Siempre queda al menos un admin activo (lo impone un trigger).
+
+El permiso lo impone **la base**, por los tres caminos:
+
+- **Navegador (RLS)**: las políticas INSERT/UPDATE/DELETE de las tablas de negocio llevan
+  `AND (SELECT public.rol_puede_escribir(auth.uid()))` (o `rol_puede_borrar` en el DELETE de
+  entidades). Las de SELECT no dependen del nivel. Toda política de escritura nueva lleva la suya.
+- **Funciones SECURITY DEFINER**: la primera línea de las que escriben es
+  `PERFORM public.rol_exigir_quien(_usuario_id, 'escribir' | 'borrar' | 'admin');`. Una función
+  nueva que escriba la lleva; si reescribes una existente, consérvala.
+- **Servidor con `supabaseAdmin`/`adminComoUsuario`**: el trigger `rol_guardia` (por sentencia,
+  en cada tabla de negocio) comprueba el nivel del autor. Una tabla de negocio nueva lo lleva:
+  `'escribir'` (entidades), `'linea'` (líneas que se reescriben al editar su documento: el
+  editor las borra) o `'admin'`.
+
+Además, las server functions que escriben usan `exigeEscribir`, `exigeBorrar` o `exigeAdmin`
+(`src/lib/permisos-middleware.ts`) en lugar de `requireSupabaseAuth`, y la interfaz oculta botones
+con `usePermisos()` / `<SiPuede>`. Eso es comodidad: la seguridad es la de la base. Las reglas
+puras están en `src/dominio/permisos.ts`; la gestión, en Ajustes > Usuarios
+(`src/lib/usuarios.functions.ts`, `usuario_fijar_nivel()`).
+
 ## Auditoría
 
-Los tres usuarios son administradores con permisos idénticos. El único control es el registro.
+Cada cambio queda registrado con su autor: el registro dice quién hizo qué.
 
 - La tabla `auditoria` es _append-only_, escrita por trigger y encadenada por hash. No se
   escribe desde la aplicación y no se modifica jamás.
@@ -153,6 +184,7 @@ dar por hecho que puedes usarlo:
 | Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                                                                                                               |
 | Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                                                                                                          |
 | Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                |
+| Niveles admin / editor / visor              | Hecho en la base (20261031200000-200300: políticas de escritura, guardia, funciones) y en Ajustes > Usuarios. Pendiente de aplicar en producción                                                           |
 
 Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
 trabajos: `npm run verify`, y las migraciones y pruebas SQL de

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeAdmin, exigeBorrar } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
 
 export type ResumenBorradoTienda = {
@@ -38,7 +39,7 @@ export const resumenBorradoTienda = createServerFn({ method: "GET" })
  * comprueba antes solo para dar un mensaje que se entienda.
  */
 export const eliminarTienda = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const resumen = await llamarRpc<ResumenBorradoTienda>(
@@ -62,7 +63,7 @@ export const eliminarTienda = createServerFn({ method: "POST" })
 
 /** Desactivar es la salida de las tiendas que no se pueden borrar. */
 export const activarTienda = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), activa: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await tabla(context.supabase, "tiendas")
@@ -83,7 +84,7 @@ const tiendaSchema = z.object({
 
 /** Editar la identidad de una tienda. Los datos fiscales son de la sociedad. */
 export const actualizarTienda = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => tiendaSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { id, ...resto } = data;

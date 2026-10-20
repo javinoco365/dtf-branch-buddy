@@ -79,6 +79,7 @@ import { claveTalla, claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado } from "@/dominio/precio-recomendado";
 import type { ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
 import { TextoRecomendado } from "@/components/textil/CrearVarianteDialog";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -246,14 +247,16 @@ function StockPage() {
             Inventario de camisetas, sudaderas y demás prendas.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
-        </Button>
+        <SiPuede accion="escribir">
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+          </Button>
+        </SiPuede>
       </div>
       {estadoEscaner && !escaner && (
         <Card className="border-amber-500/50">
@@ -434,38 +437,42 @@ function StockPage() {
                       >
                         <History className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Editar datos"
-                        onClick={() => {
-                          setEditing(it);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `¿Seguro que quieres eliminar "${it.nombre}"?\n\n` +
-                                "Si tiene movimientos de stock no se borrará: se desactivará, " +
-                                "porque su historia explica el coste de lo que ya vendiste." +
-                                // Con la migración del escáner, solo a 0 unidades.
-                                (escaner && Number(it.cantidad) !== 0
-                                  ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
-                                    "merma o un recuento que la deje a 0, o fusiónala con la buena."
-                                  : ""),
+                      <SiPuede accion="escribir">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Editar datos"
+                          onClick={() => {
+                            setEditing(it);
+                            setOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </SiPuede>
+                      <SiPuede accion="borrar">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `¿Seguro que quieres eliminar "${it.nombre}"?\n\n` +
+                                  "Si tiene movimientos de stock no se borrará: se desactivará, " +
+                                  "porque su historia explica el coste de lo que ya vendiste." +
+                                  // Con la migración del escáner, solo a 0 unidades.
+                                  (escaner && Number(it.cantidad) !== 0
+                                    ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
+                                      "merma o un recuento que la deje a 0, o fusiónala con la buena."
+                                    : ""),
+                              )
                             )
-                          )
-                            del.mutate(it.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                              del.mutate(it.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 );

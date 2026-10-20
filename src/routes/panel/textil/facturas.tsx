@@ -45,6 +45,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { contadoresDeSerie } from "@/lib/facturas.functions";
 import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
 import { totalesDocumentos } from "@/dominio/sumatorios";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -333,9 +334,11 @@ function FacturasPage() {
                         </Button>
                       </>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <SiPuede accion="borrar">
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

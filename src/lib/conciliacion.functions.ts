@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, filasDeFuncion, llamarRpc, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
@@ -628,7 +629,7 @@ export const verTraspasos = createServerFn({ method: "GET" })
  * con los demás y se dice cuál.
  */
 export const aplicarPlan = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .handler(async ({ context }) => {
     const datos = await leer(context.supabase);
     if (!datos) throw new Error(`Falta aplicar la migración ${MIGRACION_MOTOR}.`);
@@ -666,7 +667,7 @@ const documentoSchema = z.object({
 
 /** Enlazar a mano: una persona lo ha mirado, así que queda conciliado. */
 export const enlazarManual = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -691,21 +692,21 @@ export const enlazarManual = createServerFn({ method: "POST" })
 const grupoSchema = (d: unknown) => z.object({ grupo: z.string().uuid() }).parse(d);
 
 export const confirmarEnlace = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(grupoSchema)
   .handler(async ({ data, context }) => ({
     ok: await llamarRpc<boolean>(context.supabase, "banco_confirmar", { _grupo: data.grupo }),
   }));
 
 export const deshacerEnlace = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(grupoSchema)
   .handler(async ({ data, context }) => ({
     filas: await llamarRpc<number>(context.supabase, "banco_desenlazar", { _grupo: data.grupo }),
   }));
 
 export const desmarcarTraspaso = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ movimiento_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => ({
     ok: await llamarRpc<boolean>(context.supabase, "banco_desmarcar_traspaso", {

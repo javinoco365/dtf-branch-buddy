@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { tabla } from "./rpc";
 import type { CategoriaCaja } from "@/dominio/caja";
 
@@ -109,7 +110,7 @@ const apunteSchema = z.object({
 });
 
 export const guardarMovimientoCaja = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => apunteSchema.extend({ id: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -148,7 +149,7 @@ export const guardarMovimientoCaja = createServerFn({ method: "POST" })
   });
 
 export const borrarMovimientoCaja = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -174,7 +175,7 @@ export const borrarMovimientoCaja = createServerFn({ method: "POST" })
  * que lo usaron.
  */
 export const guardarConceptoCaja = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -213,7 +214,7 @@ export const guardarConceptoCaja = createServerFn({ method: "POST" })
   });
 
 export const guardarSocioCaja = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({

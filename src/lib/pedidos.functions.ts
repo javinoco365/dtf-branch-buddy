@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { FILAS_POR_PAGINA, leerTodas, trozos } from "./paginar";
 import { leerPorIds, type ErrorConsulta } from "./leer-por-ids";
@@ -331,7 +332,7 @@ export const listPedidos = createServerFn({ method: "POST" })
  * en la auditoría; después, ni la sincronización ni el trigger la pisan.
  */
 export const fijarRealizadoPedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -365,7 +366,7 @@ export const fijarRealizadoPedido = createServerFn({ method: "POST" })
  * estima con el coste de envío por defecto de Gerencia.
  */
 export const fijarCosteEnvioPedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -426,7 +427,7 @@ const direccionSchema = z
   .optional();
 
 export const createPedidoManual = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -502,7 +503,7 @@ export const createPedidoManual = createServerFn({ method: "POST" })
   });
 
 export const updatePedidoEstado = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -559,7 +560,7 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
   });
 
 export const updatePedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -640,7 +641,7 @@ export const updatePedido = createServerFn({ method: "POST" })
   });
 
 export const setPedidoTracking = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -714,7 +715,7 @@ export const setPedidoTracking = createServerFn({ method: "POST" })
   });
 
 export const deletePedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");

@@ -33,6 +33,7 @@ import {
 } from "@/lib/textil.functions";
 import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
   head: () => ({ meta: [{ title: "Ajustes textil · DTF Culture" }] }),
@@ -122,14 +123,16 @@ function AjustesPage() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Marcas comerciales</h2>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nueva marca
-        </Button>
+        <SiPuede accion="escribir">
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Nueva marca
+          </Button>
+        </SiPuede>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -155,25 +158,29 @@ function AjustesPage() {
                   {!m.activa && <Badge variant="outline">Inactiva</Badge>}
                 </div>
                 <div className="flex gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditing(m);
-                      setOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      setBorrando(m);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <SiPuede accion="escribir">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(m);
+                        setOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </SiPuede>
+                  <SiPuede accion="borrar">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setBorrando(m);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </SiPuede>
                 </div>
               </div>
               {m.direccion && <div className="text-xs text-muted-foreground">{m.direccion}</div>}

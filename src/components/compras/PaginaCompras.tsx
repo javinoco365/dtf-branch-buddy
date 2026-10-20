@@ -128,6 +128,7 @@ import {
 } from "@/dominio/compras";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { totalesCompras } from "@/dominio/sumatorios-facturas";
+import { SiPuede } from "@/components/SiPuede";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -934,9 +935,11 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           // Un casado no se deshace: ni la factura ni su proforma se borran.
                           !c.proforma_id &&
                           !casadas.has(c.id))) && (
-                        <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <SiPuede accion="borrar">
+                          <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </SiPuede>
                       )}
                     </div>
                   </TableCell>

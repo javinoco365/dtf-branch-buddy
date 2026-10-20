@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { leerTodas, trozos } from "./paginar";
 import { cuadreExtracto, huellaMovimiento, normalizarIban } from "@/dominio/extractos";
@@ -90,7 +91,7 @@ export const analizarExtracto = createServerFn({ method: "POST" })
  * sin extracto, como antes.
  */
 export const importarExtracto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(formularioExtracto)
   .handler(async ({ data, context }) => {
     const { leerExtracto } = await import("./extracto-banco.server");
@@ -192,7 +193,7 @@ export const listCuentas = createServerFn({ method: "GET" })
   });
 
 export const guardarCuenta = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -298,7 +299,7 @@ export const proponerConciliacion = createServerFn({ method: "GET" })
   });
 
 export const conciliar = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -319,7 +320,7 @@ export const conciliar = createServerFn({ method: "POST" })
   });
 
 export const desconciliar = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ movimiento_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const ok = await llamarRpc<boolean>(context.supabase, "banco_desconciliar", {

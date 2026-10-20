@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { renderizarPlantilla } from "@/dominio/plantillas";
 import { eur } from "@/lib/format";
 import { tabla } from "./rpc";
@@ -159,7 +159,7 @@ export async function avisarPedidoEnviado(
 
 /** La misma operación, disparada a mano desde la pantalla. */
 export const enviarAvisoPedidoEnviado = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<ResultadoAviso> => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");

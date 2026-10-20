@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import {
@@ -200,13 +201,13 @@ async function registrarBorrador(supabase: unknown, id: string): Promise<{ movid
 
 /** Guarda el borrador. Todavía no ha tocado el stock. */
 export const guardarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => compraSchema.parse(d))
   .handler(async ({ data, context }) => guardarBorrador(context.supabase, data));
 
 /** Registra la compra: las líneas casadas entran en el libro de stock. */
 export const registrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => registrarBorrador(context.supabase, data.id));
 
@@ -292,7 +293,7 @@ export type SalidaRegistroCompra = ResultadoRegistro & { atomica: boolean };
  * proforma entraría dos veces (contrato, A12).
  */
 export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => registroSchema.parse(d))
   .handler(async ({ data, context }): Promise<SalidaRegistroCompra> => {
     const { lineas: lineasEntrada, lectura_ia, ...cab } = data;
@@ -542,7 +543,7 @@ export const entradasDeProforma = createServerFn({ method: "POST" })
  *   lógico) y deja de contar. La de textil, nunca: ya movió stock.
  */
 export const borrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: compra } = await tabla(context.supabase, "textil_compras")
@@ -577,7 +578,7 @@ export const borrarCompra = createServerFn({ method: "POST" })
 
 /** Marca una factura recibida como pagada (con su fecha) o la vuelve a pendiente. */
 export const pagarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -645,7 +646,7 @@ const ficheroYCategoria = (d: unknown) => {
  * hace nada y lo dice.
  */
 export const subirFacturaRecibida = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(ficheroYCategoria)
   .handler(async ({ data, context }) => {
     const { huellaDe, procesarFactura } = await import("./cola-compras.server");
@@ -703,7 +704,7 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
 
 /** Vuelve a leer con IA una factura de la cola (por ejemplo, una que dio error). */
 export const releerFacturaRecibida = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { procesarFactura } = await import("./cola-compras.server");
@@ -766,7 +767,7 @@ export const verFicheroCompra = createServerFn({ method: "POST" })
  * sin dejar rastro es justo lo que no se puede hacer.
  */
 export const adjuntarFicheroCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => {
     const { fichero } = ficheroDe(d);
     const id = z

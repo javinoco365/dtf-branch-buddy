@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeAdmin } from "./permisos-middleware";
 import {
   ambitoDeClave,
   claveAmbito,
@@ -262,7 +263,7 @@ export const listarPlantillasPresupuesto = createServerFn({ method: "GET" })
 
 /** Guarda la plantilla de un ámbito (solo administradores: lo decide la RLS). */
 export const guardarPlantillaPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) =>
     z
       .object({

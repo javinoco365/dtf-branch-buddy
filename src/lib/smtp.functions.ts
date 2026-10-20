@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
 
 /** Solo un administrador toca el servidor de correo. */
@@ -61,7 +62,7 @@ const guardarSchema = z.object({
 });
 
 export const guardarSmtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => guardarSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -81,7 +82,7 @@ export const guardarSmtp = createServerFn({ method: "POST" })
 
 /** Quita la configuración propia de una tienda: vuelve a usar la general. */
 export const usarSmtpGeneral = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -102,7 +103,7 @@ export const usarSmtpGeneral = createServerFn({ method: "POST" })
  * nadie mira. Esto lo dice ahora y con el motivo del proveedor.
  */
 export const probarSmtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) =>
     z
       .object({

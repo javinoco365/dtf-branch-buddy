@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { leerTodas, trozos } from "./paginar";
 import { leerPorIds } from "./leer-por-ids";
@@ -204,7 +205,7 @@ async function guardarPdfTrasEmitir(userId: string, facturaId: string): Promise<
  * guarda; después devuelve una URL firmada de diez minutos.
  */
 export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -250,7 +251,7 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
  * falló al emitir. La pantalla la llama hasta que no quedan.
  */
 export const rellenarPdfsTienda = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -309,7 +310,7 @@ export const rellenarPdfsTienda = createServerFn({ method: "POST" })
  * enseña la pantalla a quien lo ha pedido.
  */
 export const enviarDocumentoPorCorreo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -458,7 +459,7 @@ type ResultadoEmision = {
 
 /** Emite una factura ordinaria. El número lo pone la base, no esta función. */
 export const emitirFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -681,7 +682,7 @@ const tipoFiscalSchema = z.enum(["particular", "profesional"]).nullable().option
  * no, con el de la ficha del cliente.
  */
 export const emitirTicket = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1022,7 +1023,7 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
  * la petición no duplica nada.
  */
 export const emitirTicketsPedidos = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1038,7 +1039,7 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
  * pedido y de la ficha del cliente, y sin nombre no se emite.
  */
 export const emitirFacturasPedidos = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1153,7 +1154,7 @@ async function emitirEnBloque(
  * negativo. Las dos quedan en el libro y suman cero.
  */
 export const anularFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1208,7 +1209,7 @@ export const contadoresDeSerie = createServerFn({ method: "GET" })
  * conciliada; si no, lo dice. Queda en la auditoría.
  */
 export const borrarUltimaFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) =>
     z.object({ tipo: z.enum(["tienda", "textil"]), factura_id: z.string().uuid() }).parse(d),
   )
@@ -1238,7 +1239,7 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
 
 /** Cambia el estado de cobro. No toca nada del documento fiscal. */
 export const cambiarEstadoCobro = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1306,7 +1307,7 @@ export const leerEstadoSeries = createServerFn({ method: "POST" })
  * rendija entre la comprobación y la escritura.
  */
 export const fijarInicioSerie = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1356,7 +1357,7 @@ function lineasDeSnapshot(snapshot: unknown) {
  * del ticket.
  */
 export const canjearTicket = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
