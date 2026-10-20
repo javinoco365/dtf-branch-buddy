@@ -70,6 +70,7 @@ import {
 import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros } from "@/dominio/cobros";
+import { claseFilaCobrada } from "@/components/cobros/fila-cobrada";
 import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
 // Normal y no con lazy(): EstadoCobroTexto ya sale de este módulo, y cargarlo
@@ -1062,16 +1063,10 @@ function FilaPedido({
   const numeroLabel = numeroVisible(pedido);
   const cancelado = pedido.estado === "cancelado";
   const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
-  // Cobrado entero: fondo verde muy suave, para ver de un vistazo lo que falta.
-  const cobrado = !cancelado && (cobro.estado === "cobrado" || cobro.estado === "excedido");
 
   return (
     <>
-      <TableRow
-        className={
-          cobrado ? "bg-emerald-50/70 hover:bg-emerald-50 dark:bg-emerald-950/20" : undefined
-        }
-      >
+      <TableRow className={claseFilaCobrada(cobro.estado, cancelado)}>
         <TableCell className="cursor-pointer" onClick={onToggle}>
           {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </TableCell>
