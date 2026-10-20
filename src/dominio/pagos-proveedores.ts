@@ -33,7 +33,26 @@ export type CompraPendiente = {
   tipo_documento?: string | null;
   /** Proforma ya casada con su factura: el pago está en la factura. */
   casada?: boolean;
+  /**
+   * En una factura casada, lo que hizo el casado (`casado_resumen`). Si la
+   * proforma ya estaba pagada (a mano, sin enlace del banco) y la factura sale
+   * por más, la factura queda pendiente solo por la diferencia.
+   */
+  casado_resumen?: unknown;
 };
+
+/**
+ * Lo ya pagado con la proforma de una factura casada que quedó pendiente: el
+ * líquido de la proforma si estaba pagada; 0 si no.
+ */
+export function pagadoConProforma(casadoResumen: unknown): number {
+  if (!casadoResumen || typeof casadoResumen !== "object") return 0;
+  const pago = (casadoResumen as { pago?: unknown }).pago;
+  if (!pago || typeof pago !== "object") return 0;
+  const p = pago as { proforma_pagada?: unknown; liquido_proforma?: unknown };
+  if (p.proforma_pagada !== true) return 0;
+  return redondear(Number(p.liquido_proforma) || 0);
+}
 
 export type TramoPago = {
   clave: "0-30" | "31-60" | "61-90" | "90+";
@@ -88,7 +107,8 @@ function claveDeProveedor(
 
 /**
  * Registradas, sin borrar y con estado_pago "pendiente"; importe = liquido ??
- * total; por proveedor_id, si no por claveNif(nif_proveedor), si no por
+ * total, menos lo ya pagado con su proforma si es una factura casada
+ * (pagadoConProforma; si no queda nada, no cuenta); por proveedor_id, si no por claveNif(nif_proveedor), si no por
  * claveTexto(proveedor); antigüedad desde la fecha (sin fecha, en el primer
  * tramo).
  */
@@ -112,7 +132,9 @@ export function pagosPendientesProveedores(
     if (c.estado !== "registrada" || c.borrada_en || c.estado_pago !== "pendiente") continue;
     if (c.casada === true) continue;
     const bruto = c.liquido ?? c.total;
-    const importe = redondear(Number(bruto) || 0);
+    // Lo pagado con su proforma ya no se debe: solo la diferencia.
+    const importe = redondear((Number(bruto) || 0) - pagadoConProforma(c.casado_resumen));
+    if (importe <= 0 && pagadoConProforma(c.casado_resumen) > 0) continue;
     total += importe;
     facturas += 1;
     if (c.tipo_documento === "proforma") proformas += 1;

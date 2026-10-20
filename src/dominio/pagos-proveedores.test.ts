@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   anticiposProveedores,
+  pagadoConProforma,
   pagosPendientesProveedores,
   type CompraPendiente,
 } from "./pagos-proveedores";
@@ -139,6 +140,45 @@ describe("proformas en los pagos", () => {
     expect(r.facturas).toBe(2);
     expect(r.proformas).toBe(1);
     expect(r.total).toBe(171);
+  });
+
+  it("factura casada pendiente con su proforma pagada a mano: solo cuenta la diferencia", () => {
+    const pago = (liquidoProforma: number, pagada = true) => ({
+      proforma_id: "p",
+      pago: { proforma_pagada: pagada, liquido_proforma: liquidoProforma, diferencia: 0 },
+    });
+    // Proforma de 1.000 pagada; la factura sale a 1.010: se deben 10.
+    const r = pagosPendientesProveedores(
+      [compra("f", { liquido: 1010, casado_resumen: pago(1000) })],
+      HOY,
+    );
+    expect(r.total).toBe(10);
+    expect(r.facturas).toBe(1);
+    expect(r.porProveedor[0].importe).toBe(10);
+    // Lo pagado cubre la factura (datos de antes de la corrección): no se debe nada.
+    const cubierta = pagosPendientesProveedores(
+      [compra("f", { liquido: 990, casado_resumen: pago(1000) })],
+      HOY,
+    );
+    expect(cubierta.total).toBe(0);
+    expect(cubierta.facturas).toBe(0);
+    // La proforma no estaba pagada: se debe la factura entera.
+    expect(
+      pagosPendientesProveedores(
+        [compra("f", { liquido: 1010, casado_resumen: pago(1000, false) })],
+        HOY,
+      ).total,
+    ).toBe(1010);
+  });
+
+  it("pagadoConProforma: solo con proforma_pagada; cualquier otra forma, 0", () => {
+    expect(pagadoConProforma({ pago: { proforma_pagada: true, liquido_proforma: "121.5" } })).toBe(
+      121.5,
+    );
+    expect(pagadoConProforma({ pago: { proforma_pagada: false, liquido_proforma: 121 } })).toBe(0);
+    expect(pagadoConProforma(null)).toBe(0);
+    expect(pagadoConProforma("x")).toBe(0);
+    expect(pagadoConProforma({ pago: null })).toBe(0);
   });
 
   const pf = (id: string, extra: Partial<ProformaFila> = {}): ProformaFila => ({

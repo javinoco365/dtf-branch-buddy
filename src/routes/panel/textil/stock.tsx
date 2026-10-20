@@ -1233,7 +1233,8 @@ function HistorialDialog({ item, onClose }: any) {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Motivo</TableHead>
                 <TableHead className="text-right">Unidades</TableHead>
-                <TableHead className="text-right">Coste unit.</TableHead>
+                {/* El ajuste de coste no tiene coste unitario: lleva el importe total. */}
+                <TableHead className="text-right">Coste unit. / importe</TableHead>
                 <TableHead>Nota</TableHead>
               </TableRow>
             </TableHeader>
@@ -1249,8 +1250,9 @@ function HistorialDialog({ item, onClose }: any) {
                     // unidades, con su importe.
                     <>
                       <TableCell className="text-right text-muted-foreground">—</TableCell>
-                      <TableCell className="text-right">
-                        {eurConSigno(Number(m.importe_ajuste ?? 0))}
+                      <TableCell className="text-right whitespace-nowrap">
+                        {eurConSigno(Number(m.importe_ajuste ?? 0))}{" "}
+                        <span className="text-xs text-muted-foreground">en total</span>
                       </TableCell>
                     </>
                   ) : (

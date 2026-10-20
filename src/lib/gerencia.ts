@@ -1120,9 +1120,10 @@ export function usePagosProveedores() {
             .order("id")
             .range(a, b),
         );
-      // Con el tipo de documento (proformas, 20261029…) y el proveedor del
+      // Con el tipo de documento y el casado (proformas, 20261029…: lo ya
+      // pagado con la proforma no se debe) y el proveedor del
       // catálogo (20261028100000) si existen; si no, sin ellos.
-      let r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id, tipo_documento`);
+      let r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id, tipo_documento, casado_resumen`);
       if (faltaLaColumna(r.error)) r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id`);
       if (faltaLaColumna(r.error)) r = await leer(CAMPOS_PAGO_PROVEEDOR);
       if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return null;

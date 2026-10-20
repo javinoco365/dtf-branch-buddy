@@ -17,7 +17,14 @@ import { claveNumero, claveProveedor } from "./cola-compras";
 import { TOLERANCIA } from "./factura-compra";
 import { redondear } from "./importes";
 import { diasDesde } from "./pendientes";
-import type { FilaRegularizacion, RegularizacionStock } from "./tipos-textil";
+import { claveTalla, claveTexto } from "./normalizar-textil";
+import type {
+  FilaRegularizacion,
+  NuevaVariante,
+  ProductoTextil,
+  RegularizacionStock,
+  VarianteCatalogo,
+} from "./tipos-textil";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -319,7 +326,72 @@ export type ArticuloFactura = {
   unidades: number;
   /** coste_total_entrada */
   coste_total: number;
+  /**
+   * Sin stock_id (variante nueva que no está en el catálogo): las que llevan
+   * la misma clave (producto, color y talla) acaban en la misma variante y van
+   * juntas en la previsión. Sin ella, cada una por su lado.
+   */
+  grupo_nueva?: string | null;
 };
+
+/**
+ * La variante del catálogo que usará la base para una «variante nueva» (paso
+ * 4.6): la activa y no repetida del mismo producto, color y talla. El producto
+ * es el elegido o, si no, el de la misma marca y referencia (o, sin
+ * referencia, la misma marca y nombre). null si no hay una sola: la base la
+ * creará.
+ */
+export function varianteDeNueva(
+  nueva: NuevaVariante,
+  productos: readonly Pick<ProductoTextil, "id" | "marca" | "referencia" | "nombre">[],
+  variantes: readonly Pick<
+    VarianteCatalogo,
+    "id" | "producto_id" | "color" | "talla" | "activa" | "repetida"
+  >[],
+): string | null {
+  const productoId = productoDeNueva(nueva, productos);
+  if (!productoId) return null;
+  const color = claveTexto(nueva.color);
+  const talla = claveTalla(nueva.talla);
+  const hay = variantes.filter(
+    (v) =>
+      v.producto_id === productoId &&
+      v.activa &&
+      !v.repetida &&
+      claveTexto(v.color) === color &&
+      claveTalla(v.talla) === talla,
+  );
+  return hay.length === 1 ? hay[0].id : null;
+}
+
+function productoDeNueva(
+  nueva: NuevaVariante,
+  productos: readonly Pick<ProductoTextil, "id" | "marca" | "referencia" | "nombre">[],
+): string | null {
+  if (nueva.producto_id) return nueva.producto_id;
+  if (!nueva.producto) return null;
+  const marca = claveTexto(nueva.producto.marca);
+  const referencia = claveTexto(nueva.producto.referencia);
+  const nombre = claveTexto(nueva.producto.nombre);
+  const p = productos.find((x) =>
+    referencia !== ""
+      ? claveTexto(x.marca) === marca && claveTexto(x.referencia) === referencia
+      : claveTexto(x.marca) === marca &&
+        claveTexto(x.referencia) === "" &&
+        claveTexto(x.nombre) === nombre,
+  );
+  return p?.id ?? null;
+}
+
+/** La clave con la que van juntas las variantes nuevas que no están en el catálogo. */
+export function grupoDeNueva(nueva: NuevaVariante): string {
+  const producto = nueva.producto_id
+    ? `p:${nueva.producto_id}`
+    : `m:${claveTexto(nueva.producto?.marca)}|${claveTexto(nueva.producto?.referencia)}|${
+        claveTexto(nueva.producto?.referencia) ? "" : claveTexto(nueva.producto?.nombre)
+      }`;
+  return `${producto}|${claveTexto(nueva.color)}|${claveTalla(nueva.talla)}`;
+}
 
 export type StockActual = { cantidad: number; coste_unitario: number };
 
@@ -344,7 +416,9 @@ function costeTrasEntrada(saldo: number, coste: number, cantidad: number, costeE
  * saldo = saldo0 + entran − salen y cm = coste medio tras la entrada, ponderado y a 4 decimales
  * como el trigger (si saldo0 ≤ 0, cm = cF), diferencia_sin_aplicar con el valor
  * de las devoluciones al coste medio de hoy.
- * Un artículo sin stock_id cuenta como variante propia con clave `nueva:<indice>` (stock 0).
+ * Un artículo sin stock_id cuenta como variante propia con clave `nueva:<indice>` (stock 0); los
+ * que comparten `grupo_nueva` van juntos, con el índice del primero. La pantalla pasa como
+ * stock_id la variante que reutilizará la base (varianteDeNueva).
  * Filas ordenadas por stock_id. `movimientos` = cuántos movimientos anotará.
  * Es una previsión: la base manda (el coste medio puede moverse entre medias).
  */
@@ -364,8 +438,13 @@ export function regularizacionPrevista(datos: {
     pro.set(e.stock_id, p);
   }
   const fac = new Map<string, { unidades: number; coste: number }>();
+  const grupos = new Map<string, string>();
   for (const a of datos.factura) {
-    const clave = a.stock_id ?? `nueva:${a.indice}`;
+    let clave = a.stock_id ?? `nueva:${a.indice}`;
+    if (!a.stock_id && a.grupo_nueva) {
+      clave = grupos.get(a.grupo_nueva) ?? clave;
+      grupos.set(a.grupo_nueva, clave);
+    }
     const f = fac.get(clave) ?? { unidades: 0, coste: 0 };
     f.unidades += num(a.unidades);
     f.coste += num(a.coste_total);
@@ -497,9 +576,10 @@ export function estadoFilaRegularizacion(f: FilaRegularizacion): EstadoFilaRegul
  * diferencia = redondear(liquidoFactura − (liquido ?? total) de la proforma);
  * revisarSiEnlazada = diferencia ≠ 0. La pantalla no sabe si el pago está enlazado en el banco
  * (la base pone el grupo en `revisar` solo si hay enlace, esté la proforma pagada o no): el texto
- * es condicional. La factura hereda «pagada» si el pago está enlazado o si el líquido es el mismo;
- * una proforma pagada a mano (sin enlace) con otro líquido deja la factura pendiente
- * (`pendienteSiAMano`), como hace la base, para que la diferencia no se pierda.
+ * es condicional. La factura hereda «pagada» si el pago está enlazado o si su líquido no pasa del
+ * de la proforma (queda cubierta; lo pagado de más se anota). Una proforma pagada a mano (sin
+ * enlace) y una factura por MÁS deja la factura pendiente (`pendienteSiAMano`, diferencia > 0),
+ * como hace la base: en Tesorería solo cuenta la diferencia (pagadoConProforma).
  */
 export function pagoPrevisto(
   proforma: Pick<ProformaFila, "estado_pago" | "fecha_pago" | "liquido" | "total">,
@@ -518,7 +598,7 @@ export function pagoPrevisto(
     fecha: proforma.fecha_pago ?? null,
     diferencia,
     revisarSiEnlazada: diferencia !== 0,
-    pendienteSiAMano: pagada && diferencia !== 0,
+    pendienteSiAMano: pagada && diferencia > 0,
   };
 }
 
@@ -543,6 +623,26 @@ export function gruposPorLineaPapel(
     else grupos.push({ linea_papel: n, indices: [i] });
   });
   return grupos;
+}
+
+/**
+ * Cada línea que sale de partir una línea del papel (en un grupo de más de
+ * una): su número del papel y si es la última del grupo. Sirve para marcar el
+ * grupo en la revisión y, en el móvil, para decir en cada tarjeta de qué línea
+ * del papel sale.
+ */
+export function partidasLineaPapel(
+  lineas: readonly { linea_papel?: number | null }[],
+): Map<number, { linea_papel: number; ultima: boolean }> {
+  const mapa = new Map<number, { linea_papel: number; ultima: boolean }>();
+  for (const g of gruposPorLineaPapel(lineas)) {
+    if (g.linea_papel === null || g.indices.length < 2) continue;
+    const n = g.linea_papel;
+    g.indices.forEach((i, k) =>
+      mapa.set(i, { linea_papel: n, ultima: k === g.indices.length - 1 }),
+    );
+  }
+  return mapa;
 }
 
 // ---------------------------------------------------------------------------

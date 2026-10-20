@@ -91,7 +91,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
   );
   // Las proformas textiles sin factura, de cualquier fecha (no dependen del
   // periodo). Las de otras categorías no son del almacén ni salen en Textil › Compras.
-  const { data: filasProformas } = useProformasPendientes();
+  const { data: filasProformas, error: errorProformas } = useProformasPendientes();
   const proformas = useMemo(
     () =>
       filasProformas
@@ -302,6 +302,11 @@ export function Textil({ d }: { d: DatosGerencia }) {
               <p className="text-xs text-muted-foreground">
                 Más {compras.sinRegistrar}{" "}
                 {compras.sinRegistrar === 1 ? "compra subida" : "compras subidas"} sin registrar.
+              </p>
+            )}
+            {errorProformas && (
+              <p className="text-xs text-destructive">
+                No se han podido leer las proformas sin factura: {errorProformas.message}
               </p>
             )}
             {proformas && proformas.proformas > 0 && (

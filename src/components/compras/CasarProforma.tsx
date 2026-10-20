@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { StatusBadge } from "@/components/StatusBadge";
-import { eur, eurConSigno, eurUnitario, fechaCorta, numeroJusto } from "@/lib/format";
+import { eur, eurConSigno, eurUnitarioFijo, fechaCorta, numeroJusto } from "@/lib/format";
 import { entradasDeProforma } from "@/lib/compras.functions";
 import { sumarCantidades } from "@/dominio/sumatorios";
 import {
@@ -62,7 +62,7 @@ export function SelectorTipoDocumento({
       <ToggleGroup
         type="single"
         variant="outline"
-        className={`justify-start ${valor === null ? "rounded-md ring-1 ring-amber-500" : ""}`}
+        className={`w-fit justify-start ${valor === null ? "rounded-md ring-1 ring-amber-500" : ""}`}
         value={valor ?? ""}
         onValueChange={(v) => v && onCambiar(v as TipoDocumentoCompra)}
       >
@@ -154,7 +154,7 @@ export function CasarProforma({
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
-          ¿Es la factura de una de estas proformas?
+          {elegida ? "Casada con su proforma" : "¿Es la factura de una de estas proformas?"}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
@@ -170,9 +170,10 @@ export function CasarProforma({
           </div>
         ) : elegida ? (
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link2 className="h-4 w-4 text-status-completado" />
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {/* El icono va dentro del texto: en el móvil no se queda solo en su línea. */}
               <span>
+                <Link2 className="mr-1.5 inline h-4 w-4 align-text-bottom text-status-completado" />
                 Casada con la proforma{" "}
                 <span className="font-medium">{describir(elegida.proforma)}</span>
               </span>
@@ -272,8 +273,8 @@ function LineaPago({
       {pago.pendienteSiAMano && (
         <p className="text-xs text-amber-700">
           Si la proforma se marcó pagada a mano (sin enlace en el banco), la factura quedará
-          pendiente de pago: la diferencia de {eur(pago.diferencia)} no estaría pagada. Márcala
-          pagada cuando la pagues.
+          pendiente por la diferencia de {eur(pago.diferencia)} (lo pagado con la proforma ya
+          cuenta). Márcala pagada cuando pagues esa diferencia.
         </p>
       )}
     </div>
@@ -379,10 +380,14 @@ function ComparacionTallas({ proformaId, datos }: { proformaId: string; datos: D
                 {numeroJusto(f.unidades_factura)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {f.coste_unitario_proforma === null ? "—" : eurUnitario(f.coste_unitario_proforma)}
+                {f.coste_unitario_proforma === null
+                  ? "—"
+                  : eurUnitarioFijo(f.coste_unitario_proforma)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {f.coste_unitario_factura === null ? "—" : eurUnitario(f.coste_unitario_factura)}
+                {f.coste_unitario_factura === null
+                  ? "—"
+                  : eurUnitarioFijo(f.coste_unitario_factura)}
               </TableCell>
               <TableCell>
                 <BadgeEstado estado={estadoFilaRegularizacion(f)} />

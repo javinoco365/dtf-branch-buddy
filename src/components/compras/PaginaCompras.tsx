@@ -82,6 +82,8 @@ import { ProformasPendientes } from "./ProformasPendientes";
 import { CasarProforma, SelectorTipoDocumento, textoCasado } from "./CasarProforma";
 import {
   cabecerasLineaPapel,
+  clasesPartida,
+  EtiquetaPartida,
   Campo,
   conTipoDocumento,
   FicheroRevision,
@@ -104,6 +106,7 @@ import {
   esProforma,
   facturasPorProforma,
   FILTROS_DOCUMENTO,
+  partidasLineaPapel,
   pasaFiltroDocumento,
   type FiltroDocumento,
   type ProformaFila,
@@ -790,7 +793,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               )}
               {filtrados.map((c: any) => (
                 <TableRow key={c.id}>
-                  <TableCell>{c.fecha ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.fecha ?? "—"}</TableCell>
                   <TableCell className="font-medium">{c.proveedor ?? "—"}</TableCell>
                   {general && (
                     <TableCell>
@@ -804,23 +807,30 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     </TableCell>
                   )}
                   <TableCell className="font-mono text-xs">
-                    {c.numero ?? "—"}
+                    <span className="whitespace-nowrap">{c.numero ?? "—"}</span>
+                    {/* Debajo del número: al lado ensanchaba la columna y partía las demás. */}
                     {esProforma(c) && (
                       <Badge
                         variant="outline"
-                        className="ml-1 border-amber-500 font-sans text-amber-700"
+                        className="mt-0.5 flex w-fit border-amber-500 font-sans text-amber-700"
                       >
                         Proforma
                       </Badge>
                     )}
                     {esProforma(c) && facturaDe.get(c.id) && (
                       <span className="block font-sans text-xs text-muted-foreground">
-                        Facturada en n.º {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                        Facturada en n.º{" "}
+                        <span className="whitespace-nowrap">
+                          {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                        </span>
                       </span>
                     )}
                     {!esProforma(c) && c.proforma_id && (
                       <span className="block font-sans text-xs text-muted-foreground">
-                        De la proforma n.º {porId.get(c.proforma_id)?.numero ?? "(sin número)"}
+                        De la proforma n.º{" "}
+                        <span className="whitespace-nowrap">
+                          {porId.get(c.proforma_id)?.numero ?? "(sin número)"}
+                        </span>
                       </span>
                     )}
                   </TableCell>
@@ -837,10 +847,14 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                         facturaDe.get(c.id)?.estado_pago === "pagada" && (
                           <span className="block text-xs text-muted-foreground">
                             Pagada con su factura n.º{" "}
-                            {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                            <span className="whitespace-nowrap">
+                              {facturaDe.get(c.id)?.numero ?? "(sin número)"}
+                            </span>
                           </span>
                         )
-                      : (general || esProforma(c)) &&
+                      : // En Textil, solo las proformas y las facturas casadas (que
+                        // heredan su pago): así la proforma y su factura dicen lo mismo.
+                        (general || esProforma(c) || !!c.proforma_id) &&
                         c.estado_pago === "pagada" &&
                         !c.borrada_en && (
                           <span className="block text-xs text-muted-foreground">
@@ -1152,6 +1166,7 @@ function RevisarCompra({
   const faltaDeProforma = pendientesDeProforma(conProformas, estado, sugerencias);
   const casadaCon = conProformas && estado.tipo_documento === "factura" && !!estado.proforma_id;
   const cabeceras = cabecerasLineaPapel(compra.lineas);
+  const partidas = partidasLineaPapel(compra.lineas);
   // Se guarda y se registra a la vez: sin fecha no se sabe en qué periodo cuenta.
   const sinFecha = !compra.fecha;
   const sinDescripcion = compra.lineas.some((l) => !l.descripcion.trim());
@@ -1351,8 +1366,9 @@ function RevisarCompra({
                   columnas={esTextil ? 5 : 4}
                 />
               )}
-              <TableRow>
-                <TableCell>
+              <TableRow className={clasesPartida(partidas.get(i)).fila}>
+                <TableCell className={clasesPartida(partidas.get(i)).celda}>
+                  <EtiquetaPartida partida={partidas.get(i)} talla={l.talla} />
                   <Input
                     value={l.descripcion}
                     onChange={(e) => setLinea(i, { descripcion: e.target.value })}
@@ -1487,19 +1503,19 @@ function RevisarCompra({
               </Select>
             </div>
             <Campo
-              etiqueta="IVA según la factura"
+              etiqueta={`IVA según ${esProformaRev ? "la proforma" : "la factura"}`}
               tipo="number"
               valor={String(compra.iva)}
               onChange={(v) => set({ iva: Number(v) })}
             />
             <Campo
-              etiqueta="IRPF según la factura"
+              etiqueta={`IRPF según ${esProformaRev ? "la proforma" : "la factura"}`}
               tipo="number"
               valor={String(compra.irpf)}
               onChange={(v) => set({ irpf: Number(v) })}
             />
             <Campo
-              etiqueta="A pagar según la factura"
+              etiqueta={`A pagar según ${esProformaRev ? "la proforma" : "la factura"}`}
               tipo="number"
               valor={String(compra.total)}
               onChange={(v) => set({ total: Number(v) })}
@@ -1654,7 +1670,11 @@ function RevisarCompra({
           <span className="text-sm text-muted-foreground mr-auto">Elige el tipo de IVA.</span>
         )}
         {duplicadoQueBloquea && (
-          <span className="text-sm text-destructive mr-auto">Ya está registrada.</span>
+          <span className="text-sm text-destructive mr-auto">
+            {duplicadoQueBloquea.facturaDeProforma
+              ? "Su factura ya está registrada."
+              : "Ya está registrada."}
+          </span>
         )}
         {!duplicadoQueBloquea && porConfirmar.length > 0 && !estado.otraFactura && (
           <span className="text-sm text-muted-foreground mr-auto">
@@ -1703,15 +1723,21 @@ function explicarTrato(categoria: string): string {
 }
 
 /** «Registrada: 12 líneas al stock, 3 variantes nuevas, 9 referencias aprendidas». */
-function textoRegistrada(r: { movidas: number; variantes_creadas: number; aprendidas: number }) {
-  if (r.movidas <= 0) return "Factura registrada";
+function textoRegistrada(r: {
+  movidas: number;
+  variantes_creadas: number;
+  aprendidas: number;
+  tipo_documento?: string | null;
+}) {
+  const proforma = r.tipo_documento === "proforma";
+  if (r.movidas <= 0) return proforma ? "Proforma registrada" : "Factura registrada";
   const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
   const partes = [plural(r.movidas, "línea al stock", "líneas al stock")];
   if (r.variantes_creadas > 0)
     partes.push(plural(r.variantes_creadas, "variante nueva", "variantes nuevas"));
   if (r.aprendidas > 0)
     partes.push(plural(r.aprendidas, "referencia aprendida", "referencias aprendidas"));
-  return `Registrada: ${partes.join(", ")}`;
+  return `${proforma ? "Proforma registrada" : "Registrada"}: ${partes.join(", ")}`;
 }
 
 /**

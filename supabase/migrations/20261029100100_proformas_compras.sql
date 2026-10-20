@@ -49,8 +49,8 @@
 --      proforma en la misma transacción: no vuelve a meter el stock, regulariza
 --      la diferencia por variante (entran, salen y ajuste de coste), pasa los
 --      enlaces del banco de la proforma a la factura y hereda su pago (salvo
---      una proforma pagada a mano, sin enlace, con otro líquido: la factura
---      queda pendiente). Bloquea las filas del banco antes que las compras,
+--      una proforma pagada a mano, sin enlace, y una factura por más: la
+--      factura queda pendiente). Bloquea las filas del banco antes que las compras,
 --      como el motor de conciliación.
 --   7. textil_compra_registrar() (camino viejo): rechaza proformas y facturas
 --      casadas.
@@ -504,16 +504,17 @@ COMMENT ON FUNCTION public.textil_stock_destino(UUID) IS
 -- valor y coste: solo motivo 'compra'), y las unidades devueltas a mano al
 -- proveedor enlazadas a ella, solo para avisar (no cambian la comparación).
 -- Una variante con devoluciones y sin 'compra' no sale.
--- `posteriores`: las unidades que entraron en esa variante (compra, inicial o
--- devolución de cliente, de otro documento) DESPUÉS de la última entrada de la
--- proforma. Lo que queda en el almacén se cuenta como lo más nuevo (lo más
--- antiguo sale antes): de la proforma solo sigue ahí saldo − posteriores, y el
--- ajuste de coste no se lleva al género de otra compra (decisión 7). Los
--- ajustes de inventario no cuentan: la fusión de variantes se anota así y no
--- es género nuevo.
--- (Solo los literales 'compra', 'inicial', 'devolucion_cliente' y
--- 'devolucion_proveedor': una función LANGUAGE sql se valida al crearla y
--- 'ajuste_coste' no puede salir en ninguna.)
+-- `posteriores`: las unidades que entraron en esa variante (compra o
+-- inicial, de otro documento) DESPUÉS de la última entrada de la proforma. Lo
+-- que queda en el almacén se cuenta como lo más nuevo (lo más antiguo sale
+-- antes): de la proforma solo sigue ahí saldo − posteriores, y el ajuste de
+-- coste no se lleva al género de otra compra (decisión 7). No cuentan las
+-- devoluciones de cliente (lo que vuelve es género que ya estaba, a menudo de
+-- la propia proforma) ni los ajustes de inventario (la fusión de variantes se
+-- anota así y no es género nuevo).
+-- (Solo los literales 'compra', 'inicial' y 'devolucion_proveedor': una
+-- función LANGUAGE sql se valida al crearla y 'ajuste_coste' no puede salir
+-- en ninguna.)
 -- Se borra y se crea: cambia el tipo de retorno (la columna posteriores).
 DROP FUNCTION IF EXISTS public.proforma_entradas(UUID);
 CREATE FUNCTION public.proforma_entradas(_proforma_id UUID)
@@ -538,7 +539,7 @@ LANGUAGE sql STABLE SET search_path = public AS $$
          COALESCE((SELECT sum(o.cantidad)
                      FROM public.textil_stock_movimientos o
                     WHERE o.empresa_id = e.empresa_id AND o.id > e.ultima
-                      AND o.motivo IN ('compra', 'inicial', 'devolucion_cliente') AND o.cantidad > 0
+                      AND o.motivo IN ('compra', 'inicial') AND o.cantidad > 0
                       AND o.compra_id IS DISTINCT FROM _proforma_id
                       AND public.textil_stock_destino(o.stock_id) = e.stock_id), 0)
     FROM e
@@ -923,6 +924,27 @@ BEGIN
     END IF;
   END IF;
 
+  -- Una proforma que llega cuando su factura ya está registrada (sin casar):
+  -- el casado solo se hace al registrar la factura, así que registrarla
+  -- volvería a meter el género y a pedir su pago. Mismo proveedor (el del
+  -- catálogo o la clave del nombre o NIF) y mismo número. La pantalla avisa
+  -- además de la que tiene el mismo importe (duplicadosDe) y pide confirmarlo.
+  IF v_tipo = 'proforma' THEN
+    SELECT f.numero INTO v_num
+      FROM public.textil_compras f, public.textil_compras c
+     WHERE c.id = v_id AND f.id <> v_id
+       AND f.empresa_id = v_empresa AND f.tipo_documento = 'factura'
+       AND f.estado = 'registrada' AND f.borrada_en IS NULL AND f.proforma_id IS NULL
+       AND ((v_prov_id IS NOT NULL AND f.proveedor_id = v_prov_id)
+            OR (COALESCE(c.proveedor_clave, '') <> '' AND f.proveedor_clave = c.proveedor_clave))
+       AND COALESCE(c.numero_clave, '') <> '' AND f.numero_clave = c.numero_clave
+     ORDER BY f.id LIMIT 1;
+    IF FOUND THEN
+      RAISE EXCEPTION 'Esta proforma parece de la factura %, ya registrada: no la registres (la factura ya cuenta y, si es textil, su género ya entró).',
+        COALESCE(v_num, '(sin número)') USING ERRCODE = 'unique_violation';
+    END IF;
+  END IF;
+
   -- 3. Líneas -------------------------------------------------------------
   -- La variante (stock_id) se escribe en el paso 4.6, después de validarla.
   DELETE FROM public.textil_compra_lineas WHERE compra_id = v_id;
@@ -1238,8 +1260,17 @@ BEGIN
           FROM p FULL OUTER JOIN f ON f.stock_id = p.stock_id
          ORDER BY 1   -- orden fijo de bloqueo de las variantes
       LOOP
-        -- c0. El saldo ANTES de regularizar.
-        SELECT cantidad INTO v_saldo0 FROM public.textil_stock WHERE id = v_rg.stock_id FOR UPDATE;
+        -- c0. El saldo ANTES de regularizar. Una variante retirada (activa =
+        --     false, con 0 unidades) no admite la salida de c2: quedaría en
+        --     negativo y fuera del almacén, sin forma de corregirla.
+        SELECT cantidad, activa, nombre, color, talla INTO v_var
+          FROM public.textil_stock WHERE id = v_rg.stock_id FOR UPDATE;
+        v_saldo0 := v_var.cantidad;
+        IF NOT v_var.activa AND v_rg.up > v_rg.uf THEN
+          RAISE EXCEPTION 'La variante % está retirada y la factura trae menos unidades que la proforma: reactívala en Stock (o fusiónala con la buena) antes de casar.',
+            concat_ws(' · ', v_var.nombre, v_var.color, v_var.talla)
+            USING ERRCODE = 'restrict_violation';
+        END IF;
 
         -- c1. La factura trae más: entra la diferencia al coste de la factura.
         v_entran := greatest(v_rg.uf - v_rg.up, 0);
@@ -1382,9 +1413,11 @@ BEGIN
   -- porque está casada. estado_pago y fecha_pago pasan en el paso 5.
   -- La factura hereda «pagada» si el pago está enlazado en el banco (si el
   -- líquido difiere, su grupo queda en «revisar» con la diferencia) o si su
-  -- líquido es el que se pagó por la proforma, al céntimo. Una proforma pagada
-  -- a mano, sin enlace, con otro líquido: la factura queda pendiente (nada
-  -- diría que falta pagar la diferencia) y casado_resumen.pago lo anota.
+  -- líquido no pasa del que se pagó por la proforma (queda cubierta; lo pagado
+  -- de más queda en casado_resumen.pago.diferencia, negativa). Una proforma
+  -- pagada a mano, sin enlace, y una factura por MÁS: la factura queda
+  -- pendiente (nada diría que falta pagar la diferencia) y casado_resumen.pago
+  -- lo anota; Tesorería solo cuenta como deuda líquido − liquido_proforma.
   IF v_proforma_id IS NOT NULL THEN
     SELECT liquido INTO v_liquido FROM public.textil_compras WHERE id = v_id;
 
@@ -1427,7 +1460,7 @@ BEGIN
 
     v_liquido_pro := round(COALESCE(v_pro.liquido, v_pro.total, 0)::NUMERIC, 2);
     v_hereda := v_pro.estado_pago = 'pagada'
-                AND (v_enlaces > 0 OR round(v_liquido, 2) = v_liquido_pro);
+                AND (v_enlaces > 0 OR round(v_liquido, 2) <= v_liquido_pro);
 
     v_pago := jsonb_build_object(
       'enlaces_movidos', v_enlaces,

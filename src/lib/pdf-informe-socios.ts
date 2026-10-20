@@ -1279,6 +1279,11 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
       c.y,
     );
     c.y += 6;
+  } else if (a.proformasError) {
+    c.sitio(8, "Almacén");
+    c.letra("negrita", 7.8, NARANJA);
+    c.texto("Proformas sin factura: no se han podido leer.", M, c.y);
+    c.y += 6;
   }
   // El «Beneficio» de este informe es margen menos gastos fijos: no resta las
   // mermas y ajustes (ni las compras ni las amortizaciones). Gerencia ›

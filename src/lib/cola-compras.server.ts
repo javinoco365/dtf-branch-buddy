@@ -218,8 +218,11 @@ export async function procesarFactura(
     }
     if (candidatas.error) throw new Error(candidatas.error.message);
 
-    // Lo que dijo la IA: factura, proforma o null si dudó.
+    // Lo que dijo la IA: factura, proforma o null si dudó. Sin la migración
+    // de proformas no hay selector: no se pide elegir ni se habla de proformas
+    // (salvo el aviso de que falta la migración).
     const tipo: TipoDocumentoCompra | null = r.lectura.tipo_documento ?? null;
+    const conProformas = await proformasAplicado(supabase);
     const yo: CompraComparable = {
       id,
       proveedor: compra.proveedor,
@@ -227,7 +230,7 @@ export async function procesarFactura(
       numero: compra.numero,
       fecha: compra.fecha,
       total: compra.total,
-      tipo_documento: tipo ?? "factura",
+      tipo_documento: conProformas ? (tipo ?? "factura") : "factura",
     };
     const duplicados = duplicadosDe(yo, (candidatas.data ?? []) as CompraComparable[]);
 
@@ -249,12 +252,10 @@ export async function procesarFactura(
         tipoIva,
         categoria,
         duplicados,
-        tipoDocumento: tipo,
+        ...(conProformas ? { tipoDocumento: tipo } : {}),
         proformas,
       }),
-      ...(tipo === "proforma" && !(await proformasAplicado(supabase))
-        ? [MOTIVO_PROFORMA_SIN_MIGRACION]
-        : []),
+      ...(tipo === "proforma" && !conProformas ? [MOTIVO_PROFORMA_SIN_MIGRACION] : []),
       ...(lineas.length < compra.lineas.length
         ? [`${compra.lineas.length - lineas.length} línea(s) sin cantidad no se han guardado.`]
         : []),

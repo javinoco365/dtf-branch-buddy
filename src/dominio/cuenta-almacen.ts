@@ -233,4 +233,6 @@ export type InformeAlmacen = {
   pagosProveedores: { total: number; facturas: number } | null;
   /** Proformas registradas sin factura (aviso desde el día 1). */
   proformasSinFactura?: ResumenProformas | null;
+  /** Si no se pudieron leer las proformas: el motivo (un fallo no es «ninguna»). */
+  proformasError?: string | null;
 };

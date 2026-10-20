@@ -240,6 +240,14 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
 
 const FILAS_PROVEEDORES = 10;
 
+/** «5 facturas · 2 proformas», o solo las facturas si no hay proformas. */
+function textoDocumentosPendientes(documentos: number, proformas: number): string {
+  const facturas = documentos - proformas;
+  const f = `${numero(facturas, 0)} ${facturas === 1 ? "factura" : "facturas"}`;
+  if (proformas <= 0) return f;
+  return `${f} · ${numero(proformas, 0)} ${proformas === 1 ? "proforma" : "proformas"}`;
+}
+
 /** Lo que se debe hoy a los proveedores: no depende del periodo ni de los filtros. */
 function PagosProveedores({ hoy }: { hoy: Date }) {
   const consulta = usePagosProveedores();
@@ -257,6 +265,8 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
   const verFacturas = (
     <VerDetalle destino={{ to: "/panel/compras", search: {} }} texto="Ver facturas de compra" />
   );
+  // Con proformas sin pagar, las columnas cuentan documentos, no facturas.
+  const columnaDocumentos = pagos && pagos.proformas > 0 ? "Documentos" : "Facturas";
 
   return (
     <Card>
@@ -294,7 +304,7 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
             <div className="flex flex-wrap items-baseline gap-x-3">
               <span className="text-2xl font-semibold tabular-nums">{eur(pagos.total)}</span>
               <span className="text-sm text-muted-foreground">
-                {numero(pagos.facturas, 0)} {pagos.facturas === 1 ? "factura" : "facturas"}
+                {textoDocumentosPendientes(pagos.facturas, pagos.proformas)}
               </span>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
@@ -302,7 +312,7 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Proveedor</TableHead>
-                    <TableHead className="text-right">Facturas</TableHead>
+                    <TableHead className="text-right">{columnaDocumentos}</TableHead>
                     <TableHead className="text-right">Pendiente</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -352,7 +362,7 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Antigüedad</TableHead>
-                    <TableHead className="text-right">Facturas</TableHead>
+                    <TableHead className="text-right">{columnaDocumentos}</TableHead>
                     <TableHead className="text-right">Pendiente</TableHead>
                   </TableRow>
                 </TableHeader>

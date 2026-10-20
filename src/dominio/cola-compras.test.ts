@@ -359,9 +359,11 @@ describe("proformas en la cola", () => {
   it("duplicadosDe no marca el par proforma ↔ factura, y sí dos proformas con el mismo número", () => {
     const proforma = doc({ id: "p", tipo_documento: "proforma" });
     const factura = doc({ id: "f", tipo_documento: "factura" });
-    // Mismo número y misma fecha e importe: no son duplicados.
+    // Mismo número y misma fecha e importe: no son duplicados (la factura
+    // que llega con su proforma registrada se casa con ella).
     expect(duplicadosDe(factura, [proforma])).toEqual([]);
-    expect(duplicadosDe(proforma, [factura])).toEqual([]);
+    // La proforma frente a una factura que aún no está registrada, tampoco.
+    expect(duplicadosDe(proforma, [{ ...factura, estado: "borrador" }])).toEqual([]);
     // Sin columna (undefined) es factura: una proforma tampoco la duplica.
     expect(duplicadosDe(doc({ id: "v" }), [proforma])).toEqual([]);
     // El par casado tampoco, aunque por error los dos dijeran factura.
@@ -377,6 +379,56 @@ describe("proformas en la cola", () => {
         doc({ id: "b", tipo_documento: "proforma", fichero_huella: "h" }),
       ]).map((x) => x.nivel),
     ).toEqual(["archivo"]);
+  });
+
+  it("duplicadosDe: una proforma cuya factura ya está registrada sin casar", () => {
+    const proforma = doc({ id: "p", tipo_documento: "proforma", estado: "borrador" });
+    // Mismo número: bloquea (el género ya entró con la factura).
+    const [d] = duplicadosDe(proforma, [doc({ id: "f", tipo_documento: "factura" })]);
+    expect(d).toMatchObject({ nivel: "factura", facturaDeProforma: true });
+    expect(bloqueaRegistro(d)).toBe(true);
+    expect(avisoDuplicado(d)).toContain("Esta proforma parece de la factura");
+    // Otro número, mismo importe y la factura un mes después: hay que confirmarlo.
+    const [p2] = duplicadosDe({ ...proforma, numero: "P-77" }, [
+      doc({ id: "f", tipo_documento: "factura", numero: "F-77", fecha: "2026-10-31" }),
+    ]);
+    expect(p2).toMatchObject({ nivel: "probable", facturaDeProforma: true });
+    expect(bloqueaRegistro(p2)).toBe(false);
+    expect(avisoDuplicado(p2)).toContain("Esta proforma puede ser de la factura");
+    // Otro importe, o ya casada con otra proforma, o de otro proveedor: nada.
+    expect(
+      duplicadosDe({ ...proforma, numero: "P-77" }, [
+        doc({ id: "f", tipo_documento: "factura", numero: "F-77", total: 130 }),
+      ]),
+    ).toEqual([]);
+    expect(
+      duplicadosDe(proforma, [doc({ id: "f", tipo_documento: "factura", proforma_id: "otra" })]),
+    ).toEqual([]);
+    expect(
+      duplicadosDe(proforma, [
+        doc({ id: "f", tipo_documento: "factura", nif_proveedor: "B99999999", proveedor: "Otro" }),
+      ]),
+    ).toEqual([]);
+    // Más de 90 días: no se sospecha.
+    expect(
+      duplicadosDe({ ...proforma, numero: "P-77" }, [
+        doc({ id: "f", tipo_documento: "factura", numero: "F-77", fecha: "2027-02-01" }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("motivosRevision: una proforma no textil no dice que mete género", () => {
+    expect(
+      motivosRevision({
+        confianza: 0.95,
+        dudas: [],
+        avisos: [],
+        tipoIva: 0.21,
+        categoria: "material",
+        duplicados: [],
+        tipoDocumento: "proforma",
+      }),
+    ).toEqual(["Es una proforma: no cuenta en el IVA ni en Gerencia."]);
   });
 
   it("motivosRevision: tipo dudoso, proforma y proformas sugeridas", () => {

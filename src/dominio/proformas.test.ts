@@ -6,8 +6,10 @@ import {
   estadoFilaRegularizacion,
   facturasPorProforma,
   FILTROS_DOCUMENTO,
+  grupoDeNueva,
   gruposPorLineaPapel,
   pagoPrevisto,
+  partidasLineaPapel,
   pasaFiltroDocumento,
   proformasSinFactura,
   proformasTextil,
@@ -15,13 +17,14 @@ import {
   regularizacionPrevista,
   resumenProformas,
   sugerirProformas,
+  varianteDeNueva,
   type ArticuloFactura,
   type DocumentoParaCasar,
   type EntradaProforma,
   type ProformaFila,
   type StockActual,
 } from "./proformas";
-import type { RegularizacionStock } from "./tipos-textil";
+import type { NuevaVariante, RegularizacionStock } from "./tipos-textil";
 
 const fila = (id: string, extra: Partial<ProformaFila> = {}): ProformaFila => ({
   id,
@@ -376,6 +379,86 @@ describe("regularizacionPrevista", () => {
     expect(r.diferencia_sin_aplicar).toBe(0);
   });
 
+  it("(h2) dos variantes nuevas del mismo grupo van juntas; resuelta a la de la proforma, no se mueve nada", () => {
+    const nuevas = regularizacionPrevista({
+      proforma: [],
+      factura: [
+        { ...art(0, null, 2, 10), grupo_nueva: "g" },
+        { ...art(1, null, 3, 15), grupo_nueva: "g" },
+      ],
+      stock: stock([]),
+      base_factura: 25,
+    });
+    expect(nuevas.variantes).toHaveLength(1);
+    expect(nuevas.variantes[0]).toMatchObject({
+      stock_id: "nueva:0",
+      unidades_factura: 5,
+      entran: 5,
+    });
+    expect(nuevas.movimientos).toBe(1);
+
+    // La «nueva» resuelta a la variante de la proforma (lo que hará la base).
+    const v = varianteDeNueva(
+      {
+        producto_id: null,
+        producto: { marca: "Gildan", referencia: null, nombre: "Camiseta X", categoria: null },
+        color: "rojo",
+        talla: "m",
+        ean: null,
+        sku: null,
+        precio_venta: 0,
+        cantidad_minima: 0,
+      },
+      [{ id: "px", marca: "GILDAN", referencia: null, nombre: "Camiseta  X" }],
+      [
+        { id: "s1", producto_id: "px", color: "Rojo", talla: "M", activa: true, repetida: false },
+        { id: "s2", producto_id: "px", color: "Rojo", talla: "L", activa: true, repetida: false },
+        { id: "s3", producto_id: "px", color: "Rojo", talla: "M", activa: false, repetida: false },
+      ],
+    );
+    expect(v).toBe("s1");
+    const r = regularizacionPrevista({
+      proforma: [pro("s1", 10, 50)],
+      factura: [art(0, v, 10, 50)],
+      stock: stock([["s1", 10, 5]]),
+      base_factura: 50,
+    });
+    expect(r.variantes).toHaveLength(1);
+    expect(r.movimientos).toBe(0);
+  });
+
+  it("varianteDeNueva: sin producto conocido, o con dos candidatas, null; con referencia, por marca y referencia", () => {
+    const nv = (extra: Partial<NuevaVariante>): NuevaVariante => ({
+      producto_id: null,
+      producto: null,
+      color: "Azul",
+      talla: "XXL",
+      ean: null,
+      sku: null,
+      precio_venta: 0,
+      cantidad_minima: 0,
+      ...extra,
+    });
+    const variantes = [
+      { id: "a", producto_id: "p1", color: "azul", talla: "2XL", activa: true, repetida: false },
+    ];
+    expect(varianteDeNueva(nv({ producto_id: "p1" }), [], variantes)).toBe("a");
+    expect(varianteDeNueva(nv({ producto_id: "p2" }), [], variantes)).toBeNull();
+    expect(
+      varianteDeNueva(
+        nv({ producto: { marca: "B", referencia: "R-1", nombre: "Otro nombre", categoria: null } }),
+        [{ id: "p1", marca: "b", referencia: "r1", nombre: "Sudadera" }],
+        variantes,
+      ),
+    ).toBe("a");
+    expect(
+      varianteDeNueva(nv({ producto_id: "p1" }), [], [...variantes, { ...variantes[0], id: "b" }]),
+    ).toBeNull();
+    expect(grupoDeNueva(nv({ producto_id: "p1" }))).toBe(
+      grupoDeNueva(nv({ producto_id: "p1", color: "AZUL", talla: "2xl" })),
+    );
+  });
+
   it("(i) P7 cuadra en una factura con todo a la vez", () => {
     const base = 154.37;
     const r = regularizacionPrevista({
@@ -542,6 +625,20 @@ describe("pagoPrevisto", () => {
     });
   });
 
+  it("pagada a mano y la factura por menos: queda cubierta, no pendiente", () => {
+    expect(
+      pagoPrevisto(
+        { estado_pago: "pagada", fecha_pago: "2026-10-02", liquido: 1000, total: 1000 },
+        990,
+      ),
+    ).toMatchObject({
+      pagada: true,
+      diferencia: -10,
+      revisarSiEnlazada: true,
+      pendienteSiAMano: false,
+    });
+  });
+
   it("pagada con otro líquido: el enlace quedaría por revisar", () => {
     expect(
       pagoPrevisto(
@@ -566,6 +663,23 @@ describe("pagoPrevisto", () => {
       revisarSiEnlazada: true,
       pendienteSiAMano: false,
     });
+  });
+});
+
+describe("partidasLineaPapel", () => {
+  it("marca las partidas de cada grupo de más de una y la última; las sueltas no salen", () => {
+    const m = partidasLineaPapel([
+      { linea_papel: 1 },
+      { linea_papel: 1 },
+      { linea_papel: 1 },
+      { linea_papel: 2 },
+      { linea_papel: null },
+    ]);
+    expect([...m.entries()]).toEqual([
+      [0, { linea_papel: 1, ultima: false }],
+      [1, { linea_papel: 1, ultima: false }],
+      [2, { linea_papel: 1, ultima: true }],
+    ]);
   });
 });
 

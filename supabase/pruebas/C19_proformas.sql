@@ -859,6 +859,93 @@ SELECT pg_temp.ok('29c. compra_proforma_solo_por_registro no nombra NEW.estado_p
 FROM (SELECT pg_get_functiondef('public.compra_proforma_solo_por_registro()'::regprocedure) AS d) x;
 
 -- ---------------------------------------------------------------------------
+-- 16c. Devoluciones de cliente de la propia proforma: no son «posteriores»
+-- ---------------------------------------------------------------------------
+-- Proforma 10 a 5 € (la única entrada de la variante), se venden 5 y el
+-- cliente devuelve 2: las 7 que quedan son de la proforma. La factura las
+-- cobra a 6 €: se ajustan las 7 (+7,00) y el coste queda en 6.
+SELECT pg_temp.variante('vq', 'Polo C19', 'Negro', 'XS');
+SELECT pg_temp.reg('pf16c', pg_temp.compra('C19-PF16C', 50, jsonb_build_array(
+         pg_temp.art('Polo negro XS', 10, 50, 50, pg_temp.id('vq'))), '{"tipo_documento": "proforma"}'::JSONB)) IS NOT NULL AS pf16c;
+INSERT INTO public.textil_pedidos (numero, estado) VALUES ('C19-P16C', 'pendiente');
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, textil_pedido_id)
+SELECT pg_temp.empresa(), pg_temp.id('vq'), 'venta', -5, id FROM public.textil_pedidos WHERE numero = 'C19-P16C';
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, textil_pedido_id, nota)
+SELECT pg_temp.empresa(), pg_temp.id('vq'), 'devolucion_cliente', 2, id, 'Devolución C19-16c'
+  FROM public.textil_pedidos WHERE numero = 'C19-P16C';
+SELECT pg_temp.ok('16c-1. proforma_entradas(): la devolución de cliente no cuenta como posterior',
+                  sum(posteriores) = 0 AND sum(unidades) = 10,
+                  string_agg(unidades || ' / ' || posteriores, '; '))
+FROM public.proforma_entradas(pg_temp.id('pf16c'));
+SELECT pg_temp.reg('fa16c', pg_temp.compra('C19-FA16C', 60, jsonb_build_array(
+         pg_temp.art('Polo negro XS', 10, 60, 60, pg_temp.id('vq'))),
+         jsonb_build_object('proforma_id', pg_temp.id('pf16c')))) IS NOT NULL AS fa16c;
+SELECT pg_temp.ok('16c-2. se ajustan las 7 que quedan: +7,00, 3,00 sin aplicar y coste 6,0000',
+                  (f ->> 'unidades_ajustadas')::NUMERIC = 7 AND (f ->> 'importe_ajuste')::NUMERIC = 7
+                  AND (f ->> 'importe_sin_aplicar')::NUMERIC = 3
+                  AND s.cantidad = 7 AND s.coste_unitario = 6.0000
+                  AND pg_temp.p7(pg_temp.id('fa16c')) = 'cuadra',
+                  f::TEXT || ' / ' || s.cantidad || ' a ' || s.coste_unitario)
+FROM (SELECT pg_temp.fila(pg_temp.id('fa16c'), pg_temp.id('vq')) AS f) x,
+     public.textil_stock s WHERE s.id = pg_temp.id('vq');
+
+-- ---------------------------------------------------------------------------
+-- 20d. Pagada a mano y la factura por MENOS: queda cubierta (pagada)
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.reg('pf20d', pg_temp.compra('C19-PF20D', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+         '{"tipo_documento": "proforma", "categoria": "material"}'::JSONB)) IS NOT NULL AS pf20d;
+SELECT pg_temp.como(pg_temp.adm(), format(
+  'UPDATE public.textil_compras SET estado_pago = ''pagada'', fecha_pago = current_date - 1 WHERE id = %L',
+  pg_temp.id('pf20d'))) AS pf20d_pagada;
+SELECT pg_temp.reg('fa20d', pg_temp.compra('C19-FA20D', 90, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 90)),
+         jsonb_build_object('proforma_id', pg_temp.id('pf20d'), 'categoria', 'material'))) IS NOT NULL AS fa20d;
+SELECT pg_temp.ok('20d. la factura nace pagada con la fecha de la proforma y la diferencia, negativa',
+                  f.estado_pago = 'pagada' AND f.fecha_pago = current_date - 1
+                  AND f.casado_resumen -> 'pago' ->> 'estado_pago' = 'pagada'
+                  AND (f.casado_resumen -> 'pago' ->> 'diferencia')::NUMERIC = -12.10,
+                  f.estado_pago || ' / ' || (f.casado_resumen -> 'pago')::TEXT)
+FROM public.textil_compras f WHERE f.id = pg_temp.id('fa20d');
+
+-- ---------------------------------------------------------------------------
+-- 32. Una variante retirada no recibe la salida de la regularización
+-- ---------------------------------------------------------------------------
+-- Proforma con 2 de vr1 (vendidas, saldo 0, retirada) y la factura sin vr1:
+-- la salida dejaría −2 en una variante que el almacén ya no enseña.
+SELECT pg_temp.variante('vr1', 'Polo C19', 'Rosa', 'S');
+SELECT pg_temp.variante('vr2', 'Polo C19', 'Rosa', 'M');
+SELECT pg_temp.reg('pf32', pg_temp.compra('C19-PF32', 10, jsonb_build_array(
+         pg_temp.art('Polo rosa S', 2, 10, 10, pg_temp.id('vr1'))), '{"tipo_documento": "proforma"}'::JSONB)) IS NOT NULL AS pf32;
+SELECT pg_temp.venta(pg_temp.id('vr1'), 2);
+SELECT pg_temp.ok('32a. (retirar la variante a 0 la desactiva)',
+                  public.textil_stock_retirar(pg_temp.id('vr1')) = 'desactivada');
+SELECT pg_temp.guarda('h32', NULL, to_jsonb(pg_temp.huella())) IS NOT NULL AS h32;
+SELECT pg_temp.ok('32b. casar la factura sin esa variante: rechazado, sin tocar nada',
+                  r LIKE '%está retirada%reactívala%' AND pg_temp.huella() = pg_temp.j('h32') #>> '{}', r)
+FROM (SELECT pg_temp.fallo(pg_temp.compra('C19-FA32', 10, jsonb_build_array(
+         pg_temp.art('Polo rosa M', 2, 10, 10, pg_temp.id('vr2'))),
+         jsonb_build_object('proforma_id', pg_temp.id('pf32')))) AS r) x;
+SELECT pg_temp.ok('32c. (la variante sigue a 0)',
+                  cantidad = 0 AND NOT activa, cantidad || ' ' || activa)
+FROM public.textil_stock WHERE id = pg_temp.id('vr1');
+
+-- ---------------------------------------------------------------------------
+-- 33. Una proforma cuya factura ya está registrada (sin casar) no se registra
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.reg('fa33', pg_temp.compra('C19-33', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+         '{"categoria": "material"}'::JSONB)) IS NOT NULL AS fa33;
+SELECT pg_temp.ok('33a. la proforma con el mismo proveedor y número: rechazada',
+                  r = '23505 Esta proforma parece de la factura C19-33, ya registrada: no la registres (la factura ya cuenta y, si es textil, su género ya entró).', r)
+FROM (SELECT pg_temp.fallo(pg_temp.compra('C19-33', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+         '{"tipo_documento": "proforma", "categoria": "material"}'::JSONB)) AS r) x;
+SELECT pg_temp.ok('33b. de otro proveedor, sí se registra',
+                  r = 'sin error', r)
+FROM (SELECT pg_temp.fallo(pg_temp.compra('C19-33', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+         '{"tipo_documento": "proforma", "categoria": "material", "proveedor": "Otro C19 S.L.", "nif_proveedor": "B19000033"}'::JSONB)) AS r) x;
+SELECT pg_temp.ok('33c. la factura ya casada con su proforma no frena una proforma nueva con su número',
+                  pg_temp.fallo(pg_temp.compra('C19-FA7', 100, jsonb_build_array(pg_temp.otra('otro', 'Vinilo', 100)),
+                    '{"tipo_documento": "proforma", "categoria": "material"}'::JSONB)) = 'sin error');
+
+-- ---------------------------------------------------------------------------
 -- 30. Al final, el libro cuadra y la auditoría está entera
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.ok('30. stock_descuadres() vacío y auditoria_verificar() sin eslabones rotos',

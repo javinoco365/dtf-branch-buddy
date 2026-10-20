@@ -184,7 +184,8 @@ function Contenido({
   const movimientosAlmacen = useMovimientosAlmacen();
   const controlesAlmacen = useControlesAlmacen(rango);
   const pagosProveedores = usePagosProveedores();
-  // Sin la migración de proformas, nulo: el informe sale sin esa línea.
+  // Sin la migración de proformas, nulo: el informe sale sin esa línea. Si
+  // falla la lectura, el informe lo dice (no es «ninguna proforma»).
   const proformasPendientes = useProformasPendientes();
   const informeAlmacen = useMemo<InformeAlmacen | null>(() => {
     const movs = movimientosAlmacen.data;
@@ -203,12 +204,14 @@ function Contenido({
       proformasSinFactura: proformasPendientes.data
         ? resumenProformas(proformasSinFactura(proformasTextil(proformasPendientes.data), ahora))
         : null,
+      proformasError: proformasPendientes.error?.message ?? null,
     };
   }, [
     movimientosAlmacen.data,
     controlesAlmacen.data,
     pagosProveedores.data,
     proformasPendientes.data,
+    proformasPendientes.error,
     rango,
   ]);
 

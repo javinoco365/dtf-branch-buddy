@@ -269,24 +269,41 @@ public.textil_stock_destino(_stock_id UUID) RETURNS UUID
 -- motivo 'compra'), y las unidades devueltas a mano al proveedor enlazadas a ella
 -- (devolucion_proveedor con compra_id = la proforma), solo para AVISAR (A2: no cambian la
 -- comparación). Una variante con devoluciones y sin 'compra' no sale (unidades 0 no existe).
+-- `posteriores`: las unidades que entraron en esa variante de OTRO documento ('compra' o
+-- 'inicial', cantidad > 0) DESPUÉS de la última entrada 'compra' de la proforma (id mayor).
+-- Lo que queda en el almacén se cuenta como lo más nuevo: de la proforma solo sigue ahí
+-- saldo − posteriores (c3 de 1.7). No cuentan las devoluciones de cliente (lo que vuelve es
+-- género que ya estaba, a menudo de la propia proforma) ni los ajustes de inventario (la fusión
+-- de variantes se anota así). Se crea con DROP + CREATE (cambió el tipo de retorno).
 public.proforma_entradas(_proforma_id UUID)
 RETURNS TABLE (stock_id UUID, unidades NUMERIC, valor NUMERIC, coste_unitario NUMERIC,
-               devueltas NUMERIC)
+               devueltas NUMERIC, posteriores NUMERIC)
   LANGUAGE sql STABLE SET search_path = public   -- SECURITY INVOKER (RLS de quien llama)
   AS $$
-    SELECT public.textil_stock_destino(m.stock_id),
-           sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'),
-           sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra'),
-           round(sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra')
-                 / NULLIF(sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'), 0), 8),
-           COALESCE(-sum(m.cantidad) FILTER (WHERE m.motivo = 'devolucion_proveedor'), 0)
-      FROM public.textil_stock_movimientos m
-     WHERE m.compra_id = _proforma_id AND m.motivo IN ('compra', 'devolucion_proveedor')
-     GROUP BY 1
-    HAVING sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') > 0
+    WITH e AS (
+      SELECT public.textil_stock_destino(m.stock_id) AS stock_id,
+             sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') AS unidades,
+             sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra') AS valor,
+             round(sum(round(m.cantidad * m.coste_unitario, 2)) FILTER (WHERE m.motivo = 'compra')
+                   / NULLIF(sum(m.cantidad) FILTER (WHERE m.motivo = 'compra'), 0), 8) AS coste_unitario,
+             COALESCE(-sum(m.cantidad) FILTER (WHERE m.motivo = 'devolucion_proveedor'), 0) AS devueltas,
+             max(m.id) FILTER (WHERE m.motivo = 'compra') AS ultima,
+             min(m.empresa_id::TEXT)::UUID AS empresa_id
+        FROM public.textil_stock_movimientos m
+       WHERE m.compra_id = _proforma_id AND m.motivo IN ('compra', 'devolucion_proveedor')
+       GROUP BY 1
+      HAVING sum(m.cantidad) FILTER (WHERE m.motivo = 'compra') > 0
+    )
+    SELECT e.stock_id, e.unidades, e.valor, e.coste_unitario, e.devueltas,
+           COALESCE((SELECT sum(o.cantidad) FROM public.textil_stock_movimientos o
+                      WHERE o.empresa_id = e.empresa_id AND o.id > e.ultima
+                        AND o.motivo IN ('compra', 'inicial') AND o.cantidad > 0
+                        AND o.compra_id IS DISTINCT FROM _proforma_id
+                        AND public.textil_stock_destino(o.stock_id) = e.stock_id), 0)
+      FROM e
   $$;
--- (Solo literales 'compra' y 'devolucion_proveedor': ninguna función LANGUAGE sql de este
---  fichero nombra 'ajuste_coste', que se valida al crearla.)
+-- (Solo literales 'compra', 'inicial' y 'devolucion_proveedor': ninguna función LANGUAGE sql de
+--  este fichero nombra 'ajuste_coste', que se valida al crearla.)
 
 -- Proformas registradas, sin borrar y sin factura (para el aviso y los anticipos). Sin periodo.
 public.compras_proformas_pendientes()
@@ -346,7 +363,14 @@ Variables nuevas: `v_tipo TEXT`, `v_proforma_id UUID`, `v_pro RECORD`, `v_liquid
      - `(v_pro.categoria = 'textil') <> (v_categoria = 'textil')` → **E-PRO-7**.
 2. Cabecera: igual, y `tipo_documento = v_tipo` en el INSERT y en el UPDATE. **No** se toca
    `proforma_id` aquí.
-3. Proveedor: igual. Al terminar, si hay `v_proforma_id`:
+3. Proveedor: igual. Al terminar, si `v_tipo = 'proforma'` (cualquier categoría): si existe una
+   factura `f` de la empresa, registrada, sin borrar y **sin** `proforma_id`, del mismo proveedor
+   (`f.proveedor_id = v_prov_id`, o la misma `proveedor_clave` no vacía) y con la misma
+   `numero_clave` no vacía → **E-PRO-15** (su factura ya está registrada: el casado solo se hace
+   al registrar la factura, así que registrar la proforma metería el género dos veces). La
+   pantalla avisa además, sin bloquear, de la factura con el mismo importe a ≤ 90 días
+   (`duplicadosDe`, 2.3) y pide confirmarlo.
+   Si hay `v_proforma_id`:
    - si `v_pro.proveedor_id` y `v_prov_id` no son nulos y son distintos → **E-PRO-6**;
    - si alguno es nulo: comparar `proveedor_clave` de las dos filas (la de la factura se lee
      de la tabla tras el paso 2); si las dos son ≠ '' y distintas → **E-PRO-6**.
@@ -358,8 +382,8 @@ Variables nuevas: `v_tipo TEXT`, `v_proforma_id UUID`, `v_pro RECORD`, `v_liquid
    - 4.9 memoria: igual en los dos casos.
 6. **Pago** (solo con `v_proforma_id`, cualquier categoría): 1.8. Devuelve `v_pago`.
 7. Registrar (paso 5 de hoy): el UPDATE pone además, si hay `v_proforma_id`:
-   `proforma_id = v_proforma_id, estado_pago = v_pro.estado_pago, fecha_pago = v_pro.fecha_pago,
-   casado_resumen = v_casado` con
+   `proforma_id = v_proforma_id, estado_pago = (v_hereda ? 'pagada' : 'pendiente'),
+   fecha_pago = (v_hereda ? v_pro.fecha_pago : NULL), casado_resumen = v_casado` (`v_hereda`, 1.8 e) con
    `v_casado := jsonb_build_object('proforma_id', v_proforma_id, 'stock', v_stock_res, 'pago', v_pago)`
    (`v_stock_res` es NULL si no es textil).
    - En el `EXCEPTION WHEN unique_violation`:
@@ -385,9 +409,11 @@ b. Factura por variante:    F(v) = Σ unidades_stock, valorF(v) = Σ coste_total
    de textil_compra_lineas WHERE compra_id = v_id AND tipo = 'articulo' GROUP BY stock_id
 c. FULL OUTER JOIN por stock_id, ORDER BY stock_id (orden fijo de bloqueo de variantes).
    Para cada variante v (P y F valen 0 si faltan):
-   c0. SELECT cantidad INTO saldo0 FROM textil_stock WHERE id = v FOR UPDATE
-       (el saldo ANTES de regularizar: lo que queda de la proforma no puede incluir lo que
-        entra ahora en c1)
+   c0. SELECT cantidad, activa, nombre, color, talla FROM textil_stock WHERE id = v FOR UPDATE
+       → saldo0 (el saldo ANTES de regularizar: lo que queda de la proforma no puede incluir lo
+        que entra ahora en c1). Si la variante está retirada (activa = false, que
+        textil_stock_retirar solo permite con 0 unidades) y P > F → **E-REG-1**: la salida de c2
+        la dejaría en negativo y fuera del almacén, sin forma de corregirla.
    c1. entran := greatest(F − P, 0)
        si entran > 0: INSERT 'compra' (empresa, v, cantidad entran, coste_unitario cF(v),
           compra_id v_id, compra_linea_id linea(v), fecha v_fecha,
@@ -403,7 +429,9 @@ c. FULL OUTER JOIN por stock_id, ORDER BY stock_id (orden fijo de bloqueo de var
        si teorico ≠ 0:
          SELECT cantidad, coste_unitario INTO saldo, cm FROM textil_stock WHERE id = v FOR UPDATE
          -- saldo y cm: los de después de c1/c2 (para el tope y para el trigger)
-         u := least(m, greatest(saldo0 − salen, 0))
+         u := least(m, greatest(saldo0 − posteriores(v) − salen, 0))
+            -- posteriores(v): de proforma_entradas() (1.5); lo que entró de otros documentos
+            -- después de la proforma es lo que queda, y no se revaloriza con su diferencia.
             -- unidades de la proforma que siguen en el almacén. NO se usa `saldo`: incluye las
             -- `entran` de c1, que ya entraron al coste de la factura (contarlas revalorizaría
             -- dos veces). Ej.: P=10 a 5 €, F=12 a 6 €, vendidas 8 → saldo0=2, entran 2,
@@ -451,12 +479,29 @@ d. Para cada grupo tocado:
             , estado = CASE WHEN dif <> 0 THEN 'revisar' ELSE estado END
       WHERE grupo = g;
      cuenta grupos y grupos_revisar (los que quedaron en 'revisar' por dif ≠ 0)
-e. v_pago := PagoTraspasado (5.2): enlaces_movidos, grupos, grupos_revisar,
-             estado_pago = v_pro.estado_pago, fecha_pago = v_pro.fecha_pago
+e. liquido_pro := round(COALESCE(v_pro.liquido, v_pro.total, 0), 2)
+   v_hereda := v_pro.estado_pago = 'pagada'
+               AND (enlaces_movidos > 0 OR round(v_liquido, 2) <= liquido_pro)
+   v_pago := PagoTraspasado (5.2): enlaces_movidos, grupos, grupos_revisar,
+             estado_pago = (v_hereda ? 'pagada' : 'pendiente'),
+             fecha_pago = (v_hereda ? v_pro.fecha_pago : NULL),
+             proforma_pagada = (v_pro.estado_pago = 'pagada'), liquido_proforma = liquido_pro,
+             diferencia = round(v_liquido − liquido_pro, 2)
 ```
 
-La copia de `estado_pago`/`fecha_pago` se hace en el UPDATE del paso 7 de 1.6 (también cubre la
-proforma marcada pagada a mano, sin enlace). La proforma **no se toca** (conserva su pago como
+Reglas del pago heredado:
+
+- Pago enlazado en el banco (`enlaces_movidos > 0`): la factura hereda «pagada»; si el líquido
+  difiere, el grupo queda en `revisar` con su diferencia (d).
+- Proforma pagada a mano (sin enlace) y factura por **igual o menos**: la factura queda cubierta y
+  hereda «pagada» con la fecha de la proforma; lo pagado de más queda en
+  `casado_resumen.pago.diferencia` (negativa).
+- Proforma pagada a mano y factura por **más**: la factura queda **pendiente** (nada diría que
+  falta la diferencia). En Tesorería › Pagos pendientes solo cuenta como deuda
+  `líquido − liquido_proforma` (`pagadoConProforma`, 2.6); lo ya pagado no se cuenta otra vez.
+- Proforma pendiente: la factura queda pendiente por su líquido.
+
+La copia de `estado_pago`/`fecha_pago` se hace en el UPDATE del paso 7 de 1.6. La proforma **no se toca** (conserva su pago como
 historia; deja de contar porque está casada).
 
 Orden de bloqueo: aquí `textil_compras` (proforma, ya bloqueada en el paso 0) → filas de
@@ -519,6 +564,8 @@ END IF;
 | E-PRO-12 | `restrict_violation` | La proforma y su factura solo se casan al registrar la factura, desde su revisión.                                              |
 | E-PRO-13 | `restrict_violation` | Esta proforma ya tiene factura (n.º %): el pago se marca en la factura.                                                         |
 | E-PRO-14 | (sin código, como el resto de `banco_enlazar_como`) | Esa proforma ya tiene factura (n.º %): concilia el pago con la factura.                          |
+| E-PRO-15 | `unique_violation`   | Esta proforma parece de la factura %, ya registrada: no la registres (la factura ya cuenta y, si es textil, su género ya entró). |
+| E-REG-1  | `restrict_violation` | La variante % está retirada y la factura trae menos unidades que la proforma: reactívala en Stock (o fusiónala con la buena) antes de casar. |
 | E-AJC-1  | `22023`              | Un ajuste de coste no mueve unidades: lleva cantidad 0 y un importe distinto de 0.                                              |
 | E-AJC-2  | `restrict_violation` | No hay existencias de esta variante a las que llevar el ajuste de coste.                                                        |
 | E-AJC-3  | `restrict_violation` | El ajuste de coste dejaría el coste medio de la variante en negativo.                                                           |
@@ -696,6 +743,7 @@ export function sugerirProformas<T extends ProformaFila>(
  *  enlazadas a la proforma; NO entran en la regularización (A2), solo se avisa. */
 export type EntradaProforma = {
   stock_id: string; unidades: number; valor: number; coste_unitario: number; devueltas: number;
+  posteriores?: number;  // unidades de otros documentos entradas después (1.5)
 };
 
 /** Un artículo de la factura con su coste de entrada ya repartido (reparto-compra.ts). */
@@ -704,21 +752,30 @@ export type ArticuloFactura = {
   stock_id: string | null;        // null si es variante nueva o sin casar
   unidades: number;               // unidades_stock
   coste_total: number;            // coste_total_entrada
+  grupo_nueva?: string | null;    // sin stock_id: las de la misma clave van juntas (grupoDeNueva)
 };
+
+/** La variante que reutilizará la base (1.6 paso 4.6) para una «variante nueva»: la activa y no
+ *  repetida del mismo producto (el elegido, o el de la misma marca+referencia, o marca+nombre sin
+ *  referencia), color (claveTexto) y talla (claveTalla). null si no hay una sola. La pantalla la
+ *  pasa como stock_id a regularizacionPrevista; si es null, pasa grupo_nueva = grupoDeNueva(nv). */
+export function varianteDeNueva(nueva, productos, variantes): string | null;
+export function grupoDeNueva(nueva: NuevaVariante): string;
 
 export type StockActual = { cantidad: number; coste_unitario: number };
 
 /**
  * La regularización que hará la base (SQL 1.7), calculada antes para enseñarla.
  * Mismas reglas, mismos redondeos: cP = valor/unidades (8 dec.), cF = Σcoste/Σunidades (8 dec.),
- * entran/salen, m = min(P, F), teorico = round(m×d, 2), u = min(m, max(saldo0 − salen, 0)) con
+ * entran/salen, m = min(P, F), teorico = round(m×d, 2),
+ * u = min(m, max(saldo0 − posteriores − salen, 0)) con
  * saldo0 = cantidad actual (ANTES de entran: lo que entra ya va al coste de la factura),
  * importe = round(u×d, 2), tope de coste ≥ 0 con −floor(saldo × cm × 100)/100, donde
  * saldo = saldo0 + entran − salen y cm = coste medio tras la entrada, ponderado y a 4 decimales
  * como el trigger (si saldo0 ≤ 0, cm = cF), diferencia_sin_aplicar con el valor
  * de las devoluciones al coste medio de hoy.
- * Un artículo sin stock_id cuenta como variante propia con clave `nueva:<indice>` (stock 0).
- * Filas ordenadas por stock_id. `movimientos` = cuántos movimientos anotará.
+ * Un artículo sin stock_id cuenta como variante propia con clave `nueva:<indice>` (stock 0);
+ * los que comparten `grupo_nueva` van juntos con el índice del primero. Filas ordenadas por stock_id. `movimientos` = cuántos movimientos anotará.
  * Es una previsión: la base manda (el coste medio puede moverse entre medias).
  */
 export function regularizacionPrevista(datos: {
@@ -741,11 +798,14 @@ export function estadoFilaRegularizacion(f: FilaRegularizacion): EstadoFilaRegul
 export function pagoPrevisto(
   proforma: Pick<ProformaFila, "estado_pago" | "fecha_pago" | "liquido" | "total">,
   liquidoFactura: number,
-): { pagada: boolean; fecha: string | null; diferencia: number; revisarSiEnlazada: boolean };
+): { pagada: boolean; fecha: string | null; diferencia: number; revisarSiEnlazada: boolean;
+     pendienteSiAMano: boolean };
 // diferencia = redondear(liquidoFactura − (liquido ?? total) de la proforma);
 // revisarSiEnlazada = diferencia ≠ 0. La pantalla no sabe si el pago está enlazado en el banco
 // (la base pone el grupo en `revisar` solo si hay enlace, esté la proforma pagada o no; una
 // pagada a mano sin enlace no deja nada por revisar): el texto es condicional (4.9).
+// pendienteSiAMano = pagada && diferencia > 0: pagada a mano y la factura por más queda
+// pendiente por la diferencia (1.8 e); por igual o menos, queda cubierta.
 
 /** Proformas con unidades ya devueltas a mano (A2): variantes con devueltas > 0. */
 export function devueltasAntesDeFactura(
@@ -775,6 +835,12 @@ export function comprasParaDevolucion<T extends ProformaFila>(
 - `duplicadosDe`: el nivel `archivo` no cambia. Los niveles `factura` y `probable` se saltan si
   `(c.tipo_documento ?? "factura") !== (o.tipo_documento ?? "factura")`, o si
   `o.proforma_id === c.id` o `c.proforma_id === o.id` (el par no es un duplicado).
+  **Excepción** (`facturaDeProforma: true` en el `Duplicado`): si `c` es una proforma y `o` una
+  factura registrada, sin borrar, sin `proforma_id` y del mismo proveedor, es su factura ya
+  registrada: mismo número → nivel `factura` (bloquea, como E-PRO-15); mismo importe y fechas a
+  ≤ `DIAS_FACTURA_DE_PROFORMA` (90) días → `probable` (hay que confirmarlo). `avisoDuplicado`:
+  «Esta proforma parece de la factura …, ya registrada: no la registres …» / «Esta proforma puede
+  ser de la factura …».
 - `avisoDuplicado`: si `d.de.tipo_documento === "proforma"`, dice «proforma» donde dice «factura».
 - `esquemaLectura` (zod), en la cabecera:
   ```ts
@@ -848,6 +914,9 @@ export function comprasParaDevolucion<T extends ProformaFila>(
   `usePagosProveedores` solo lee las pendientes).
 - `pagosPendientesProveedores`: además se salta `c.casada === true`. `PagosProveedores` gana
   `proformas: number` (cuántas de las contadas son proforma).
+- `CompraPendiente.casado_resumen?: unknown` (lo lee `usePagosProveedores` con la migración). En
+  una factura casada pendiente con `casado_resumen.pago.proforma_pagada`, el importe es
+  `líquido − liquido_proforma` (`pagadoConProforma`); si no queda nada, no cuenta (1.8 e).
 - Nueva (entrada = lo que da `useProformasPendientes`, que es `ProformaFila[]`, **no**
   `CompraPendiente[]`: `ProformaFila.total` admite null y `estado` es opcional, y con
   `CompraPendiente` no compilaría):
@@ -1179,6 +1248,9 @@ export type PagoTraspasado = {
   grupos_revisar: number;
   estado_pago: "pendiente" | "pagada";
   fecha_pago: string | null;
+  proforma_pagada: boolean;       // la proforma estaba pagada al casar
+  liquido_proforma: number;       // lo que se pagó (o se debía) por la proforma
+  diferencia: number;             // líquido de la factura − liquido_proforma
 };
 
 /** textil_compras.casado_resumen de la factura casada, y `casado` del resultado del registro. */
@@ -1258,7 +1330,7 @@ Otros tipos que cruzan capas, ya definidos arriba: `ProformaFila`, `ProformaPend
 17. **Bajada** que dejaría el coste negativo: tope, coste ≥ 0.
 18. Un `ajuste_coste` desde `authenticated` → E-AJC-4; con cantidad ≠ 0 → E-AJC-1 (o CHECK); sin existencias → E-AJC-2.
 19. Líquido distinto y proforma conciliada → grupo `revisar` con `diferencia` = movimiento − (−liquido factura).
-20. Proforma **pagada a mano** (sin banco) → la factura nace pagada con esa fecha; `pago.enlaces_movidos = 0`.
+20. Proforma **pagada a mano** (sin banco) → la factura nace pagada con esa fecha; `pago.enlaces_movidos = 0`. 20c: factura por más → pendiente con `pago.diferencia` > 0. 20d: factura por menos → pagada, `pago.diferencia` < 0.
 21. `authenticated` cambia `estado_pago` de la proforma casada → E-PRO-13.
 22. Otro proveedor → E-PRO-6; proforma de otra empresa → E-PRO-2; no registrada → E-PRO-4; un documento que no es proforma → E-PRO-3; proforma con `proforma_id` → E-PRO-8; textil con no textil → E-PRO-7; inexistente → E-PRO-1; tipo raro → E-PRO-9.
 23. **No textil**: proforma y factura de `material` casadas → sin movimientos, `casado_resumen.stock = null`, pago traspasado.
@@ -1269,6 +1341,9 @@ Otros tipos que cruzan capas, ya definidos arriba: `ProformaFila`, `ProformaPend
 28. `linea_papel` se guarda; `linea_papel = 0` falla (CHECK).
 29. `proforma_entradas()` resuelve una variante fusionada a su destino; una devolución a proveedor enlazada a la proforma sale en `devueltas` y no cambia `unidades`.
 29b. **Más unidades y otro coste con parte vendida** (P=10 a 5 €, F=12 a 6 €, 8 vendidas antes de casar): `entran 2`, `unidades_ajustadas = 2`, `importe_ajuste = 2,00`, coste medio final 6,0000 (no 6,50).
+16c. **Devolución de cliente de la propia proforma** (P=10 a 5 €, vendidas 5, vuelven 2, F=10 a 6 €): `posteriores = 0`, se ajustan las 7 que quedan (+7,00) y el coste queda en 6,0000.
+32. Variante de la proforma **retirada** (vendida a 0 y desactivada) y la factura sin ella → E-REG-1, sin tocar nada.
+33. Proforma con el mismo proveedor y número que una factura ya registrada sin casar → E-PRO-15; de otro proveedor, o con el número de una factura ya casada, se registra.
 29c. `pg_get_functiondef('public.compra_proforma_solo_por_registro()'::regprocedure)` no contiene `NEW.estado_pago` ni `OLD.estado_pago` (compara con `to_jsonb`).
 30. `stock_descuadres()` vacío al final; `auditoria_verificar()` sin eslabones rotos.
 31. (Fuera de la transacción) reversión: quita columnas y funciones, repone los tres CHECKs y el índice de antes; reaplicar deja `proformas_version() = 1`. Con una proforma registrada, la reversión se niega.

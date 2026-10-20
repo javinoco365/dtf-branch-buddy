@@ -73,8 +73,11 @@ import { aVarianteCatalogo, etiquetaVariante } from "@/dominio/stock-textil";
 import {
   facturasPorProforma,
   gruposPorLineaPapel,
+  partidasLineaPapel,
   sugerirProformas,
   type ArticuloFactura,
+  grupoDeNueva,
+  varianteDeNueva,
   type DocumentoParaCasar,
   type ProformaFila,
   type StockActual,
@@ -205,6 +208,31 @@ export function cabecerasLineaPapel(
     }
   }
   return mapa;
+}
+
+/** Las clases de la fila y de su primera celda si es una partida. */
+export function clasesPartida(p: { ultima: boolean } | undefined) {
+  if (!p) return { fila: "", celda: "" };
+  return {
+    fila: p.ultima ? "border-b-2 border-b-muted-foreground/30" : "",
+    celda: "border-l-4 border-l-muted-foreground/30",
+  };
+}
+
+/** En el móvil (tarjetas), de qué línea del papel sale esta partida. */
+export function EtiquetaPartida({
+  partida,
+  talla,
+}: {
+  partida: { linea_papel: number } | undefined;
+  talla: string | null | undefined;
+}) {
+  if (!partida) return null;
+  return (
+    <span className="mb-1 block text-xs text-muted-foreground md:hidden">
+      Línea {partida.linea_papel} del papel{talla ? ` · talla ${talla}` : ""}
+    </span>
+  );
 }
 
 /** «Línea 2 del papel · 3 tallas · 45,00 €», encima de sus partidas. */
@@ -522,9 +550,18 @@ export function RevisarCompraTextil({
   lineas.forEach((l, i) => {
     if (tipoDe(l) !== "articulo") return;
     const e = efectivas[i];
+    // Una «variante nueva» que ya está en el catálogo: la base la reutiliza
+    // (paso 4.6), así que la previsión también.
+    const nueva = e.estado === "nueva" ? e.nueva : null;
     articulosFactura.push({
       indice: i,
-      stock_id: e.estado === "casada" ? e.stock_id : null,
+      stock_id:
+        e.estado === "casada"
+          ? e.stock_id
+          : nueva
+            ? varianteDeNueva(nueva, productos, variantes)
+            : null,
+      grupo_nueva: nueva ? grupoDeNueva(nueva) : null,
       unidades: unidadesDeLinea(l.cantidad, packDe(l)),
       coste_total: costePorLinea.get(i)?.coste_total ?? 0,
     });
@@ -566,9 +603,15 @@ export function RevisarCompraTextil({
   );
   const casadaCon = conProformas && estado.tipo_documento === "factura" && !!estado.proforma_id;
   const cabeceras = cabecerasLineaPapel(lineas);
+  const partidas = partidasLineaPapel(lineas);
 
   const pendientes: string[] = [];
-  if (duplicadoQueBloquea) pendientes.push("Ya está registrada.");
+  if (duplicadoQueBloquea)
+    pendientes.push(
+      duplicadoQueBloquea.facturaDeProforma
+        ? "Su factura ya está registrada."
+        : "Ya está registrada.",
+    );
   if (!duplicadoQueBloquea && porConfirmar.length > 0 && !estado.otraFactura)
     pendientes.push("¿Es un duplicado? Descártala o confirma que es otra factura.");
   if (!compra.fecha) pendientes.push("Falta la fecha de la factura.");
@@ -747,11 +790,14 @@ export function RevisarCompraTextil({
             const e = efectivas[i];
             const coste = costePorLinea.get(i);
             const cabecera = cabeceras.get(i);
+            const partida = partidas.get(i);
+            const marca = clasesPartida(partida);
             return (
               <Fragment key={i}>
                 {cabecera && <FilaLineaPapel grupo={cabecera} lineas={lineas} columnas={13} />}
-                <TableRow className="align-top">
-                  <TableCell>
+                <TableRow className={`align-top ${marca.fila}`}>
+                  <TableCell className={marca.celda}>
+                    <EtiquetaPartida partida={partida} talla={l.talla} />
                     <Select
                       value={tipo}
                       onValueChange={(v) => setLinea(i, { tipo: v as TipoLineaCompra })}
@@ -970,13 +1016,15 @@ export function RevisarCompraTextil({
           </div>
         )}
         <Campo
-          etiqueta={conTipos ? "IVA según la factura" : "IVA"}
+          etiqueta={conTipos ? `IVA según ${esProformaRev ? "la proforma" : "la factura"}` : "IVA"}
           tipo="number"
           valor={String(compra.iva)}
           onChange={(v) => set({ iva: Number(v) })}
         />
         <Campo
-          etiqueta={conTipos ? "Total según la factura" : "Total"}
+          etiqueta={
+            conTipos ? `Total según ${esProformaRev ? "la proforma" : "la factura"}` : "Total"
+          }
           tipo="number"
           valor={String(compra.total)}
           onChange={(v) => set({ total: Number(v) })}
@@ -1269,12 +1317,18 @@ export function TarjetaQueMirar({
             className={bloqueaRegistro(d) ? "font-medium text-destructive" : "font-medium"}
           >
             {avisoDuplicado(d)}
-            {bloqueaRegistro(d) && " No se puede registrar dos veces."}
+            {bloqueaRegistro(d) && !d.facturaDeProforma && " No se puede registrar dos veces."}
           </p>
         ))}
         {String(motivos ?? "")
           .split("\n")
-          .filter((m) => m && !m.startsWith("Este fichero") && !m.startsWith("Esta factura"))
+          .filter(
+            (m) =>
+              m &&
+              !m.startsWith("Este fichero") &&
+              !m.startsWith("Esta factura") &&
+              !m.startsWith("Esta proforma"),
+          )
           .filter((m) => !m.startsWith("Posible duplicado"))
           .map((m, i) => (
             <p key={i} className="text-muted-foreground">
@@ -1293,7 +1347,9 @@ export function TarjetaQueMirar({
                 variant={otraFactura ? "default" : "outline"}
                 onClick={onOtraFactura}
               >
-                Es otra factura
+                {porConfirmar.every((d) => d.facturaDeProforma)
+                  ? "No es de esa factura"
+                  : "Es otra factura"}
               </Button>
             )}
           </div>

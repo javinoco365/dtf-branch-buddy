@@ -69,7 +69,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
   const sinCostes = d.costeMetro === 0 && c.coste === 0;
 
   // Las proformas sin factura, de cualquier fecha: no dependen del periodo.
-  const { data: filasProformas } = useProformasPendientes();
+  const { data: filasProformas, error: errorProformas } = useProformasPendientes();
   const proformas = useMemo(
     () => (filasProformas ? resumenProformas(proformasSinFactura(filasProformas, d.hoy)) : null),
     [filasProformas, d.hoy],
@@ -188,7 +188,14 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Avisos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          {/* Un fallo no es «ninguna proforma pendiente». */}
+          {errorProformas && (
+            <p className="flex items-start gap-2 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              No se han podido leer las proformas sin factura: {errorProformas.message}
+            </p>
+          )}
           {avisos.length === 0 ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <CheckCircle2 className="h-4 w-4 text-status-completado" />
