@@ -64,6 +64,8 @@ export function mensajeErrorEscaner(e: ErrorEscaner): string {
       return `${linea(e)}: un artículo no puede tener importe negativo; si es un abono o un descuento, márcala como descuento.`;
     case "E-REG-10":
       return `${linea(e)}: las unidades de una prenda tienen que ser enteras y mayores que cero (${cantidad(d[0])} × ${cantidad(d[1])} = ${cantidad(d[2])}).`;
+    case "E-REG-13":
+      return `${linea(e)}: un porte no puede ser negativo ni un descuento positivo.`;
     case "E-REG-14":
       return `Las líneas suman ${importe(d[0])} y la base dice ${importe(d[1])}: falta o sobra una línea (porte, descuento…) o hay un importe mal leído.`;
     case "E-REP-1":

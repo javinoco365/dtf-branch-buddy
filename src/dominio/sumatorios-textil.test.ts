@@ -49,11 +49,11 @@ describe("totalesStock", () => {
       },
     ];
     expect(totalesStock(filas).valor).toBe(14);
-    // El resumen de Gerencia solo mira las activas: por eso no se usa aquí.
-    expect(resumenStock(filas).valor).toBe(10);
+    // El valor de Gerencia también cuenta las desactivadas (como el libro).
+    expect(resumenStock(filas).valor).toBe(14);
   });
 
-  it("el valor coincide con el de Gerencia cuando todas están activas", () => {
+  it("con una variante en negativo, el pie la cuenta como cero y Gerencia con su signo", () => {
     const filas = [
       {
         id: "a",
@@ -72,7 +72,9 @@ describe("totalesStock", () => {
         coste_unitario: 9,
       },
     ];
-    expect(totalesStock(filas).valor).toBe(resumenStock(filas).valor);
+    expect(totalesStock(filas).valor).toBe(3.3);
+    // Gerencia, como el libro y el informe de socios: 3,30 − 9,00.
+    expect(resumenStock(filas).valor).toBe(-5.7);
     expect(totalesStock(filas).fisico).toBe(resumenStock(filas).unidades);
   });
 });

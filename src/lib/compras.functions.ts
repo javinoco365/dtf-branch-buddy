@@ -84,7 +84,7 @@ export const leerFacturaCompra = createServerFn({ method: "POST" })
 
 const lineaSchema = z.object({
   descripcion: z.string().min(1),
-  cantidad: z.number().positive(),
+  cantidad: z.number().positive("La cantidad de cada línea tiene que ser mayor que cero."),
   precio_unitario: z.number(),
   importe: z.number(),
   unidad: z.string().optional().nullable(),
@@ -233,8 +233,8 @@ const nuevaVarianteSchema = z
   });
 
 const lineaRegistroSchema = z.object({
-  descripcion: z.string().trim().min(1),
-  cantidad: z.number().positive(),
+  descripcion: z.string().trim().min(1, "Hay líneas sin descripción."),
+  cantidad: z.number().positive("La cantidad de cada línea tiene que ser mayor que cero."),
   precio_unitario: z.number(),
   importe: z.number(),
   unidad: z.string().nullable(),
@@ -245,7 +245,7 @@ const lineaRegistroSchema = z.object({
   color: z.string().nullable(),
   talla: z.string().nullable(),
   ean: z.string().nullable(),
-  unidades_por_pack: z.number().positive(),
+  unidades_por_pack: z.number().positive("Las unidades por pack tienen que ser mayores que cero."),
   stock_id: z.string().uuid().nullable(),
   nueva_variante: nuevaVarianteSchema.nullable(),
   casado_metodo: z.enum(METODOS_CASADO).nullable(),
@@ -313,17 +313,17 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
      */
     const caminoViejo = async (): Promise<SalidaRegistroCompra> => {
       // Sin la migración: lo nuevo (variantes que crear, packs que entran al
-      // stock, una línea que no es artículo casada con una variante) no se
-      // puede registrar por el camino viejo sin perderlo. Una línea de portes
-      // o de descuento sin variante sí: no mueve stock, como siempre (sin
-      // repartir; si se bloquease, una factura textil con portes no se podría
-      // registrar hasta aplicar la migración).
+      // stock) no se puede registrar por el camino viejo sin perderlo. Una
+      // línea de portes o de descuento sin variante sí: no mueve stock, como
+      // siempre (sin repartir; si se bloquease, una factura textil con portes
+      // no se podría registrar hasta aplicar la migración). Y casada con una
+      // variante, también: la revisión de siempre (sin el escáner) obliga a
+      // casar todas las líneas, y el camino viejo las guarda sin tipo, así que
+      // entran como artículo, que es lo que hacía antes de esta obra.
       const necesitaEscaner =
         categoria === "textil" &&
         lineas.some(
-          (l) =>
-            l.nueva_variante !== null ||
-            (l.stock_id !== null && (l.tipo !== "articulo" || l.unidades_por_pack !== 1)),
+          (l) => l.nueva_variante !== null || (l.stock_id !== null && l.unidades_por_pack !== 1),
         );
       if (necesitaEscaner) throw new Error(AVISO_MIGRACION_ESCANER);
 
@@ -379,17 +379,20 @@ export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
       fecha: cab.fecha,
       base: cab.base,
       iva: cab.iva,
-      irpf: cab.irpf ?? 0,
       total: cab.total,
       categoria,
-      gasto_id: cab.gasto_id ?? null,
       tipo_iva: cab.tipo_iva ?? null,
       tipo_irpf: cab.tipo_irpf ?? null,
       liquido_origen: cab.liquido_origen ?? null,
-      nota_descuadre: cab.nota_descuadre ?? null,
-      concepto: cab.concepto ?? null,
-      forma_pago: cab.forma_pago ?? null,
-      notas: cab.notas ?? null,
+      // Solo lo que manda la pantalla: lo que no manda (Textil › Compras no
+      // manda concepto, IRPF ni forma de pago) se conserva en el borrador de
+      // la cola, como hacía guardarCompra.
+      ...(cab.irpf === undefined ? {} : { irpf: cab.irpf }),
+      ...(cab.gasto_id === undefined ? {} : { gasto_id: cab.gasto_id }),
+      ...(cab.nota_descuadre === undefined ? {} : { nota_descuadre: cab.nota_descuadre }),
+      ...(cab.concepto === undefined ? {} : { concepto: cab.concepto }),
+      ...(cab.forma_pago === undefined ? {} : { forma_pago: cab.forma_pago }),
+      ...(cab.notas === undefined ? {} : { notas: cab.notas }),
       lectura_ia: lecturaIa,
       lineas: conCostes,
     };

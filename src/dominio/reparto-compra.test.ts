@@ -177,6 +177,19 @@ describe("repartirCostes", () => {
     expect(r.entradas.map((e) => e.coste_total)).toEqual([0.99, 1.99, 1]);
   });
 
+  it("E-REG-13: un porte negativo o un descuento positivo no se reparten (la base tampoco los deja)", () => {
+    const r = repartirCostes([art(100), otra("descuento", 8), otra("porte", -3)], 105);
+    expect(r).toEqual({
+      ok: false,
+      errores: [
+        { linea: 1, codigo: "E-REG-13", datos: [] },
+        { linea: 2, codigo: "E-REG-13", datos: [] },
+      ],
+    });
+    // Con su signo, sí; y «otro» puede llevar cualquiera.
+    expect(repartirCostes([art(100), otra("descuento", -8), otra("otro", -2)], 90).ok).toBe(true);
+  });
+
   it("mayor resto: el céntimo suelto va al de más resto aunque pese menos", () => {
     // R = 3 céntimos, pesos 100 y 300: partes 0 y 2, restos 300 y 100 → al primero.
     const r = ok(repartirCostes([art(1), art(3), otra("porte", 0.03)], 4.03));

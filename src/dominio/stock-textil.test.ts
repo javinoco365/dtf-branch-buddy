@@ -5,6 +5,9 @@ import {
   aVarianteCatalogo,
   buscarProductos,
   compararTallas,
+  costeAlReescribir,
+  productoQueChoca,
+  SIN_COSTE_CONGELADO,
   disponible,
   etiquetaVariante,
   lineasDesdeStock,
@@ -313,5 +316,58 @@ describe("margenPrevisto", () => {
   it("vender por debajo del coste da margen negativo", () => {
     const m = margenPrevisto([{ cantidad: 3, precio_unitario: 2, coste_unitario: 2.333333 }]);
     expect(m).toMatchObject({ base: 6, coste: 7, margen: -1, porcentaje: -16.7 });
+  });
+});
+
+describe("costeAlReescribir", () => {
+  const previos = new Map<string, number | null>([
+    ["con", 7.5],
+    ["sin", null],
+  ]);
+  it("la línea que ya tenía coste lo conserva", () => {
+    expect(costeAlReescribir(previos, "con", undefined, true)).toBe(7.5);
+  });
+  it("la que no tenía coste sigue sin él: se manda SIN_COSTE_CONGELADO", () => {
+    expect(costeAlReescribir(previos, "sin", undefined, true)).toBe(SIN_COSTE_CONGELADO);
+    expect(SIN_COSTE_CONGELADO).toBeLessThan(0);
+  });
+  it("sin la migración de reglas (nadie traduce el -1), no se manda nada", () => {
+    expect(costeAlReescribir(previos, "sin", undefined, false)).toBeUndefined();
+  });
+  it("una variante nueva en el documento no manda nada: la base pone el coste de hoy", () => {
+    expect(costeAlReescribir(previos, "otra", undefined, true)).toBeUndefined();
+  });
+  it("el coste por posición (al confirmar un presupuesto) manda", () => {
+    expect(costeAlReescribir(previos, "sin", 3.2, true)).toBe(3.2);
+  });
+  it("sin la columna o sin variante, nada", () => {
+    expect(costeAlReescribir(null, "con", 3, true)).toBeUndefined();
+    expect(costeAlReescribir(previos, null, 3, true)).toBeUndefined();
+  });
+});
+
+describe("productoQueChoca", () => {
+  const polo: ProductoTextil = {
+    id: "p-polo",
+    marca: null,
+    referencia: "150",
+    nombre: "Polo Y",
+    categoria: null,
+    activo: true,
+  };
+  it("misma marca y referencia con otro nombre: choca", () => {
+    expect(productoQueChoca([polo], { marca: "", referencia: " 150 ", nombre: "Camiseta X" })).toBe(
+      polo,
+    );
+  });
+  it("con el mismo nombre (escrito distinto) no choca: se usa ese producto", () => {
+    expect(
+      productoQueChoca([polo], { marca: null, referencia: "150", nombre: "POLO y" }),
+    ).toBeNull();
+  });
+  it("otra marca, otra referencia o sin referencia: no choca", () => {
+    expect(productoQueChoca([polo], { marca: "Roly", referencia: "150", nombre: "X" })).toBeNull();
+    expect(productoQueChoca([polo], { marca: null, referencia: "151", nombre: "X" })).toBeNull();
+    expect(productoQueChoca([polo], { marca: null, referencia: null, nombre: "X" })).toBeNull();
   });
 });

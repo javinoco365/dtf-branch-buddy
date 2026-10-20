@@ -157,6 +157,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   // Con la migración del escáner textil: casado automático, reparto de portes
   // y registro en una sola transacción.
   const escaner = data?.escaner === true;
+  // Los duplicados se buscan entre TODAS las compras, no solo las de esta
+  // pantalla: una factura textil puede estar ya registrada en Compras
+  // generales con otra categoría (la IA la clasificó mal). En la pantalla
+  // general ya están todas; en Textil › Compras se leen aparte (la misma
+  // consulta que la pantalla general) al abrir una revisión.
+  const todasFn = useServerFn(listCompras);
+  const { data: todasData } = useQuery({
+    queryKey: ["compras", "general"],
+    queryFn: () => todasFn({ data: { soloTextil: false } }),
+    enabled: !general && cola && !!revisando,
+  });
+  const paraDuplicados = !cola ? [] : general ? compras : (todasData?.compras ?? compras);
   const [viendoProveedores, setViendoProveedores] = useState(false);
   const ajustesFn = useServerFn(leerAjustesGerencia);
   const { data: ajustes } = useQuery({
@@ -864,7 +876,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           // reparto: ninguna se registra casada a mano y sin ver los costes.
           <RevisarCompraTextil
             conTipos={recibidas}
-            todas={cola ? compras : []}
+            todas={paraDuplicados}
             onDescartar={() => {
               const fila = compras.find((c: any) => c.id === revisando.id);
               setRevisando(null);
@@ -884,7 +896,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           <RevisarCompra
             modo={modo}
             conTipos={recibidas}
-            todas={cola ? compras : []}
+            todas={paraDuplicados}
             onDescartar={() => {
               const fila = compras.find((c: any) => c.id === revisando.id);
               setRevisando(null);

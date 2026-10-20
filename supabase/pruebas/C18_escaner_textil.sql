@@ -385,7 +385,12 @@ END $$;
 SELECT pg_temp.variante('v7off', 'Camiseta C18 siete', 'Rojo', 'S');
 SELECT public.textil_stock_retirar(pg_temp.id('v7off'));   -- sin movimientos: se borra
 SELECT pg_temp.variante('v7off', 'Camiseta C18 siete', 'Rojo', 'S', 1, 1);
-SELECT public.textil_stock_retirar(pg_temp.id('v7off'));   -- con movimientos: se desactiva
+SELECT pg_temp.ok('7.0 retirar una variante con existencias: no (E-STK-4)',
+                  r LIKE '23001 Esta variante tiene 1 unidades: para retirarla%', r)
+FROM (SELECT pg_temp.fallo_sql(format('SELECT public.textil_stock_retirar(%L)', pg_temp.id('v7off'))) AS r) x;
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad)
+VALUES (pg_temp.empresa(), pg_temp.id('v7off'), 'merma', -1);
+SELECT public.textil_stock_retirar(pg_temp.id('v7off'));   -- con movimientos y a 0: se desactiva
 SELECT pg_temp.variante('v7rep', 'Camiseta C18 siete', 'Verde', 'S');
 UPDATE public.textil_stock SET repetida = true WHERE id = pg_temp.id('v7rep');
 
@@ -999,6 +1004,132 @@ BEGIN
     AND (SELECT cantidad FROM public.textil_stock WHERE id = s1) = 2,
     v1::TEXT || ' / ' || v2::TEXT);
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- 34. Factura sin NIF de un proveedor que ya está con NIF: no se parte en dos
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE v JSONB; v_n INT := (SELECT count(*) FROM public.proveedores);
+BEGIN
+  v := pg_temp.reg(pg_temp.compra('C18-34', 'TEXTILES C18 s.l.', NULL, 10,
+         jsonb_build_array(pg_temp.otra('otro', 'Servicio', 10)), '{"categoria": "otros"}'::JSONB));
+  RAISE NOTICE '%', pg_temp.ok('34a. la IA no leyó el NIF: va al proveedor con NIF de ese nombre, sin crear otro',
+    (v ->> 'proveedor_id')::UUID = pg_temp.id('p5') AND NOT (v ->> 'proveedor_nuevo')::BOOLEAN
+    AND (SELECT count(*) FROM public.proveedores) = v_n, v::TEXT);
+END $$;
+INSERT INTO public.textil_compras (empresa_id, proveedor, numero, fecha, base, categoria)
+VALUES (pg_temp.empresa(), 'Textiles C18 S.L.', 'C18-34b', current_date - 3, 10, 'otros');
+SELECT public.escaner_textil_migrar_datos() IS NOT NULL AS migrada_34;
+SELECT pg_temp.ok('34b. la migración de datos también: una compra antigua sin NIF va al proveedor con NIF',
+                  proveedor_id = pg_temp.id('p5'), COALESCE(proveedor_id::TEXT, 'sin proveedor'))
+FROM public.textil_compras WHERE numero = 'C18-34b';
+
+-- ---------------------------------------------------------------------------
+-- 35. El proveedor elegido no tenía NIF y la factura sí: se le completa
+-- ---------------------------------------------------------------------------
+INSERT INTO public.proveedores (nombre) VALUES ('Sur C18');
+SELECT pg_temp.guarda('p35', id) FROM public.proveedores WHERE nombre = 'Sur C18';
+DO $$
+DECLARE v JSONB;
+BEGIN
+  v := pg_temp.reg(pg_temp.compra('C18-35', 'Sur C18', 'B18000035', 10,
+         jsonb_build_array(pg_temp.otra('otro', 'Servicio', 10)),
+         jsonb_build_object('categoria', 'otros', 'proveedor_id', pg_temp.id('p35'))));
+  RAISE NOTICE '%', pg_temp.ok('35. con proveedor_id sin NIF y factura con NIF: el proveedor queda con el NIF',
+    (SELECT nif_clave FROM public.proveedores WHERE id = pg_temp.id('p35')) = 'B18000035', v::TEXT);
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 36. Producto nuevo con la marca y referencia de otro producto: no se reutiliza en silencio
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.ok('36. «Camiseta X» con la referencia de «Heavy Cotton C18»: E-REG-26',
+                  r LIKE '23505 Línea 1: la referencia 5000-C18 ya es del producto Heavy Cotton C18; elígelo o cambia la referencia.%', r)
+FROM (SELECT pg_temp.fallo(pg_temp.compra('C18-36', 'Mayorista C18', 'B18000008', 10, jsonb_build_array(
+  pg_temp.art('Camiseta X', 1, 10, 10, NULL, 1, jsonb_build_object(
+    'nueva_variante', jsonb_build_object('producto_id', NULL,
+      'producto', jsonb_build_object('marca', 'Gildan', 'referencia', '5000-C18', 'nombre', 'Camiseta X C18',
+                                     'categoria', NULL),
+      'color', 'Negro', 'talla', 'M', 'ean', NULL, 'sku', NULL, 'precio_venta', 0,
+      'cantidad_minima', 0)))))) AS r) x;
+
+-- ---------------------------------------------------------------------------
+-- 37. Registrar un borrador de la cola conserva lo que el JSON no trae
+-- ---------------------------------------------------------------------------
+INSERT INTO public.textil_compras (empresa_id, proveedor, nif_proveedor, numero, fecha, base,
+                                   categoria, concepto, notas, irpf, forma_pago)
+VALUES (pg_temp.empresa(), 'Cola C18', 'B18000037', 'C18-37', current_date - 3, 100, 'otros',
+        'Camisetas y sudaderas', 'Fichero: albaran_0412.pdf', 12, 'transferencia');
+DO $$
+DECLARE v JSONB; v_id UUID := (SELECT id FROM public.textil_compras WHERE numero = 'C18-37');
+BEGIN
+  v := pg_temp.reg((pg_temp.compra('C18-37', 'Cola C18', 'B18000037', 100,
+         jsonb_build_array(pg_temp.otra('otro', 'Camisetas', 100)), '{"categoria": "otros"}'::JSONB)
+         - 'concepto' - 'notas' - 'irpf' - 'forma_pago') || jsonb_build_object('id', v_id));
+  RAISE NOTICE '%', pg_temp.ok('37. concepto, notas, IRPF y forma de pago que no vienen se conservan',
+    (SELECT concepto = 'Camisetas y sudaderas' AND notas = 'Fichero: albaran_0412.pdf' AND irpf = 12
+            AND forma_pago = 'transferencia' AND estado = 'registrada'
+       FROM public.textil_compras WHERE id = v_id),
+    (SELECT concat_ws(' / ', concepto, notas, irpf, forma_pago, estado) FROM public.textil_compras WHERE id = v_id));
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 38. Una devolución de cliente a coste 0 también entra en la media
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.variante('v38', 'Camiseta C18 treinta y ocho', 'Gris', 'M', 2, 0);
+INSERT INTO public.textil_pedidos (numero, estado) VALUES ('C18-P38', 'pendiente');
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, textil_pedido_id)
+SELECT pg_temp.empresa(), pg_temp.id('v38'), 'venta', -2, id FROM public.textil_pedidos WHERE numero = 'C18-P38';
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, coste_unitario)
+VALUES (pg_temp.empresa(), pg_temp.id('v38'), 'inicial', 10, 5);
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, textil_pedido_id, nota)
+SELECT pg_temp.empresa(), pg_temp.id('v38'), 'devolucion_cliente', 2, id, 'Devolución C18-38'
+  FROM public.textil_pedidos WHERE numero = 'C18-P38';
+SELECT pg_temp.ok('38. vuelven 2 que salieron a 0: entran a 0 y la media baja a 4,1667 (caché = libro)',
+                  m.coste_unitario = 0 AND s.cantidad = 12 AND s.coste_unitario = 4.1667
+                  AND abs(s.cantidad * s.coste_unitario
+                          - (SELECT sum(cantidad * coste_unitario) FROM public.textil_stock_movimientos
+                              WHERE stock_id = pg_temp.id('v38'))) < 0.01,
+                  m.coste_unitario || ' / ' || s.cantidad || ' a ' || s.coste_unitario)
+FROM public.textil_stock_movimientos m JOIN public.textil_stock s ON s.id = m.stock_id
+WHERE m.nota = 'Devolución C18-38';
+
+-- ---------------------------------------------------------------------------
+-- 39. Fusionar una variante con existencias negativas: los ajustes suman 0
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.variante('v39a', 'Camiseta C18 treinta y nueve', 'Gris', 'M', 1, 4);
+INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad)
+VALUES (pg_temp.empresa(), pg_temp.id('v39a'), 'merma', -4);
+SELECT pg_temp.variante('v39b', 'Camiseta C18 treinta y nueve bis', 'Gris', 'M', 5, 6);
+SELECT public.textil_stock_fusionar(pg_temp.id('v39a'), pg_temp.id('v39b'), pg_temp.adm()) IS NOT NULL AS fusionada_39;
+SELECT pg_temp.ok('39a. origen en −3 a 4,00 y destino a 6,00: los dos ajustes de la fusión suman 0',
+                  sum(cantidad * coste_unitario) = 0, sum(cantidad * coste_unitario)::TEXT)
+FROM public.textil_stock_movimientos
+WHERE stock_id IN (pg_temp.id('v39a'), pg_temp.id('v39b')) AND nota LIKE 'Fusión:%';
+SELECT pg_temp.ok('39b. el destino queda con 2 a 6,00 y el origen a 0',
+                  d.cantidad = 2 AND d.coste_unitario = 6 AND o.cantidad = 0,
+                  d.cantidad || ' a ' || d.coste_unitario || ' / origen ' || o.cantidad)
+FROM public.textil_stock d, public.textil_stock o
+WHERE d.id = pg_temp.id('v39b') AND o.id = pg_temp.id('v39a');
+
+-- ---------------------------------------------------------------------------
+-- 40. Una variante no nace con existencias ni coste
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.ok('40a. alta con 100 unidades a 9,99 sin movimiento: E-STK-3',
+                  r LIKE '23001 Una variante nace sin existencias y sin coste%', r)
+FROM (SELECT pg_temp.fallo_sql(
+  'INSERT INTO public.textil_stock (nombre, cantidad, coste_unitario) VALUES (''Alta C18'', 100, 9.99)') AS r) x;
+SELECT pg_temp.ok('40b. alta a 0 unidades y coste 0: sí', r = 'sin error', r)
+FROM (SELECT pg_temp.fallo_sql(
+  'INSERT INTO public.textil_stock (nombre, cantidad, coste_unitario) VALUES (''Alta C18'', 0, 0)') AS r) x;
+
+-- ---------------------------------------------------------------------------
+-- 41. Reescribir una línea que ya no tenía coste congelado: sigue sin él
+-- ---------------------------------------------------------------------------
+INSERT INTO public.textil_presupuesto_items (presupuesto_id, stock_id, descripcion, cantidad, precio_unitario, coste_unit_snapshot)
+SELECT id, pg_temp.id('v17'), 'Reescrita sin coste', 1, 15, -1 FROM public.textil_presupuestos WHERE numero = 'C18-PR17';
+SELECT pg_temp.ok('41. la línea llega con -1 (conservar «sin coste»): queda nula, no a la media de hoy (13,75)',
+                  coste_unit_snapshot IS NULL, COALESCE(coste_unit_snapshot::TEXT, 'nulo'))
+FROM public.textil_presupuesto_items WHERE descripcion = 'Reescrita sin coste';
 
 -- El libro y las reservas siguen cuadrando después de todo lo anterior.
 SELECT pg_temp.ok('fin. sin descuadres entre la caché y el libro ni en las reservas',

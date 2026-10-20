@@ -65,9 +65,11 @@ export type MemoriaEscaner = {
 /**
  * El proveedor de una factura y lo que el escáner ha aprendido de él.
  *
- * Lo busca por id; si no, por NIF (`nif_clave`); si no lo encuentra por NIF,
- * o la factura no trae NIF, por nombre entre los que no tienen NIF (igual que
- * el registro, que a ese le completa el NIF).
+ * Lo busca por id; si no, por NIF (`nif_clave`); si la factura no trae NIF,
+ * por nombre el que tiene NIF, si es uno solo (la IA no leyó el NIF de un
+ * proveedor que ya está en el catálogo); y si no, por nombre entre los que no
+ * tienen NIF. Igual que el registro, que a este último le completa el NIF si
+ * la factura lo trae.
  */
 export const leerMemoriaEscaner = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -100,6 +102,12 @@ export const leerMemoriaEscaner = createServerFn({ method: "POST" })
       if (faltaMigracion(r.error)) return sinMigracion;
       if (r.error) throw new Error(r.error.message);
       fila = r.data;
+    }
+    if (!fila && nombre && !nif) {
+      const r = await buscar().eq("nombre_clave", nombre).neq("nif_clave", "").limit(2);
+      if (faltaMigracion(r.error)) return sinMigracion;
+      if (r.error) throw new Error(r.error.message);
+      if (r.data?.length === 1) fila = r.data[0] as Record<string, unknown>;
     }
     if (!fila && nombre) {
       const r = await buscar().eq("nombre_clave", nombre).eq("nif_clave", "").maybeSingle();

@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
+import { escanerAplicado } from "./escaner-textil";
 import type { Cobro } from "./cobros.functions";
 // Arriba y no con await import(): facturas.functions también lo importa de
 // forma normal, y cargarlo de las dos formas tira el arranque del servidor
@@ -42,6 +43,7 @@ import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/ticket
 import { diaEnEspana, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
 import { resolverIdentidad } from "@/dominio/plantilla-presupuesto";
 import { normalizarEan } from "@/dominio/normalizar-textil";
+import { costeAlReescribir } from "@/dominio/stock-textil";
 import type { ProductoTextil } from "@/dominio/tipos-textil";
 import type { Database } from "@/integrations/supabase/types";
 import {
@@ -523,11 +525,20 @@ async function faltantesDisponibilidad(
   return faltantes;
 }
 
+/** El coste congelado de las líneas que ya tenía el documento, por variante. */
+type CostesPrevios = {
+  /** Variante → su coste congelado, o null si su línea no tenía. */
+  previos: Map<string, number | null>;
+  /** Si la base sabe dejar una línea sin coste al reinsertarla (SIN_COSTE_CONGELADO). */
+  conservarNulo: boolean;
+};
+
 /**
  * El coste congelado (`coste_unit_snapshot`) de las líneas guardadas de un
  * presupuesto o un pedido, por variante. Se lee ANTES de borrar las líneas
  * para reescribirlas: así cada línea nueva conserva el coste de la anterior
- * con la misma variante y no se recalcula leyendo el maestro.
+ * con la misma variante (también el nulo: una línea sin coste no toma el de
+ * hoy) y no se recalcula leyendo el maestro.
  *
  * `null` si la columna no existe (falta la migración 20261028100000): entonces
  * no se manda nada y todo queda como antes.
@@ -537,39 +548,50 @@ async function costesCongelados(
   tablaItems: "textil_presupuesto_items" | "textil_pedido_items",
   campo: "presupuesto_id" | "pedido_id",
   documentoId: string | null | undefined,
-): Promise<Map<string, number> | null> {
+): Promise<CostesPrevios | null> {
   const consulta = tabla(supabase, tablaItems).select("stock_id, coste_unit_snapshot");
   const { data, error } = documentoId
     ? await consulta.eq(campo, documentoId)
     : await consulta.limit(1);
   if (faltaLaColumna(error)) return null;
   if (error) throw new Error(error.message);
-  const costes = new Map<string, number>();
-  if (!documentoId) return costes;
+  const previos = new Map<string, number | null>();
+  if (!documentoId) return { previos, conservarNulo: false };
   for (const f of (data ?? []) as { stock_id: string | null; coste_unit_snapshot: unknown }[]) {
-    if (!f.stock_id || f.coste_unit_snapshot === null || f.coste_unit_snapshot === undefined) {
-      continue;
+    if (!f.stock_id) continue;
+    const coste =
+      f.coste_unit_snapshot === null || f.coste_unit_snapshot === undefined
+        ? null
+        : Number(f.coste_unit_snapshot);
+    if (!previos.has(f.stock_id) || (previos.get(f.stock_id) === null && coste !== null)) {
+      previos.set(f.stock_id, coste);
     }
-    if (!costes.has(f.stock_id)) costes.set(f.stock_id, Number(f.coste_unit_snapshot));
   }
-  return costes;
+  // Pedirle a la base que deje una línea sin coste solo si el trigger que lo
+  // entiende existe (migración 20261028100200); si no, el -1 se guardaría tal cual.
+  const conNulos = [...previos.values()].some((c) => c === null);
+  return { previos, conservarNulo: conNulos && (await escanerAplicado(supabase)) };
 }
 
 /**
- * La columna `coste_unit_snapshot` de una línea nueva: el congelado que le
- * toca (por posición o por variante) o nada, y entonces lo pone el trigger
- * con el coste medio de hoy. Sin la columna, nada.
+ * La columna `coste_unit_snapshot` de una línea reescrita: el congelado que le
+ * toca (por posición o por variante), SIN_COSTE_CONGELADO si la línea que
+ * había no tenía coste, o nada (línea nueva: lo pone el trigger con el coste
+ * medio de hoy). Sin la columna, nada. La regla, en costeAlReescribir.
  */
 function conCosteCongelado(
-  costes: { porStock: Map<string, number> | null; porLinea?: (number | null)[] },
+  costes: CostesPrevios | null,
   indice: number,
   stockId: string | null | undefined,
+  porLinea?: (number | null)[],
 ): { coste_unit_snapshot?: number } {
-  if (!costes.porStock || !stockId) return {};
-  const deLinea = costes.porLinea?.[indice];
-  if (deLinea !== null && deLinea !== undefined) return { coste_unit_snapshot: deLinea };
-  const deStock = costes.porStock.get(stockId);
-  return deStock === undefined ? {} : { coste_unit_snapshot: deStock };
+  const coste = costeAlReescribir(
+    costes?.previos ?? null,
+    stockId,
+    porLinea?.[indice],
+    costes?.conservarNulo ?? false,
+  );
+  return coste === undefined ? {} : { coste_unit_snapshot: coste };
 }
 
 /**
@@ -768,7 +790,7 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
         iva_pct: it.iva_pct,
         subtotal: it.subtotal,
         stock_id: it.stock_id ?? null,
-        ...conCosteCongelado({ porStock }, i, it.stock_id),
+        ...conCosteCongelado(porStock, i, it.stock_id),
       })),
     );
     if (itErr) throw itErr;
@@ -1019,7 +1041,7 @@ async function guardarPedidoTextil(
       iva_pct: it.iva_pct,
       subtotal: it.subtotal,
       stock_id: it.stock_id ?? null,
-      ...conCosteCongelado({ porStock, porLinea: costes?.porLinea }, i, it.stock_id),
+      ...conCosteCongelado(porStock, i, it.stock_id, costes?.porLinea),
     })),
   );
   if (itErr) throw itErr;

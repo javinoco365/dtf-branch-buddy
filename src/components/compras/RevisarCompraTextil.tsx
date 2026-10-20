@@ -396,6 +396,11 @@ export function RevisarCompraTextil({
   if (!compra.fecha) pendientes.push("Falta la fecha de la factura.");
   if (sinProveedor) pendientes.push("Falta el proveedor (nombre o NIF).");
   if (sinDescripcion) pendientes.push("Hay líneas sin descripción.");
+  // También en portes y descuentos: el reparto no mira su cantidad, pero el
+  // registro la necesita mayor que cero.
+  const sinCantidad = lineas.findIndex((l) => !(Number(l.cantidad) > 0));
+  if (sinCantidad >= 0)
+    pendientes.push(`Línea ${sinCantidad + 1}: la cantidad tiene que ser mayor que cero.`);
   if (faltan.length > 0)
     pendientes.push(
       `${faltan.length} línea${faltan.length === 1 ? "" : "s"} sin variante del almacén.`,

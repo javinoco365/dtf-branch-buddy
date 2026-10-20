@@ -341,9 +341,10 @@ export const DEFINICIONES = {
   // --- Gerencia › Textil ------------------------------------------------------
   g_stock_valor: {
     que: "Lo que vale el almacén textil a precio de compra, hoy.",
-    calculo: "Unidades de cada artículo activo × su coste medio ponderado.",
+    calculo:
+      "Unidades de cada artículo × su coste medio ponderado, redondeado al céntimo y sumado. Cuentan todos: también los desactivados que aún tienen unidades y, con su signo, los que están en negativo.",
     fuente:
-      "Almacén textil, hoy: las unidades y el coste medio guardados. No depende del periodo. Puede diferir unos céntimos del valor según el libro de la Cuenta del almacén.",
+      "Almacén textil, hoy: las unidades y el coste medio guardados. No depende del periodo. Es la misma cifra que el «Valor del almacén hoy» del informe de socios; de la Cuenta del almacén (el libro) solo la separan los redondeos del coste medio y las entradas en una variante que estaba en negativo: la diferencia es la comprobación «caché − libro».",
   },
   g_compras_textil: {
     que: "Lo comprado para el textil en el periodo, sin IVA.",

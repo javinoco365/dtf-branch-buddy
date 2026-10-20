@@ -68,6 +68,8 @@ export function unidadesDeLinea(cantidad: number, unidadesPorPack: number): numb
  *
  * 1. Sin artículos → E-REG-8.
  * 2. Artículo con importe negativo → E-REG-9; unidades no enteras o ≤ 0 → E-REG-10.
+ *    Porte negativo o descuento positivo → E-REG-13 (lo rechaza también la base:
+ *    si no se avisara aquí, la revisión dejaría registrar y fallaría al final).
  * 3. Las líneas tienen que sumar la base con ±2 céntimos → si no, E-REG-14.
  * 4. Lo que no es artículo (R = base − Σ artículos) se reparte por importe
  *    (o por unidades si los artículos son a 0 €) con el mayor resto.
@@ -97,6 +99,12 @@ export function repartirCostes(
       });
     }
     return { indice, unidades, c, importe: c / 100 };
+  });
+  lineas.forEach((l, indice) => {
+    const c = centimos(l.importe);
+    if ((l.tipo === "porte" && c < 0) || (l.tipo === "descuento" && c > 0)) {
+      errores.push({ linea: indice, codigo: "E-REG-13", datos: [] });
+    }
   });
 
   const baseC = centimos(base);

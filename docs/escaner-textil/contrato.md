@@ -710,6 +710,8 @@ aplicadas. La usa `escanerAplicado()` (3.1).
 | E-CAB-6  | `Una compra se registra desde su revisión, no cambiando su estado a mano.`                                                                                     | restrict_violation |
 | E-STK-1  | `El coste medio no se escribe a mano: lo calcula el libro de movimientos. Para corregirlo, anota un ajuste de inventario.`                                     | restrict_violation |
 | E-STK-2  | `Las entradas por compra solo las anota el registro de su factura (Textil › Compras).`                                                                         | restrict_violation |
+| E-STK-3  | `Una variante nace sin existencias y sin coste: las unidades entran con su factura (Textil › Compras) o con un ajuste de inventario.`                          | restrict_violation |
+| E-STK-4  | `Esta variante tiene % unidades: para retirarla, anota antes una merma o un ajuste de inventario que la deje a 0, o fusiónala con la buena.`                   | restrict_violation |
 | E-REG-1  | `Sin usuario: la compra necesita un autor.`                                                                                                                    | 22023              |
 | E-REG-2  | `Sin acceso a esta empresa.`                                                                                                                                   | 42501              |
 | E-REG-3  | `La compra no existe.`                                                                                                                                         | P0002              |
@@ -734,6 +736,7 @@ aplicadas. La usa `escanerAplicado()` (3.1).
 | E-REG-22 | `Esta compra tiene portes, descuentos u otros cargos: regístrala desde la revisión de Textil › Compras para repartirlos.`                                      | restrict_violation |
 | E-REG-23 | `La fecha de la factura (%) es posterior a hoy: revisa que esté bien leída.`                                                                                   | 22023              |
 | E-REG-25 | `El NIF de la factura (%) no es el del proveedor elegido (%). Vuelve a elegir el proveedor.`                                                                   | 22023              |
+| E-REG-26 | `Línea %: la referencia % ya es del producto %; elígelo o cambia la referencia.`                                                                               | unique_violation   |
 | E-FUS-1  | `No se fusiona una variante consigo misma.`                                                                                                                    | 22023              |
 | E-FUS-2  | `Las dos variantes tienen que ser de la misma empresa.`                                                                                                        | 42501              |
 | E-FUS-3  | `La variante de destino tiene que estar activa y no repetida.`                                                                                                 | restrict_violation |
@@ -991,6 +994,7 @@ export type CodigoErrorEscaner =
   | "E-REG-8"
   | "E-REG-9"
   | "E-REG-10"
+  | "E-REG-13" // porte negativo o descuento positivo (como la base)
   | "E-REG-14"
   | "E-REP-1" // «Línea %: el descuento deja el artículo en negativo; revisa el descuento.»
   | "E-EAN-1"; // «Línea %: el EAN % no es válido.»
@@ -2412,3 +2416,60 @@ Ninguno impedía implementar el contrato; son huecos que se han cerrado en el SQ
    de componentes que exporta funciones rompe el refresco en caliente (dos avisos nuevos de
    `react-refresh/only-export-components`). `compras.functions.ts` y
    `escaner-textil.functions.ts` usan el mismo `textoONulo` en vez de una copia cada uno.
+
+### CORRECTOR (20-10-2026)
+
+Lo que encontraron los tres revisores y se ha arreglado. Manda sobre lo que diga más arriba.
+
+1. **Proveedor sin NIF que ya está con NIF** (1.3.7 paso 2, 1.2 C, `leerMemoriaEscaner`). Si la
+   factura no trae NIF, primero se busca por `nombre_clave` el proveedor **con** NIF; si es uno
+   solo, se usa ese; si no, el de ese nombre sin NIF; si no, se crea. La migración de datos
+   enlaza igual una compra antigua sin NIF antes de crear proveedores de solo nombre, y
+   `leerMemoriaEscaner` encuentra igual al proveedor. Así no se parte en dos (memoria y pagos).
+2. **Proveedor elegido sin NIF y factura con NIF** (1.3.7 paso 2). Con `proveedor_id`, si el
+   proveedor no tenía NIF y la factura sí (y ningún otro lo tiene), se le pone.
+3. **Producto nuevo con la marca y referencia de otro** (1.3.7 paso 4.6). Si ya existe un
+   producto con esa marca y referencia y **otro** `nombre_clave`, E-REG-26 en vez de reutilizarlo
+   en silencio. `CrearVarianteDialog` lo avisa antes con `productoQueChoca` (dominio).
+4. **Cabecera del borrador de la cola** (1.3.7 paso 1). En el `UPDATE`, `concepto`, `notas`,
+   `irpf`, `gasto_id`, `nota_descuadre` y `forma_pago` que **no vienen** en el JSON conservan lo que
+   había; si vienen (aunque sea nulos), mandan. El servidor no rellena con nulo o 0 lo que la
+   pantalla no manda (en `RegistroCompra` esas claves son opcionales).
+5. **Devolución de cliente a coste 0** (1.3.4 paso 3). La condición de la media es `cantidad > 0
+AND (coste_unitario > 0 OR motivo IN ('compra', 'devolucion_cliente') OR fusión)`: la
+   devolución recalcula la media al coste resuelto aunque sea 0, y el libro y la caché no se
+   separan.
+6. **Fusión con existencias negativas** (1.3.9 paso 2). Con `q < 0`, los dos ajustes van al coste
+   medio del **destino** (la salida es la del destino y toda salida sale a su coste medio): suman 0.
+7. **Coste congelado al reescribir líneas** (1.3.6). Guardar un presupuesto o pedido borra y
+   reinserta sus líneas. La línea que ya existía sin coste se manda con `coste_unit_snapshot =
+-1` (`SIN_COSTE_CONGELADO`, `costeAlReescribir` en `src/dominio/stock-textil.ts`) y el trigger
+   la deja nula en el `INSERT`. Solo se manda si `escanerAplicado` (sin el trigger, el -1 se
+   guardaría tal cual).
+8. **Alta de variante con existencias** (1.3.3). `stock_alta_sin_existencias()`, `BEFORE INSERT
+ON textil_stock`: cantidad o coste distintos de 0 sin la bandera → E-STK-3.
+9. **Valor del almacén, una sola definición** (5, `g_stock_valor`). `resumenStock().valor` (y
+   `unidades`) suman **todas** las variantes con su signo, `redondear(cantidad × coste, 2)` cada
+   una: la misma cifra que `valorCache` (informe de socios y controles) y que el libro salvo
+   redondeos y entradas en saldo negativo. `textil_stock_retirar()` ya no desactiva una variante
+   con unidades (E-STK-4): primero salen por el libro (merma, ajuste o fusión) y pasan por
+   Resultados. El pie de la tabla de Stock (`totalesStock`) sigue contando las negativas como 0,
+   como dice su explicación.
+10. **Página «Almacén» del informe de socios**. Las mermas y ajustes restan en Gerencia ›
+    Resultados (A), no en el «Beneficio» del informe (margen − gastos fijos): la tarjeta y una
+    nota lo dicen.
+11. **Duplicados en Textil › Compras** (3.3). La revisión compara con **todas** las compras
+    (`listCompras({ soloTextil: false })`, la misma consulta de la pantalla general), no solo las
+    textil.
+12. **Reintento de «Nuevo artículo» con producto nuevo** (Stock). Si la variante falla después de
+    crear el producto, el reintento reutiliza ese producto y la lista de productos se refresca.
+13. **Signo de portes y descuentos en el dominio** (2.3). `repartirCostes` da E-REG-13 como la
+    base, y la revisión no deja registrar.
+14. **Camino viejo con portes casados** (3.2). Sin la migración de reglas, una línea que no es
+    artículo **casada** con una variante ya no bloquea: se guarda sin tipo y entra como artículo,
+    como antes de esta obra (la revisión de siempre obliga a casar todas las líneas).
+15. **Cantidad 0 en una línea que no es artículo**. La revisión textil lo dice en «pendientes» y
+    el esquema de zod tiene mensaje en castellano.
+
+La reversión de 20261028100200 quita también `stock_alta_sin_existencias` y repone
+`textil_stock_retirar()` tal cual estaba en 20260903200000.

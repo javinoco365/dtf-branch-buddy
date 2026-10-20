@@ -143,7 +143,13 @@ export type LineaRegistro = {
   coste_unitario_entrada: number | null;
 };
 
-/** El JSON `_compra` de textil_compra_guardar_y_registrar. */
+/**
+ * El JSON `_compra` de textil_compra_guardar_y_registrar.
+ *
+ * Las claves opcionales, si no vienen, conservan en una compra que ya existe
+ * (un borrador de la cola) lo que tenía: el concepto y el IRPF leídos, la nota
+ * con el fichero… Si vienen, aunque sea nulas, mandan.
+ */
 export type RegistroCompra = {
   id: string | null;
   empresa_id: string | null;
@@ -154,17 +160,17 @@ export type RegistroCompra = {
   fecha: string | null;
   base: number;
   iva: number;
-  irpf: number;
+  irpf?: number;
   total: number;
   categoria: string;
-  gasto_id: string | null;
+  gasto_id?: string | null;
   tipo_iva: number | null;
   tipo_irpf: number | null;
   liquido_origen: "calculado" | "factura" | null;
-  nota_descuadre: string | null;
-  concepto: string | null;
-  forma_pago: string | null;
-  notas: string | null;
+  nota_descuadre?: string | null;
+  concepto?: string | null;
+  forma_pago?: string | null;
+  notas?: string | null;
   lectura_ia: unknown;
   lineas: LineaRegistro[];
 };
@@ -196,6 +202,7 @@ export type CodigoErrorEscaner =
   | "E-REG-8"
   | "E-REG-9"
   | "E-REG-10"
+  | "E-REG-13" // «Línea %: un porte no puede ser negativo ni un descuento positivo.»
   | "E-REG-14"
   | "E-REP-1" // «Línea %: el descuento deja el artículo en negativo; revisa el descuento.»
   | "E-EAN-1"; // «Línea %: el EAN % no es válido.»

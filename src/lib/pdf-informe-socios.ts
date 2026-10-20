@@ -1246,7 +1246,7 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
     {
       etiqueta: "Mermas y ajustes del periodo",
       valor: eur(k.perdidas),
-      pie: "Restan en la cuenta de resultados (A)",
+      pie: "En Resultados (A), no en el Beneficio",
       color: NARANJA,
       v: null,
       rojo: k.perdidas > 0,
@@ -1265,7 +1265,22 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
   ];
   const y0 = c.y;
   tarjetas.forEach((t, i) => tarjeta(c, t, M + i * (w + 4), y0, w, alto));
-  c.y = y0 + alto + 10;
+  c.y = y0 + alto + 5;
+  // El «Beneficio» de este informe es margen menos gastos fijos: no resta las
+  // mermas y ajustes (ni las compras ni las amortizaciones). Gerencia ›
+  // Resultados sí. Se dice para que nadie compare las dos cifras sin saberlo.
+  c.sitio(12, "Almacén");
+  c.letra("texto", 6.8, GRIS);
+  (
+    doc.splitTextToSize(
+      "Las mermas y ajustes restan en Gerencia › Resultados (grupo A). El «Beneficio» de este informe es el margen menos los gastos fijos: no las resta, como tampoco resta las compras ni las amortizaciones, así que puede ser mayor que el de Resultados.",
+      ANCHO,
+    ) as string[]
+  ).forEach((l) => {
+    c.texto(l, M, c.y);
+    c.y += 3.4;
+  });
+  c.y += 5;
 
   // Los controles: tienen que dar 0.
   c.sitio(48, "Almacén");

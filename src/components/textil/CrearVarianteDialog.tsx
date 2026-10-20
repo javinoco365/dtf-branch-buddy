@@ -22,6 +22,7 @@ import { DEFINICIONES } from "@/dominio/definiciones";
 import { eur, eurUnitario, numeroJusto } from "@/lib/format";
 import { claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado, type Recomendacion } from "@/dominio/precio-recomendado";
+import { productoQueChoca } from "@/dominio/stock-textil";
 import type { NuevaVariante, ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
 
 /** Una línea de factura para la que se crea una variante. */
@@ -130,6 +131,21 @@ export function CrearVarianteDialog({
     const p = prods[g.clave];
     if (p && !p.producto_id && !p.nombre.trim()) {
       problemas.push("Falta el nombre de un producto nuevo.");
+    }
+    // La base no reutiliza en silencio un producto con esa marca y referencia
+    // y otro nombre (E-REG-26): se avisa antes.
+    const choca =
+      p && !p.producto_id && p.nombre.trim()
+        ? productoQueChoca(productos, {
+            marca: p.marca,
+            referencia: p.referencia,
+            nombre: p.nombre,
+          })
+        : null;
+    if (choca) {
+      problemas.push(
+        `La referencia ${p.referencia.trim()} ya es del producto ${choca.nombre}; elígelo o cambia la referencia.`,
+      );
     }
   }
   for (const l of lineas) {

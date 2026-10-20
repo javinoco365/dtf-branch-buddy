@@ -12,9 +12,11 @@
 -- textil_stock_variante_unica y textil_stock_ean_unico, el NOT NULL de
 -- producto_id y las tres CHECK de las entradas por compra.
 --
--- Repone, copiadas tal cual, stock_aplicar_movimiento() y
--- stock_cantidad_solo_por_movimiento() de 20260903200000_stock_movimientos.sql
--- y textil_compra_registrar(uuid) de 20261013100000_compras_generales.sql.
+-- Quita también el freno a dar de alta una variante con existencias
+-- (stock_alta_sin_existencias). Repone, copiadas tal cual,
+-- stock_aplicar_movimiento(), stock_cantidad_solo_por_movimiento() y
+-- textil_stock_retirar() de 20260903200000_stock_movimientos.sql y
+-- textil_compra_registrar(uuid) de 20261013100000_compras_generales.sql.
 --
 -- No toca ninguna fila. Lo que se pierde es la protección: las compras
 -- registradas vuelven a poder cambiarse por la cabecera y el coste medio a
@@ -40,6 +42,9 @@ DROP FUNCTION IF EXISTS public.textil_item_coste_congelado();
 
 DROP TRIGGER IF EXISTS textil_stock_mov_compra_solo_registro ON public.textil_stock_movimientos;
 DROP FUNCTION IF EXISTS public.stock_compra_solo_por_registro();
+
+DROP TRIGGER IF EXISTS textil_stock_alta_sin_existencias ON public.textil_stock;
+DROP FUNCTION IF EXISTS public.stock_alta_sin_existencias();
 
 DROP INDEX IF EXISTS public.textil_stock_variante_unica;
 DROP INDEX IF EXISTS public.textil_stock_ean_unico;
@@ -113,6 +118,29 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.textil_stock_retirar(_stock_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_movimientos INT;
+BEGIN
+  SELECT count(*) INTO v_movimientos
+    FROM public.textil_stock_movimientos WHERE stock_id = _stock_id;
+
+  IF v_movimientos = 0 THEN
+    DELETE FROM public.textil_stock WHERE id = _stock_id;
+    RETURN 'borrada';
+  END IF;
+
+  UPDATE public.textil_stock SET activa = false, updated_at = now() WHERE id = _stock_id;
+  RETURN 'desactivada';
+END;
+$$;
+
+COMMENT ON FUNCTION public.textil_stock_retirar(UUID) IS
+  'Borra la variante si nunca tuvo movimientos; si los tuvo, la desactiva. '
+  'Devuelve "borrada" o "desactivada" para que la pantalla lo explique.';
 
 -- ---------------------------------------------------------------------------
 -- Copiada tal cual de 20261013100000_compras_generales.sql

@@ -9,7 +9,7 @@ import {
 import { normalizarTexto } from "@/dominio/clientes";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -172,26 +172,41 @@ function StockPage() {
   });
 
   const productoFn = useServerFn(guardarProductoTextil);
+  // El producto nuevo que ya se creó en un intento anterior cuya variante
+  // falló (un EAN repetido, por ejemplo): el reintento lo reutiliza en vez de
+  // volver a crearlo y chocar con «Ya existe un producto con esa marca…».
+  const productoCreado = useRef<{ clave: string; id: string } | null>(null);
   const upsert = useMutation({
     mutationFn: async (d: { variante: any; productoNuevo: ProductoNuevo | null }) => {
       let producto_id: string | null | undefined = d.variante.producto_id;
       // El producto nuevo se guarda antes que la variante, que apunta a él.
       if (d.productoNuevo) {
-        const r = await productoFn({ data: d.productoNuevo });
-        producto_id = r.id;
+        const clave = JSON.stringify(d.productoNuevo);
+        if (productoCreado.current?.clave === clave) {
+          producto_id = productoCreado.current.id;
+        } else {
+          const r = await productoFn({ data: d.productoNuevo });
+          producto_id = r.id;
+          productoCreado.current = { clave, id: r.id };
+        }
       }
       return upsertFn({
         data: { ...d.variante, ...(producto_id !== undefined ? { producto_id } : {}) },
       });
     },
     onSuccess: () => {
+      productoCreado.current = null;
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
       qc.invalidateQueries({ queryKey: ["textil-productos"] });
       toast.success("Guardado");
       setOpen(false);
       setEditing(null);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => {
+      // Si el producto llegó a crearse, que ya salga en el desplegable.
+      qc.invalidateQueries({ queryKey: ["textil-productos"] });
+      toast.error(e.message);
+    },
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
@@ -437,7 +452,12 @@ function StockPage() {
                             confirm(
                               `¿Seguro que quieres eliminar "${it.nombre}"?\n\n` +
                                 "Si tiene movimientos de stock no se borrará: se desactivará, " +
-                                "porque su historia explica el coste de lo que ya vendiste.",
+                                "porque su historia explica el coste de lo que ya vendiste." +
+                                // Con la migración del escáner, solo a 0 unidades.
+                                (escaner && Number(it.cantidad) !== 0
+                                  ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
+                                    "merma o un recuento que la deje a 0, o fusiónala con la buena."
+                                  : ""),
                             )
                           )
                             del.mutate(it.id);

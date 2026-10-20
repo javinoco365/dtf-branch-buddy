@@ -33,18 +33,23 @@
 --      registrada dentro de las funciones de registro (SECURITY DEFINER), nunca
 --      con un UPDATE de authenticated o anon.
 --   3. stock_cantidad_solo_por_movimiento(): además de la cantidad, protege el
---      coste medio. Solo lo escribe el libro de movimientos.
+--      coste medio. Solo lo escribe el libro de movimientos. Y
+--      stock_alta_sin_existencias(): una variante nace a 0 unidades y coste 0.
+--      textil_stock_retirar() ya no desactiva una variante con existencias:
+--      antes tienen que salir por el libro (merma, ajuste o fusión).
 --   4. stock_aplicar_movimiento() nuevo: fecha contable del movimiento; la
 --      devolución de cliente entra al coste al que salió en ese pedido (también
 --      si la venta salió de una variante fusionada en esta); el ajuste al alza
 --      sin coste entra al coste medio; una compra a coste 0 baja la media; y
---      TODA salida sale al coste medio vigente. Y el trigger
+--      TODA salida sale al coste medio vigente. La devolución de cliente
+--      recalcula la media al coste resuelto (aunque sea 0). Y el trigger
 --      textil_stock_mov_compra_solo_registro: las entradas «compra» solo las
 --      anotan las funciones de registro.
 --   5. Entradas por compra, siempre con su línea de factura (CHECK NOT VALID:
 --      las antiguas se quedan como están).
 --   6. textil_item_coste_congelado(): las líneas de presupuesto y pedido textil
---      congelan el coste medio de su variante al crearse.
+--      congelan el coste medio de su variante al crearse (y conservan el nulo
+--      al reescribirse, si la aplicación lo pide con -1).
 --   7. textil_compra_guardar_y_registrar(): guarda y registra una compra (de
 --      cualquier categoría) en una sola transacción. En textil valida el
 --      reparto (Σ coste de entrada = base, al céntimo), crea las variantes
@@ -255,6 +260,70 @@ BEGIN
 END;
 $$;
 
+-- Y al dar de alta: una variante nace sin existencias y sin coste. Sin esto,
+-- un INSERT por PostgREST con cantidad y coste dejaba unidades y un coste medio
+-- sin ninguna fila en el libro (stock_descuadres solo mira unidades).
+CREATE OR REPLACE FUNCTION public.stock_alta_sin_existencias()
+RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF (COALESCE(NEW.cantidad, 0) <> 0 OR COALESCE(NEW.coste_unitario, 0) <> 0)
+     AND COALESCE(current_setting('app.stock_via_movimiento', true), '') <> '1' THEN
+    RAISE EXCEPTION
+      'Una variante nace sin existencias y sin coste: las unidades entran con su factura (Textil › Compras) o con un ajuste de inventario.'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS textil_stock_alta_sin_existencias ON public.textil_stock;
+CREATE TRIGGER textil_stock_alta_sin_existencias
+  BEFORE INSERT ON public.textil_stock
+  FOR EACH ROW EXECUTE FUNCTION public.stock_alta_sin_existencias();
+
+-- Retirar una variante, solo sin existencias. Antes se desactivaba con sus
+-- unidades: dejaban de verse en el almacén pero seguían valiendo en el libro,
+-- y su pérdida no pasaba nunca por Resultados. Ahora primero tienen que salir
+-- por el libro (una merma o un ajuste de inventario) o pasar a otra variante
+-- (fusionar).
+CREATE OR REPLACE FUNCTION public.textil_stock_retirar(_stock_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_movimientos INT;
+  v_cantidad NUMERIC;
+BEGIN
+  SELECT cantidad INTO v_cantidad FROM public.textil_stock WHERE id = _stock_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN 'borrada';   -- ya no estaba (como antes)
+  END IF;
+
+  SELECT count(*) INTO v_movimientos
+    FROM public.textil_stock_movimientos WHERE stock_id = _stock_id;
+
+  IF v_movimientos = 0 THEN
+    DELETE FROM public.textil_stock WHERE id = _stock_id;
+    RETURN 'borrada';
+  END IF;
+
+  IF v_cantidad <> 0 THEN
+    RAISE EXCEPTION 'Esta variante tiene % unidades: para retirarla, anota antes una merma o un ajuste de inventario que la deje a 0, o fusiónala con la buena.',
+      replace(trim_scale(v_cantidad)::TEXT, '.', ',') USING ERRCODE = 'restrict_violation';
+  END IF;
+
+  UPDATE public.textil_stock SET activa = false, updated_at = now() WHERE id = _stock_id;
+  RETURN 'desactivada';
+END;
+$$;
+
+COMMENT ON FUNCTION public.textil_stock_retirar(UUID) IS
+  'Borra la variante si nunca tuvo movimientos; si los tuvo, la desactiva, pero solo con 0 '
+  'unidades (las que tenga salen antes por el libro). Devuelve "borrada" o "desactivada".';
+
+REVOKE EXECUTE ON FUNCTION public.textil_stock_retirar(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.textil_stock_retirar(UUID) TO authenticated, service_role;
+
 -- ---------------------------------------------------------------------------
 -- 4. Nuevo stock_aplicar_movimiento() y entradas «compra» solo por registro
 -- ---------------------------------------------------------------------------
@@ -302,8 +371,12 @@ BEGIN
   END IF;
 
   -- 3. Media ponderada. Una compra a coste 0 (regalo, 100 % de descuento) sí
-  --    la baja. Con saldo negativo o cero, la entrada manda.
-  IF NEW.cantidad > 0 AND (NEW.coste_unitario > 0 OR NEW.motivo = 'compra' OR v_fusion) THEN
+  --    la baja, y una devolución de cliente también, al coste que se le haya
+  --    resuelto (aunque sea 0, si la venta salió a 0): si no, esas unidades
+  --    valdrían 0 en el libro y el coste medio en la caché. Con saldo negativo
+  --    o cero, la entrada manda.
+  IF NEW.cantidad > 0
+     AND (NEW.coste_unitario > 0 OR NEW.motivo IN ('compra', 'devolucion_cliente') OR v_fusion) THEN
     IF v_saldo > 0 THEN
       v_nuevo_coste := (v_saldo * v_coste + NEW.cantidad * NEW.coste_unitario)
                        / (v_saldo + NEW.cantidad);
@@ -378,12 +451,21 @@ END $$;
 -- cambiarla, se conserva: solo si la persona la pasa a OTRA variante se toma
 -- el coste de la nueva. Retirar la variante (FK SET NULL) o fusionarla no
 -- reescribe el coste congelado.
+--
+-- Guardar un presupuesto o un pedido borra y vuelve a insertar sus líneas.
+-- Una línea que ya existía SIN coste congelado (anterior a esta migración, o
+-- de una variante sin coste) no puede tomar el coste de hoy al reinsertarse:
+-- la aplicación la manda con coste_unit_snapshot = -1 (SIN_COSTE_CONGELADO en
+-- src/lib/textil.functions.ts), que aquí se queda en nulo. Ningún coste real
+-- es negativo.
 CREATE OR REPLACE FUNCTION public.textil_item_coste_congelado()
 RETURNS TRIGGER
 LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    IF NEW.coste_unit_snapshot IS NULL AND NEW.stock_id IS NOT NULL THEN
+    IF NEW.coste_unit_snapshot < 0 THEN
+      NEW.coste_unit_snapshot := NULL;
+    ELSIF NEW.coste_unit_snapshot IS NULL AND NEW.stock_id IS NOT NULL THEN
       SELECT NULLIF(s.coste_unitario, 0) INTO NEW.coste_unit_snapshot
         FROM public.textil_stock s WHERE s.id = NEW.stock_id;
     END IF;
@@ -448,6 +530,7 @@ DECLARE
   v_p_categoria TEXT;
   v_p_marca TEXT;
   v_p_referencia TEXT;
+  v_otro RECORD;
   v_color TEXT;
   v_talla TEXT;
   v_ean TEXT;
@@ -522,24 +605,33 @@ BEGIN
        v_lectura, 'borrador')
     RETURNING id INTO v_id;
   ELSE
+    -- Una clave que no viene en el JSON conserva lo que había (lo que guardó
+    -- la cola: el concepto y el IRPF leídos, la nota con el fichero…), como
+    -- hacía guardarCompra. Si viene, aunque sea nula, manda.
     UPDATE public.textil_compras
        SET proveedor = v_nombre,
            nif_proveedor = v_nif,
            numero = v_numero,
            fecha = v_fecha,
-           concepto = NULLIF(btrim(_compra ->> 'concepto'), ''),
-           notas = NULLIF(btrim(_compra ->> 'notas'), ''),
+           concepto = CASE WHEN _compra ? 'concepto'
+                           THEN NULLIF(btrim(_compra ->> 'concepto'), '') ELSE concepto END,
+           notas = CASE WHEN _compra ? 'notas'
+                        THEN NULLIF(btrim(_compra ->> 'notas'), '') ELSE notas END,
            base = v_base,
            iva = COALESCE(NULLIF(_compra ->> 'iva', '')::NUMERIC, 0),
-           irpf = COALESCE(NULLIF(_compra ->> 'irpf', '')::NUMERIC, 0),
+           irpf = CASE WHEN _compra ? 'irpf'
+                       THEN COALESCE(NULLIF(_compra ->> 'irpf', '')::NUMERIC, 0) ELSE irpf END,
            total = COALESCE(NULLIF(_compra ->> 'total', '')::NUMERIC, 0),
            categoria = v_categoria,
-           gasto_id = NULLIF(btrim(_compra ->> 'gasto_id'), '')::UUID,
+           gasto_id = CASE WHEN _compra ? 'gasto_id'
+                           THEN NULLIF(btrim(_compra ->> 'gasto_id'), '')::UUID ELSE gasto_id END,
            tipo_iva = COALESCE(NULLIF(_compra ->> 'tipo_iva', '')::NUMERIC, tipo_iva),
            tipo_irpf = COALESCE(NULLIF(_compra ->> 'tipo_irpf', '')::NUMERIC, tipo_irpf),
            liquido_origen = COALESCE(NULLIF(btrim(_compra ->> 'liquido_origen'), ''), liquido_origen),
-           nota_descuadre = NULLIF(btrim(_compra ->> 'nota_descuadre'), ''),
-           forma_pago = NULLIF(btrim(_compra ->> 'forma_pago'), ''),
+           nota_descuadre = CASE WHEN _compra ? 'nota_descuadre'
+                                 THEN NULLIF(btrim(_compra ->> 'nota_descuadre'), '') ELSE nota_descuadre END,
+           forma_pago = CASE WHEN _compra ? 'forma_pago'
+                             THEN NULLIF(btrim(_compra ->> 'forma_pago'), '') ELSE forma_pago END,
            lectura_ia = COALESCE(lectura_ia, v_lectura),
            estado = 'borrador'
      WHERE id = v_id;
@@ -555,6 +647,13 @@ BEGIN
        AND v_prov.nif_clave <> public.nif_clave(v_nif) THEN
       RAISE EXCEPTION 'El NIF de la factura (%) no es el del proveedor elegido (%). Vuelve a elegir el proveedor.',
         v_nif, v_prov.nif USING ERRCODE = '22023';
+    END IF;
+    -- El elegido no tenía NIF y la factura sí: se completa (como en la rama
+    -- de abajo), salvo que ese NIF ya sea de otro proveedor.
+    IF v_prov.nif_clave = '' AND public.nif_clave(v_nif) <> ''
+       AND NOT EXISTS (SELECT 1 FROM public.proveedores
+                        WHERE empresa_id = v_empresa AND nif_clave = public.nif_clave(v_nif)) THEN
+      UPDATE public.proveedores SET nif = v_nif WHERE id = v_prov_id;
     END IF;
   ELSIF public.nif_clave(v_nif) <> '' THEN
     SELECT id INTO v_prov_id FROM public.proveedores
@@ -582,9 +681,18 @@ BEGIN
       END IF;
     END IF;
   ELSIF public.textil_clave(v_nombre) <> '' THEN
-    SELECT id INTO v_prov_id FROM public.proveedores
-     WHERE empresa_id = v_empresa AND nif_clave = ''
-       AND nombre_clave = public.textil_clave(v_nombre);
+    -- Sin NIF en la factura: primero el proveedor CON NIF de ese nombre, si
+    -- es uno solo (la IA no leyó el NIF de un proveedor que ya está en el
+    -- catálogo: no se parte en dos); si no, el de ese nombre sin NIF.
+    SELECT min(id::TEXT)::UUID INTO v_prov_id FROM public.proveedores
+     WHERE empresa_id = v_empresa AND nif_clave <> ''
+       AND nombre_clave = public.textil_clave(v_nombre)
+    HAVING count(*) = 1;
+    IF v_prov_id IS NULL THEN
+      SELECT id INTO v_prov_id FROM public.proveedores
+       WHERE empresa_id = v_empresa AND nif_clave = ''
+         AND nombre_clave = public.textil_clave(v_nombre);
+    END IF;
     IF v_prov_id IS NULL THEN
       INSERT INTO public.proveedores (empresa_id, nombre, origen)
       VALUES (v_empresa, v_nombre, 'escaner')
@@ -758,11 +866,19 @@ BEGIN
           v_p_categoria := NULLIF(btrim(v_pj ->> 'categoria'), '');
           v_producto := NULL;
           IF public.textil_clave(v_p_referencia) <> '' THEN
-            SELECT id INTO v_producto
+            SELECT id, nombre, nombre_clave INTO v_otro
               FROM public.textil_productos
              WHERE empresa_id = v_empresa
                AND marca_clave = public.textil_clave(v_p_marca)
                AND referencia_clave = public.textil_clave(v_p_referencia);
+            v_producto := v_otro.id;
+            -- Esa marca y referencia ya son de un producto con OTRO nombre: no
+            -- se reutiliza en silencio (las prendas entrarían en otro producto
+            -- y el nombre escrito se perdería).
+            IF v_producto IS NOT NULL AND v_otro.nombre_clave <> public.textil_clave(v_p_nombre) THEN
+              RAISE EXCEPTION 'Línea %: la referencia % ya es del producto %; elígelo o cambia la referencia.',
+                r.orden + 1, v_p_referencia, v_otro.nombre USING ERRCODE = 'unique_violation';
+            END IF;
             IF v_producto IS NULL THEN
               INSERT INTO public.textil_productos (empresa_id, marca, referencia, nombre, categoria, origen)
               VALUES (v_empresa, v_p_marca, v_p_referencia, v_p_nombre, v_p_categoria, 'escaner')
@@ -1076,9 +1192,13 @@ BEGIN
   -- suman 0.
   PERFORM set_config('app.fusion_variantes', '1', true);
 
-  -- 2. Las unidades pasan al coste medio del origen.
+  -- 2. Las unidades pasan al coste medio del origen. Con existencias
+  --    negativas es al revés: la salida es la del destino, y toda salida sale
+  --    al coste medio de su variante (paso 4 de stock_aplicar_movimiento), así
+  --    que los dos ajustes van al coste del destino. Si no, no sumarían 0 y
+  --    la fusión dejaría una merma o una ganancia que no existe.
   v_q := v_origen.cantidad;
-  v_c := v_origen.coste_unitario;
+  v_c := CASE WHEN v_q < 0 THEN v_destino.coste_unitario ELSE v_origen.coste_unitario END;
   IF v_q <> 0 THEN
     INSERT INTO public.textil_stock_movimientos
       (empresa_id, stock_id, motivo, cantidad, coste_unitario, nota)
@@ -1133,7 +1253,7 @@ $$;
 
 COMMENT ON FUNCTION public.textil_stock_fusionar(UUID, UUID, UUID) IS
   'Fusiona una variante (normalmente repetida) en otra: pasa sus unidades al coste medio del '
-  'origen con dos ajustes, sus reservas, sus líneas de pedido y presupuesto, la memoria y las '
+  'origen (si son negativas, al del destino) con dos ajustes que suman 0, sus reservas, sus líneas de pedido y presupuesto, la memoria y las '
   'compras en borrador; el origen queda desactivado y con fusionada_en.';
 
 REVOKE ALL ON FUNCTION public.textil_stock_fusionar(UUID, UUID, UUID) FROM PUBLIC, anon, authenticated;

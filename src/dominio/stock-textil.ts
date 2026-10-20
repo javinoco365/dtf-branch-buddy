@@ -344,3 +344,64 @@ export function margenPrevisto(
     baseSinCoste: redondear(baseSinCoste),
   };
 }
+
+/**
+ * Lo que se manda en `coste_unit_snapshot` para pedir a la base que deje la
+ * línea SIN coste congelado (nula) al reescribirla. Lo traduce a nulo el
+ * trigger `textil_item_coste_congelado` (migración 20261028100200). Ningún
+ * coste real es negativo.
+ */
+export const SIN_COSTE_CONGELADO = -1;
+
+/**
+ * El coste congelado que se manda al reescribir una línea de un presupuesto o
+ * un pedido (guardar borra las líneas y las vuelve a insertar):
+ *
+ * - el que traiga la línea por su posición (`porLinea`, al confirmar un
+ *   presupuesto) o el que tenía la línea guardada con la misma variante;
+ * - si la línea guardada con esa variante NO tenía coste (anterior a la
+ *   migración, o de una variante sin coste), `SIN_COSTE_CONGELADO`, para que
+ *   no tome el coste medio de hoy; solo con `conservarNulo` (el trigger que lo
+ *   entiende existe), si no, nada;
+ * - si es nueva, nada: el trigger le pone el coste medio de hoy.
+ *
+ * `undefined` = no mandar la columna. `previos` es null sin la columna.
+ */
+export function costeAlReescribir(
+  previos: ReadonlyMap<string, number | null> | null,
+  stockId: string | null | undefined,
+  deLinea: number | null | undefined,
+  conservarNulo: boolean,
+): number | undefined {
+  if (!previos || !stockId) return undefined;
+  if (deLinea !== null && deLinea !== undefined) return deLinea;
+  if (!previos.has(stockId)) return undefined;
+  const previo = previos.get(stockId);
+  if (previo !== null && previo !== undefined) return previo;
+  return conservarNulo ? SIN_COSTE_CONGELADO : undefined;
+}
+
+/**
+ * El producto del catálogo que ya tiene la marca y la referencia de un
+ * producto nuevo pero con OTRO nombre, o null. El registro lo rechaza
+ * (E-REG-26): si no, las prendas entrarían en ese otro producto y el nombre
+ * escrito se perdería. Con el mismo nombre (o sin referencia) no hay choque:
+ * se usa ese producto. Compara con las mismas claves que la base.
+ */
+export function productoQueChoca(
+  productos: readonly ProductoTextil[],
+  nuevo: { marca: string | null; referencia: string | null; nombre: string },
+): ProductoTextil | null {
+  const referencia = claveTexto(nuevo.referencia);
+  if (!referencia) return null;
+  const marca = claveTexto(nuevo.marca);
+  const nombre = claveTexto(nuevo.nombre);
+  return (
+    productos.find(
+      (p) =>
+        claveTexto(p.marca) === marca &&
+        claveTexto(p.referencia) === referencia &&
+        claveTexto(p.nombre) !== nombre,
+    ) ?? null
+  );
+}

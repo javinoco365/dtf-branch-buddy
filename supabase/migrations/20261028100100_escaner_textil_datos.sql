@@ -126,6 +126,25 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT;
   v_proveedores := v_n;
 
+  -- Una compra sin NIF de un proveedor que sí lo tiene en otra (la IA no lo
+  -- leyó): al proveedor CON NIF de ese nombre, si es uno solo. Así no se crea
+  -- otro de solo nombre y no se parten en dos su memoria y sus pagos (igual
+  -- que textil_compra_guardar_y_registrar).
+  UPDATE public.textil_compras c
+     SET proveedor_id = p.id
+    FROM public.proveedores p
+   WHERE c.proveedor_id IS NULL
+     AND public.nif_clave(c.nif_proveedor) = ''
+     AND public.textil_clave(c.proveedor) <> ''
+     AND p.empresa_id = c.empresa_id
+     AND p.nif_clave <> ''
+     AND p.nombre_clave = public.textil_clave(c.proveedor)
+     AND (SELECT count(*) FROM public.proveedores p2
+           WHERE p2.empresa_id = c.empresa_id AND p2.nif_clave <> ''
+             AND p2.nombre_clave = p.nombre_clave) = 1;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  v_compras := v_n;
+
   -- Sin NIF: uno por (empresa, nombre normalizado).
   INSERT INTO public.proveedores (empresa_id, nombre, origen)
   SELECT DISTINCT ON (c.empresa_id, public.textil_clave(c.proveedor))
@@ -148,7 +167,7 @@ BEGIN
      AND public.nif_clave(c.nif_proveedor) <> ''
      AND p.nif_clave = public.nif_clave(c.nif_proveedor);
   GET DIAGNOSTICS v_n = ROW_COUNT;
-  v_compras := v_n;
+  v_compras := v_compras + v_n;
 
   UPDATE public.textil_compras c
      SET proveedor_id = p.id
