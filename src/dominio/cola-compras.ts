@@ -23,6 +23,7 @@
 import { z } from "zod";
 import { redondear } from "./importes";
 import { CATEGORIAS_COMPRA } from "./compras";
+import { TIPOS_LINEA_COMPRA } from "./tipos-textil";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -137,6 +138,8 @@ export const bloqueaRegistro = (d: Duplicado) =>
 export const UMBRAL_CONFIANZA = 0.85;
 
 const texto = z.string().nullable();
+/** Texto o null; si falta, null. */
+const textoOpcional = texto.optional().transform((v) => v ?? null);
 
 /**
  * Lo que tiene que devolver la IA. Los importes van como texto, tal como
@@ -163,6 +166,17 @@ export const esquemaLectura = z.object({
       unidad: texto,
       precio_unitario: texto,
       importe: texto,
+      // Escáner textil. Tolerantes a propósito: si el modelo se deja una de
+      // estas claves o pone un tipo raro, no se pierde la lectura entera de la
+      // factura (el tipo lo decide luego tipoDeLinea).
+      tipo: z.enum(TIPOS_LINEA_COMPRA).nullable().optional().catch(null),
+      referencia: textoOpcional,
+      marca: textoOpcional,
+      modelo: textoOpcional,
+      color: textoOpcional,
+      talla: textoOpcional,
+      ean: textoOpcional,
+      unidades_por_pack: textoOpcional,
     }),
   ),
 });
@@ -214,13 +228,35 @@ export const ESQUEMA_LECTURA_JSON = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["descripcion", "cantidad", "unidad", "precio_unitario", "importe"],
+        required: [
+          "descripcion",
+          "cantidad",
+          "unidad",
+          "precio_unitario",
+          "importe",
+          "tipo",
+          "referencia",
+          "marca",
+          "modelo",
+          "color",
+          "talla",
+          "ean",
+          "unidades_por_pack",
+        ],
         properties: {
           descripcion: { type: "string" },
           cantidad: tOn,
           unidad: tOn,
           precio_unitario: tOn,
           importe: tOn,
+          tipo: { type: "string", enum: [...TIPOS_LINEA_COMPRA] },
+          referencia: tOn,
+          marca: tOn,
+          modelo: tOn,
+          color: tOn,
+          talla: tOn,
+          ean: tOn,
+          unidades_por_pack: tOn,
         },
       },
     },

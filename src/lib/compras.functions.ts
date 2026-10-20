@@ -1,11 +1,27 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
+import {
+  AVISO_MIGRACION_ESCANER,
+  escanerAplicado,
+  mensajeErrorEscaner,
+  textoONulo,
+} from "./escaner-textil";
 import { normalizarCompra, revisarCompra } from "@/dominio/factura-compra";
 import { CATEGORIAS_COMPRA, FORMAS_PAGO } from "@/dominio/compras";
 import { avisoDuplicado, type CompraComparable } from "@/dominio/cola-compras";
+import { normalizarEan } from "@/dominio/normalizar-textil";
+import { conCostesDeEntrada } from "@/dominio/reparto-compra";
+import {
+  METODOS_CASADO,
+  TIPOS_LINEA_COMPRA,
+  type LineaRegistro,
+  type NuevaVariante,
+  type RegistroCompra,
+  type ResultadoRegistro,
+} from "@/dominio/tipos-textil";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -68,7 +84,7 @@ export const leerFacturaCompra = createServerFn({ method: "POST" })
 
 const lineaSchema = z.object({
   descripcion: z.string().min(1),
-  cantidad: z.number().positive(),
+  cantidad: z.number().positive("La cantidad de cada línea tiene que ser mayor que cero."),
   precio_unitario: z.number(),
   importe: z.number(),
   unidad: z.string().optional().nullable(),
@@ -103,79 +119,304 @@ const compraSchema = z.object({
   lineas: z.array(lineaSchema),
 });
 
+type DatosCompra = z.infer<typeof compraSchema>;
+
+/**
+ * Guarda el borrador (cabecera y líneas). Todavía no ha tocado el stock. Lo
+ * usan `guardarCompra` y el camino viejo de `guardarYRegistrarCompra`.
+ */
+async function guardarBorrador(supabase: unknown, data: DatosCompra): Promise<{ id: string }> {
+  const { id, lineas, lectura_ia, ...cabecera } = data;
+  const empresa_id = await empresaActiva(supabase);
+
+  let compraId = id;
+  if (id) {
+    const { error } = await tabla(supabase, "textil_compras").update(cabecera).eq("id", id);
+    if (error) throw new Error(error.message);
+    const { error: delErr } = await tabla(supabase, "textil_compra_lineas")
+      .delete()
+      .eq("compra_id", id);
+    if (delErr) throw new Error(delErr.message);
+  } else {
+    const { data: fila, error } = await tabla(supabase, "textil_compras")
+      .insert({ ...cabecera, empresa_id, lectura_ia: parsearLectura(lectura_ia) })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    compraId = fila.id as string;
+  }
+
+  if (lineas.length > 0) {
+    const { error } = await tabla(supabase, "textil_compra_lineas").insert(
+      lineas.map((l, i) => ({ ...l, compra_id: compraId, orden: i })),
+    );
+    if (error) throw new Error(error.message);
+  }
+  return { id: compraId! };
+}
+
+/**
+ * Registra un borrador ya guardado con `textil_compra_registrar` (el camino
+ * viejo, sin reparto): las líneas casadas entran en el libro de stock.
+ */
+async function registrarBorrador(supabase: unknown, id: string): Promise<{ movidas: number }> {
+  // Registrarla es confirmarla: la ha revisado una persona.
+  const antes = await tabla(supabase, "textil_compras")
+    .select("revision")
+    .eq("id", id)
+    .maybeSingle();
+  const conCola = !faltaLaColumna(antes.error) && antes.data?.revision !== undefined;
+  if (conCola && antes.data?.revision !== "revisada") {
+    const { error } = await tabla(supabase, "textil_compras")
+      .update({ revision: "revisada" })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+  }
+  try {
+    const movidas = await llamarRpc<number>(supabase, "textil_compra_registrar", {
+      _compra_id: id,
+    });
+    return { movidas };
+  } catch (e) {
+    // Si no se registra, vuelve a la cola como estaba.
+    if (conCola && antes.data?.revision !== "revisada") {
+      await tabla(supabase, "textil_compras")
+        .update({ revision: antes.data?.revision })
+        .eq("id", id);
+    }
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (/textil_compras_factura_unica|duplicate key/i.test(mensaje)) {
+      throw new Error(
+        "Esta factura (mismo proveedor y número) ya está registrada. Si es un duplicado, bórrala.",
+      );
+    }
+    throw e;
+  }
+}
+
 /** Guarda el borrador. Todavía no ha tocado el stock. */
 export const guardarCompra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => compraSchema.parse(d))
-  .handler(async ({ data, context }) => {
-    const { id, lineas, lectura_ia, ...cabecera } = data;
-    const empresa_id = await empresaActiva(context.supabase);
-
-    let compraId = id;
-    if (id) {
-      const { error } = await tabla(context.supabase, "textil_compras")
-        .update(cabecera)
-        .eq("id", id);
-      if (error) throw new Error(error.message);
-      const { error: delErr } = await tabla(context.supabase, "textil_compra_lineas")
-        .delete()
-        .eq("compra_id", id);
-      if (delErr) throw new Error(delErr.message);
-    } else {
-      const { data: fila, error } = await tabla(context.supabase, "textil_compras")
-        .insert({ ...cabecera, empresa_id, lectura_ia: parsearLectura(lectura_ia) })
-        .select("id")
-        .single();
-      if (error) throw new Error(error.message);
-      compraId = fila.id as string;
-    }
-
-    if (lineas.length > 0) {
-      const { error } = await tabla(context.supabase, "textil_compra_lineas").insert(
-        lineas.map((l, i) => ({ ...l, compra_id: compraId, orden: i })),
-      );
-      if (error) throw new Error(error.message);
-    }
-    return { id: compraId };
-  });
+  .handler(async ({ data, context }) => guardarBorrador(context.supabase, data));
 
 /** Registra la compra: las líneas casadas entran en el libro de stock. */
 export const registrarCompra = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    // Registrarla es confirmarla: la ha revisado una persona.
-    const antes = await tabla(context.supabase, "textil_compras")
-      .select("revision")
-      .eq("id", data.id)
-      .maybeSingle();
-    const conCola = !faltaLaColumna(antes.error) && antes.data?.revision !== undefined;
-    if (conCola && antes.data?.revision !== "revisada") {
-      const { error } = await tabla(context.supabase, "textil_compras")
-        .update({ revision: "revisada" })
-        .eq("id", data.id);
-      if (error) throw new Error(error.message);
-    }
-    try {
-      const movidas = await llamarRpc<number>(context.supabase, "textil_compra_registrar", {
-        _compra_id: data.id,
-      });
-      return { movidas };
-    } catch (e) {
-      // Si no se registra, vuelve a la cola como estaba.
-      if (conCola && antes.data?.revision !== "revisada") {
-        await tabla(context.supabase, "textil_compras")
-          .update({ revision: antes.data?.revision })
-          .eq("id", data.id);
+  .handler(async ({ data, context }) => registrarBorrador(context.supabase, data.id));
+
+// ---------------------------------------------------------------------------
+// Guardar y registrar en una sola transacción (escáner textil)
+// ---------------------------------------------------------------------------
+
+const nuevaVarianteSchema = z
+  .object({
+    producto_id: z.string().uuid().nullable(),
+    producto: z
+      .object({
+        marca: z.string().nullable(),
+        referencia: z.string().nullable(),
+        nombre: z.string().trim().min(1),
+        categoria: z.string().nullable(),
+      })
+      .nullable(),
+    color: z.string().nullable(),
+    talla: z.string().nullable(),
+    ean: z.string().nullable(),
+    sku: z.string().nullable(),
+    precio_venta: z.number().min(0),
+    cantidad_minima: z.number().min(0),
+  })
+  .refine((v) => v.producto_id !== null || v.producto !== null, {
+    message: "La variante nueva necesita un producto: elige uno o escribe el nuevo.",
+  });
+
+const lineaRegistroSchema = z.object({
+  descripcion: z.string().trim().min(1, "Hay líneas sin descripción."),
+  cantidad: z.number().positive("La cantidad de cada línea tiene que ser mayor que cero."),
+  precio_unitario: z.number(),
+  importe: z.number(),
+  unidad: z.string().nullable(),
+  tipo: z.enum(TIPOS_LINEA_COMPRA),
+  referencia: z.string().nullable(),
+  marca: z.string().nullable(),
+  modelo: z.string().nullable(),
+  color: z.string().nullable(),
+  talla: z.string().nullable(),
+  ean: z.string().nullable(),
+  unidades_por_pack: z.number().positive("Las unidades por pack tienen que ser mayores que cero."),
+  stock_id: z.string().uuid().nullable(),
+  nueva_variante: nuevaVarianteSchema.nullable(),
+  casado_metodo: z.enum(METODOS_CASADO).nullable(),
+});
+
+const registroSchema = compraSchema.extend({
+  id: z.string().uuid().nullable().optional(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Falta la fecha de la factura (AAAA-MM-DD)."),
+  proveedor_id: z.string().uuid().nullable().optional(),
+  lectura_ia: z.string().nullable().optional(),
+  lineas: z.array(lineaRegistroSchema),
+});
+
+export type EntradaRegistroCompra = z.input<typeof registroSchema>;
+export type SalidaRegistroCompra = ResultadoRegistro & { atomica: boolean };
+
+/**
+ * Guarda y registra una compra en una sola transacción de la base
+ * (`textil_compra_guardar_y_registrar`): cabecera, líneas, proveedor, variantes
+ * nuevas, memoria del escáner y movimientos de stock. Si algo falla, no queda
+ * nada a medias.
+ *
+ * En textil, el reparto de portes, descuentos y otros cargos lo hace aquí el
+ * servidor (el del navegador solo se enseña) y la base lo vuelve a comprobar
+ * al céntimo.
+ *
+ * Sin la migración 20261028100200, cae al camino viejo (guardar el borrador y
+ * `textil_compra_registrar`) si la compra no necesita nada nuevo; si lo
+ * necesita, lo dice.
+ */
+export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => registroSchema.parse(d))
+  .handler(async ({ data, context }): Promise<SalidaRegistroCompra> => {
+    const { lineas: lineasEntrada, lectura_ia, ...cab } = data;
+    const id = cab.id ?? null;
+    const categoria = cab.categoria ?? "textil";
+    const empresa_id = id ? null : await empresaActiva(context.supabase);
+
+    // EAN: en la línea, uno que no vale se manda nulo (el aviso ya lo vio la
+    // persona); en una variante nueva, no se crea con un EAN que no vale.
+    const lineas: LineaRegistro[] = lineasEntrada.map((l, i) => {
+      let nueva: NuevaVariante | null = null;
+      if (l.nueva_variante) {
+        const escrito = textoONulo(l.nueva_variante.ean);
+        const ean = escrito ? normalizarEan(escrito) : null;
+        if (escrito && !ean) {
+          throw new Error(mensajeErrorEscaner({ linea: i, codigo: "E-EAN-1", datos: [escrito] }));
+        }
+        nueva = { ...l.nueva_variante, ean };
       }
-      const mensaje = e instanceof Error ? e.message : String(e);
-      if (/textil_compras_factura_unica|duplicate key/i.test(mensaje)) {
-        throw new Error(
-          "Esta factura (mismo proveedor y número) ya está registrada. Si es un duplicado, bórrala.",
+      return {
+        ...l,
+        ean: normalizarEan(l.ean),
+        nueva_variante: nueva,
+        unidades_stock: null,
+        coste_total_entrada: null,
+        coste_unitario_entrada: null,
+      };
+    });
+
+    /**
+     * Sin las migraciones del escáner: guardar el borrador y
+     * `textil_compra_registrar`, como antes de esta obra.
+     */
+    const caminoViejo = async (): Promise<SalidaRegistroCompra> => {
+      // Sin la migración: lo nuevo (variantes que crear, packs que entran al
+      // stock) no se puede registrar por el camino viejo sin perderlo. Una
+      // línea de portes o de descuento sin variante sí: no mueve stock, como
+      // siempre (sin repartir; si se bloquease, una factura textil con portes
+      // no se podría registrar hasta aplicar la migración). Y casada con una
+      // variante, también: la revisión de siempre (sin el escáner) obliga a
+      // casar todas las líneas, y el camino viejo las guarda sin tipo, así que
+      // entran como artículo, que es lo que hacía antes de esta obra.
+      const necesitaEscaner =
+        categoria === "textil" &&
+        lineas.some(
+          (l) => l.nueva_variante !== null || (l.stock_id !== null && l.unidades_por_pack !== 1),
         );
-      }
-      throw e;
+      if (necesitaEscaner) throw new Error(AVISO_MIGRACION_ESCANER);
+
+      // Solo las columnas de siempre: sin proveedor_id ni los campos nuevos de línea.
+      const { proveedor_id: _sinProveedor, ...cabeceraVieja } = cab;
+      void _sinProveedor;
+      const { id: guardada } = await guardarBorrador(context.supabase, {
+        ...cabeceraVieja,
+        id: id ?? undefined,
+        lectura_ia: lectura_ia ?? null,
+        lineas: lineas.map((l) => ({
+          descripcion: l.descripcion,
+          cantidad: l.cantidad,
+          precio_unitario: l.precio_unitario,
+          importe: l.importe,
+          unidad: l.unidad,
+          stock_id: l.stock_id,
+        })),
+      });
+      const { movidas } = await registrarBorrador(context.supabase, guardada);
+      return {
+        id: guardada,
+        movidas,
+        variantes_creadas: 0,
+        aprendidas: 0,
+        proveedor_id: null,
+        proveedor_nuevo: false,
+        atomica: false,
+      };
+    };
+
+    // El reparto que manda es este, no el del navegador. Sin las migraciones
+    // no hay reparto ni comprobación al céntimo: la factura se registra como
+    // antes (una que no cuadra con su base no se bloquea por algo que aún no
+    // existe en la base).
+    let conCostes = lineas;
+    if (categoria === "textil") {
+      const r = conCostesDeEntrada(lineas, cab.base);
+      if (r.ok) conCostes = r.lineas;
+      else if (await escanerAplicado(context.supabase)) {
+        throw new Error(mensajeErrorEscaner(r.errores[0]));
+      } else return caminoViejo();
     }
+
+    const lecturaIa = parsearLectura(lectura_ia);
+    const _compra: RegistroCompra = {
+      id,
+      empresa_id,
+      proveedor_id: cab.proveedor_id ?? null,
+      proveedor: cab.proveedor ?? null,
+      nif_proveedor: cab.nif_proveedor ?? null,
+      numero: cab.numero ?? null,
+      fecha: cab.fecha,
+      base: cab.base,
+      iva: cab.iva,
+      total: cab.total,
+      categoria,
+      tipo_iva: cab.tipo_iva ?? null,
+      tipo_irpf: cab.tipo_irpf ?? null,
+      liquido_origen: cab.liquido_origen ?? null,
+      // Solo lo que manda la pantalla: lo que no manda (Textil › Compras no
+      // manda concepto, IRPF ni forma de pago) se conserva en el borrador de
+      // la cola, como hacía guardarCompra.
+      ...(cab.irpf === undefined ? {} : { irpf: cab.irpf }),
+      ...(cab.gasto_id === undefined ? {} : { gasto_id: cab.gasto_id }),
+      ...(cab.nota_descuadre === undefined ? {} : { nota_descuadre: cab.nota_descuadre }),
+      ...(cab.concepto === undefined ? {} : { concepto: cab.concepto }),
+      ...(cab.forma_pago === undefined ? {} : { forma_pago: cab.forma_pago }),
+      ...(cab.notas === undefined ? {} : { notas: cab.notas }),
+      lectura_ia: lecturaIa,
+      lineas: conCostes,
+    };
+
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { data: resultado, error } = await llamarRpcConError<ResultadoRegistro>(
+      adminComoUsuario(context.userId),
+      "textil_compra_guardar_y_registrar",
+      { _compra, _usuario_id: context.userId },
+    );
+
+    if (faltaLaFuncion(error)) return caminoViejo();
+    // Los mensajes de la base ya son para la persona (contrato, 1.4).
+    if (error) throw new Error(error.message);
+    if (!resultado) throw new Error("La base no ha devuelto el resultado del registro.");
+    return {
+      id: resultado.id,
+      movidas: Number(resultado.movidas ?? 0),
+      variantes_creadas: Number(resultado.variantes_creadas ?? 0),
+      aprendidas: Number(resultado.aprendidas ?? 0),
+      proveedor_id: resultado.proveedor_id ?? null,
+      proveedor_nuevo: Boolean(resultado.proveedor_nuevo),
+      atomica: true,
+    };
   });
 
 /**
@@ -195,10 +436,15 @@ export const listCompras = createServerFn({ method: "GET" })
     const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
     // Con la migración 20261015100000 hay cola de revisión y subida de varias.
     const cola = !faltaLaColumna(prueba3.error);
+    // Con las migraciones 20261028…: revisión con el escáner textil.
+    const escaner = await escanerAplicado(context.supabase);
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const { data: compras, error } = await leerTodas<any>((a, b) => {
       let consulta = tabla(context.supabase, "textil_compras").select(
-        "*, lineas:textil_compra_lineas(*)",
+        // Pista por columna: con la migración del escáner, los movimientos de
+        // stock enlazan compras y líneas, y sin pista PostgREST puede ver dos
+        // relaciones (PGRST201) y dejar la lista sin cargar.
+        "*, lineas:textil_compra_lineas!compra_id(*)",
       );
       if (generales && data.soloTextil) consulta = consulta.eq("categoria", "textil");
       return consulta
@@ -208,7 +454,7 @@ export const listCompras = createServerFn({ method: "GET" })
         .range(a, b);
     });
     if (error) throw new Error(error.message);
-    return { compras: (compras ?? []) as any[], generales, recibidas, cola };
+    return { compras: (compras ?? []) as any[], generales, recibidas, cola, escaner };
   });
 
 /**
@@ -303,6 +549,19 @@ const ficheroDe = (d: unknown) => {
 };
 
 /**
+ * El fichero y, opcional, la categoría de la cola desde la que se sube: solo
+ * «textil» (Textil › Compras). Sin ella, la categoría la propone la IA.
+ */
+const ficheroYCategoria = (d: unknown) => {
+  const { fichero } = ficheroDe(d);
+  const valor = (d as FormData).get("categoria");
+  if (valor !== null && valor !== "" && valor !== "textil") {
+    throw new Error("Categoría no admitida al subir: solo «textil».");
+  }
+  return { fichero, categoria: valor === "textil" ? ("textil" as const) : null };
+};
+
+/**
  * Sube una factura a la cola: guarda el fichero en compras/ronoca/<año>/,
  * crea la fila (para que se vea pase lo que pase), la lee con IA y la deja
  * pendiente de revisión o como error. Si el mismo fichero ya está subido, no
@@ -310,7 +569,7 @@ const ficheroDe = (d: unknown) => {
  */
 export const subirFacturaRecibida = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(ficheroDe)
+  .inputValidator(ficheroYCategoria)
   .handler(async ({ data, context }) => {
     const { huellaDe, procesarFactura } = await import("./cola-compras.server");
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -346,7 +605,7 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
     const { error } = await tabla(context.supabase, "textil_compras").insert({
       id,
       empresa_id,
-      categoria: "otros",
+      categoria: data.categoria ?? "otros",
       revision: "pendiente",
       revision_motivo: "Leyendo con IA…",
       fichero_ruta: ruta,
@@ -361,6 +620,7 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
       bytes,
       data.fichero.type,
       borrada ? avisoDuplicado({ nivel: "archivo", de: borrada, borrada: true }) : null,
+      data.categoria ? { categoria: data.categoria } : undefined,
     );
   });
 
@@ -372,7 +632,7 @@ export const releerFacturaRecibida = createServerFn({ method: "POST" })
     const { procesarFactura } = await import("./cola-compras.server");
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const { data: fila, error } = await tabla(context.supabase, "textil_compras")
-      .select("estado, fichero_ruta")
+      .select("estado, fichero_ruta, categoria")
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -396,6 +656,8 @@ export const releerFacturaRecibida = createServerFn({ method: "POST" })
       new Uint8Array(await descarga.data.arrayBuffer()),
       tipo,
       null,
+      // Una de la cola de Textil sigue en Textil al releerla.
+      fila.categoria === "textil" ? { categoria: "textil" } : undefined,
     );
   });
 

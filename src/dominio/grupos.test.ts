@@ -224,6 +224,35 @@ describe("cuenta de resultados en tres columnas", () => {
   });
 });
 
+describe("mermas y ajustes del almacén en la cuenta de resultados", () => {
+  const base = {
+    ventas: [pedido("a", 1000), pedido("b", 200)],
+    documentados: new Set(["a"]),
+    costeActual: 0,
+    facturadoSinPedido: 0,
+    costesFijos: { a: 0, b: 0 },
+    tipoIs: 15,
+  };
+
+  it("restan en A y en el total, no en B", () => {
+    const r = resultadosPorGrupo({ ...base, almacen: 100 });
+    expect(r.a).toMatchObject({ almacen: 100, bai: 900, sociedades: 135, neto: 765 });
+    expect(r.b).toMatchObject({ almacen: 0, bai: 200 });
+    expect(r.total).toMatchObject({ almacen: 100, bai: 1100, sociedades: 135, neto: 965 });
+  });
+
+  it("un recuento que encuentra prendas (almacén negativo) suma", () => {
+    const r = resultadosPorGrupo({ ...base, almacen: -10 });
+    expect(r.a).toMatchObject({ almacen: -10, bai: 1010 });
+  });
+
+  it("sin almacén, 0 y el beneficio de siempre", () => {
+    const r = resultadosPorGrupo(base);
+    expect(r.a).toMatchObject({ almacen: 0, bai: 1000 });
+    expect(r.total.almacen).toBe(0);
+  });
+});
+
 describe("gastos por grupo", () => {
   const gastos = [
     { id: "1", con_justificante: true },

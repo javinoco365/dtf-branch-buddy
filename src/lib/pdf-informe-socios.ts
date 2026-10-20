@@ -1,5 +1,5 @@
 import type { jsPDF } from "jspdf";
-import { eur, metros, numero } from "@/lib/format";
+import { eur, fechaCorta, metros, numero } from "@/lib/format";
 import { LETRA, registrarFuentesPdf } from "@/lib/fuentes-pdf";
 import {
   etiquetaGasto,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/resumen-diario-textos";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import type { AjustesJornada, GastoDelRango } from "@/dominio/gerencia";
+import type { InformeAlmacen } from "@/dominio/cuenta-almacen";
+import type { Partida } from "@/dominio/tipos-textil";
 import {
   BLANCO,
   CIELO,
@@ -44,7 +46,10 @@ import {
  * - Página 2, la cuenta del periodo: de lo vendido al beneficio, lo pedido
  *   frente a lo realizado y frente al periodo anterior; la máquina y los
  *   cobros; la evolución día a día (o mes a mes).
- * - Página 3, cada negocio en su ficha y cómo leer el informe.
+ * - Después, los gastos del periodo y el almacén textil: su cuenta, el valor
+ *   de hoy, los controles que tienen que dar 0 y lo que se debe a los
+ *   proveedores.
+ * - La última, cada negocio en su ficha y cómo leer el informe.
  *
  * Con los colores y las letras de la casa (los del presupuesto). Las cifras
  * llegan hechas del dominio (`resumenPeriodo`): aquí solo se colocan.
@@ -68,6 +73,8 @@ export type DatosInformeSocios = {
   jornada: AjustesJornada;
   /** Los gastos fijos del periodo uno a uno; nulo si no se han podido leer. */
   gastos: readonly GastoDelRango[] | null;
+  /** La página «Almacén»; nulo (o ausente) si no se ha podido leer. */
+  almacen?: InformeAlmacen | null;
   generado: Date;
 };
 
@@ -1109,6 +1116,241 @@ function gastosDelPeriodo(c: Lienzo, autoTable: AutoTable, inicio: number) {
 }
 
 // ---------------------------------------------------------------------------
+// El almacén textil
+// ---------------------------------------------------------------------------
+
+/** Un ✓ en un círculo verde o un ✗ en uno rojo, dibujados (la letra no los tiene). */
+function marca(c: Lienzo, ok: boolean, x: number, y: number) {
+  const { doc } = c;
+  c.relleno(ok ? VERDE : ROJO);
+  doc.circle(x, y, 1.9, "F");
+  doc.setDrawColor(...BLANCO);
+  doc.setLineWidth(0.45);
+  if (ok) {
+    doc.line(x - 0.95, y, x - 0.25, y + 0.75);
+    doc.line(x - 0.25, y + 0.75, x + 1, y - 0.8);
+  } else {
+    doc.line(x - 0.8, y - 0.8, x + 0.8, y + 0.8);
+    doc.line(x - 0.8, y + 0.8, x + 0.8, y - 0.8);
+  }
+  doc.setLineWidth(0.2);
+}
+
+/** Si todas las partidas de la cuenta están a cero: no hay nada que contar. */
+function cuentaVacia(a: InformeAlmacen): boolean {
+  const k = a.cuenta;
+  return [
+    k.inicial,
+    k.compras,
+    k.altas,
+    k.devolucionesCliente,
+    k.ventas,
+    k.mermas,
+    k.devolucionesProveedor,
+    k.ajustes,
+    k.final,
+  ].every((p) => p.unidades === 0 && p.valor === 0);
+}
+
+function almacen(c: Lienzo, autoTable: AutoTable) {
+  const { doc, d } = c;
+  const a = d.almacen;
+  c.seccion("Cuenta del almacén textil", "Unidades y valor a precio de compra, sin IVA");
+  if (!a) {
+    c.letra("texto", 8.5, GRIS);
+    c.texto("Sin datos del almacén para este periodo.", M, c.y);
+    c.y += 8;
+    return;
+  }
+
+  const k = a.cuenta;
+  if (cuentaVacia(a)) {
+    c.letra("texto", 8.5, GRIS);
+    c.texto("Sin datos del almacén para este periodo.", M, c.y);
+    c.y += 8;
+  } else {
+    const uds = (p: Partida) => numero(p.unidades, 0);
+    const filas: [string, Partida][] = [
+      [`Existencias al ${fechaCorta(k.desde)}`, k.inicial],
+      ["+ Compras", k.compras],
+      ["+ Altas con existencias", k.altas],
+      ["+ Devoluciones de clientes", k.devolucionesCliente],
+      ["− Coste de lo vendido", k.ventas],
+      ["− Mermas", k.mermas],
+      ["− Devoluciones a proveedores", k.devolucionesProveedor],
+      ["± Ajustes de inventario", k.ajustes],
+    ];
+    autoTable(doc, {
+      startY: c.y,
+      margin: { left: M, right: M, top: 30, bottom: H - LIMITE },
+      head: [["", "Unidades", "Valor"]],
+      body: filas.map(([etiqueta, p]) => [etiqueta, uds(p), eur(p.valor)]),
+      foot: [[`= Existencias al ${fechaCorta(k.hasta)}`, uds(k.final), eur(k.final.valor)]],
+      theme: "plain",
+      styles: { font: LETRA.texto, fontSize: 8.2, textColor: TINTA, cellPadding: 1.9 },
+      headStyles: {
+        fillColor: NOCHE,
+        textColor: BLANCO,
+        fontStyle: "bold",
+        fontSize: 7.5,
+        halign: "right",
+      },
+      footStyles: { fillColor: FONDO_NARANJA, fontStyle: "bold", fontSize: 9, halign: "right" },
+      alternateRowStyles: { fillColor: FONDO },
+      columnStyles: {
+        0: { cellWidth: 100, halign: "left" },
+        1: { halign: "right", font: LETRA.cifras },
+        2: { halign: "right", font: LETRA.cifras },
+      },
+      didParseCell: (h) => {
+        if (h.column.index === 0) h.cell.styles.halign = "left";
+        // La primera fila (lo que había) va en negrita, como el total.
+        if (h.section === "body" && h.row.index === 0) {
+          h.cell.styles.font = LETRA.texto;
+          h.cell.styles.fontStyle = "bold";
+        }
+      },
+    });
+    c.y = finTabla(doc) + 3;
+    const descuadre = Math.abs(k.descuadre.valor) >= 0.005 || k.descuadre.unidades !== 0;
+    if (descuadre) {
+      c.letra("negrita", 7.5, ROJO);
+      c.texto(
+        `La cuenta no cierra: descuadre de ${numero(k.descuadre.unidades, 0)} unidades y ${eur(k.descuadre.valor)}.`,
+        M,
+        c.y + 2,
+      );
+      c.y += 5;
+    }
+    c.letra("texto", 6.8, GRIS);
+    (doc.splitTextToSize(DEFINICIONES.g_almacen_cuenta.fuente, ANCHO) as string[]).forEach((l) => {
+      c.texto(l, M, c.y + 2);
+      c.y += 3.4;
+    });
+    c.y += 5;
+  }
+
+  // Tres cifras: lo que vale hoy, lo que se perdió y lo que se debe.
+  const alto = 26;
+  c.sitio(alto + 6, "Almacén");
+  const w = (ANCHO - 2 * 4) / 3;
+  const tarjetas: Tarjeta[] = [
+    {
+      etiqueta: "Valor del almacén hoy",
+      valor: a.valorHoy === null ? "—" : eur(a.valorHoy),
+      pie: "Unidades × coste medio guardados",
+      color: CIELO,
+      v: null,
+      sinVariacion: true,
+    },
+    {
+      etiqueta: "Mermas y ajustes del periodo",
+      valor: eur(k.perdidas),
+      pie: "En Resultados (A), no en el Beneficio",
+      color: NARANJA,
+      v: null,
+      rojo: k.perdidas > 0,
+      sinVariacion: true,
+    },
+    {
+      etiqueta: "Debido a proveedores hoy",
+      valor: a.pagosProveedores ? eur(a.pagosProveedores.total) : "—",
+      pie: a.pagosProveedores
+        ? `${plural(a.pagosProveedores.facturas, "factura", "facturas")} pendientes de pago`
+        : "No se han podido leer",
+      color: MARINO,
+      v: null,
+      sinVariacion: true,
+    },
+  ];
+  const y0 = c.y;
+  tarjetas.forEach((t, i) => tarjeta(c, t, M + i * (w + 4), y0, w, alto));
+  c.y = y0 + alto + 5;
+  // El «Beneficio» de este informe es margen menos gastos fijos: no resta las
+  // mermas y ajustes (ni las compras ni las amortizaciones). Gerencia ›
+  // Resultados sí. Se dice para que nadie compare las dos cifras sin saberlo.
+  c.sitio(12, "Almacén");
+  c.letra("texto", 6.8, GRIS);
+  (
+    doc.splitTextToSize(
+      "Las mermas y ajustes restan en Gerencia › Resultados (grupo A). El «Beneficio» de este informe es el margen menos los gastos fijos: no las resta, como tampoco resta las compras ni las amortizaciones, así que puede ser mayor que el de Resultados.",
+      ANCHO,
+    ) as string[]
+  ).forEach((l) => {
+    c.texto(l, M, c.y);
+    c.y += 3.4;
+  });
+  c.y += 5;
+
+  // Los controles: tienen que dar 0.
+  c.sitio(48, "Almacén");
+  c.seccion("Controles del almacén", "Tienen que dar 0");
+  const r = a.controles;
+  if (!r) {
+    c.letra("texto", 8.5, GRIS);
+    c.texto("No se han podido comprobar.", M, c.y);
+    c.y += 8;
+    return;
+  }
+  const lineas: [string, string | null, boolean, string?][] = [
+    [
+      "Compras textil frente a sus entradas en el stock",
+      r.comprasConDescuadre === 0
+        ? eur(r.diferenciaCompras)
+        : `${eur(r.diferenciaCompras)} · ${plural(r.comprasConDescuadre, "compra", "compras")} con descuadre`,
+      r.comprasConDescuadre === 0 && Math.abs(r.diferenciaCompras) < 0.005,
+      r.comprasSinEnlace > 0
+        ? `${plural(r.comprasSinEnlace, "anterior", "anteriores")} al enlace, sin comprobar`
+        : undefined,
+    ],
+    [
+      "Variantes descuadradas",
+      r.variantesDescuadradas === null ? null : numero(r.variantesDescuadradas, 0),
+      r.variantesDescuadradas === 0,
+    ],
+    [
+      "Reservas descuadradas",
+      r.reservasDescuadradas === null ? null : numero(r.reservasDescuadradas, 0),
+      r.reservasDescuadradas === 0,
+    ],
+  ];
+  c.relleno(FONDO);
+  doc.roundedRect(M, c.y - 4.5, ANCHO, lineas.length * 6.4 + 3, 1.8, 1.8, "F");
+  for (const [etiqueta, valor, enCero, nota] of lineas) {
+    if (valor !== null) marca(c, enCero, M + 5, c.y - 1.2);
+    c.letra("texto", 8, TINTA);
+    c.texto(etiqueta, M + 9, c.y);
+    if (nota) {
+      const ancho = doc.getTextWidth(etiqueta);
+      c.letra("texto", 6.5, GRIS);
+      c.texto(nota, M + 9 + ancho + 2, c.y);
+    }
+    if (valor === null) {
+      c.letra("texto", 8, GRIS);
+      c.texto("No comprobado", W - M - 4, c.y, "right");
+    } else {
+      c.letra(enCero ? "cifras" : "negrita", 8.2, enCero ? TINTA : ROJO);
+      c.texto(valor, W - M - 4, c.y, "right");
+    }
+    c.y += 6.4;
+  }
+  c.y += 3;
+  c.letra("texto", 6.8, GRIS);
+  const informativa =
+    `Valor según la caché − valor según el libro: ${
+      r.diferenciaValorCache === null ? "—" : eur(r.diferenciaValorCache)
+    }. Informativo, no cuenta como control: con el coste medio solo lo mueven los redondeos y las variantes que llegaron a quedar en negativo.` +
+    (r.todoEnCero
+      ? ""
+      : " Si algún control no da 0, hay que mirarlo antes de fiarse de las cifras del almacén.");
+  (doc.splitTextToSize(informativa, ANCHO) as string[]).forEach((l) => {
+    c.texto(l, M, c.y + 2);
+    c.y += 3.4;
+  });
+  c.y += 4;
+}
+
+// ---------------------------------------------------------------------------
 // Página 3: cada negocio
 // ---------------------------------------------------------------------------
 
@@ -1293,6 +1535,11 @@ export async function generarInformeSocios(d: DatosInformeSocios): Promise<Blob>
   c.cabeceraInterior("Gastos del periodo");
   const inicioGastos = doc.getNumberOfPages();
   gastosDelPeriodo(c, autoTable, inicioGastos);
+
+  // El almacén textil
+  doc.addPage();
+  c.cabeceraInterior("Almacén");
+  almacen(c, autoTable);
 
   // Cada negocio
   doc.addPage();

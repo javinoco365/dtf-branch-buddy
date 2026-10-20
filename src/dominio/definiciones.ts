@@ -341,20 +341,56 @@ export const DEFINICIONES = {
   // --- Gerencia › Textil ------------------------------------------------------
   g_stock_valor: {
     que: "Lo que vale el almacén textil a precio de compra, hoy.",
-    calculo: "Unidades de cada artículo activo × su coste medio ponderado.",
-    fuente: "Almacén textil. No depende del periodo.",
+    calculo:
+      "Unidades de cada artículo × su coste medio ponderado, redondeado al céntimo y sumado. Cuentan todos: también los desactivados que aún tienen unidades y, con su signo, los que están en negativo.",
+    fuente:
+      "Almacén textil, hoy: las unidades y el coste medio guardados. No depende del periodo. Es la misma cifra que el «Valor del almacén hoy» del informe de socios; de la Cuenta del almacén (el libro) solo la separan los redondeos del coste medio y las entradas en una variante que estaba en negativo: la diferencia es la comprobación «caché − libro».",
   },
   g_compras_textil: {
     que: "Lo comprado para el textil en el periodo, sin IVA.",
     calculo: "Suma de la base de las facturas de compra registradas con fecha en el periodo.",
     fuente: "Compras del textil subidas al CRM.",
   },
+  g_almacen_cuenta: {
+    que: "Cómo ha cambiado el almacén textil en el periodo, en unidades y a precio de compra: lo que había, lo que entró, lo que salió y lo que queda.",
+    calculo:
+      "Existencias al inicio + compras + altas con existencias + devoluciones de clientes − coste de lo vendido − mermas − devoluciones a proveedores ± ajustes de inventario = existencias al final. Cada movimiento cuenta a su coste: las entradas por compra al de la factura, con portes y descuentos repartidos, y las salidas al coste medio congelado al salir. El valor a una fecha es la suma de todos los movimientos hasta ese día.",
+    fuente:
+      "Libro de movimientos del almacén textil, por la fecha del movimiento (en las compras, la de la factura). No depende de los filtros de tienda ni canal. El coste de lo vendido va por la fecha de salida y el «Coste de la ropa» de Resultados por la fecha del pedido: en un periodo pueden no coincidir.",
+  },
+  g_almacen_perdidas: {
+    que: "Lo que se ha perdido o encontrado en el almacén textil fuera de los pedidos: mermas, recuentos, devoluciones a proveedores y devoluciones de clientes sin pedido.",
+    calculo:
+      "Mermas + devoluciones a proveedores − ajustes de inventario − devoluciones de clientes sin pedido, cada movimiento a su coste congelado: un recuento que encuentra prendas resta coste y uno que no las encuentra lo suma. Lo que sale o vuelve con un pedido ya está en «Coste de la ropa» y no se cuenta aquí. Va en A: la ropa se compró con factura.",
+    fuente:
+      "Libro de movimientos del almacén textil con fecha en el periodo. El CRM todavía no recoge abonos de proveedor: una devolución cuesta aquí hasta que exista el abono.",
+  },
+  g_almacen_controles: {
+    que: "Comprobaciones que tienen que dar 0. Si alguna no da 0, hay algo que mirar antes de fiarse de las cifras del almacén.",
+    calculo:
+      "1) La base de cada factura textil registrada menos el valor de sus entradas en el stock, con portes y descuentos repartidos: 0,00 €. 2) Variantes cuyas unidades guardadas no coinciden con la suma de su libro: 0. 3) Variantes cuyo reservado no coincide con sus reservas: 0.",
+    fuente:
+      "Facturas de compra textil registradas con fecha en el periodo y sus entradas enlazadas. Las registradas antes del enlace (migración 20261028100000) no tienen entradas enlazadas: se cuentan aparte y no se pueden comprobar.",
+  },
+  g_precio_recomendado: {
+    que: "Un precio de referencia, solo informativo: el precio de venta lo pones tú.",
+    calculo:
+      "Coste medio de la prenda × la relación precio/coste típica (la mediana) de las otras tallas y colores del mismo producto; si el producto no tiene ninguna con precio, la de todas tus prendas activas con precio y coste (al menos 3). Sin coste o sin esos datos, no se recomienda nada.",
+    fuente: "Almacén textil: prendas activas con precio de venta y coste medio mayores que cero.",
+  },
+  m_margen_previsto: {
+    que: "Lo que dejaría este documento si la ropa costase lo que cuesta en el almacén.",
+    calculo:
+      "Base de las líneas con prenda del almacén − cantidad × coste congelado en la línea (o, si aún no se ha guardado, el coste medio de hoy). Las líneas sin prenda del almacén no tienen coste y se cuentan aparte.",
+    fuente:
+      "Coste medio del almacén textil, congelado en cada línea al guardarla. El margen real sale al entregar el pedido, con el coste de la salida.",
+  },
 
   // --- Gerencia › Resultados --------------------------------------------------
   g_resultado: {
     que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
     calculo:
-      "Ingresos sin IVA (con el envío cobrado) − costes variables (producción DTF, envíos pagados a la agencia y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
+      "Ingresos sin IVA (con el envío cobrado) − costes variables (producción DTF, envíos pagados a la agencia y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones − mermas y ajustes de almacén = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
     fuente:
       "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
   },
@@ -376,6 +412,14 @@ export const DEFINICIONES = {
       "303: IVA de las facturas y tickets emitidos (un ticket canjeado por factura cuenta una vez, como en Fiscal) − IVA de las compras registradas y de los gastos. 111: IRPF retenido a profesionales y nóminas, y el de las facturas de compra sueltas. 115: IRPF retenido del alquiler. 202: 18 % de la cuota del último modelo 200, en abril, octubre y diciembre. Un 303 negativo no se paga: queda a compensar y se descuenta de los 303 positivos siguientes, también de otros años, durante cuatro años; el importe de cada 303 ya lleva descontado lo pendiente, y lo que queda a compensar sale aparte. Solo se compensa desde el trimestre de la primera factura o ticket emitido en el CRM: antes, el CRM no sabe lo que se vendió, así que el 303 de esos trimestres no se calcula y lo soportado entonces no queda a compensar. Solo se compensa el IVA: el 111, el 115 y el 202 se pagan enteros. Es orientativo: lo que de verdad queda a compensar es lo que diga el último 303 que presentó la gestoría. (En el cuarto trimestre la gestoría puede pedir la devolución en vez de compensar; aquí se supone que se compensa.)",
     fuente:
       "Facturas emitidas, compras del textil y gastos de Ajustes con justificante, del trimestre entero; para lo que queda a compensar, también los de los cuatro años anteriores, desde la primera venta documentada. Lo vendido sin factura no está: emite su factura o ticket para que cuente. Los gastos sin justificante tampoco: no llevan IVA ni retención.",
+  },
+  // --- Gerencia › Tesorería --------------------------------------------------
+  g_pagos_proveedores: {
+    que: "Lo que se debe hoy a los proveedores: facturas registradas que aún no se han pagado.",
+    calculo:
+      "Suma del líquido (total menos retención) de las facturas de compra registradas, sin borrar y pendientes de pago, de todas las categorías, por proveedor y por antigüedad desde la fecha de la factura.",
+    fuente:
+      "Facturas de compra. No depende del periodo. Una factura deja de estar pendiente al marcarla pagada o al conciliarla con el banco.",
   },
   rd_pedidos: {
     que: "Los pedidos que entraron en el periodo y los metros que se pidieron.",

@@ -66,7 +66,8 @@ export const EXPLICACION_VALOR_STOCK =
 /**
  * El pie de la tabla del almacén. Suma las variantes que se le dan, sin
  * descartar las desactivadas: tiene que cuadrar con las filas que se ven
- * encima (`resumenStock()` de textil.ts, en cambio, solo cuenta las activas).
+ * encima. (`resumenStock()` de textil.ts, el valor de Gerencia, también las
+ * cuenta, pero las que están en negativo van con su signo, como en el libro.)
  *
  * El coste y el PVP son precios por unidad y no se suman; lo que sí tiene
  * sentido es el valor del almacén, Σ max(0, unidades) × coste medio.

@@ -127,6 +127,76 @@ describe("validar la lectura de la IA", () => {
     expect(validarLectura("no es json")).toMatchObject({ ok: false });
   });
 
+  it("las claves del escáner textil son tolerantes: si faltan, null; un tipo raro, null", () => {
+    const r = validarLectura(lecturaBuena);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.lectura.lineas[0].tipo ?? null).toBeNull();
+      expect(r.lectura.lineas[0]).toMatchObject({
+        referencia: null,
+        marca: null,
+        modelo: null,
+        color: null,
+        talla: null,
+        ean: null,
+        unidades_por_pack: null,
+      });
+    }
+    const conTextil = {
+      ...lecturaBuena,
+      lineas: [
+        {
+          ...lecturaBuena.lineas[0],
+          tipo: "porte",
+          referencia: "5000",
+          marca: "Gildan",
+          modelo: null,
+          color: "Negro",
+          talla: "XL",
+          ean: "4006381333931",
+          unidades_por_pack: "5",
+        },
+        { ...lecturaBuena.lineas[0], tipo: "envio" },
+      ],
+    };
+    const r2 = validarLectura(conTextil);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) {
+      expect(r2.lectura.lineas[0]).toMatchObject({
+        tipo: "porte",
+        referencia: "5000",
+        unidades_por_pack: "5",
+      });
+      expect(r2.lectura.lineas[1].tipo).toBeNull();
+    }
+  });
+
+  it("el JSON Schema de las líneas pide las ocho claves del escáner", () => {
+    const lineas = ESQUEMA_LECTURA_JSON.properties.lineas.items;
+    expect([...lineas.required].sort()).toEqual(
+      [
+        "descripcion",
+        "cantidad",
+        "unidad",
+        "precio_unitario",
+        "importe",
+        "tipo",
+        "referencia",
+        "marca",
+        "modelo",
+        "color",
+        "talla",
+        "ean",
+        "unidades_por_pack",
+      ].sort(),
+    );
+    expect(Object.keys(lineas.properties).sort()).toEqual([...lineas.required].sort());
+    expect(lineas.properties.tipo).toEqual({
+      type: "string",
+      enum: ["articulo", "porte", "descuento", "otro"],
+    });
+  });
+
   it("el JSON Schema pide los mismos campos que el esquema", () => {
     expect([...ESQUEMA_LECTURA_JSON.required].sort()).toEqual(Object.keys(lecturaBuena).sort());
   });

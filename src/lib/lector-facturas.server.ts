@@ -33,9 +33,19 @@ Devuelve los datos de la factura con el esquema que se te pide:
 - concepto: en pocas palabras, qué se compra.
 - categoria: una de ${CATEGORIAS_COMPRA.map((c) => `"${c.valor}" (${c.etiqueta})`).join(", ")}. Si no está claro, null.
 - base, iva, irpf, total: base imponible, cuota de IVA, retención de IRPF y total a pagar.
-- lineas: cada concepto con su cantidad, unidad, precio unitario e importe.
+- lineas: cada línea del papel con su tipo, cantidad, unidad, precio unitario, importe y los datos de la prenda.
 - confianza: de 0 a 1, cuánto te fías de tu lectura en conjunto.
 - dudas: cada cosa que no esté clara (un número borroso, un dato que no aparece, dos tipos de IVA…), en castellano y en una frase. Si no hay, una lista vacía.
+
+En cada línea, además:
+- tipo: "articulo" si es una prenda o un producto que entra en el almacén; "porte" si son portes, transporte o gastos de envío; "descuento" si es un descuento, un rappel o un abono (con importe negativo); "otro" para cualquier otro cargo (embalaje, seguro, recargo, gastos de gestión).
+- referencia: el código del artículo tal como lo escribe el proveedor (referencia, código, SKU). Si no hay, null.
+- marca: la marca de la prenda (Gildan, B&C, Stanley/Stella, Roly, Fruit of the Loom…), no la del proveedor. Si no aparece, null.
+- modelo: el nombre del modelo de la prenda (por ejemplo «Heavy Cotton» o «Exact 190»), sin color ni talla. Si no aparece, null.
+- color y talla: tal como aparecen en esa línea. Si la línea no los dice, null; no los deduzcas de otras líneas.
+- ean: el código de barras (EAN o GTIN, de 8 a 14 cifras) si la línea lo trae; si no, null.
+- unidades_por_pack: si la línea vende packs, cajas o lotes («pack 5», «caja de 10»), cuántas prendas lleva cada uno, tal como está escrito; si se vende por unidades, null.
+- Cada línea del papel es una línea: no juntes tallas ni colores de líneas distintas ni separes una línea en varias. Si una línea lleva varias tallas juntas, déjala así y dilo en dudas.
 
 Reglas:
 - Copia los importes TAL CUAL están escritos, con su coma decimal si la tienen.

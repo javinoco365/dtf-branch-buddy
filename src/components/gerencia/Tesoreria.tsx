@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Clock, HandCoins, Hourglass, Wallet } from "lucide-react";
+import { Clock, HandCoins, Hourglass, Truck, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,13 +12,15 @@ import {
 } from "@/components/ui/table";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
-import { eur, numero } from "@/lib/format";
+import { eur, fechaCorta, numero } from "@/lib/format";
+import { usePagosProveedores } from "@/lib/gerencia";
+import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { variacion } from "@/dominio/kpis";
 import { desglosePorMetodo, totalizar } from "@/dominio/facturacion";
 import { totalesCaja } from "@/dominio/caja";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { antiguedadPendientes, diasMediosCobro, resumenBanco } from "@/dominio/gerencia";
-import { sumarImportes } from "@/dominio/sumatorios";
+import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import {
   destinoCaja,
   destinoCobros,
@@ -228,7 +230,164 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           pie={<VerDetalle destino={DESTINO_CONCILIACION} texto="Ver conciliación" />}
         />
       </div>
+
+      <PagosProveedores hoy={d.hoy} />
     </div>
+  );
+}
+
+const FILAS_PROVEEDORES = 10;
+
+/** Lo que se debe hoy a los proveedores: no depende del periodo ni de los filtros. */
+function PagosProveedores({ hoy }: { hoy: Date }) {
+  const consulta = usePagosProveedores();
+  const pagos = useMemo(
+    () => (consulta.data ? pagosPendientesProveedores(consulta.data, hoy) : null),
+    [consulta.data, hoy],
+  );
+  const primeros = pagos ? pagos.porProveedor.slice(0, FILAS_PROVEEDORES) : [];
+  const resto = pagos ? pagos.porProveedor.slice(FILAS_PROVEEDORES) : [];
+  // La fila «Resto»: los que no caben en la lista, sumados.
+  const resumenResto = {
+    facturas: sumarCantidades(resto, (x) => x.facturas),
+    importe: sumarImportes(resto, (x) => x.importe),
+  };
+  const verFacturas = (
+    <VerDetalle destino={{ to: "/panel/compras", search: {} }} texto="Ver facturas de compra" />
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-base">
+          <Truck className="h-4 w-4 text-muted-foreground" />
+          Pagos pendientes a proveedores
+          <Explicacion
+            titulo="Pagos pendientes a proveedores"
+            definicion={DEFINICIONES.g_pagos_proveedores}
+          />
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          A día de hoy, de todas las categorías. {verFacturas}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {consulta.error ? (
+          <p className="text-sm text-destructive">
+            No se han podido leer las facturas de compra: {consulta.error.message}
+          </p>
+        ) : consulta.data === undefined ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : !pagos ? (
+          <p className="text-sm text-muted-foreground">
+            Falta aplicar la migración 20261014100000_compras_recibidas: sin ella no se sabe qué
+            facturas de compra están pagadas.
+          </p>
+        ) : pagos.facturas === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay facturas de compra pendientes de pago.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <span className="text-2xl font-semibold tabular-nums">{eur(pagos.total)}</span>
+              <span className="text-sm text-muted-foreground">
+                {numero(pagos.facturas, 0)} {pagos.facturas === 1 ? "factura" : "facturas"}
+              </span>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Table movil="tarjetas">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Proveedor</TableHead>
+                    <TableHead className="text-right">Facturas</TableHead>
+                    <TableHead className="text-right">Pendiente</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {primeros.map((p) => (
+                    <TableRow key={p.clave}>
+                      <TableCell className="font-medium">
+                        {p.nombre}
+                        {p.masAntigua && (
+                          <span className="block text-xs text-muted-foreground">
+                            La más antigua, del {fechaCorta(p.masAntigua)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{p.facturas}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(p.importe)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {resto.length > 0 && (
+                    <TableRow>
+                      <TableCell className="text-muted-foreground">
+                        Resto · {numero(resto.length, 0)}{" "}
+                        {resto.length === 1 ? "proveedor" : "proveedores"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {numero(resumenResto.facturas, 0)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {eur(resumenResto.importe)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(pagos.facturas, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(pagos.total)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+              <Table movil="tarjetas">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Antigüedad</TableHead>
+                    <TableHead className="text-right">Facturas</TableHead>
+                    <TableHead className="text-right">Pendiente</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagos.tramos.map((t) => (
+                    <TableRow key={t.clave}>
+                      <TableCell
+                        className={
+                          t.clave === "90+" && t.facturas > 0
+                            ? "font-medium text-status-cancelado"
+                            : "font-medium"
+                        }
+                      >
+                        {t.etiqueta}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{t.facturas}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(t.importe)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {numero(pagos.facturas, 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(pagos.total)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "@/lib/rpc";
+import { faltaLaColumna, faltaLaTabla, llamarRpc, llamarRpcConError, tabla } from "@/lib/rpc";
 import { leerTodas, trozos } from "@/lib/paginar";
 import { leerPorIds } from "@/lib/leer-por-ids";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
@@ -38,6 +38,18 @@ import {
 } from "@/dominio/textil";
 import type { CompraResumen, DocumentoDePedido, DocumentoFiscal } from "@/dominio/fiscal";
 import { comprasQueCuentan } from "@/dominio/compras";
+import { valorAFecha, valorMovimiento, type MovimientoAlmacen } from "@/dominio/cuenta-almacen";
+import {
+  controlComprasEntradas,
+  resumenControles,
+  type ResumenControles,
+  type CompraControl,
+  type ControlCompras,
+  type EntradaControl,
+} from "@/dominio/controles-almacen";
+import type { CompraPendiente } from "@/dominio/pagos-proveedores";
+import { sumarImportes } from "@/dominio/sumatorios";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -803,4 +815,218 @@ export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]
       };
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cuentas del almacén textil (migraciones 20261028…)
+// ---------------------------------------------------------------------------
+
+export type DatosMovimientosAlmacen = {
+  movimientos: MovimientoAlmacen[];
+  /**
+   * false sin la migración 20261028100000: no hay `fecha` ni `compra_id`, cada
+   * movimiento cuenta por el día de su `created_at` (una compra, el día que se
+   * registró y no el de la factura).
+   */
+  conFecha: boolean;
+};
+
+const CAMPOS_MOV_ALMACEN = "id, stock_id, motivo, cantidad, coste_unitario, created_at";
+/** Columnas de la migración 20261028100000_escaner_textil_esquema. */
+const CAMPOS_MOV_ESCANER = "fecha, compra_id";
+
+/**
+ * Todos los movimientos del almacén textil, de cualquier fecha: la cuenta
+ * del almacén necesita lo anterior al periodo (existencias iniciales) y el
+ * filtro por fecha efectiva lo hace el dominio (`cuentaAlmacen`), porque una
+ * compra registrada hoy puede llevar la fecha de una factura de hace un mes.
+ * Nulo sin la tabla de movimientos.
+ */
+export function useMovimientosAlmacen() {
+  return useQuery({
+    queryKey: ["almacen-movimientos"],
+    queryFn: async (): Promise<DatosMovimientosAlmacen | null> => {
+      const leer = (campos: string) =>
+        leerTodas<MovimientoAlmacen>((a, b) =>
+          tabla(supabase, "textil_stock_movimientos").select(campos).order("id").range(a, b),
+        );
+      let conFecha = true;
+      let r = await leer(`${CAMPOS_MOV_ALMACEN}, textil_pedido_id, ${CAMPOS_MOV_ESCANER}`);
+      if (faltaLaColumna(r.error)) {
+        conFecha = false;
+        r = await leer(`${CAMPOS_MOV_ALMACEN}, textil_pedido_id`);
+      }
+      if (faltaLaTabla(r.error)) return null;
+      if (r.error) throw new Error(r.error.message);
+      return { movimientos: r.data, conFecha };
+    },
+  });
+}
+
+export type DatosControlesAlmacen =
+  | { disponible: false }
+  | {
+      disponible: true;
+      compras: ControlCompras;
+      /** Filas de `stock_descuadres()`; nulo si no se pudo leer. */
+      variantes: number | null;
+      /** Filas de `stock_reservas_descuadres()`; nulo si no se pudo leer. */
+      reservas: number | null;
+      /**
+       * Valor del almacén según la caché: Σ por variante de
+       * redondear(cantidad × coste_unitario, 2). Nulo si no se pudo leer.
+       */
+      valorCache: number | null;
+    };
+
+const CAMPOS_COMPRA_CONTROL = "id, numero, proveedor, fecha, base, estado";
+const CAMPOS_COMPRA_CONTROL_POR_MIGRACION = [
+  `${CAMPOS_COMPRA_CONTROL}, categoria, borrada_en`,
+  `${CAMPOS_COMPRA_CONTROL}, categoria`,
+  CAMPOS_COMPRA_CONTROL,
+];
+
+/** Cuántas filas devuelve una función de la base; nulo si no se puede leer. */
+async function contarFilas(funcion: string): Promise<number | null> {
+  const { data, error } = await llamarRpcConError<unknown[]>(supabase, funcion, {});
+  if (error) return null;
+  return Array.isArray(data) ? data.length : null;
+}
+
+/**
+ * Lo que necesitan los controles del almacén: las compras textil
+ * registradas con fecha en el rango frente a sus entradas de stock, las
+ * variantes y reservas descuadradas y el valor de la caché. Sin la migración
+ * 20261028100000 (sin `compra_id` en los movimientos), `disponible: false`.
+ */
+export function useControlesAlmacen(rango: RangoFechas) {
+  const desde = dia(rango.desde);
+  const hasta = dia(rango.hasta);
+  return useQuery({
+    queryKey: ["almacen-controles", desde, hasta],
+    queryFn: async (): Promise<DatosControlesAlmacen> => {
+      // Sin el enlace de los movimientos con su compra no hay nada que comprobar.
+      const enlace = await tabla(supabase, "textil_stock_movimientos").select("compra_id").limit(1);
+      if (faltaLaColumna(enlace.error) || faltaLaTabla(enlace.error)) {
+        return { disponible: false };
+      }
+      if (enlace.error) throw new Error(enlace.error.message);
+
+      const leerCompras = (campos: string) =>
+        leerTodas<CompraControl>((a, b) =>
+          tabla(supabase, "textil_compras")
+            .select(campos)
+            .eq("estado", "registrada")
+            .gte("fecha", desde)
+            .lte("fecha", hasta)
+            .order("id")
+            .range(a, b),
+        );
+      let compras = await leerCompras(CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0]);
+      for (const campos of CAMPOS_COMPRA_CONTROL_POR_MIGRACION.slice(1)) {
+        if (!faltaLaColumna(compras.error)) break;
+        compras = await leerCompras(campos);
+      }
+      if (compras.error) throw new Error(compras.error.message);
+      // Solo las del textil (sin categoría, de antes de las compras generales, lo son).
+      const delTextil = compras.data.filter((c) => !c.categoria || c.categoria === "textil");
+
+      const entradas: EntradaControl[] = [];
+      // En trozos de 100: una URL con cientos de UUID la corta PostgREST.
+      for (const trozo of trozos(
+        delTextil.map((c) => c.id),
+        100,
+      )) {
+        const r = await leerTodas<EntradaControl & { id: string }>((a, b) =>
+          tabla(supabase, "textil_stock_movimientos")
+            .select("id, motivo, cantidad, coste_unitario, compra_id")
+            .eq("motivo", "compra")
+            .in("compra_id", trozo)
+            .order("id")
+            .range(a, b),
+        );
+        if (r.error) throw new Error(r.error.message);
+        entradas.push(...r.data);
+      }
+
+      const [variantes, reservas, stock] = await Promise.all([
+        contarFilas("stock_descuadres"),
+        contarFilas("stock_reservas_descuadres"),
+        leerTodas<{ id: string; cantidad: number | string; coste_unitario: number | string }>(
+          (a, b) =>
+            tabla(supabase, "textil_stock")
+              .select("id, cantidad, coste_unitario")
+              .order("id")
+              .range(a, b),
+        ),
+      ]);
+
+      return {
+        disponible: true,
+        compras: controlComprasEntradas(delTextil, entradas),
+        variantes,
+        reservas,
+        valorCache: stock.error
+          ? null
+          : sumarImportes(stock.data, (s) =>
+              valorMovimiento({
+                cantidad: s.cantidad ?? 0,
+                coste_unitario: s.coste_unitario ?? 0,
+              }),
+            ),
+      };
+    },
+  });
+}
+
+const CAMPOS_PAGO_PROVEEDOR =
+  "id, proveedor, nif_proveedor, numero, fecha, liquido, total, estado, estado_pago, borrada_en";
+
+/**
+ * Las facturas de compra registradas y pendientes de pago, de cualquier
+ * fecha y categoría. Nulo sin la migración 20261014100000 (sin `estado_pago`)
+ * o sin la tabla de compras.
+ */
+export function usePagosProveedores() {
+  return useQuery({
+    queryKey: ["gerencia-pagos-proveedores"],
+    queryFn: async (): Promise<CompraPendiente[] | null> => {
+      const leer = (campos: string) =>
+        leerTodas<CompraPendiente>((a, b) =>
+          tabla(supabase, "textil_compras")
+            .select(campos)
+            .eq("estado", "registrada")
+            .eq("estado_pago", "pendiente")
+            .order("id")
+            .range(a, b),
+        );
+      // Con el proveedor del catálogo (20261028100000) si existe; si no, sin él.
+      let r = await leer(`${CAMPOS_PAGO_PROVEEDOR}, proveedor_id`);
+      if (faltaLaColumna(r.error)) r = await leer(CAMPOS_PAGO_PROVEEDOR);
+      if (faltaLaColumna(r.error) || faltaLaTabla(r.error)) return null;
+      if (r.error) throw new Error(r.error.message);
+      return r.data;
+    },
+  });
+}
+
+/**
+ * El resumen de los controles del almacén con lo que leen
+ * `useControlesAlmacen` y `useMovimientosAlmacen`: la diferencia de valor
+ * caché − libro es contra el libro a hoy (día de Madrid, como la fecha
+ * efectiva). Nulo sin la migración o mientras se lee.
+ */
+export function resumenControlesAlmacen(
+  datos: DatosControlesAlmacen | undefined,
+  movimientos: readonly MovimientoAlmacen[] | null | undefined,
+  hoy: Date,
+): ResumenControles | null {
+  if (!datos || !datos.disponible) return null;
+  const libro = movimientos ? valorAFecha(movimientos, diaEnEspana(hoy)).valor : null;
+  return resumenControles(
+    datos.compras,
+    datos.variantes,
+    datos.reservas,
+    datos.valorCache === null || libro === null ? null : datos.valorCache - libro,
+  );
 }

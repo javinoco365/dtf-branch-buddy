@@ -16,7 +16,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { useAuth } from "@/lib/auth-context";
 import { fechaLarga } from "@/lib/format";
-import { useAjustesGerencia, useCosteMetroActual } from "@/lib/gerencia";
+import {
+  resumenControlesAlmacen,
+  useAjustesGerencia,
+  useControlesAlmacen,
+  useCosteMetroActual,
+  useMovimientosAlmacen,
+  usePagosProveedores,
+} from "@/lib/gerencia";
 import { useDatosResumen, useDocumentosResumen, type DatosResumen } from "@/lib/resumen-diario";
 import { recuperarRealizadoWoo } from "@/lib/woocommerce.functions";
 import type { PeriodoUrl } from "@/lib/filtros-url";
@@ -46,6 +53,8 @@ import {
 } from "@/dominio/periodos";
 import { diaRealizado } from "@/dominio/realizado";
 import { resumenPeriodo, type DocumentoParaResumen, type Resumen } from "@/dominio/resumen-diario";
+import { cuentaAlmacen, type InformeAlmacen } from "@/dominio/cuenta-almacen";
+import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { ErrorPestana, Nota } from "../comun";
 import { Esquema } from "./Esquema";
 import { Desglose } from "./Desglose";
@@ -168,6 +177,31 @@ function Contenido({
     [gastos, rango],
   );
 
+  // La página «Almacén» del informe. Si una parte no se puede leer, va a nulo
+  // y el informe sale igual.
+  const movimientosAlmacen = useMovimientosAlmacen();
+  const controlesAlmacen = useControlesAlmacen(rango);
+  const pagosProveedores = usePagosProveedores();
+  const informeAlmacen = useMemo<InformeAlmacen | null>(() => {
+    const movs = movimientosAlmacen.data;
+    if (!movs) return null;
+    const ahora = new Date();
+    const controles = controlesAlmacen.data;
+    const pagos = pagosProveedores.data
+      ? pagosPendientesProveedores(pagosProveedores.data, ahora)
+      : null;
+    return {
+      cuenta: cuentaAlmacen(movs.movimientos, diaDeFecha(rango.desde), diaDeFecha(rango.hasta)),
+      valorHoy: controles?.disponible ? controles.valorCache : null,
+      controles: resumenControlesAlmacen(controles, movs.movimientos, ahora),
+      pagosProveedores: pagos ? { total: pagos.total, facturas: pagos.facturas } : null,
+    };
+  }, [movimientosAlmacen.data, controlesAlmacen.data, pagosProveedores.data, rango]);
+
+  // Mientras se lee el almacén, el botón espera: «leyendo» no es «sin datos».
+  const almacenLeido =
+    !movimientosAlmacen.isPending && !controlesAlmacen.isPending && !pagosProveedores.isPending;
+
   const error = actual.error ?? docs.error;
   const etiqueta = etiquetaPeriodo(seleccion);
 
@@ -191,7 +225,7 @@ function Contenido({
           />
           <BotonInforme
             datos={
-              resumen
+              resumen && almacenLeido
                 ? {
                     resumen,
                     anterior: resumenPrevio,
@@ -201,6 +235,7 @@ function Contenido({
                     colores: Object.fromEntries(tiendas.map((t) => [t.id, t.color])),
                     jornada,
                     gastos: gastosDelPeriodo,
+                    almacen: informeAlmacen,
                   }
                 : null
             }

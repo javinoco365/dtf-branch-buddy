@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +47,8 @@ import { toast } from "sonner";
 import { eur, fechaCorta } from "@/lib/format";
 import { descargarBlob } from "@/lib/csv";
 import { LineasEditor, type Linea } from "@/components/textil/LineasEditor";
+import { aVarianteCatalogo, lineasDesdeStock, utilizable } from "@/dominio/stock-textil";
+import type { VarianteCatalogo } from "@/dominio/tipos-textil";
 import {
   SelectorClienteTextil,
   type ClienteTextil,
@@ -76,6 +78,10 @@ import {
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
+  // «Desde el stock»: Textil › Stock manda aquí las variantes marcadas.
+  validateSearch: (s: Record<string, unknown>): { desde_stock?: string } => ({
+    desde_stock: typeof s.desde_stock === "string" ? s.desde_stock : undefined,
+  }),
   component: PresupuestosPage,
 });
 
@@ -130,12 +136,63 @@ function PresupuestosPage() {
     queryFn: () => cliFn(),
   });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
-  const { data: stock = [] } = useQuery({ queryKey: ["textil-stock"], queryFn: () => stockFn() });
+  const { data: stock = [], isSuccess: stockCargado } = useQuery({
+    queryKey: ["textil-stock"],
+    queryFn: () => stockFn(),
+  });
+  // El catálogo con el disponible de cada variante (físico − reservado).
+  const variantes = useMemo(
+    () => (stock as Record<string, unknown>[]).map(aVarianteCatalogo),
+    [stock],
+  );
 
   const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
   const [confirmando, setConfirmando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
+
+  // «Desde el stock»: ?desde_stock=<id>,<id>… abre el documento nuevo con esas
+  // variantes y se quita de la dirección (al volver atrás no se abre otra vez).
+  const { desde_stock: desdeStock } = Route.useSearch();
+  const navigate = useNavigate();
+  const [lineasIniciales, setLineasIniciales] = useState<Linea[] | null>(null);
+  useEffect(() => {
+    if (!desdeStock || !stockCargado) return;
+    const porId = new Map(variantes.map((v) => [v.id, v]));
+    const vistas = new Set<string>();
+    const elegidas: VarianteCatalogo[] = [];
+    let ignoradas = 0;
+    for (const id of desdeStock
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)) {
+      const v = porId.get(id);
+      if (!v || !utilizable(v) || vistas.has(id)) {
+        ignoradas += 1;
+        continue;
+      }
+      vistas.add(id);
+      elegidas.push(v);
+    }
+    if (ignoradas > 0) {
+      toast.warning(
+        `${ignoradas} variante${ignoradas === 1 ? "" : "s"} no se ha${ignoradas === 1 ? "" : "n"} añadido: no existe${ignoradas === 1 ? "" : "n"}, está${ignoradas === 1 ? "" : "n"} desactivada${ignoradas === 1 ? "" : "s"} o repetida${ignoradas === 1 ? "" : "s"}.`,
+      );
+    }
+    if (elegidas.length > 0) {
+      setEditing(null);
+      setLineasIniciales(lineasDesdeStock(elegidas));
+      setOpen(true);
+    }
+    void navigate({
+      to: ".",
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        desde_stock: undefined,
+      })) as never,
+      replace: true,
+    });
+  }, [desdeStock, stockCargado, variantes, navigate]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["textil-presupuestos"] });
@@ -167,6 +224,11 @@ function PresupuestosPage() {
     onSuccess: (r) => {
       invalidate();
       toast.success("Guardado");
+      // El presupuesto no reserva: si pide más de lo disponible, se avisa y se guarda igual.
+      const avisos = (r as { avisos?: string[] } | null)?.avisos ?? [];
+      if (avisos.length > 0) {
+        toast.warning(`Falta stock para aceptarlo tal cual: ${avisos.join(" · ")}`);
+      }
       setOpen(false);
       setEditing(null);
       // El PDF de lo que se acaba de guardar, listo para mandarlo.
@@ -208,6 +270,7 @@ function PresupuestosPage() {
         <Button
           onClick={() => {
             setEditing(null);
+            setLineasIniciales(null);
             setOpen(true);
           }}
         >
@@ -337,6 +400,7 @@ function PresupuestosPage() {
                       disabled={!!p.pedido_id}
                       onClick={() => {
                         setEditing(p);
+                        setLineasIniciales(null);
                         setOpen(true);
                       }}
                     >
@@ -408,9 +472,10 @@ function PresupuestosPage() {
           open={open}
           onOpenChange={setOpen}
           presupuesto={editing}
+          lineasIniciales={lineasIniciales}
           clientes={clientes}
           marcas={marcas}
-          stock={stock}
+          stock={variantes}
           defaultMarcaId={defaultMarcaId}
           onSave={(v: any) => save.mutate(v)}
           loading={save.isPending}
@@ -424,6 +489,7 @@ function PresupuestoDialog({
   open,
   onOpenChange,
   presupuesto,
+  lineasIniciales,
   clientes,
   marcas,
   stock,
@@ -435,7 +501,7 @@ function PresupuestoDialog({
     fecha: new Date().toISOString().slice(0, 10),
     validez_dias: 30,
     marca_id: defaultMarcaId,
-    items: [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
+    items: lineasIniciales ?? [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
   };
   const [f, setF] = useState<any>({
     ...initial,
@@ -445,6 +511,11 @@ function PresupuestoDialog({
       precio_unitario: Number(it.precio_unitario),
       iva_pct: Number(it.iva_pct),
       stock_id: it.stock_id ?? null,
+      // El coste congelado de la línea guardada: solo se enseña, no se manda.
+      coste_unit_snapshot:
+        it.coste_unit_snapshot === null || it.coste_unit_snapshot === undefined
+          ? null
+          : Number(it.coste_unit_snapshot),
     })),
   });
 
@@ -558,7 +629,13 @@ function PresupuestoDialog({
                 fecha: f.fecha,
                 validez_dias: Number(f.validez_dias) || 30,
                 notas: f.notas || null,
-                items: f.items,
+                items: (f.items as Linea[]).map((it) => ({
+                  descripcion: it.descripcion,
+                  cantidad: it.cantidad,
+                  precio_unitario: it.precio_unitario,
+                  iva_pct: it.iva_pct,
+                  stock_id: it.stock_id ?? null,
+                })),
               })
             }
           >

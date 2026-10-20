@@ -26,9 +26,15 @@ async function huella(f: File): Promise<string> {
 
 export function SubidaFacturas({
   deshabilitado,
+  categoria,
   alTerminarUna,
 }: {
   deshabilitado: boolean;
+  /**
+   * «textil» desde Textil › Compras: la factura nace como textil y la IA no
+   * decide su categoría. Sin ella, la decide la IA (Compras generales).
+   */
+  categoria?: "textil";
   /** Tras cada factura, para refrescar la cola. */
   alTerminarUna: () => void;
 }) {
@@ -57,6 +63,7 @@ export function SubidaFacturas({
         poner(i, { estado: "leyendo" });
         const fd = new FormData();
         fd.append("fichero", f);
+        if (categoria) fd.append("categoria", categoria);
         const r = (await subirFn({ data: fd })) as
           | { resultado: "pendiente"; motivos: string[] }
           | { resultado: "error" | "duplicado"; motivo: string };

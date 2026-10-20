@@ -31,6 +31,14 @@ FROM (VALUES
    EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
             WHERE n.nspname = 'public' AND p.proname = 'banco_documentos_por_conciliar')),
   ('20261026100000_plantillas_presupuesto',
-   to_regclass('public.plantillas_presupuesto') IS NOT NULL)
+   to_regclass('public.plantillas_presupuesto') IS NOT NULL),
+  ('20261028100000_escaner_textil_esquema',
+   to_regclass('public.textil_referencias_proveedor') IS NOT NULL),
+  ('20261028100100_escaner_textil_datos',
+   EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = 'escaner_textil_migrar_datos')),
+  ('20261028100200_escaner_textil_reglas',
+   EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = 'escaner_textil_version'))
 ) AS m(migracion, aplicada)
 ORDER BY migracion;

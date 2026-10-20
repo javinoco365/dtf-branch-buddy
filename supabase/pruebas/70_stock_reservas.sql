@@ -17,7 +17,7 @@ BEGIN
 
   INSERT INTO public.textil_stock_movimientos
     (empresa_id, stock_id, motivo, cantidad, coste_unitario)
-  VALUES (v_empresa, v_stock, 'compra', 20, 4.00);
+  VALUES (v_empresa, v_stock, 'inicial', 20, 4.00);
 
   PERFORM set_config('prueba.empresa', v_empresa::TEXT, false);
   PERFORM set_config('prueba.stock', v_stock::TEXT, false);

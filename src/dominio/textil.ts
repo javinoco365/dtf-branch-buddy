@@ -49,16 +49,30 @@ export type ArticuloStock = {
 };
 
 export type ResumenStock = {
+  /** Artículos activos. */
   articulos: number;
+  /** Todas las unidades, con su signo (también las de artículos desactivados). */
   unidades: number;
-  /** Unidades × coste medio: lo que vale el almacén a precio de compra. */
+  /**
+   * Lo que vale el almacén a precio de compra: Σ redondear(unidades × coste
+   * medio, 2) de TODOS los artículos, con su signo. Es la misma definición que
+   * el valor de la caché de los controles y el del informe de socios, y la que
+   * da el libro (la Cuenta del almacén) salvo redondeos del coste medio.
+   */
   valor: number;
   reservadas: number;
   /** Activos con un mínimo puesto y en él o por debajo, los más justos primero. */
   bajoMinimo: (ArticuloStock & { faltan: number })[];
 };
 
-/** El almacén a día de hoy. Solo los artículos activos. */
+/**
+ * El almacén a día de hoy. Las unidades y el valor cuentan todos los
+ * artículos, también los desactivados y los que están en negativo, como el
+ * libro: si no, una variante desactivada con unidades, o una en negativo,
+ * haría que esta cifra no coincidiera con la Cuenta del almacén ni con el
+ * informe de socios. El número de artículos, lo reservado y el «bajo mínimo»,
+ * solo los activos.
+ */
 export function resumenStock(stock: readonly ArticuloStock[]): ResumenStock {
   const activos = stock.filter((a) => a.activa !== false);
   const bajoMinimo = activos
@@ -67,9 +81,12 @@ export function resumenStock(stock: readonly ArticuloStock[]): ResumenStock {
     .sort((a, b) => b.faltan - a.faltan || a.nombre.localeCompare(b.nombre));
   return {
     articulos: activos.length,
-    unidades: activos.reduce((s, a) => s + num(a.cantidad), 0),
+    unidades: redondear(
+      stock.reduce((s, a) => s + num(a.cantidad), 0),
+      6,
+    ),
     valor: redondear(
-      activos.reduce((s, a) => s + Math.max(0, num(a.cantidad)) * num(a.coste_unitario), 0),
+      stock.reduce((s, a) => s + redondear(num(a.cantidad) * num(a.coste_unitario), 2), 0),
     ),
     reservadas: activos.reduce((s, a) => s + num(a.cantidad_reservada), 0),
     bajoMinimo,

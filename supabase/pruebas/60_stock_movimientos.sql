@@ -12,20 +12,20 @@ BEGIN
   PERFORM set_config('prueba.empresa', v_empresa::TEXT, false);
 END $$;
 
--- 1. Una compra sube el saldo.
+-- 1. Una entrada sube el saldo.
 INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, coste_unitario)
 VALUES (current_setting('prueba.empresa')::UUID, current_setting('prueba.stock')::UUID,
-        'compra', 100, 3.00);
+        'inicial', 100, 3.00);
 
 SELECT CASE WHEN cantidad = 100 AND coste_unitario = 3
-            THEN 'BIEN  1. la compra sube el saldo y fija el coste'
+            THEN 'BIEN  1. la entrada sube el saldo y fija el coste'
             ELSE 'MAL   1. cantidad ' || cantidad || ' coste ' || coste_unitario END
 FROM public.textil_stock WHERE id = current_setting('prueba.stock')::UUID;
 
 -- 2. Coste medio ponderado: 100 a 3,00 más 100 a 5,00 dan 4,00.
 INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, motivo, cantidad, coste_unitario)
 VALUES (current_setting('prueba.empresa')::UUID, current_setting('prueba.stock')::UUID,
-        'compra', 100, 5.00);
+        'inicial', 100, 5.00);
 
 SELECT CASE WHEN cantidad = 200 AND coste_unitario = 4
             THEN 'BIEN  2. coste medio ponderado: 100 a 3 + 100 a 5 = 4,00'

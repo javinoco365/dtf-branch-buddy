@@ -32,7 +32,9 @@ describe("almacén", () => {
       a("c", 5, 5, 1),
       a("x", 100, 0, 9, false),
     ]);
-    expect(r).toMatchObject({ articulos: 3, unidades: 18, valor: 37, reservadas: 3 });
+    // Unidades y valor cuentan también la desactivada (100 × 9,00), como el
+    // libro; artículos y reservadas, solo las activas.
+    expect(r).toMatchObject({ articulos: 3, unidades: 118, valor: 937, reservadas: 3 });
     expect(r.bajoMinimo.map((x) => [x.id, x.faltan])).toEqual([
       ["b", 2],
       ["c", 0],
@@ -53,5 +55,32 @@ describe("coste de lo vendido", () => {
       ["p1", 24],
       ["p2", 7.5],
     ]);
+  });
+});
+
+describe("valor del almacén", () => {
+  it("cuenta con su signo las variantes en negativo y redondea cada una al céntimo, como la caché", () => {
+    const r = resumenStock([
+      {
+        id: "a",
+        nombre: "A",
+        cantidad: 3,
+        cantidad_minima: 0,
+        cantidad_reservada: 0,
+        coste_unitario: 4.1667,
+      },
+      {
+        id: "b",
+        nombre: "B",
+        cantidad: -2,
+        cantidad_minima: 0,
+        cantidad_reservada: 0,
+        coste_unitario: 4,
+        activa: false,
+      },
+    ]);
+    // 12,50 (12,5001) − 8,00
+    expect(r.valor).toBe(4.5);
+    expect(r.unidades).toBe(1);
   });
 });

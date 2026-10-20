@@ -1,9 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
+import { escanerAplicado } from "./escaner-textil";
 import type { Cobro } from "./cobros.functions";
 // Arriba y no con await import(): facturas.functions también lo importa de
 // forma normal, y cargarlo de las dos formas tira el arranque del servidor
@@ -41,6 +42,10 @@ import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-
 import { LIMITES_TICKET, documentoVigente, esTipoFiscal } from "@/dominio/tickets";
 import { diaEnEspana, fechaDocumentoDePedido } from "@/dominio/fecha-documento";
 import { resolverIdentidad } from "@/dominio/plantilla-presupuesto";
+import { normalizarEan } from "@/dominio/normalizar-textil";
+import { costeAlReescribir } from "@/dominio/stock-textil";
+import type { ProductoTextil } from "@/dominio/tipos-textil";
+import type { Database } from "@/integrations/supabase/types";
 import {
   VALIDEZ_TEXTIL_POR_DEFECTO,
   clientePresupuestoTextil,
@@ -156,15 +161,43 @@ export const setMarcaPredeterminada = createServerFn({ method: "POST" })
   });
 
 // ============ STOCK ============
+/**
+ * Una fila de `listStock`: la de siempre y, con la migración 20261028100000,
+ * su producto, su EAN y si está repetida (opcionales: sin la migración no
+ * vienen). Para la pantalla, mejor pasarla por `aVarianteCatalogo`.
+ */
+export type FilaStock = Database["public"]["Tables"]["textil_stock"]["Row"] & {
+  activa?: boolean;
+  cantidad_reservada?: number;
+  producto_id?: string | null;
+  ean?: string | null;
+  repetida?: boolean;
+  fusionada_en?: string | null;
+  producto?: ProductoTextil | null;
+};
+
 export const listStock = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
-    const { data, error } = await leerTodas((a, b) =>
-      context.supabase.from("textil_stock").select("*").order("nombre").order("id").range(a, b),
+    const leer = (campos: string) =>
+      leerTodas<Record<string, unknown>>((a, b) =>
+        tabla(context.supabase, "textil_stock")
+          .select(campos)
+          .order("nombre")
+          .order("id")
+          .range(a, b),
+      );
+    // Con su producto (migración 20261028100000). Sin ella, PostgREST no
+    // encuentra la relación (PGRST200) o la tabla: se lee como siempre.
+    let { data, error } = await leer(
+      "*, producto:textil_productos(id, marca, referencia, nombre, categoria, activo)",
     );
-    if (error) throw error;
-    return data ?? [];
+    if (error && (error.code === "PGRST200" || faltaLaColumna(error) || faltaLaTabla(error))) {
+      ({ data, error } = await leer("*"));
+    }
+    if (error) throw new Error(error.message);
+    return (data ?? []) as FilaStock[];
   });
 
 const stockSchema = z.object({
@@ -174,59 +207,80 @@ const stockSchema = z.object({
   categoria: z.string().optional().nullable(),
   color: z.string().optional().nullable(),
   talla: z.string().optional().nullable(),
-  cantidad: z.number(),
+  // Se ignoran si llegan (un cliente viejo): las existencias y el coste medio
+  // solo cambian por movimientos, y una variante nueva nace a 0 (todo entra
+  // por factura o por recuento).
+  cantidad: z.number().optional(),
+  coste_unitario: z.number().optional(),
   cantidad_minima: z.number(),
-  coste_unitario: z.number(),
   precio_venta: z.number(),
   notas: z.string().optional().nullable(),
+  // Con la migración 20261028100000.
+  producto_id: z.string().uuid().nullable().optional(),
+  ean: z.string().nullable().optional(),
 });
+
+/** El mensaje para la persona de un único que salta al guardar una variante. */
+function errorVariante(error: { code?: string; message: string }): Error {
+  if (error.code === "23505" && /textil_stock_ean_unico/.test(error.message)) {
+    return new Error("Ese EAN ya lo tiene otra variante.");
+  }
+  if (error.code === "23505" && /textil_stock_variante_unica/.test(error.message)) {
+    return new Error("Ya hay una variante activa de ese producto con ese color y esa talla.");
+  }
+  return new Error(error.message);
+}
 
 export const upsertStockItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => stockSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { id, cantidad, ...rest } = data;
+    // cantidad y coste_unitario no se escriben nunca aquí: los mueve el libro
+    // de movimientos y hay guardianes en la base que lo impiden.
+    const { id, cantidad: _cantidad, coste_unitario: _coste, producto_id, ean, ...rest } = data;
+    void _cantidad;
+    void _coste;
 
-    // La cantidad ya no se escribe aquí: es la suma del libro de movimientos y
-    // hay un guardián en la base que lo impide. Al editar se ignora; al crear
-    // se anota como existencias iniciales.
-    if (id) {
-      const { data: row, error } = await context.supabase
-        .from("textil_stock")
-        .update(rest)
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
-      return row;
+    const eanEscrito = ean?.trim() ? ean.trim() : null;
+    const eanNormal = eanEscrito ? normalizarEan(eanEscrito) : null;
+    if (eanEscrito && !eanNormal) throw new Error(`El EAN ${eanEscrito} no es válido.`);
+    // Solo lo que llega: así una pantalla vieja no borra el producto ni el EAN.
+    const nuevos = {
+      ...(producto_id === undefined ? {} : { producto_id }),
+      ...(ean === undefined ? {} : { ean: eanNormal }),
+    };
+
+    const guardar = (campos: Record<string, unknown>) =>
+      id
+        ? tabla(context.supabase, "textil_stock").update(campos).eq("id", id).select().single()
+        : // Nace sin existencias y sin coste: entran con su factura (Textil ›
+          // Compras) o con un recuento. Sin movimiento «inicial».
+          tabla(context.supabase, "textil_stock")
+            .insert({ ...campos, cantidad: 0, coste_unitario: 0 })
+            .select()
+            .single();
+
+    let { data: row, error } = await guardar({ ...rest, ...nuevos });
+    // Sin la migración 20261028100000 no hay producto_id ni ean.
+    if (faltaLaColumna(error) && Object.keys(nuevos).length > 0) {
+      ({ data: row, error } = await guardar(rest));
     }
-
-    const { data: row, error } = await context.supabase
-      .from("textil_stock")
-      .insert({ ...rest, cantidad: 0 })
-      .select()
-      .single();
-    if (error) throw error;
-
-    const inicial = Number(cantidad) || 0;
-    if (inicial > 0) {
-      const { error: mErr } = await tabla(context.supabase, "textil_stock_movimientos").insert({
-        empresa_id: await empresaActiva(context.supabase),
-        stock_id: row.id,
-        motivo: "inicial",
-        cantidad: inicial,
-        coste_unitario: Number(rest.coste_unitario) || 0,
-        nota: "Existencias al dar de alta la variante",
-      });
-      if (mErr) throw mErr;
-    }
+    if (error) throw errorVariante(error);
     return row;
   });
 
 /**
- * Anota un movimiento de stock: una compra, una merma o un recuento.
+ * Anota un movimiento de stock que no es una compra ni un pedido: una merma,
+ * un recuento, una devolución a un proveedor o de un cliente sin pedido.
  *
- * Es la única forma de que cambie una cantidad. La base lo exige.
+ * Las entradas por compra solo las anota el registro de su factura (Textil ›
+ * Compras). El coste no se manda: lo pone la base (las salidas, al coste medio;
+ * la devolución de un cliente, al de su venta o al medio; un recuento al alza,
+ * al medio).
+ *
+ * El signo lo decide el motivo: una merma y una devolución a proveedor
+ * siempre restan, una devolución de cliente siempre suma; el ajuste lleva el
+ * suyo («sobran» o «faltan»).
  */
 export const registrarMovimientoStock = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -235,28 +289,42 @@ export const registrarMovimientoStock = createServerFn({ method: "POST" })
       .object({
         stock_id: z.string().uuid(),
         motivo: z.enum([
-          "compra",
           "merma",
           "ajuste_inventario",
           "devolucion_cliente",
           "devolucion_proveedor",
         ]),
         cantidad: z.number().refine((n) => n !== 0, "La cantidad no puede ser cero"),
-        coste_unitario: z.number().nonnegative().default(0),
         nota: z.string().optional().nullable(),
+        compra_id: z.string().uuid().nullable().optional(),
+      })
+      .refine((m) => !m.compra_id || m.motivo === "devolucion_proveedor", {
+        message: "Solo una devolución a proveedor se enlaza con su compra.",
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await tabla(context.supabase, "textil_stock_movimientos").insert({
+    const unidades = Math.abs(data.cantidad);
+    const cantidad =
+      data.motivo === "merma" || data.motivo === "devolucion_proveedor"
+        ? -unidades
+        : data.motivo === "devolucion_cliente"
+          ? unidades
+          : data.cantidad;
+    const fila = {
       empresa_id: await empresaActiva(context.supabase),
       stock_id: data.stock_id,
       motivo: data.motivo,
-      cantidad: data.cantidad,
-      coste_unitario: data.coste_unitario,
+      cantidad,
+      coste_unitario: 0,
       nota: data.nota ?? null,
-    });
-    if (error) throw error;
+    };
+    const insertar = (campos: Record<string, unknown>) =>
+      tabla(context.supabase, "textil_stock_movimientos").insert(campos);
+    let { error } = await insertar(data.compra_id ? { ...fila, compra_id: data.compra_id } : fila);
+    // Sin la migración 20261028100000 no hay compra_id: se anota sin enlace.
+    if (faltaLaColumna(error) && data.compra_id) ({ error } = await insertar(fila));
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
@@ -422,19 +490,23 @@ function agruparStock(items: { stock_id?: string | null; cantidad: number }[]) {
 const ESTADOS_SALIDA = new Set(["enviado", "entregado"]);
 
 /**
- * Comprueba que hay stock DISPONIBLE, que no es lo mismo que stock físico.
+ * Lo que falta de stock DISPONIBLE, que no es lo mismo que stock físico: una
+ * frase por variante («Camiseta …: solicitado 5, disponible 3»), vacía si hay
+ * de todo.
  *
  * disponible = físico − reservado. Lo físico son las camisetas que hay en el
  * armario; lo reservado, las que ya están prometidas a otros pedidos sin
  * entregar. `previos` es lo que este mismo pedido tenía reservado antes de
  * editarlo: se devuelve al montón porque va a sustituirse, no a sumarse.
+ *
+ * El presupuesto solo avisa con esta lista; el pedido no se guarda con ella.
  */
-async function validarDisponibilidad(
+async function faltantesDisponibilidad(
   supabase: any,
   nuevos: Map<string, number>,
   previos: Map<string, number> = new Map(),
-) {
-  if (nuevos.size === 0) return;
+): Promise<string[]> {
+  if (nuevos.size === 0) return [];
   const ids = Array.from(nuevos.keys());
   const { data, error } = await supabase
     .from("textil_stock")
@@ -450,9 +522,76 @@ async function validarDisponibilidad(
       faltantes.push(`${s.nombre}: solicitado ${pedido}, disponible ${disponible}`);
     }
   }
-  if (faltantes.length) {
-    throw new Error(`Stock insuficiente — ${faltantes.join("; ")}`);
+  return faltantes;
+}
+
+/** El coste congelado de las líneas que ya tenía el documento, por variante. */
+type CostesPrevios = {
+  /** Variante → su coste congelado, o null si su línea no tenía. */
+  previos: Map<string, number | null>;
+  /** Si la base sabe dejar una línea sin coste al reinsertarla (SIN_COSTE_CONGELADO). */
+  conservarNulo: boolean;
+};
+
+/**
+ * El coste congelado (`coste_unit_snapshot`) de las líneas guardadas de un
+ * presupuesto o un pedido, por variante. Se lee ANTES de borrar las líneas
+ * para reescribirlas: así cada línea nueva conserva el coste de la anterior
+ * con la misma variante (también el nulo: una línea sin coste no toma el de
+ * hoy) y no se recalcula leyendo el maestro.
+ *
+ * `null` si la columna no existe (falta la migración 20261028100000): entonces
+ * no se manda nada y todo queda como antes.
+ */
+async function costesCongelados(
+  supabase: unknown,
+  tablaItems: "textil_presupuesto_items" | "textil_pedido_items",
+  campo: "presupuesto_id" | "pedido_id",
+  documentoId: string | null | undefined,
+): Promise<CostesPrevios | null> {
+  const consulta = tabla(supabase, tablaItems).select("stock_id, coste_unit_snapshot");
+  const { data, error } = documentoId
+    ? await consulta.eq(campo, documentoId)
+    : await consulta.limit(1);
+  if (faltaLaColumna(error)) return null;
+  if (error) throw new Error(error.message);
+  const previos = new Map<string, number | null>();
+  if (!documentoId) return { previos, conservarNulo: false };
+  for (const f of (data ?? []) as { stock_id: string | null; coste_unit_snapshot: unknown }[]) {
+    if (!f.stock_id) continue;
+    const coste =
+      f.coste_unit_snapshot === null || f.coste_unit_snapshot === undefined
+        ? null
+        : Number(f.coste_unit_snapshot);
+    if (!previos.has(f.stock_id) || (previos.get(f.stock_id) === null && coste !== null)) {
+      previos.set(f.stock_id, coste);
+    }
   }
+  // Pedirle a la base que deje una línea sin coste solo si el trigger que lo
+  // entiende existe (migración 20261028100200); si no, el -1 se guardaría tal cual.
+  const conNulos = [...previos.values()].some((c) => c === null);
+  return { previos, conservarNulo: conNulos && (await escanerAplicado(supabase)) };
+}
+
+/**
+ * La columna `coste_unit_snapshot` de una línea reescrita: el congelado que le
+ * toca (por posición o por variante), SIN_COSTE_CONGELADO si la línea que
+ * había no tenía coste, o nada (línea nueva: lo pone el trigger con el coste
+ * medio de hoy). Sin la columna, nada. La regla, en costeAlReescribir.
+ */
+function conCosteCongelado(
+  costes: CostesPrevios | null,
+  indice: number,
+  stockId: string | null | undefined,
+  porLinea?: (number | null)[],
+): { coste_unit_snapshot?: number } {
+  const coste = costeAlReescribir(
+    costes?.previos ?? null,
+    stockId,
+    porLinea?.[indice],
+    costes?.conservarNulo ?? false,
+  );
+  return coste === undefined ? {} : { coste_unit_snapshot: coste };
 }
 
 /**
@@ -596,8 +735,16 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
     const { items, id, ...header } = data;
     const totals = calcularTotales(items);
 
-    // Alerta (no reserva) de stock disponible al crear presupuestos
-    await validarDisponibilidad(context.supabase, agruparStock(items));
+    // Solo avisa: el presupuesto no reserva ni deja de guardarse por falta
+    // de stock. Las reservas nacen al aceptarlo (convertirlo en pedido).
+    const avisos = await faltantesDisponibilidad(context.supabase, agruparStock(items));
+    // El coste congelado de las líneas que ya tenía, antes de reescribirlas.
+    const porStock = await costesCongelados(
+      context.supabase,
+      "textil_presupuesto_items",
+      "presupuesto_id",
+      id,
+    );
 
     const payload = {
       ...header,
@@ -634,8 +781,8 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
       presupuestoId = row.id;
     }
 
-    const { error: itErr } = await context.supabase.from("textil_presupuesto_items").insert(
-      totals.itemsCalc.map((it) => ({
+    const { error: itErr } = await tabla(context.supabase, "textil_presupuesto_items").insert(
+      totals.itemsCalc.map((it, i) => ({
         presupuesto_id: presupuestoId!,
         descripcion: it.descripcion,
         cantidad: it.cantidad,
@@ -643,10 +790,11 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
         iva_pct: it.iva_pct,
         subtotal: it.subtotal,
         stock_id: it.stock_id ?? null,
+        ...conCosteCongelado(porStock, i, it.stock_id),
       })),
     );
     if (itErr) throw itErr;
-    return { id: presupuestoId };
+    return { id: presupuestoId!, avisos };
   });
 
 export const deletePresupuesto = createServerFn({ method: "POST" })
@@ -705,24 +853,36 @@ export const confirmarPresupuestoTextil = createServerFn({ method: "POST" })
 
     const hoy = new Date();
     const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
-    const { id: pedidoId } = await guardarPedidoTextil(context.supabase, {
-      cliente_id: p.cliente_id ?? null,
-      cliente_nombre: p.cliente_nombre ?? null,
-      cliente_email: p.cliente_email ?? null,
-      marca_id: p.marca_id ?? null,
-      fecha,
-      estado: "pendiente",
-      metodo_pago: null,
-      envio: 0,
-      notas: [`Del presupuesto ${p.numero}`, p.notas?.trim()].filter(Boolean).join("\n"),
-      items: p.items.map((it: any) => ({
-        descripcion: it.descripcion,
-        cantidad: Number(it.cantidad),
-        precio_unitario: Number(it.precio_unitario),
-        iva_pct: Number(it.iva_pct),
-        stock_id: it.stock_id ?? null,
-      })),
-    });
+    // El pedido conserva el coste congelado de cada línea del presupuesto.
+    const items = p.items as any[];
+    const costesPorLinea = items.map((it) =>
+      it.coste_unit_snapshot === null || it.coste_unit_snapshot === undefined
+        ? null
+        : Number(it.coste_unit_snapshot),
+    );
+    const conColumna = items.some((it) => "coste_unit_snapshot" in it);
+    const { id: pedidoId } = await guardarPedidoTextil(
+      context.supabase,
+      {
+        cliente_id: p.cliente_id ?? null,
+        cliente_nombre: p.cliente_nombre ?? null,
+        cliente_email: p.cliente_email ?? null,
+        marca_id: p.marca_id ?? null,
+        fecha,
+        estado: "pendiente",
+        metodo_pago: null,
+        envio: 0,
+        notas: [`Del presupuesto ${p.numero}`, p.notas?.trim()].filter(Boolean).join("\n"),
+        items: items.map((it: any) => ({
+          descripcion: it.descripcion,
+          cantidad: Number(it.cantidad),
+          precio_unitario: Number(it.precio_unitario),
+          iva_pct: Number(it.iva_pct),
+          stock_id: it.stock_id ?? null,
+        })),
+      },
+      conColumna ? { porLinea: costesPorLinea } : undefined,
+    );
 
     // Solo si nadie lo confirmó mientras tanto.
     const { data: enlazados, error: errEnlace } = await tabla(
@@ -832,6 +992,8 @@ export const upsertTextilPedido = createServerFn({ method: "POST" })
 async function guardarPedidoTextil(
   supabase: any,
   data: z.infer<typeof pedidoSchema>,
+  /** El coste congelado de cada línea, por posición (al confirmar un presupuesto). */
+  costes?: { porLinea: (number | null)[] },
 ): Promise<{ id: string }> {
   const { items, id, ...header } = data;
   // El envío dentro de la base imponible, artículo 78 LIVA. Antes se sumaba
@@ -843,8 +1005,11 @@ async function guardarPedidoTextil(
   const estadoPrevio = id ? await estadoDelPedido(supabase, id) : null;
   const nuevos = agruparStock(items);
   if (header.estado !== "cancelado") {
-    await validarDisponibilidad(supabase, nuevos, previos);
+    const faltantes = await faltantesDisponibilidad(supabase, nuevos, previos);
+    if (faltantes.length) throw new Error(`Stock insuficiente — ${faltantes.join("; ")}`);
   }
+  // El coste congelado de las líneas que ya tenía, antes de reescribirlas.
+  const porStock = await costesCongelados(supabase, "textil_pedido_items", "pedido_id", id);
 
   const payload = {
     ...header,
@@ -867,8 +1032,8 @@ async function guardarPedidoTextil(
     if (error) throw error;
     pedidoId = row.id;
   }
-  const { error: itErr } = await supabase.from("textil_pedido_items").insert(
-    totals.itemsCalc.map((it) => ({
+  const { error: itErr } = await tabla(supabase, "textil_pedido_items").insert(
+    totals.itemsCalc.map((it, i) => ({
       pedido_id: pedidoId!,
       descripcion: it.descripcion,
       cantidad: it.cantidad,
@@ -876,6 +1041,7 @@ async function guardarPedidoTextil(
       iva_pct: it.iva_pct,
       subtotal: it.subtotal,
       stock_id: it.stock_id ?? null,
+      ...conCosteCongelado(porStock, i, it.stock_id, costes?.porLinea),
     })),
   );
   if (itErr) throw itErr;
