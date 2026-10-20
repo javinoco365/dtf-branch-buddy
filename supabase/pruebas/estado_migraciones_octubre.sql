@@ -39,6 +39,12 @@ FROM (VALUES
             WHERE n.nspname = 'public' AND p.proname = 'escaner_textil_migrar_datos')),
   ('20261028100200_escaner_textil_reglas',
    EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-            WHERE n.nspname = 'public' AND p.proname = 'escaner_textil_version'))
+            WHERE n.nspname = 'public' AND p.proname = 'escaner_textil_version')),
+  ('20261031100000_rendimiento_indices',
+   to_regclass('public.textil_facturas_rectifica_idx') IS NOT NULL),
+  ('20261031100100_rendimiento_rls',
+   EXISTS (SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'pedidos'
+              AND policyname = 'pedidos lectura' AND qual LIKE '%mis_tiendas()%'))
 ) AS m(migracion, aplicada)
 ORDER BY migracion;
