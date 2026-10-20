@@ -905,32 +905,45 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    // Verificar pertenencia a la tienda
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
+    // Verificar pertenencia a la tienda. Las dos comprobaciones van a la vez;
+    // nada más se lee con el cliente de servicio hasta que una de las dos pase.
+    const [{ data: miembro }, { data: rol }] = await Promise.all([
+      supabaseAdmin
+        .from("tienda_usuarios")
+        .select("tienda_id")
+        .eq("tienda_id", data.tienda_id)
+        .eq("user_id", context.userId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", context.userId)
+        .eq("role", "admin")
+        .maybeSingle(),
+    ]);
     if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
 
-    const { data: tienda } = await supabaseAdmin
-      .from("tiendas")
-      .select("woo_url, sync_enabled, nombre")
-      .eq("id", data.tienda_id)
-      .maybeSingle();
+    // Ya con acceso: tienda, credenciales y empresa a la vez. Los errores se
+    // miran en el mismo orden que en serie (tienda, credenciales, empresa).
+    const [rTienda, rCreds, rEmpresa] = await Promise.allSettled([
+      supabaseAdmin
+        .from("tiendas")
+        .select("woo_url, sync_enabled, nombre")
+        .eq("id", data.tienda_id)
+        .maybeSingle(),
+      leerCredencialesWoo(supabaseAdmin, data.tienda_id),
+      empresaDeTienda(supabaseAdmin, data.tienda_id),
+    ]);
+    if (rTienda.status === "rejected") throw rTienda.reason;
+    const { data: tienda } = rTienda.value;
     if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
     if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
 
-    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (rCreds.status === "rejected") throw rCreds.reason;
+    const creds = rCreds.value;
     if (!creds) throw new Error("Faltan credenciales de WooCommerce");
-    const empresaId = await empresaDeTienda(supabaseAdmin, data.tienda_id);
+    if (rEmpresa.status === "rejected") throw rEmpresa.reason;
+    const empresaId = rEmpresa.value;
 
     // El turno, antes de leer nada de por dónde iba: lo que se lea después ya
     // no lo cambia nadie más mientras dure esta llamada.

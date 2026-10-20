@@ -2,7 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
-import { FILAS_POR_PAGINA, leerTodas, trozos } from "./paginar";
+import {
+  enParalelo,
+  FILAS_POR_PAGINA,
+  juntarEnOrden,
+  leerTodas,
+  PETICIONES_A_LA_VEZ,
+  trozos,
+} from "./paginar";
 import { leerPorIds, type ErrorConsulta } from "./leer-por-ids";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
@@ -100,7 +107,6 @@ function porPedido<T extends { pedido_id: string | null }>(filas: readonly T[]):
  * líneas en otro orden que líneas de menos.
  */
 async function lineasDePedidos(supabase: any, ids: readonly string[]) {
-  const filas: any[] = [];
   // iva_rate viaja hasta la pantalla: sin él, el formulario de edición no
   // puede saber a qué tipo estaba una línea y la rellena con el 21 %. Una
   // línea al 10 % o al 4 % se convertía en una al 21 % con solo abrir el
@@ -110,18 +116,19 @@ async function lineasDePedidos(supabase: any, ids: readonly string[]) {
   // consulta entera.
   const consulta = (trozo: string[]) =>
     supabase.from("pedido_items").select("*").in("pedido_id", trozo);
-  for (const trozo of trozos([...new Set(ids)])) {
-    const r = await consulta(trozo);
-    if (r.error) return { data: filas, error: r.error as ErrorConsulta };
-    if ((r.data ?? []).length < FILAS_POR_PAGINA) {
-      filas.push(...(r.data ?? []));
-      continue;
-    }
-    const todas = await leerTodas<any>((a, b) => consulta(trozo).order("id").range(a, b));
-    filas.push(...todas.data);
-    if (todas.error) return { data: filas, error: todas.error };
-  }
-  return { data: filas, error: null };
+  // Los trozos se leen a la vez y se juntan en su orden: mismas líneas y en
+  // el mismo orden que en serie, y el mismo «para en el primer error».
+  const respuestas = await enParalelo(
+    trozos([...new Set(ids)]),
+    PETICIONES_A_LA_VEZ,
+    async (trozo): Promise<{ data: any[]; error: ErrorConsulta | null }> => {
+      const r = await consulta(trozo);
+      if (r.error) return { data: [], error: r.error as ErrorConsulta };
+      if ((r.data ?? []).length < FILAS_POR_PAGINA) return { data: r.data ?? [], error: null };
+      return leerTodas<any>((a, b) => consulta(trozo).order("id").range(a, b));
+    },
+  );
+  return juntarEnOrden(respuestas);
 }
 
 type DocumentoLeido = DocumentoPedido & {
@@ -207,6 +214,25 @@ export const listPedidos = createServerFn({ method: "POST" })
     // pedidos (líneas, clientes, envíos, cobros, documentos) se lee además por
     // trozos de ids, para que la lista no reviente la dirección de la petición.
     const tramo = tramoDeConsulta(data.desde, data.hasta);
+    // La hora de corte y los metros realizados cada día del periodo, sean de
+    // pedidos de ese día o de otros (un pedido de la tarde se hace al día
+    // siguiente). Sin la migración de realizado_en, sin ellos. No dependen de
+    // los pedidos: se piden a la vez que la primera página y se esperan
+    // después, en el mismo orden de errores que antes.
+    const extras = Promise.all([
+      tabla(supabase, "gerencia_ajustes").select("*").limit(1).maybeSingle(),
+      leerTodas<{ realizado_en: string | null; metros_total: number | null }>((a, b) => {
+        let q = tabla(supabase, "pedidos")
+          .select("realizado_en, metros_total")
+          .gte("realizado_en", tramo.desde)
+          .lt("realizado_en", tramo.hasta);
+        if (data.tiendaId) q = q.eq("tienda_id", data.tiendaId);
+        return q.order("realizado_en").order("id").range(a, b);
+      }),
+    ]);
+    // Si los pedidos fallan se lanza su error sin esperar a estos: que su
+    // rechazo, si lo hubiera, no quede como promesa sin atender.
+    extras.catch(() => {});
     const { data: filas, error } = await leerTodas<FechaPedido & Record<string, any>>((a, b) => {
       let query = tabla(supabase, "pedidos")
         .select("*")
@@ -223,20 +249,7 @@ export const listPedidos = createServerFn({ method: "POST" })
       [...unicos.values()].filter((p) => pedidoEnDias(p, data.desde, data.hasta)),
       "reciente",
     );
-    // La hora de corte y los metros realizados cada día del periodo, sean de
-    // pedidos de ese día o de otros (un pedido de la tarde se hace al día
-    // siguiente). Sin la migración de realizado_en, sin ellos.
-    const [{ data: ajustes }, realizados] = await Promise.all([
-      tabla(supabase, "gerencia_ajustes").select("*").limit(1).maybeSingle(),
-      leerTodas<{ realizado_en: string | null; metros_total: number | null }>((a, b) => {
-        let q = tabla(supabase, "pedidos")
-          .select("realizado_en, metros_total")
-          .gte("realizado_en", tramo.desde)
-          .lt("realizado_en", tramo.hasta);
-        if (data.tiendaId) q = q.eq("tienda_id", data.tiendaId);
-        return q.order("realizado_en").order("id").range(a, b);
-      }),
-    ]);
+    const [{ data: ajustes }, realizados] = await extras;
     const conRealizado = !faltaLaColumna(realizados.error);
     if (realizados.error && conRealizado) throw new Error(realizados.error.message);
     const horaCorte = horaCorta(

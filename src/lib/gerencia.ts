@@ -20,7 +20,7 @@ import {
   llamarRpcConError,
   tabla,
 } from "@/lib/rpc";
-import { leerTodas, trozos } from "@/lib/paginar";
+import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
 import { leerPorIds } from "@/lib/leer-por-ids";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
@@ -60,6 +60,7 @@ import type { ProformaFila } from "@/dominio/proformas";
 import { proformasAplicado } from "@/lib/escaner-textil";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { diaEnEspana } from "@/dominio/fecha-documento";
+import { diasDelRango } from "@/dominio/periodos";
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -71,6 +72,11 @@ function useTextilPeriodo(rango: RangoFechas) {
   return useQuery({
     queryKey: ["textil-periodo", dia(rango.desde), dia(rango.hasta)],
     queryFn: async (): Promise<PedidoTextilResumen[]> => {
+      // Un rango vacío (el del periodo anterior cuando no se compara) no trae
+      // nada, igual que usePedidosPeriodo y useCobrosPeriodo. Se corta aquí y
+      // no con `enabled: false`: así `data` llega (vacía) y quien espera a las
+      // ventas previas no se queda cargando para siempre.
+      if (!diasDelRango(rango)) return [];
       const { data, error } = await leerTodas<PedidoTextilResumen & { id: string }>((a, b) =>
         tabla(supabase, "textil_pedidos")
           .select("id, fecha, estado, subtotal, iva, envio, total, cliente_id, marca_id")
@@ -81,13 +87,22 @@ function useTextilPeriodo(rango: RangoFechas) {
       );
       if (error) throw error;
 
+      // Los trozos se piden a la vez y se recorren en su orden, con la misma
+      // regla que en serie: el primer trozo que falla decide. Si dice que
+      // falta la tabla del almacén, ningún pedido lleva coste (no se mezclan
+      // trozos con y sin él); si es otro error, se lanza.
+      const respuestas = await enParalelo(
+        trozos(data.map((p) => p.id)),
+        PETICIONES_A_LA_VEZ,
+        async (trozo) =>
+          await tabla(supabase, "textil_stock_movimientos")
+            .select("textil_pedido_id, motivo, cantidad, coste_unitario")
+            .in("textil_pedido_id", trozo)
+            .in("motivo", ["venta", "devolucion_cliente"]),
+      );
       const movs: MovimientoCoste[] = [];
       let conAlmacen = true;
-      for (const trozo of trozos(data.map((p) => p.id))) {
-        const r = await tabla(supabase, "textil_stock_movimientos")
-          .select("textil_pedido_id, motivo, cantidad, coste_unitario")
-          .in("textil_pedido_id", trozo)
-          .in("motivo", ["venta", "devolucion_cliente"]);
+      for (const r of respuestas) {
         // Sin la migración del almacén no hay coste: el textil va sin él.
         if (faltaLaTabla(r.error)) {
           conAlmacen = false;
@@ -282,8 +297,14 @@ async function fechasDePedidos(
 ): Promise<Map<string, string>> {
   const campo = nombre === "pedidos" ? "fecha_pedido" : "fecha";
   const mapa = new Map<string, string>();
-  for (const trozo of trozos([...new Set(ids)])) {
-    const { data, error } = await tabla(supabase, nombre).select(`id, ${campo}`).in("id", trozo);
+  // Trozos a la vez; se juntan en su orden y se lanza el primer error en
+  // orden, como en serie.
+  const respuestas = await enParalelo(
+    trozos([...new Set(ids)]),
+    PETICIONES_A_LA_VEZ,
+    async (trozo) => await tabla(supabase, nombre).select(`id, ${campo}`).in("id", trozo),
+  );
+  for (const { data, error } of respuestas) {
     if (error) throw new Error(error.message);
     for (const f of (data ?? []) as Record<string, string>[]) mapa.set(f.id, f[campo]);
   }
@@ -307,14 +328,18 @@ export function useComercial(rango: RangoFechas) {
             .range(a, b),
         );
 
-      let tiendas = await leer("presupuestos", ", tienda_id, pedido_id");
+      // Tiendas y textil a la vez; los errores se miran en el mismo orden que
+      // antes (primero tiendas).
+      let [tiendas, textil] = await Promise.all([
+        leer("presupuestos", ", tienda_id, pedido_id"),
+        leer("textil_presupuestos", ", pedido_id"),
+      ]);
       const tiendasDisponible = !faltaLaTabla(tiendas.error);
       if (!tiendasDisponible) tiendas = { data: [], error: null };
       if (tiendas.error) throw new Error(tiendas.error.message);
 
       // El enlace del presupuesto textil con su pedido llegó en una migración
       // posterior: sin ella se leen igual, sin días hasta el pedido.
-      let textil = await leer("textil_presupuestos", ", pedido_id");
       if (faltaLaColumna(textil.error)) textil = await leer("textil_presupuestos", "");
       if (textil.error) throw new Error(textil.error.message);
 
@@ -432,15 +457,19 @@ export function useEnvios(rango: RangoFechas) {
         origen: string | null;
       };
       const pedidos = new Map<string, FilaPedido>();
-      for (const trozo of trozos(ids)) {
+      // Los trozos a la vez (cada uno con sus dos consultas); se recorren en
+      // su orden, con el mismo orden de errores que en serie.
+      const respuestas = await enParalelo(trozos(ids), PETICIONES_A_LA_VEZ, (trozo) =>
         // Si el pedido ya tenía un seguimiento de antes, no se envió en el rango.
-        const [p, previos] = await Promise.all([
+        Promise.all([
           tabla(supabase, "pedidos").select("id, fecha_pedido, tienda_id, origen").in("id", trozo),
           tabla(supabase, "enlaces_seguimiento")
             .select("pedido_id")
             .in("pedido_id", trozo)
             .lt("created_at", desde),
-        ]);
+        ]),
+      );
+      for (const [p, previos] of respuestas) {
         if (p.error) throw new Error(p.error.message);
         if (previos.error) throw new Error(previos.error.message);
         const yaEnviados = new Set(
@@ -724,9 +753,16 @@ async function documentosDe(
 ): Promise<DocumentoDePedido[]> {
   const docs: DocumentoDePedido[] = [];
   const campos = `id, tipo, estado, rectifica_a_id, ${campoPedido}`;
+  // Los trozos de cada paso a la vez, recorridos en su orden: mismos
+  // documentos, mismo orden y el mismo primer error que en serie. Las
+  // rectificativas dependen de los documentos leídos: siguen siendo dos pasos.
   const leer = async (columna: string, valores: string[]) => {
-    for (const trozo of trozos(valores)) {
-      const r = await tabla(supabase, nombre).select(campos).in(columna, trozo);
+    const respuestas = await enParalelo(
+      trozos(valores),
+      PETICIONES_A_LA_VEZ,
+      async (trozo) => await tabla(supabase, nombre).select(campos).in(columna, trozo),
+    );
+    for (const r of respuestas) {
       if (r.error) throw new Error(r.error.message);
       for (const d of (r.data ?? []) as Record<string, string | null>[]) {
         docs.push({
@@ -758,15 +794,20 @@ export function useDocumentosDePedidos(ventas: readonly Venta[]) {
   return useQuery({
     queryKey: ["gerencia-docs-pedidos", claveIds(tienda), claveIds(textil)],
     queryFn: async (): Promise<DocumentoDePedido[]> => {
-      const deTienda = await documentosDe("facturas", "pedido_id", tienda);
-      let delTextil: DocumentoDePedido[] = [];
-      try {
-        delTextil = await documentosDe("textil_facturas", "textil_pedido_id", textil);
-      } catch (e) {
+      // Tienda y textil a la vez. Los errores se miran en el mismo orden que
+      // en serie: primero el de tienda, luego el del textil.
+      const [deTienda, delTextil] = await Promise.allSettled([
+        documentosDe("facturas", "pedido_id", tienda),
+        documentosDe("textil_facturas", "textil_pedido_id", textil),
+      ]);
+      if (deTienda.status === "rejected") throw deTienda.reason;
+      if (delTextil.status === "rejected") {
+        const e = delTextil.reason;
         // Antes de la migración de tickets la factura textil no sabe su pedido.
         if (!(e instanceof Error) || !/textil_pedido_id/.test(e.message)) throw e;
+        return deTienda.value;
       }
-      return [...deTienda, ...delTextil];
+      return [...deTienda.value, ...delTextil.value];
     },
   });
 }
@@ -785,15 +826,18 @@ export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]
   return useQuery({
     queryKey: ["gerencia-textil", desde, hasta, claveIds(pedidos)],
     queryFn: async (): Promise<DatosTextil> => {
-      const lineas: LineaTextil[] = [];
-      for (const trozo of trozos([...pedidos])) {
-        const r = await tabla(supabase, "textil_pedido_items")
-          .select("descripcion, cantidad, subtotal")
-          .in("pedido_id", trozo);
-        if (r.error) throw new Error(r.error.message);
-        lineas.push(...((r.data ?? []) as LineaTextil[]));
-      }
-      const [stock, marcas, compras] = await Promise.all([
+      // Las líneas por trozos a la vez y, al mismo tiempo, el almacén, las
+      // marcas y las compras. Los errores se miran en el mismo orden que en
+      // serie: primero las líneas (en el orden de sus trozos), luego lo demás.
+      const lecturaLineas = enParalelo(
+        trozos([...pedidos]),
+        PETICIONES_A_LA_VEZ,
+        async (trozo) =>
+          await tabla(supabase, "textil_pedido_items")
+            .select("descripcion, cantidad, subtotal")
+            .in("pedido_id", trozo),
+      );
+      const lecturaResto = Promise.all([
         leerTodas<ArticuloStock>((a, b) =>
           tabla(supabase, "textil_stock")
             .select(
@@ -814,6 +858,15 @@ export function useTextilGerencia(rango: RangoFechas, pedidos: readonly string[]
           ),
         ),
       ]);
+      // Si las líneas fallan se lanza su error sin esperar a lo demás: que su
+      // rechazo, si lo hubiera, no quede como promesa sin atender.
+      lecturaResto.catch(() => {});
+      const lineas: LineaTextil[] = [];
+      for (const r of await lecturaLineas) {
+        if (r.error) throw new Error(r.error.message);
+        lineas.push(...((r.data ?? []) as LineaTextil[]));
+      }
+      const [stock, marcas, compras] = await lecturaResto;
       // Solo las del textil; sin la migración de compras generales, todas lo son.
       const comprasTextil = compras.error
         ? compras
@@ -972,13 +1025,6 @@ export function useControlesAlmacen(rango: RangoFechas) {
   return useQuery({
     queryKey: ["almacen-controles", desde, hasta],
     queryFn: async (): Promise<DatosControlesAlmacen> => {
-      // Sin el enlace de los movimientos con su compra no hay nada que comprobar.
-      const enlace = await tabla(supabase, "textil_stock_movimientos").select("compra_id").limit(1);
-      if (faltaLaColumna(enlace.error) || faltaLaTabla(enlace.error)) {
-        return { disponible: false };
-      }
-      if (enlace.error) throw new Error(enlace.error.message);
-
       const leerCompras = (campos: string) =>
         leerTodas<CompraControl>((a, b) =>
           tabla(supabase, "textil_compras")
@@ -989,19 +1035,37 @@ export function useControlesAlmacen(rango: RangoFechas) {
             .order("id")
             .range(a, b),
         );
-      let compras = await leerCompras(CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0]);
-      let camposLeidos = CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0];
-      for (const campos of CAMPOS_COMPRA_CONTROL_POR_MIGRACION.slice(1)) {
-        if (!faltaLaColumna(compras.error)) break;
-        compras = await leerCompras(campos);
-        camposLeidos = campos;
-      }
-      if (compras.error) throw new Error(compras.error.message);
-
+      const lecturaCompras = (async () => {
+        let compras = await leerCompras(CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0]);
+        let camposLeidos = CAMPOS_COMPRA_CONTROL_POR_MIGRACION[0];
+        for (const campos of CAMPOS_COMPRA_CONTROL_POR_MIGRACION.slice(1)) {
+          if (!faltaLaColumna(compras.error)) break;
+          compras = await leerCompras(campos);
+          camposLeidos = campos;
+        }
+        return { compras, camposLeidos };
+      })();
       // Qué consulta de entradas usar se decide aquí y no por el error: sin la
       // migración 20261029100000, 'ajuste_coste' en el filtro da 22P02 (valor
       // de enum no válido), que faltaLaColumna no reconoce.
-      const conProformas = await proformasAplicado(supabase);
+      const lecturaProformas = proformasAplicado(supabase);
+      // La sonda, las compras y la comprobación de proformas van a la vez; se
+      // miran en el mismo orden que en serie (sonda, compras, proformas). Si
+      // la sonda corta antes, que los otros dos no queden sin atender.
+      lecturaCompras.catch(() => {});
+      lecturaProformas.catch(() => {});
+
+      // Sin el enlace de los movimientos con su compra no hay nada que comprobar.
+      const enlace = await tabla(supabase, "textil_stock_movimientos").select("compra_id").limit(1);
+      if (faltaLaColumna(enlace.error) || faltaLaTabla(enlace.error)) {
+        return { disponible: false };
+      }
+      if (enlace.error) throw new Error(enlace.error.message);
+
+      const { compras, camposLeidos } = await lecturaCompras;
+      if (compras.error) throw new Error(compras.error.message);
+
+      const conProformas = await lecturaProformas;
 
       // El otro miembro de cada par, aunque su fecha caiga fuera del rango:
       // la proforma de cada factura casada y la factura de cada proforma.
@@ -1011,26 +1075,32 @@ export function useControlesAlmacen(rango: RangoFechas) {
         const faltanProformas = todas
           .map((c) => c.proforma_id)
           .filter((id): id is string => !!id && !yaEstan.has(id));
-        const proformas = await leerPorIds<CompraControl>(faltanProformas, (trozo, a, b) =>
-          tabla(supabase, "textil_compras")
-            .select(camposLeidos)
-            .in("id", trozo)
-            .order("id")
-            .range(a, b),
-        );
-        if (proformas.error) throw new Error(proformas.error.message);
         const idsProformas = todas.filter((c) => c.tipo_documento === "proforma").map((c) => c.id);
-        // En trozos de 100, como las entradas.
-        const facturas: CompraControl[] = [];
-        for (const trozo of trozos(idsProformas, 100)) {
-          const f = await leerTodas<CompraControl>((a, b) =>
+        // Las proformas que faltan y las facturas de las proformas (en trozos
+        // de 100, como las entradas) a la vez; los errores, en el orden de
+        // antes: primero las proformas, luego cada trozo de facturas.
+        const [proformas, porTrozo] = await Promise.all([
+          leerPorIds<CompraControl>(faltanProformas, (trozo, a, b) =>
             tabla(supabase, "textil_compras")
               .select(camposLeidos)
-              .eq("estado", "registrada")
-              .in("proforma_id", trozo)
+              .in("id", trozo)
               .order("id")
               .range(a, b),
-          );
+          ),
+          enParalelo(trozos(idsProformas, 100), PETICIONES_A_LA_VEZ, (trozo) =>
+            leerTodas<CompraControl>((a, b) =>
+              tabla(supabase, "textil_compras")
+                .select(camposLeidos)
+                .eq("estado", "registrada")
+                .in("proforma_id", trozo)
+                .order("id")
+                .range(a, b),
+            ),
+          ),
+        ]);
+        if (proformas.error) throw new Error(proformas.error.message);
+        const facturas: CompraControl[] = [];
+        for (const f of porTrozo) {
           if (f.error) throw new Error(f.error.message);
           facturas.push(...f.data);
         }
@@ -1045,26 +1115,32 @@ export function useControlesAlmacen(rango: RangoFechas) {
       const delTextil = todas.filter((c) => !c.categoria || c.categoria === "textil");
 
       const entradas: EntradaControl[] = [];
-      // En trozos de 100: una URL con cientos de UUID la corta PostgREST.
-      for (const trozo of trozos(
-        delTextil.map((c) => c.id),
-        100,
-      )) {
-        const r = await leerTodas<EntradaControl & { id: string }>((a, b) => {
-          const consulta = tabla(supabase, "textil_stock_movimientos");
-          return (
-            conProformas
-              ? consulta
-                  .select("id, motivo, cantidad, coste_unitario, compra_id, importe_ajuste")
-                  .in("motivo", ["compra", "ajuste_coste"])
-              : consulta
-                  .select("id, motivo, cantidad, coste_unitario, compra_id")
-                  .eq("motivo", "compra")
-          )
-            .in("compra_id", trozo)
-            .order("id")
-            .range(a, b);
-        });
+      // En trozos de 100: una URL con cientos de UUID la corta PostgREST. Los
+      // trozos a la vez, recorridos en su orden (mismo primer error).
+      const porTrozoEntradas = await enParalelo(
+        trozos(
+          delTextil.map((c) => c.id),
+          100,
+        ),
+        PETICIONES_A_LA_VEZ,
+        (trozo) =>
+          leerTodas<EntradaControl & { id: string }>((a, b) => {
+            const consulta = tabla(supabase, "textil_stock_movimientos");
+            return (
+              conProformas
+                ? consulta
+                    .select("id, motivo, cantidad, coste_unitario, compra_id, importe_ajuste")
+                    .in("motivo", ["compra", "ajuste_coste"])
+                : consulta
+                    .select("id, motivo, cantidad, coste_unitario, compra_id")
+                    .eq("motivo", "compra")
+            )
+              .in("compra_id", trozo)
+              .order("id")
+              .range(a, b);
+          }),
+      );
+      for (const r of porTrozoEntradas) {
         if (r.error) throw new Error(r.error.message);
         entradas.push(...r.data);
       }

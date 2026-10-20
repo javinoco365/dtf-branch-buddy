@@ -176,17 +176,20 @@ export const importarExtracto = createServerFn({ method: "POST" })
 export const listCuentas = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const c = await tabla(context.supabase, "banco_cuentas")
-      .select("id, banco, alias, iban, activa")
-      .order("created_at");
+    // Cuentas y extractos a la vez; los errores se miran en el orden de antes.
+    const [c, e] = await Promise.all([
+      tabla(context.supabase, "banco_cuentas")
+        .select("id, banco, alias, iban, activa")
+        .order("created_at"),
+      tabla(context.supabase, "banco_extractos")
+        .select(
+          "id, cuenta_id, fichero, formato, desde, hasta, saldo_inicial, saldo_final, suma_movimientos, movimientos, nuevos, cuadra, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
     if (faltaLaTabla(c.error)) return { disponible: false, cuentas: [], extractos: [] };
     if (c.error) throw new Error(c.error.message);
-    const e = await tabla(context.supabase, "banco_extractos")
-      .select(
-        "id, cuenta_id, fichero, formato, desde, hasta, saldo_inicial, saldo_final, suma_movimientos, movimientos, nuevos, cuadra, created_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(20);
     if (e.error) throw new Error(e.error.message);
     return { disponible: true, cuentas: c.data ?? [], extractos: e.data ?? [] };
   });
@@ -253,14 +256,27 @@ export const listMovimientosBanco = createServerFn({ method: "GET" })
 export const proponerConciliacion = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: movs, error: e1 } = await leerTodas<any>((a, b) =>
-      tabla(context.supabase, "banco_movimientos")
-        .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
-        .gt("importe", 0)
-        .order("fecha", { ascending: false })
-        .order("id")
-        .range(a, b),
-    );
+    // Ingresos y facturas a la vez; los errores se miran en el orden de antes.
+    const [{ data: movs, error: e1 }, { data: facs, error: e2 }] = await Promise.all([
+      leerTodas<any>((a, b) =>
+        tabla(context.supabase, "banco_movimientos")
+          .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
+          .gt("importe", 0)
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+      leerTodas<any>((a, b) =>
+        tabla(context.supabase, "facturas")
+          .select(
+            "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
+          )
+          .in("estado", ["emitida", "vencida"])
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+    ]);
     if (e1) throw new Error(e1.message);
 
     const sinCasar: MovimientoBanco[] = (movs ?? [])
@@ -272,16 +288,6 @@ export const proponerConciliacion = createServerFn({ method: "GET" })
         importe: Number(m.importe),
       }));
 
-    const { data: facs, error: e2 } = await leerTodas<any>((a, b) =>
-      tabla(context.supabase, "facturas")
-        .select(
-          "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
-        )
-        .in("estado", ["emitida", "vencida"])
-        .order("fecha", { ascending: false })
-        .order("id")
-        .range(a, b),
-    );
     if (e2) throw new Error(e2.message);
 
     const pendientes: FacturaPendiente[] = (facs ?? [])

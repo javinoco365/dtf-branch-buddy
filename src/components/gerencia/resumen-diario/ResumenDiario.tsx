@@ -143,35 +143,54 @@ function Contenido({
     [tiendas],
   );
 
-  const calcular = (r: Rango, datos?: DatosResumen, documentos?: DocumentoParaResumen[]) =>
-    datos && documentos
-      ? resumenPeriodo({
-          desde: diaDeFecha(r.desde),
-          hasta: diaDeFecha(r.hasta),
-          hoy: diaRealizado(new Date().toISOString()) ?? diaDeFecha(new Date()),
-          negocios,
-          pedidos: datos.pedidos,
-          cobros: datos.cobros,
-          documentos,
-          ajustes: {
-            horaCorte: jornada.hora_corte,
-            metrosHora: jornada.metros_hora,
-            jornadaInicio: jornada.jornada_inicio,
-            jornadaFin: jornada.jornada_fin,
-            costeEnvioDefecto: jornada.coste_envio_defecto,
-            costeMetroActual: costeMetro,
-          },
-          // Los gastos y el objetivo de lo que ha pasado del periodo: un año en
-          // curso no carga los gastos de los meses que aún no han llegado.
-          gastosFijos: gastos ? gastosFijosDelRango(gastos, transcurrido(r)) : null,
-          objetivo: objetivoDelRango(objetivos, transcurrido(r)),
-        })
-      : null;
+  // En useMemo: resumenPeriodo recorre todos los pedidos, cobros y documentos
+  // del periodo, y antes se repetía en cada repintado del diálogo (cada tecla,
+  // cada consulta que llegaba). Mismas entradas, mismo resultado.
+  const { resumen, resumenPrevio } = useMemo(() => {
+    const calcular = (r: Rango, datos?: DatosResumen, documentos?: DocumentoParaResumen[]) =>
+      datos && documentos
+        ? resumenPeriodo({
+            desde: diaDeFecha(r.desde),
+            hasta: diaDeFecha(r.hasta),
+            hoy: diaRealizado(new Date().toISOString()) ?? diaDeFecha(new Date()),
+            negocios,
+            pedidos: datos.pedidos,
+            cobros: datos.cobros,
+            documentos,
+            ajustes: {
+              horaCorte: jornada.hora_corte,
+              metrosHora: jornada.metros_hora,
+              jornadaInicio: jornada.jornada_inicio,
+              jornadaFin: jornada.jornada_fin,
+              costeEnvioDefecto: jornada.coste_envio_defecto,
+              costeMetroActual: costeMetro,
+            },
+            // Los gastos y el objetivo de lo que ha pasado del periodo: un año en
+            // curso no carga los gastos de los meses que aún no han llegado.
+            gastosFijos: gastos ? gastosFijosDelRango(gastos, transcurrido(r)) : null,
+            objetivo: objetivoDelRango(objetivos, transcurrido(r)),
+          })
+        : null;
 
-  const resumen: Resumen | null = calcular(rango, actual.data, docs.data);
-  const resumenPrevio: Resumen | null = comparacion
-    ? calcular(previo, anterior.data, docsPrevios.data)
-    : null;
+    const resumen: Resumen | null = calcular(rango, actual.data, docs.data);
+    const resumenPrevio: Resumen | null = comparacion
+      ? calcular(previo, anterior.data, docsPrevios.data)
+      : null;
+    return { resumen, resumenPrevio };
+  }, [
+    rango,
+    previo,
+    comparacion,
+    actual.data,
+    anterior.data,
+    docs.data,
+    docsPrevios.data,
+    negocios,
+    jornada,
+    costeMetro,
+    gastos,
+    objetivos,
+  ]);
 
   // Los gastos fijos uno a uno, para ver de dónde sale el total.
   const gastosDelPeriodo = useMemo(

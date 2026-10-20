@@ -16,6 +16,10 @@ import { defineConfig } from "vitest/config";
 // La otra excepción es src/arquitectura/: pruebas que leen el código fuente de
 // src/ (sin ejecutarlo) para frenar fallos de compilación que solo se ven al
 // arrancar el servidor de producción.
+//
+// Y src/lib/paginar.test.ts: el ayudante de lecturas en paralelo es
+// infraestructura de E/S (no negocio, por eso no está en src/dominio/), pero es
+// puro y se prueba igual, sin red ni base de datos.
 
 export default defineConfig({
   resolve: {
@@ -25,7 +29,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/dominio/**/*.test.ts", "src/arquitectura/**/*.test.ts"],
+    include: [
+      "src/dominio/**/*.test.ts",
+      "src/arquitectura/**/*.test.ts",
+      "src/lib/paginar.test.ts",
+    ],
     reporters: "dot",
   },
 });

@@ -526,6 +526,11 @@ async function leerPagina<T>(
 export const verConciliacion = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // Los recuentos van a la vez que la lectura: con el motor, la ventana de
+    // pendientes no los trae y siempre hacen falta. Sin él (lectura de las
+    // tablas, que ya los cuenta) la llamada sobra y su error se ignora.
+    const recuento = contar(context.supabase);
+    recuento.catch(() => {});
     const datos = await leer(context.supabase);
     if (!datos) return { disponible: false as const, falta: MIGRACION_MOTOR };
     return {
@@ -535,7 +540,7 @@ export const verConciliacion = createServerFn({ method: "GET" })
       plan: planConciliacion(datos.movimientos, datos.documentos),
       recortado: datos.recortado,
       limite: LIMITE_CONCILIACION,
-      cuantos: datos.cuantos ?? (await contar(context.supabase)),
+      cuantos: datos.cuantos ?? (await recuento),
       falta: datos.falta,
     };
   });

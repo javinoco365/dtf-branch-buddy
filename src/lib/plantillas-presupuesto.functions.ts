@@ -202,23 +202,44 @@ export const listarPlantillasPresupuesto = createServerFn({ method: "GET" })
 
     // Las tiendas activas que deja ver la RLS: las suyas, o todas si es
     // administrador.
-    let tiendas = await tabla(sb, "tiendas")
-      .select("id, nombre, logo_url, color")
-      .eq("activa", true)
-      .order("nombre");
-    if (faltaLaColumna(tiendas.error)) {
-      tiendas = await tabla(sb, "tiendas").select("id, nombre, logo_url, color").order("nombre");
-    }
-    if (tiendas.error) throw new Error(tiendas.error.message);
-
-    const empresa = await leerEmpresaActiva(sb);
-    const baseTextil = await identidadTextil(sb, empresa?.marcaPredeterminada ?? null);
-
+    const leerTiendas = async () => {
+      let tiendas = await tabla(sb, "tiendas")
+        .select("id, nombre, logo_url, color")
+        .eq("activa", true)
+        .order("nombre");
+      if (faltaLaColumna(tiendas.error)) {
+        tiendas = await tabla(sb, "tiendas").select("id, nombre, logo_url, color").order("nombre");
+      }
+      return tiendas;
+    };
+    const leerBaseTextil = async () => {
+      const empresa = await leerEmpresaActiva(sb);
+      return {
+        empresa,
+        baseTextil: await identidadTextil(sb, empresa?.marcaPredeterminada ?? null),
+      };
+    };
     // Todas las plantillas que ve, de una vez. Sin la migración, ninguna: el
     // editor enseña las de por defecto y avisa de que falta.
-    const { data: filas, error } = await tabla(sb, "plantillas_presupuesto").select(
-      "ambito, tienda_id, empresa_id, config, logo_url",
-    );
+    const leerPlantillas = async () =>
+      await tabla(sb, "plantillas_presupuesto").select(
+        "ambito, tienda_id, empresa_id, config, logo_url",
+      );
+
+    // Las tres lecturas no dependen unas de otras: van a la vez. Los errores
+    // se miran en el mismo orden que antes (tiendas, textil, plantillas).
+    const [rTiendas, rBase, rPlantillas] = await Promise.allSettled([
+      leerTiendas(),
+      leerBaseTextil(),
+      leerPlantillas(),
+    ]);
+    if (rTiendas.status === "rejected") throw rTiendas.reason;
+    const tiendas = rTiendas.value;
+    if (tiendas.error) throw new Error(tiendas.error.message);
+    if (rBase.status === "rejected") throw rBase.reason;
+    const { empresa, baseTextil } = rBase.value;
+    if (rPlantillas.status === "rejected") throw rPlantillas.reason;
+    const { data: filas, error } = rPlantillas.value;
     if (error && !faltaLaTabla(error)) throw new Error(error.message);
     const disponible = !error;
     const guardadas = (filas ?? []) as FilaPlantilla[];

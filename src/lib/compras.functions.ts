@@ -470,18 +470,30 @@ export const listCompras = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ soloTextil: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
-    const prueba = await tabla(context.supabase, "textil_compras").select("categoria").limit(1);
-    const generales = !faltaLaColumna(prueba.error);
-    const prueba2 = await tabla(context.supabase, "textil_compras").select("liquido").limit(1);
+    // Las cinco comprobaciones de migración no dependen unas de otras: van a
+    // la vez (cinco conexiones, por debajo del tope de seis de un Worker). Si
+    // alguna lanza, se lanza la misma que en serie: escáner antes que proformas.
+    const t = () => tabla(context.supabase, "textil_compras");
+    const [prueba, prueba2, prueba3, pruebaEscaner, pruebaProformas] = await Promise.allSettled([
+      t().select("categoria").limit(1),
+      t().select("liquido").limit(1),
+      t().select("revision").limit(1),
+      escanerAplicado(context.supabase),
+      proformasAplicado(context.supabase),
+    ]);
+    const resultado = <T>(r: PromiseSettledResult<T>): T => {
+      if (r.status === "rejected") throw r.reason;
+      return r.value;
+    };
+    const generales = !faltaLaColumna(resultado(prueba).error);
     // Con la migración 20261014100000 la base calcula los importes.
-    const recibidas = !faltaLaColumna(prueba2.error);
-    const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
+    const recibidas = !faltaLaColumna(resultado(prueba2).error);
     // Con la migración 20261015100000 hay cola de revisión y subida de varias.
-    const cola = !faltaLaColumna(prueba3.error);
+    const cola = !faltaLaColumna(resultado(prueba3).error);
     // Con las migraciones 20261028…: revisión con el escáner textil.
-    const escaner = await escanerAplicado(context.supabase);
+    const escaner = resultado(pruebaEscaner);
     // Con las migraciones 20261029…: proformas y casado con su factura.
-    const proformas = await proformasAplicado(context.supabase);
+    const proformas = resultado(pruebaProformas);
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const { data: compras, error } = await leerTodas<any>((a, b) => {
       let consulta = tabla(context.supabase, "textil_compras").select(

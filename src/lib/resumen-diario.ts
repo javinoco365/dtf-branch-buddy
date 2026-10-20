@@ -16,7 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
-import { leerTodas, trozos } from "@/lib/paginar";
+import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
 import { useFiscal } from "@/lib/gerencia";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { apuntesDeVenta } from "@/dominio/canjes";
@@ -143,14 +143,18 @@ async function cobradoPorPedido(
   ids: readonly string[],
 ): Promise<Map<string, number>> {
   const total = new Map<string, number>();
-  for (const trozo of trozos(ids)) {
-    const r = await leerTodas<Record<string, string | number>>((a, b) =>
+  // Los trozos a la vez; se suman en su orden (mismo resultado, mismo primer
+  // error que en serie).
+  const respuestas = await enParalelo(trozos(ids), PETICIONES_A_LA_VEZ, (trozo) =>
+    leerTodas<Record<string, string | number>>((a, b) =>
       tabla(supabase, "cobros")
         .select(`id, ${columna}, importe`)
         .in(columna, trozo)
         .order("id")
         .range(a, b),
-    );
+    ),
+  );
+  for (const r of respuestas) {
     if (r.error) throw new Error(r.error.message);
     for (const c of r.data) {
       const id = c[columna] as string;
@@ -163,10 +167,13 @@ async function cobradoPorPedido(
 /** Los pedidos de tienda con número de seguimiento: llevan envío. */
 async function conSeguimiento(ids: readonly string[]): Promise<Set<string>> {
   const r = new Set<string>();
-  for (const trozo of trozos(ids)) {
-    const x = await tabla(supabase, "enlaces_seguimiento")
-      .select("pedido_id")
-      .in("pedido_id", trozo);
+  const respuestas = await enParalelo(
+    trozos(ids),
+    PETICIONES_A_LA_VEZ,
+    async (trozo) =>
+      await tabla(supabase, "enlaces_seguimiento").select("pedido_id").in("pedido_id", trozo),
+  );
+  for (const x of respuestas) {
     if (x.error) throw new Error(x.error.message);
     for (const f of (x.data ?? []) as { pedido_id: string }[]) r.add(f.pedido_id);
   }
@@ -176,11 +183,18 @@ async function conSeguimiento(ids: readonly string[]): Promise<Set<string>> {
 /** Lo que costó la ropa que salió del almacén para cada pedido textil. */
 async function costeTextil(ids: readonly string[]): Promise<Map<string, number> | null> {
   const movs: MovimientoCoste[] = [];
-  for (const trozo of trozos(ids)) {
-    const r = await tabla(supabase, "textil_stock_movimientos")
-      .select("textil_pedido_id, motivo, cantidad, coste_unitario")
-      .in("textil_pedido_id", trozo)
-      .in("motivo", ["venta", "devolucion_cliente"]);
+  // Los trozos a la vez, recorridos en su orden: el primero que falla decide,
+  // como en serie.
+  const respuestas = await enParalelo(
+    trozos(ids),
+    PETICIONES_A_LA_VEZ,
+    async (trozo) =>
+      await tabla(supabase, "textil_stock_movimientos")
+        .select("textil_pedido_id, motivo, cantidad, coste_unitario")
+        .in("textil_pedido_id", trozo)
+        .in("motivo", ["venta", "devolucion_cliente"]),
+  );
+  for (const r of respuestas) {
     // Sin la migración del almacén no hay coste: el textil va sin él.
     if (faltaLaTabla(r.error)) return null;
     if (r.error) throw new Error(r.error.message);
@@ -218,6 +232,10 @@ export function useDatosResumen(tramo: Rango) {
     enabled: !!dias,
     queryFn: async (): Promise<DatosResumen> => {
       const { desde, hasta } = dias!;
+      // Los cobros del tramo no dependen de los pedidos: se piden a la vez y
+      // se miran después, en el mismo orden de errores que antes.
+      const lecturaCobros = cobrosDelTramo(desde, hasta);
+      lecturaCobros.catch(() => {});
       let conRealizado = true;
       let [t, x] = await Promise.all([
         leerPedidosTienda(desde, hasta, true),
@@ -236,7 +254,7 @@ export function useDatosResumen(tramo: Rango) {
 
       const idsTienda = t.data.map((p) => p.id);
       const idsTextil = x.data.map((p) => p.id);
-      const cobrosTramo = await cobrosDelTramo(desde, hasta);
+      const cobrosTramo = await lecturaCobros;
       const conCobros = !faltaLaTabla(cobrosTramo.error);
       if (cobrosTramo.error && conCobros) throw new Error(cobrosTramo.error.message);
       const [cobradoTienda, cobradoTextil, seguimiento, costes] = await Promise.all([
