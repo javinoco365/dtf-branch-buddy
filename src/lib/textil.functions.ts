@@ -22,6 +22,7 @@ import {
   texto,
 } from "@/lib/pdf-presupuesto-datos";
 import { identidadTextil, leerEmpresaActiva } from "./plantillas-presupuesto.functions";
+import { BUCKET_IMAGENES, imagenesParaPdf, rutasImagenes } from "./presupuesto-imagenes-datos";
 // Arriba y no con await import(): este módulo también se importa de forma
 // normal (presupuestos, facturas y la vista previa del editor), y cargarlo de
 // las dos formas deja en el arranque del servidor una importación circular
@@ -806,8 +807,15 @@ export const deletePresupuesto = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    // Las imágenes: sus filas se van en cascada; los ficheros, después.
+    const rutas = await rutasImagenes(context.supabase, "textil", data.id);
     const { error } = await context.supabase.from("textil_presupuestos").delete().eq("id", data.id);
     if (error) throw error;
+    if (rutas.length) {
+      const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+      const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);
+      if (r.error) console.warn("[presupuesto] no se borraron sus imágenes:", r.error.message);
+    }
     return { ok: true };
   });
 
@@ -1839,9 +1847,10 @@ export const pdfPresupuestoTextil = createServerFn({ method: "POST" })
       id: empresaId,
       marcaPredeterminada: activa?.id === empresaId ? activa.marcaPredeterminada : null,
     };
-    const [{ datos, base }, { plantilla, logo_url }] = await Promise.all([
+    const [{ datos, base }, { plantilla, logo_url }, imagenes] = await Promise.all([
       datosPdfTextil(sb, p, empresa),
       leerPlantillaPresupuesto(sb, { ambito: "textil" }, empresaId),
+      imagenesParaPdf(sb, "textil", data.id),
     ]);
 
     const identidad = resolverIdentidad(plantilla, logo_url, base);
@@ -1851,6 +1860,7 @@ export const pdfPresupuestoTextil = createServerFn({ method: "POST" })
         emisor: { ...datos.emisor, nombre_comercial: identidad.nombre_comercial },
         logo: await descargarLogo(identidad.logo_url),
         color: identidad.color,
+        imagenes,
       },
       plantilla,
     );

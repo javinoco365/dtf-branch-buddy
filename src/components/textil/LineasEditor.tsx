@@ -68,6 +68,8 @@ export function LineasEditor({
       stock_id: s.id,
       descripcion: items[i].descripcion || etiquetaVariante(s),
       precio_unitario: items[i].precio_unitario || s.precio_venta || 0,
+      // Con el precio de venta de la variante, ya hay precio.
+      precio_pendiente: items[i].precio_pendiente && !(s.precio_venta > 0),
       // El coste congelado era de la variante anterior.
       coste_unit_snapshot: id === items[i].stock_id ? items[i].coste_unit_snapshot : null,
     });
@@ -160,11 +162,14 @@ export function LineasEditor({
                 <Input
                   type="number"
                   step="0.01"
-                  className="col-span-2 md:col-span-2"
-                  placeholder="Precio"
+                  className={`col-span-2 md:col-span-2${it.precio_pendiente ? " border-destructive" : ""}`}
+                  placeholder={it.precio_pendiente ? "Falta" : "Precio"}
                   aria-label="Precio"
-                  value={it.precio_unitario}
-                  onChange={(e) => update(i, { precio_unitario: Number(e.target.value) })}
+                  aria-invalid={it.precio_pendiente || undefined}
+                  value={it.precio_pendiente ? "" : it.precio_unitario}
+                  onChange={(e) =>
+                    update(i, { precio_unitario: Number(e.target.value), precio_pendiente: false })
+                  }
                 />
                 <Input
                   type="number"

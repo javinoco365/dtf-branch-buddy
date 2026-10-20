@@ -27,6 +27,7 @@ import {
   webLegible,
 } from "@/lib/pdf-presupuesto-datos";
 import { descargarLogo } from "@/lib/logo-descarga";
+import { BUCKET_IMAGENES, imagenesParaPdf, rutasImagenes } from "@/lib/presupuesto-imagenes-datos";
 
 /**
  * Presupuestos de las tiendas. Ver 20261001100000_presupuestos_tiendas.sql.
@@ -239,8 +240,15 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
     if (actual.pedido_id) {
       throw new Error("Este presupuesto ya es un pedido: bórralo desde el pedido si hace falta.");
     }
+    // Las imágenes: sus filas se van en cascada; los ficheros, después.
+    const rutas = await rutasImagenes(context.supabase, "tienda", data.id);
     const { error } = await tabla(context.supabase, "presupuestos").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    if (rutas.length) {
+      const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+      const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);
+      if (r.error) console.warn("[presupuesto] no se borraron sus imágenes:", r.error.message);
+    }
     return { ok: true };
   });
 
@@ -388,9 +396,10 @@ export const pdfPresupuesto = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     if (!p) throw new Error("Sin acceso a este presupuesto");
 
-    const [{ data: tienda }, { plantilla, logo_url }] = await Promise.all([
+    const [{ data: tienda }, { plantilla, logo_url }, imagenes] = await Promise.all([
       tabla(sb, "tiendas").select(COLUMNAS_TIENDA_PDF).eq("id", p.tienda_id).maybeSingle(),
       leerPlantillaPresupuesto(sb, { ambito: "tienda", tiendaId: p.tienda_id }),
+      imagenesParaPdf(sb, "tienda", p.id),
     ]);
     const datos = await datosPdfTienda(sb, tienda ?? { empresa_id: p.empresa_id }, p);
     const identidad = resolverIdentidad(plantilla, logo_url, identidadTienda(tienda));
@@ -401,6 +410,7 @@ export const pdfPresupuesto = createServerFn({ method: "POST" })
         emisor: { ...datos.emisor, nombre_comercial: identidad.nombre_comercial },
         logo: await descargarLogo(identidad.logo_url),
         color: identidad.color,
+        imagenes,
       },
       plantilla,
     );

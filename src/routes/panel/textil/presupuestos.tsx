@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileDown, Loader2, Plus, Pencil, Trash2, PackageCheck } from "lucide-react";
+import { FileDown, Loader2, Pencil, Trash2, PackageCheck } from "lucide-react";
 import {
   listPresupuestos,
   upsertPresupuesto,
@@ -54,6 +54,15 @@ import {
   type ClienteTextil,
 } from "@/components/textil/SelectorClienteTextil";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import {
+  AvisosIa,
+  NuevoPresupuestoMenu,
+  PresupuestoIaDialog,
+  type ModoIa,
+} from "@/components/presupuestos/CrearPresupuestoIa";
+import { ImagenesPresupuesto } from "@/components/presupuestos/ImagenesPresupuesto";
+import { useImagenesPresupuesto } from "@/components/presupuestos/useImagenesPresupuesto";
+import type { BorradorTextil } from "@/dominio/presupuesto-ia";
 import {
   BarraFiltros,
   CampoBusqueda,
@@ -150,6 +159,10 @@ function PresupuestosPage() {
   const [borrando, setBorrando] = useState<any>(null);
   const [confirmando, setConfirmando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
+  // Con IA: el modo del diálogo y, al volver, el borrador con sus imágenes.
+  const [modoIa, setModoIa] = useState<ModoIa | null>(null);
+  const [borrador, setBorrador] = useState<BorradorTextil | null>(null);
+  const [imagenesIa, setImagenesIa] = useState<File[]>([]);
 
   // «Desde el stock»: ?desde_stock=<id>,<id>… abre el documento nuevo con esas
   // variantes y se quita de la dirección (al volver atrás no se abre otra vez).
@@ -181,6 +194,8 @@ function PresupuestosPage() {
     }
     if (elegidas.length > 0) {
       setEditing(null);
+      setBorrador(null);
+      setImagenesIa([]);
       setLineasIniciales(lineasDesdeStock(elegidas));
       setOpen(true);
     }
@@ -220,10 +235,22 @@ function PresupuestosPage() {
   });
 
   const save = useMutation({
-    mutationFn: (d: any) => upsertFn({ data: d }),
+    // Primero el presupuesto; luego sus imágenes (si fallan, el presupuesto ya está guardado).
+    mutationFn: async ({
+      datos,
+      sincronizar,
+    }: {
+      datos: any;
+      sincronizar: (id: string) => Promise<string[]>;
+    }) => {
+      const r = await upsertFn({ data: datos });
+      const fallos = r?.id ? await sincronizar(r.id) : [];
+      return { ...r, fallos };
+    },
     onSuccess: (r) => {
       invalidate();
       toast.success("Guardado");
+      if (r.fallos.length) toast.warning(`Presupuesto guardado, pero: ${r.fallos.join(" · ")}`);
       // El presupuesto no reserva: si pide más de lo disponible, se avisa y se guarda igual.
       const avisos = (r as { avisos?: string[] } | null)?.avisos ?? [];
       if (avisos.length > 0) {
@@ -231,6 +258,8 @@ function PresupuestosPage() {
       }
       setOpen(false);
       setEditing(null);
+      setBorrador(null);
+      setImagenesIa([]);
       // El PDF de lo que se acaba de guardar, listo para mandarlo.
       if (r?.id) pdfMut.mutate(r.id);
     },
@@ -267,15 +296,16 @@ function PresupuestosPage() {
             Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido.
           </p>
         </div>
-        <Button
-          onClick={() => {
+        <NuevoPresupuestoMenu
+          onManual={() => {
             setEditing(null);
             setLineasIniciales(null);
+            setBorrador(null);
+            setImagenesIa([]);
             setOpen(true);
           }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
-        </Button>
+          onIa={setModoIa}
+        />
       </div>
       <BarraFiltros>
         <CampoBusqueda
@@ -401,6 +431,8 @@ function PresupuestosPage() {
                       onClick={() => {
                         setEditing(p);
                         setLineasIniciales(null);
+                        setBorrador(null);
+                        setImagenesIa([]);
                         setOpen(true);
                       }}
                     >
@@ -467,17 +499,36 @@ function PresupuestosPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <PresupuestoIaDialog
+        modo={modoIa}
+        ambito="textil"
+        onCerrar={() => setModoIa(null)}
+        onBorrador={({ propuesta, imagenes }) => {
+          if (propuesta.ambito !== "textil") return;
+          setModoIa(null);
+          setEditing(null);
+          setLineasIniciales(null);
+          setBorrador(propuesta.borrador);
+          setImagenesIa(imagenes);
+          setOpen(true);
+        }}
+      />
+
       {open && (
         <PresupuestoDialog
           open={open}
           onOpenChange={setOpen}
           presupuesto={editing}
           lineasIniciales={lineasIniciales}
+          borrador={borrador}
+          imagenesIniciales={imagenesIa}
           clientes={clientes}
           marcas={marcas}
           stock={variantes}
           defaultMarcaId={defaultMarcaId}
-          onSave={(v: any) => save.mutate(v)}
+          onSave={(datos: any, sincronizar: (id: string) => Promise<string[]>) =>
+            save.mutate({ datos, sincronizar })
+          }
           loading={save.isPending}
         />
       )}
@@ -490,6 +541,8 @@ function PresupuestoDialog({
   onOpenChange,
   presupuesto,
   lineasIniciales,
+  borrador,
+  imagenesIniciales,
   clientes,
   marcas,
   stock,
@@ -497,12 +550,48 @@ function PresupuestoDialog({
   onSave,
   loading,
 }: any) {
-  const initial = presupuesto ?? {
-    fecha: new Date().toISOString().slice(0, 10),
-    validez_dias: 30,
-    marca_id: defaultMarcaId,
-    items: lineasIniciales ?? [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
-  };
+  const b = borrador as BorradorTextil | null;
+  // Un borrador de la IA rellena lo mismo que se rellena a mano; lo que no
+  // sabe (cantidad, precio) sale en los avisos de arriba y no se guarda sin rellenar.
+  const initial =
+    presupuesto ??
+    (b
+      ? {
+          fecha: b.fecha,
+          validez_dias: b.validez_dias,
+          marca_id: defaultMarcaId,
+          cliente_id: b.cliente_id,
+          cliente_nombre: b.cliente_nombre || null,
+          cliente_email: b.cliente_email || null,
+          cliente_nif: b.cliente_nif || null,
+          cliente_direccion: b.cliente_direccion || null,
+          notas: b.notas || null,
+          items: b.lineas.length
+            ? b.lineas.map((l) => ({
+                descripcion: l.descripcion,
+                cantidad: l.cantidad ?? 0,
+                precio_unitario: l.precio_unitario ?? 0,
+                // Sin precio ni en el texto ni en el stock: vacío, y no se guarda así.
+                precio_pendiente: l.precio_unitario === null,
+                iva_pct: l.iva_pct,
+                stock_id: l.stock_id,
+              }))
+            : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
+        }
+      : {
+          fecha: new Date().toISOString().slice(0, 10),
+          validez_dias: 30,
+          marca_id: defaultMarcaId,
+          items: lineasIniciales ?? [
+            { descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 },
+          ],
+        });
+  const imagenes = useImagenesPresupuesto({
+    ambito: "textil",
+    presupuestoId: presupuesto?.id ?? null,
+    abierto: open,
+    iniciales: presupuesto ? undefined : imagenesIniciales,
+  });
   const [f, setF] = useState<any>({
     ...initial,
     items: (initial.items ?? []).map((it: any) => ({
@@ -511,6 +600,7 @@ function PresupuestoDialog({
       precio_unitario: Number(it.precio_unitario),
       iva_pct: Number(it.iva_pct),
       stock_id: it.stock_id ?? null,
+      precio_pendiente: it.precio_pendiente === true,
       // El coste congelado de la línea guardada: solo se enseña, no se manda.
       coste_unit_snapshot:
         it.coste_unit_snapshot === null || it.coste_unit_snapshot === undefined
@@ -539,6 +629,7 @@ function PresupuestoDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {!presupuesto && b && <AvisosIa avisos={b.avisos} />}
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label>Cliente</Label>
@@ -603,6 +694,7 @@ function PresupuestoDialog({
             items={f.items}
             onChange={(items: Linea[]) => setF({ ...f, items })}
           />
+          <ImagenesPresupuesto estado={imagenes} />
           <div>
             <Label>Notas</Label>
             <Textarea
@@ -617,27 +709,40 @@ function PresupuestoDialog({
           </Button>
           <Button
             disabled={loading || f.items.length === 0}
-            onClick={() =>
-              onSave({
-                id: presupuesto?.id,
-                cliente_id: f.cliente_id || null,
-                cliente_nombre: f.cliente_nombre || null,
-                cliente_email: f.cliente_email || null,
-                cliente_nif: f.cliente_nif || null,
-                cliente_direccion: f.cliente_direccion || null,
-                marca_id: f.marca_id || null,
-                fecha: f.fecha,
-                validez_dias: Number(f.validez_dias) || 30,
-                notas: f.notas || null,
-                items: (f.items as Linea[]).map((it) => ({
-                  descripcion: it.descripcion,
-                  cantidad: it.cantidad,
-                  precio_unitario: it.precio_unitario,
-                  iva_pct: it.iva_pct,
-                  stock_id: it.stock_id ?? null,
-                })),
-              })
-            }
+            onClick={() => {
+              // Lo que la IA no ha sabido (la cantidad) no se guarda a cero sin querer.
+              if (b && (f.items as Linea[]).some((it) => !(Number(it.cantidad) > 0))) {
+                toast.error("La cantidad de cada línea tiene que ser mayor que cero");
+                return;
+              }
+              // Ni el precio: hay que escribirlo (aunque sea 0 a propósito).
+              if ((f.items as Linea[]).some((it) => it.precio_pendiente)) {
+                toast.error("Falta el precio en alguna línea");
+                return;
+              }
+              onSave(
+                {
+                  id: presupuesto?.id,
+                  cliente_id: f.cliente_id || null,
+                  cliente_nombre: f.cliente_nombre || null,
+                  cliente_email: f.cliente_email || null,
+                  cliente_nif: f.cliente_nif || null,
+                  cliente_direccion: f.cliente_direccion || null,
+                  marca_id: f.marca_id || null,
+                  fecha: f.fecha,
+                  validez_dias: Number(f.validez_dias) || 30,
+                  notas: f.notas || null,
+                  items: (f.items as Linea[]).map((it) => ({
+                    descripcion: it.descripcion,
+                    cantidad: it.cantidad,
+                    precio_unitario: it.precio_unitario,
+                    iva_pct: it.iva_pct,
+                    stock_id: it.stock_id ?? null,
+                  })),
+                },
+                imagenes.sincronizar,
+              );
+            }}
           >
             Guardar
           </Button>
