@@ -291,6 +291,83 @@
 }
 
 /*
+ * Lo mismo, de 768 a 1023 px (tablet en vertical), para las tablas que en la
+ * tablet tampoco caben y se leen mejor como tarjetas:
+ * <Table movil="tarjetas-tablet">. Llevan también `tabla-tarjetas`, así que
+ * por debajo de 768 px se comportan igual que las otras. Desde 1024 px no
+ * cambia nada.
+ */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  table.tabla-tarjetas-tablet {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+  }
+  .tabla-tarjetas-tablet thead {
+    display: none;
+  }
+  .tabla-tarjetas-tablet tbody,
+  .tabla-tarjetas-tablet tfoot {
+    display: block;
+  }
+  .tabla-tarjetas-tablet tr {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .tabla-tarjetas-tablet td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    column-gap: 0.375rem;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 0.125rem 0;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .tabla-tarjetas-tablet td > * {
+    min-width: 0;
+  }
+  .tabla-tarjetas-tablet td::before {
+    content: attr(data-etiqueta);
+    flex: none;
+    max-width: 45%;
+    margin-right: auto;
+    padding-right: 0.75rem;
+    text-align: left;
+    font-size: 0.75rem;
+    color: var(--color-muted-foreground);
+  }
+  .tabla-tarjetas-tablet td[data-etiqueta=""]::before,
+  .tabla-tarjetas-tablet td:not([data-etiqueta])::before {
+    display: none;
+  }
+  .tabla-tarjetas-tablet td:empty {
+    display: none;
+  }
+  /* La primera celda es el título de la tarjeta. */
+  .tabla-tarjetas-tablet td:first-child {
+    justify-content: flex-start;
+    text-align: left;
+    font-weight: 600;
+    padding-bottom: 0.25rem;
+  }
+  .tabla-tarjetas-tablet td:first-child::before {
+    display: none;
+  }
+  /* Una celda que ocupa toda la fila (estado vacío, detalle desplegado). */
+  .tabla-tarjetas-tablet td[colspan]:not([colspan="1"]) {
+    display: block;
+    text-align: left;
+  }
+}
+
+/*
  * El Resumen diario de Gerencia se imprime solo (o se guarda en PDF): sin el
  * resto de la pantalla, sin los botones, con todo su alto y con el desglose en
  * una página aparte.

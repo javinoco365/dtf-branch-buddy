@@ -319,7 +319,7 @@ function Gerencia() {
       )}
 
       <Tabs value={f.pestana} onValueChange={(pestana) => cambiar({ pestana })}>
-        <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto">
+        <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto md:max-lg:h-auto md:max-lg:flex-wrap md:max-lg:justify-start">
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="ventas">Ventas</TabsTrigger>
           <TabsTrigger value="tesoreria">Cobros y tesorería</TabsTrigger>

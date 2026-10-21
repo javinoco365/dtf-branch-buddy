@@ -1,7 +1,7 @@
 // Compara dos tandas de capturas, píxel a píxel.
 //
 // Uso:
-//   node pruebas-visuales/comparar.mjs <antes> <despues> [--solo escritorio|movil]
+//   node pruebas-visuales/comparar.mjs <antes> <despues> [--solo escritorio|movil|tablet-v|…]
 //                                      [--umbral 4]
 //
 // Para cada captura que esté en las dos carpetas dice si es idéntica o cuántos
@@ -20,7 +20,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright")
 const args = process.argv.slice(2);
 const [antes, despues] = args;
 if (!antes || !despues) {
-  console.error("Uso: comparar.mjs <antes> <despues> [--solo escritorio|movil]");
+  console.error("Uso: comparar.mjs <antes> <despues> [--solo escritorio|movil|tablet-v|…]");
   process.exit(2);
 }
 const opcion = (n) => {
@@ -117,7 +117,11 @@ async function diferencias(a, b) {
 let cambiadas = 0;
 let comparadas = 0;
 let faltan = 0;
-for (const tamano of ["escritorio", "movil"]) {
+// Todos los tamaños que haya en <antes> (ver --tamanos en capturar.mjs).
+const tamanos = readdirSync(antes, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name);
+for (const tamano of tamanos) {
   if (SOLO && SOLO !== tamano) continue;
   const da = join(antes, tamano);
   const db = join(despues, tamano);

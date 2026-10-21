@@ -327,7 +327,7 @@ function PedidosPage() {
       </BarraFiltros>
       <Card>
         <CardContent className="p-0">
-          <Table movil="tarjetas">
+          <Table movil="tarjetas-tablet">
             <TableHeader>
               <TableRow>
                 <TableHead>Nº</TableHead>

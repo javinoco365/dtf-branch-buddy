@@ -307,7 +307,7 @@ function StockPage() {
       )}
       <Card>
         <CardContent className="p-0">
-          <Table movil="tarjetas">
+          <Table movil="tarjetas-tablet">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" aria-label="Elegir" />
@@ -400,7 +400,7 @@ function StockPage() {
                       {fmtEUR(Number(it.coste_unitario))}
                     </TableCell>
                     <TableCell className="text-right">{fmtEUR(Number(it.precio_venta))}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="whitespace-nowrap text-right">
                       {escaner && v?.repetida && (
                         <Button
                           variant="ghost"

@@ -76,6 +76,24 @@ Opciones de `capturar.mjs`: `--solo escritorio|movil` y
 propio fichero). Si una pantalla da un error de JavaScript, sale en la línea de
 esa captura.
 
+`--tamanos todos` (o una lista, `--tamanos tablet-v,portatil`) captura además
+el resto de dispositivos, cada uno en su carpeta:
+
+| Nombre          | Tamaño      | Qué es                    |
+| --------------- | ----------- | ------------------------- |
+| `escritorio`    | 1440 × 900  | Ordenador (la referencia) |
+| `movil`         | 390 × 844   | Móvil                     |
+| `movil-pequeno` | 360 × 780   | Móvil pequeño (Android)   |
+| `tablet-v`      | 820 × 1180  | Tablet en vertical        |
+| `tablet-h`      | 1180 × 820  | Tablet en horizontal      |
+| `portatil`      | 1366 × 768  | Portátil                  |
+| `grande`        | 1920 × 1080 | Pantalla grande           |
+
+Si la página se sale de ancho, la línea de esa captura dice `DESBORDE` y qué
+elemento llega más lejos. Ojo: el `<main>` del panel corta lo que sobra
+(`overflow-x-hidden`), así que un recorte dentro de él no sale como desborde:
+hay que mirar la captura.
+
 ## Detalles que importan
 
 - **La fecha está fijada** al lunes 5 de octubre de 2026 a las 10:00 (hora de
@@ -90,6 +108,15 @@ esa captura.
 - Si una pantalla nueva pide una tabla que no está en `datos.mjs`, el Supabase
   de prueba devuelve una lista vacía y la pantalla sale en su estado vacío. La
   salida del servidor apunta cada petición, así se ve qué falta.
+
+## Regla para la tablet
+
+Por debajo de 1280 px (`xl:`) la barra lateral es un cajón que se abre con el
+botón de la cabecera, como en el móvil: en una tablet el contenido tiene todo
+el ancho. Las tablas que tampoco caben en la tablet en vertical (768–1023 px)
+se leen como tarjetas con `<Table movil="tarjetas-tablet">`; la lista de
+Pedidos, con `useEsMovil(CONSULTA_TABLET)`. Todo con clases `max-lg:` /
+`lg:hidden` o `max-xl:`, así que el ordenador de 1440 no cambia.
 
 ## Regla para el móvil
 

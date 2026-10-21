@@ -62,8 +62,11 @@ export function SelectorPeriodo({
     elegir({ tipo: valor, ref: sel.ref });
   }
 
+  // En el móvil ocupa su propia fila: el desplegable mide la mitad de ella.
+  // Sin el ancho completo, en «Todo» (sin flechas) la mitad era la mitad de
+  // sí mismo y se quedaba en una cajita vacía.
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div className={cn("flex flex-wrap items-center gap-2 max-md:w-full", className)}>
       <Select value={sel.tipo} onValueChange={cambiarTipo}>
         <SelectTrigger className="w-[150px] max-md:w-[calc(50%-0.25rem)]" aria-label="Periodo">
           <SelectValue />

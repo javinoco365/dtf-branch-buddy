@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useMemo, useState } from "react";
-import { useEsMovil } from "@/hooks/use-es-movil";
+import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
@@ -228,7 +228,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   // Una sola vista montada: tarjetas en el móvil, tabla en el ordenador.
   // Antes se montaban las dos y el CSS escondía una: cada pedido se pintaba
   // dos veces. Al imprimir se montan las dos, como antes (ver useEsMovil).
-  const vista = useEsMovil();
+  // Las tarjetas salen también en la tablet en vertical (< 1024 px): allí la
+  // tabla de once columnas tampoco cabe y se desplazaba de lado.
+  const vista = useEsMovil(CONSULTA_TABLET);
   const conTarjetas = vista.movil || vista.imprimiendo;
   const conTabla = !vista.movil || vista.imprimiendo;
   const estadoFiltro = f.estado;
@@ -650,15 +652,15 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         )}
         {grupos.map((g) => (
           <div key={g.fecha}>
-            <div className="flex items-center justify-between pb-2 border-b mb-2">
-              <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:text-xs">
+            <div className="flex items-center justify-between pb-2 border-b mb-2 max-md:gap-2">
+              <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:min-w-0 max-md:text-xs">
                 {format(parseISO(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm max-md:flex-wrap max-md:justify-end max-md:gap-y-1">
                 {/* En el ordenador los metros del día van en su pie, debajo de
                     su columna. En el móvil no hay pie: van aquí, debajo del
                     importe, para que la fecha no se parta en dos líneas. */}
-                <div className="text-right leading-tight md:hidden">
+                <div className="text-right leading-tight lg:hidden">
                   <div className="font-semibold">{eur(g.totales.total)}</div>
                   <div className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                     <MetrosSuma totales={g.totales} />
@@ -667,7 +669,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     )}
                   </div>
                 </div>
-                <span className="font-semibold max-md:hidden">{eur(g.totales.total)}</span>
+                <span className="font-semibold max-lg:hidden">{eur(g.totales.total)}</span>
                 <Badge variant="outline" className="whitespace-nowrap">
                   {describirPedidos(g.totales.pedidos)}
                 </Badge>
@@ -684,7 +686,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             {/* En el móvil, una tarjeta por pedido: una tabla de once columnas
                 no cabe en 390 px y desplazarla de lado esconde lo importante. */}
             {conTarjetas && (
-              <div className="space-y-2 md:hidden">
+              <div className="grid gap-2 md:grid-cols-2 md:items-start lg:hidden">
                 {g.lista.map((p) => (
                   <TarjetaPedido
                     key={p.id}
@@ -699,7 +701,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </div>
             )}
             {conTabla && (
-              <Card className="max-md:hidden">
+              <Card className="max-lg:hidden">
                 <CardContent className="p-0">
                   {/*
                   Cada día es una tabla aparte, y una tabla HTML reparte el
@@ -719,6 +721,10 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   de 1440. Allí la tabla mide 1134, o 1117 si el navegador
                   tiene barra de desplazamiento fija (Windows, o un Mac con
                   ratón): el mínimo de 1104 cabe en las dos y no se desplaza.
+                  Por debajo de 1440 (un portátil de 1366, con la barra
+                  lateral) Total, Cobrado y Pendiente bajan a w-24 y el mínimo
+                  a 1056, que cabe en los 1060 que quedan. Por debajo de 1024
+                  ya no hay tabla: tarjetas.
                   Con 1120 sobraba un píxel y salía una barra horizontal bajo
                   cada día. Llegaron a sumar 1184, más que la propia tabla, y
                   Cliente se quedaba en cero: el nombre desaparecía y su
@@ -731,7 +737,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
                   del total del periodo: si cambian aquí, cambian allí.
                 */}
-                  <Table className="table-fixed min-w-[1104px]">
+                  <Table className="table-fixed min-w-[1104px] max-[1440px]:min-w-[1056px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10" />
@@ -742,9 +748,11 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                         <TableHead className="w-32">Origen</TableHead>
                         <TableHead className="w-32">Estado</TableHead>
                         <TableHead className="w-24 text-right">Metros</TableHead>
-                        <TableHead className="w-28 text-right">Total</TableHead>
-                        <TableHead className="w-28 text-right">Cobrado</TableHead>
-                        <TableHead className="w-28 text-right">Pendiente</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">Total</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">Cobrado</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">
+                          Pendiente
+                        </TableHead>
                         <TableHead className="w-12">Env.</TableHead>
                         <TableHead className="w-12" />
                       </TableRow>
@@ -792,7 +800,10 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 «Pendiente» delante de cada cifra (las etiquetas salen de la
                 cabecera).
               */}
-              <Table movil="tarjetas" className="table-fixed min-w-[1104px]">
+              <Table
+                movil="tarjetas-tablet"
+                className="table-fixed min-w-[1104px] max-[1440px]:min-w-[1056px]"
+              >
                 <ColumnasPedidos />
                 <TableHeader className="hidden">
                   <TableRow>
@@ -941,9 +952,9 @@ function ColumnasPedidos() {
       <col className="w-32" />
       <col className="w-32" />
       <col className="w-24" />
-      <col className="w-28" />
-      <col className="w-28" />
-      <col className="w-28" />
+      <col className="w-28 max-[1440px]:w-24" />
+      <col className="w-28 max-[1440px]:w-24" />
+      <col className="w-28 max-[1440px]:w-24" />
       <col className="w-12" />
       <col className="w-12" />
     </colgroup>

@@ -15,14 +15,30 @@ import { useSyncExternalStore } from "react";
  * debe montar las dos y dejar que el CSS elija, como antes.
  */
 const CONSULTA = "(max-width: 767px)";
+/** Hasta la tablet en vertical: por debajo de 1024 px, el corte de `lg:`. */
+export const CONSULTA_TABLET = "(max-width: 1023px)";
 
-function suscribirAncho(avisar: () => void) {
-  const mql = window.matchMedia(CONSULTA);
-  mql.addEventListener("change", avisar);
-  return () => mql.removeEventListener("change", avisar);
+// Una pareja de funciones (suscribirse y leer) por consulta, siempre las
+// mismas: useSyncExternalStore se vuelve a suscribir si cambian.
+const porConsulta = new Map<
+  string,
+  { suscribir: (avisar: () => void) => () => void; leer: () => boolean }
+>();
+function funcionesDe(consulta: string) {
+  let f = porConsulta.get(consulta);
+  if (!f) {
+    f = {
+      suscribir: (avisar) => {
+        const mql = window.matchMedia(consulta);
+        mql.addEventListener("change", avisar);
+        return () => mql.removeEventListener("change", avisar);
+      },
+      leer: () => window.matchMedia(consulta).matches,
+    };
+    porConsulta.set(consulta, f);
+  }
+  return f;
 }
-
-const anchoDeMovil = () => window.matchMedia(CONSULTA).matches;
 
 let imprimiendo = false;
 function suscribirImpresion(avisar: () => void) {
@@ -42,8 +58,16 @@ function suscribirImpresion(avisar: () => void) {
   };
 }
 
-export function useEsMovil(): { movil: boolean; imprimiendo: boolean } {
-  const movil = useSyncExternalStore(suscribirAncho, anchoDeMovil, () => false);
+/**
+ * `consulta`: por omisión, el móvil (< 768 px). Con `CONSULTA_TABLET`, también
+ * la tablet en vertical (< 1024 px), para las vistas que allí tampoco caben.
+ */
+export function useEsMovil(consulta: string = CONSULTA): {
+  movil: boolean;
+  imprimiendo: boolean;
+} {
+  const { suscribir, leer } = funcionesDe(consulta);
+  const movil = useSyncExternalStore(suscribir, leer, () => false);
   const imp = useSyncExternalStore(
     suscribirImpresion,
     () => imprimiendo,

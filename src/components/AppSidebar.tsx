@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -56,10 +57,17 @@ import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
 
 export function AppSidebar() {
-  const { state } = useSidebar();
-  const collapsed = state === "collapsed";
+  const { state, isMobile, setOpenMobile } = useSidebar();
+  // En el cajón (móvil y tablet) el menú sale siempre entero, aunque en el
+  // ordenador se hubiese plegado a iconos.
+  const collapsed = state === "collapsed" && !isMobile;
   const { isAdmin, user } = useAuth();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  // En el cajón, al elegir una pantalla el menú se cierra solo: si no, se
+  // queda tapando la pantalla que se acaba de abrir.
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [pathname, setOpenMobile]);
   const navigate = useNavigate();
 
   const { data: tiendas = [] } = useQuery({

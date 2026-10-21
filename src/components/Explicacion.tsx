@@ -20,7 +20,7 @@ export function Explicacion({ titulo, definicion }: { titulo: string; definicion
         <button
           type="button"
           aria-label={`Qué es «${titulo}»`}
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative inline-flex h-4 w-4 shrink-0 items-center pointer-coarse:after:absolute pointer-coarse:after:-inset-3 justify-center rounded-full text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onPointerEnter={(e) => conRaton(e) && setAbierta(true)}
           onPointerLeave={(e) => conRaton(e) && setAbierta(false)}
         >

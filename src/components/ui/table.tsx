@@ -7,8 +7,10 @@ type TableProps = React.HTMLAttributes<HTMLTableElement> & {
    * «tarjetas»: por debajo de 768 px cada fila se pinta como una tarjeta, con
    * el nombre de la columna delante de cada dato (ver `.tabla-tarjetas` en
    * styles.css). En el ordenador la tabla no cambia en nada.
+   * «tarjetas-tablet»: igual, pero hasta 1023 px (también en la tablet en
+   * vertical). Desde 1024 px, tabla normal.
    */
-  movil?: "tarjetas";
+  movil?: "tarjetas" | "tarjetas-tablet";
 };
 
 const Table = React.forwardRef<HTMLTableElement, TableProps>(
@@ -23,7 +25,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
       [ref],
     );
     React.useEffect(() => {
-      if (movil !== "tarjetas" || !propia.current) return;
+      if (!movil || !propia.current) return;
       const tabla = propia.current;
       ponerEtiquetas(tabla);
       // Las filas cambian al filtrar o al cargar: se vuelven a etiquetar.
@@ -37,7 +39,8 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
           ref={unirRef}
           className={cn(
             "w-full caption-bottom text-sm",
-            movil === "tarjetas" && "tabla-tarjetas",
+            movil && "tabla-tarjetas",
+            movil === "tarjetas-tablet" && "tabla-tarjetas-tablet",
             className,
           )}
           {...props}

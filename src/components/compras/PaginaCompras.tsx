@@ -785,7 +785,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       />
       <Card>
         <CardContent className="p-0">
-          <Table movil="tarjetas">
+          <Table movil="tarjetas-tablet">
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha</TableHead>
