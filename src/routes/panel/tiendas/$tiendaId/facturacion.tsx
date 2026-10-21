@@ -34,7 +34,7 @@ import {
   ClipboardList,
   Undo2,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -286,25 +286,9 @@ function FacturacionTienda() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={grafica.datos}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => eur(v)}
-                      contentStyle={{
-                        background: "var(--color-card)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ConGrafica>
+                  <IngresosPorTramo datos={grafica.datos} />
+                </ConGrafica>
               </CardContent>
             </Card>
 
@@ -320,31 +304,9 @@ function FacturacionTienda() {
                     Los pedidos de este periodo no tienen líneas de detalle.
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis
-                        type="number"
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(v) => `${v} m`}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="producto"
-                        width={140}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => metros(v)}
-                        contentStyle={{
-                          background: "var(--color-card)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                        }}
-                      />
-                      <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ConGrafica>
+                    <TopProductosMetros datos={topProductos} />
+                  </ConGrafica>
                 )}
               </CardContent>
             </Card>

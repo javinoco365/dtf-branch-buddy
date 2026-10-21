@@ -1,23 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SelectFiltro } from "@/components/filtros/Filtros";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
-import { Resumen } from "@/components/gerencia/Resumen";
-import { Ventas } from "@/components/gerencia/Ventas";
-import { Tesoreria } from "@/components/gerencia/Tesoreria";
-import { Ajustes } from "@/components/gerencia/Ajustes";
-import { Clientes } from "@/components/gerencia/Clientes";
-import { Comercial } from "@/components/gerencia/Comercial";
-import { Produccion } from "@/components/gerencia/Produccion";
-import { Margen } from "@/components/gerencia/Margen";
-import { Resultados } from "@/components/gerencia/Resultados";
-import { Fiscal } from "@/components/gerencia/Fiscal";
-import { Textil } from "@/components/gerencia/Textil";
 import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
-import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/ResumenDiario";
+import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/BotonResumenDiario";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
@@ -57,6 +46,50 @@ import {
   webSinPagar,
 } from "@/dominio/gerencia";
 
+// Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
+// las once (y la librería de gráficas) para enseñar solo una. Estos módulos se
+// importan solo así, con import() (ver importaciones-mixtas.test.ts).
+const CARGAR_PESTANA = {
+  resumen: () => import("@/components/gerencia/Resumen"),
+  ventas: () => import("@/components/gerencia/Ventas"),
+  tesoreria: () => import("@/components/gerencia/Tesoreria"),
+  clientes: () => import("@/components/gerencia/Clientes"),
+  comercial: () => import("@/components/gerencia/Comercial"),
+  produccion: () => import("@/components/gerencia/Produccion"),
+  margen: () => import("@/components/gerencia/Margen"),
+  resultados: () => import("@/components/gerencia/Resultados"),
+  fiscal: () => import("@/components/gerencia/Fiscal"),
+  textil: () => import("@/components/gerencia/Textil"),
+  ajustes: () => import("@/components/gerencia/Ajustes"),
+} as const;
+const Resumen = lazy(() => CARGAR_PESTANA.resumen().then((m) => ({ default: m.Resumen })));
+const Ventas = lazy(() => CARGAR_PESTANA.ventas().then((m) => ({ default: m.Ventas })));
+const Tesoreria = lazy(() => CARGAR_PESTANA.tesoreria().then((m) => ({ default: m.Tesoreria })));
+const Clientes = lazy(() => CARGAR_PESTANA.clientes().then((m) => ({ default: m.Clientes })));
+const Comercial = lazy(() => CARGAR_PESTANA.comercial().then((m) => ({ default: m.Comercial })));
+const Produccion = lazy(() => CARGAR_PESTANA.produccion().then((m) => ({ default: m.Produccion })));
+const Margen = lazy(() => CARGAR_PESTANA.margen().then((m) => ({ default: m.Margen })));
+const Resultados = lazy(() => CARGAR_PESTANA.resultados().then((m) => ({ default: m.Resultados })));
+const Fiscal = lazy(() => CARGAR_PESTANA.fiscal().then((m) => ({ default: m.Fiscal })));
+const Textil = lazy(() => CARGAR_PESTANA.textil().then((m) => ({ default: m.Textil })));
+const Ajustes = lazy(() => CARGAR_PESTANA.ajustes().then((m) => ({ default: m.Ajustes })));
+
+// Resumen es la que se abre por defecto: se pide en cuanto se carga el código
+// de Gerencia (también al pasar el ratón por el enlace del menú), sin esperar
+// a montar la pantalla.
+if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => undefined);
+
+/** Mientras llega el código de una pestaña: lo mismo que mientras llegan los datos. */
+function EsqueletoPestana() {
+  return (
+    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/panel/gerencia")({
   head: () => ({ meta: [{ title: "Gerencia · DTF Culture" }] }),
   component: Gerencia,
@@ -73,6 +106,12 @@ function Gerencia() {
   // abre Gerencia exactamente como estaba.
   const periodo = usePeriodoUrl("mes");
   const { valores: f, cambiar } = useFiltrosUrl(FILTROS_GERENCIA);
+  // El código de la pestaña abierta se pide ya, a la vez que los datos, y no
+  // después de que lleguen (sería otra espera en cadena).
+  useEffect(() => {
+    const cargar = CARGAR_PESTANA[f.pestana as keyof typeof CARGAR_PESTANA];
+    void cargar?.().catch(() => undefined);
+  }, [f.pestana]);
   const filtro: FiltroGerencia = useMemo(
     () => ({ tienda: f.tienda, canal: esCanal(f.canal) ? f.canal : "todos" }),
     [f.tienda, f.canal],
@@ -267,47 +306,47 @@ function Gerencia() {
         </TabsList>
 
         <TabsContent value="ajustes" className="mt-4">
-          <Ajustes />
+          <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+            <Ajustes />
+          </Suspense>
         </TabsContent>
 
         {enAjustes ? null : !datos ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
-            ))}
-          </div>
+          <EsqueletoPestana />
         ) : (
           <div {...propsDatosDeAntes(deAntes)}>
-            <TabsContent value="resumen" className="mt-4">
-              <Resumen d={datos} />
-            </TabsContent>
-            <TabsContent value="ventas" className="mt-4">
-              <Ventas d={datos} />
-            </TabsContent>
-            <TabsContent value="tesoreria" className="mt-4">
-              <Tesoreria d={datos} />
-            </TabsContent>
-            <TabsContent value="clientes" className="mt-4">
-              <Clientes d={datos} />
-            </TabsContent>
-            <TabsContent value="comercial" className="mt-4">
-              <Comercial d={datos} />
-            </TabsContent>
-            <TabsContent value="produccion" className="mt-4">
-              <Produccion d={datos} />
-            </TabsContent>
-            <TabsContent value="margen" className="mt-4">
-              <Margen d={datos} />
-            </TabsContent>
-            <TabsContent value="resultados" className="mt-4">
-              <Resultados d={datos} />
-            </TabsContent>
-            <TabsContent value="fiscal" className="mt-4">
-              <Fiscal d={datos} />
-            </TabsContent>
-            <TabsContent value="textil" className="mt-4">
-              <Textil d={datos} />
-            </TabsContent>
+            <Suspense fallback={<EsqueletoPestana />}>
+              <TabsContent value="resumen" className="mt-4">
+                <Resumen d={datos} />
+              </TabsContent>
+              <TabsContent value="ventas" className="mt-4">
+                <Ventas d={datos} />
+              </TabsContent>
+              <TabsContent value="tesoreria" className="mt-4">
+                <Tesoreria d={datos} />
+              </TabsContent>
+              <TabsContent value="clientes" className="mt-4">
+                <Clientes d={datos} />
+              </TabsContent>
+              <TabsContent value="comercial" className="mt-4">
+                <Comercial d={datos} />
+              </TabsContent>
+              <TabsContent value="produccion" className="mt-4">
+                <Produccion d={datos} />
+              </TabsContent>
+              <TabsContent value="margen" className="mt-4">
+                <Margen d={datos} />
+              </TabsContent>
+              <TabsContent value="resultados" className="mt-4">
+                <Resultados d={datos} />
+              </TabsContent>
+              <TabsContent value="fiscal" className="mt-4">
+                <Fiscal d={datos} />
+              </TabsContent>
+              <TabsContent value="textil" className="mt-4">
+                <Textil d={datos} />
+              </TabsContent>
+            </Suspense>
           </div>
         )}
       </Tabs>

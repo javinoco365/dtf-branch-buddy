@@ -1,12 +1,15 @@
-import { Component, lazy, Suspense, type ReactNode } from "react";
+import { Component, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const PedidosTable = lazy(() =>
-  import("@/components/PedidosTable").then((m) => ({ default: m.PedidosTable })),
-);
-
-class PedidosErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+/**
+ * Si la tabla de pedidos falla al pintarse, lo dice con el error y un botón
+ * para reintentar, en vez de dejar la pantalla en blanco.
+ */
+export class PedidosErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -30,22 +33,4 @@ class PedidosErrorBoundary extends Component<{ children: ReactNode }, { error: E
     }
     return this.props.children;
   }
-}
-
-export function PedidosTableLazy({ tiendaId }: { tiendaId?: string }) {
-  return (
-    <PedidosErrorBoundary>
-      <Suspense
-        fallback={
-          <Card>
-            <CardContent className="p-6 text-sm text-muted-foreground">
-              Cargando pedidos…
-            </CardContent>
-          </Card>
-        }
-      >
-        <PedidosTable tiendaId={tiendaId} />
-      </Suspense>
-    </PedidosErrorBoundary>
-  );
 }

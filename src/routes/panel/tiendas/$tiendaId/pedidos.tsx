@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { PedidosTableLazy } from "@/components/PedidosTableLazy";
+// Normal y no con lazy(): la ruta ya va en su propio trozo, y con lazy la
+// tabla empezaba a pedir los pedidos un viaje más tarde.
+import { PedidosTable } from "@/components/PedidosTable";
+import { PedidosErrorBoundary } from "@/components/pedidos/PedidosErrorBoundary";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({
   component: Pedidos,
@@ -31,7 +34,9 @@ function Pedidos() {
           Pedidos sincronizados con WooCommerce y manuales.
         </p>
       </div>
-      <PedidosTableLazy tiendaId={tiendaId} />
+      <PedidosErrorBoundary>
+        <PedidosTable tiendaId={tiendaId} />
+      </PedidosErrorBoundary>
     </div>
   );
 }
