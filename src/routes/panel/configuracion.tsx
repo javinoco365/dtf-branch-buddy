@@ -21,24 +21,22 @@ function ConfiguracionPage() {
       </div>
 
       <Section title="Configuración" desc="Parámetros globales del sistema">
-        {isAdmin && (
-          <ConfigCard
-            to="/panel/configuracion-empresa"
-            icon={Building2}
-            title="Datos de la empresa"
-            desc="Razón social, CIF, dirección, contacto fiscal y costes de producción por metro."
-            badge="Admin"
-          />
-        )}
-        {isAdmin && (
-          <ConfigCard
-            to="/panel/configuracion-pdf"
-            icon={FileText}
-            title="PDF de presupuestos"
-            desc="La plantilla del PDF de cada tienda y del textil: logo, nombre comercial, cabecera, textos y pie con los datos fiscales."
-            badge="Admin"
-          />
-        )}
+        {/* Los ve cualquier nivel; cambiarlos es de administrador (la
+            pantalla los enseña de solo lectura a los demás). */}
+        <ConfigCard
+          to="/panel/configuracion-empresa"
+          icon={Building2}
+          title="Datos de la empresa"
+          desc="Razón social, CIF, dirección, contacto fiscal y costes de producción por metro."
+          badge={isAdmin ? "Admin" : "Solo lectura"}
+        />
+        <ConfigCard
+          to="/panel/configuracion-pdf"
+          icon={FileText}
+          title="PDF de presupuestos"
+          desc="La plantilla del PDF de cada tienda y del textil: logo, nombre comercial, cabecera, textos y pie con los datos fiscales."
+          badge={isAdmin ? "Admin" : "Solo lectura"}
+        />
         <ConfigCard
           to="/panel/configuracion-caja"
           icon={Wallet}
@@ -50,7 +48,7 @@ function ConfiguracionPage() {
             to="/panel/usuarios"
             icon={Users}
             title="Usuarios y permisos"
-            desc="Crea usuarios, elige su nivel (administrador, editor o solo lectura), decide qué tiendas ve cada uno y desactívalos sin perder su historial."
+            desc="Crea usuarios, elige su nivel (administrador, editor o solo lectura) y desactívalos sin perder su historial."
             badge="Admin"
           />
         )}

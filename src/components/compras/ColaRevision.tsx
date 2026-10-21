@@ -135,9 +135,11 @@ export function ColaRevision({
                   <TableCell className="text-right">
                     <div className="inline-flex items-center gap-1">
                       {!error && (
-                        <Button size="sm" onClick={() => onRevisar(c)}>
-                          Revisar
-                        </Button>
+                        <SiPuede accion="escribir">
+                          <Button size="sm" onClick={() => onRevisar(c)}>
+                            Revisar
+                          </Button>
+                        </SiPuede>
                       )}
                       {c.fichero_ruta && (
                         <Button
@@ -150,15 +152,17 @@ export function ColaRevision({
                         </Button>
                       )}
                       {c.fichero_ruta && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Volver a leer con IA"
-                          disabled={releer.isPending}
-                          onClick={() => releer.mutate(c.id)}
-                        >
-                          <RotateCw className="h-4 w-4" />
-                        </Button>
+                        <SiPuede accion="escribir">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Volver a leer con IA"
+                            disabled={releer.isPending}
+                            onClick={() => releer.mutate(c.id)}
+                          >
+                            <RotateCw className="h-4 w-4" />
+                          </Button>
+                        </SiPuede>
                       )}
                       <SiPuede accion="borrar">
                         <Button

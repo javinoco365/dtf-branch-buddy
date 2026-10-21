@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { fijarCosteEnvioPedido, setPedidoTracking } from "@/lib/pedidos.functions";
 import { useAuth } from "@/lib/auth-context";
+import { usePermisos } from "@/hooks/use-permisos";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { TRANSPORTISTAS_CONOCIDOS, transportistaConocido } from "@/dominio/transportistas";
 
@@ -35,6 +36,8 @@ export function PedidoTrackingDialog({
   // no siempre es lo mismo). Vacío: Gerencia lo estima con su coste por defecto.
   const [coste, setCoste] = useState("");
   const { isAdmin } = useAuth();
+  // Ver el tracking, cualquiera; cambiarlo, quien escribe.
+  const { escribir } = usePermisos();
 
   useEffect(() => {
     if (!open) return;
@@ -102,8 +105,9 @@ export function PedidoTrackingDialog({
               value={transportista}
               onChange={(e) => setTransportista(e.target.value)}
               placeholder="SEUR, MRW, Correos Express…"
+              disabled={!escribir}
             />
-            <div className="flex flex-wrap gap-2 mt-1">
+            <div className={escribir ? "flex flex-wrap gap-2 mt-1" : "hidden"}>
               {TRANSPORTISTAS_CONOCIDOS.map((t) => (
                 <Button
                   key={t.nombre}
@@ -123,11 +127,17 @@ export function PedidoTrackingDialog({
               value={codigo}
               onChange={(e) => onCodigoChange(e.target.value)}
               placeholder={conocidoActual?.marcador ?? "0034050034059700104370"}
+              disabled={!escribir}
             />
           </div>
           <div className="space-y-1">
             <Label>URL de seguimiento</Label>
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://…"
+              disabled={!escribir}
+            />
             <p className="text-xs text-muted-foreground">
               {conocidoActual
                 ? `${conocidoActual.ayuda} Si recibes por correo un enlace propio, pégalo aquí para sustituirlo.`
@@ -154,11 +164,13 @@ export function PedidoTrackingDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {escribir ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending || !costeValido}>
-            {mut.isPending ? "Guardando…" : "Guardar"}
-          </Button>
+          {escribir && (
+            <Button onClick={() => mut.mutate()} disabled={mut.isPending || !costeValido}>
+              {mut.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

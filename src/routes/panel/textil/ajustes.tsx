@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/panel/textil/ajustes")({
 });
 
 function AjustesPage() {
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const listFn = useServerFn(listMarcas);
   const upsertFn = useServerFn(upsertMarca);
@@ -103,6 +105,7 @@ function AjustesPage() {
               <Select
                 value={defaultId ?? "__none__"}
                 onValueChange={(v) => setDef.mutate(v === "__none__" ? null : v)}
+                disabled={!escribir}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Ninguna" />

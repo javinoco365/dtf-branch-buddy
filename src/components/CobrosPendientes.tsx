@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SiPuede } from "@/components/SiPuede";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -230,14 +231,16 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                     </TableCell>
                     <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => marcar.mutate(f.id)}
-                        disabled={marcar.isPending}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" /> Cobrado
-                      </Button>
+                      <SiPuede accion="escribir">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => marcar.mutate(f.id)}
+                          disabled={marcar.isPending}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" /> Cobrado
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 );

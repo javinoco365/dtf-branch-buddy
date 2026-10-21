@@ -68,7 +68,7 @@ import {
   updatePedidoEstado,
   type DocumentoDeLista,
 } from "@/lib/pedidos.functions";
-import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
+import { abrirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
 import { resumenCobros, type ResumenCobros } from "@/dominio/cobros";
 import { claseFilaCobrada } from "@/components/cobros/fila-cobrada";
@@ -115,6 +115,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
+import { usePermisos } from "@/hooks/use-permisos";
 
 export type { Direccion };
 
@@ -470,19 +471,21 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           {/* Solo con una tienda delante: sincronizar «todas» no significa
               nada, cada una tiene sus credenciales y su web. */}
           {tiendaId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => sincronizar.mutate()}
-              disabled={ocupado}
-            >
-              {sincronizar.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              {sincronizar.isPending ? "Sincronizando…" : "Sincronizar"}
-            </Button>
+            <SiPuede accion="escribir">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => sincronizar.mutate()}
+                disabled={ocupado}
+              >
+                {sincronizar.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                {sincronizar.isPending ? "Sincronizando…" : "Sincronizar"}
+              </Button>
+            </SiPuede>
           )}
           {/* Un solo botón para las dos exportaciones: con uno más, la barra
               no cabía en una fila en un portátil y se salía en una tableta. */}
@@ -527,14 +530,16 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setFacturandoVarios(true)}
-            title="Emitir tickets o facturas de varios pedidos, del más antiguo al más nuevo"
-          >
-            <Receipt className="h-4 w-4 mr-2" /> Facturar
-          </Button>
+          <SiPuede accion="escribir">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFacturandoVarios(true)}
+              title="Emitir tickets o facturas de varios pedidos, del más antiguo al más nuevo"
+            >
+              <Receipt className="h-4 w-4 mr-2" /> Facturar
+            </Button>
+          </SiPuede>
           {tiendaId && (
             <SiPuede accion="escribir">
               <Button size="sm" onClick={() => setNuevoOpen(true)}>
@@ -1070,10 +1075,11 @@ function numeroVisible(pedido: PedidoFila) {
 /**
  * El ticket o la factura del pedido, en verde, con su número: abre el PDF.
  * Es el mismo PDF que se descarga desde Facturas (si no estaba guardado, el
- * servidor lo genera y lo guarda antes).
+ * servidor lo genera y lo guarda antes, si quien lo abre puede escribir).
  */
 function BotonDocumento({ documento }: { documento: DocumentoDeLista }) {
-  const abrirFn = useServerFn(generarYSubirFacturaPDF);
+  // Cualquier nivel lo abre; si no estaba guardado, lo guarda quien escribe.
+  const abrirFn = useServerFn(abrirFacturaPDF);
   const [abriendo, setAbriendo] = useState(false);
   const esTicket = documento.tipo === "simplificada";
   const que = `${esTicket ? "el ticket" : "la factura"} ${documento.referencia}`;
@@ -1367,6 +1373,11 @@ function SelectorEstado({
   estado: string;
   onEstadoChange: (estado: string) => void;
 }) {
+  // Quien solo ve, ve la etiqueta; cambiar el estado es escribir.
+  const { escribir } = usePermisos();
+  if (!escribir) {
+    return <Badge variant={estadoVariant(estado)}>{ESTADO_LABEL[estado] ?? estado}</Badge>;
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1402,6 +1413,8 @@ function MenuAcciones({
   onFacturar: () => void;
   onBorrar: () => void;
 }) {
+  // Ver el tracking y los cobros, cualquiera; lo demás, según el nivel.
+  const { escribir, borrar } = usePermisos();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1410,13 +1423,15 @@ function MenuAcciones({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>
+        {escribir && <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>}
         <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
         {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
-        <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>
-        <DropdownMenuItem onClick={onBorrar} className="text-destructive">
-          Borrar
-        </DropdownMenuItem>
+        {escribir && <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>}
+        {borrar && (
+          <DropdownMenuItem onClick={onBorrar} className="text-destructive">
+            Borrar
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

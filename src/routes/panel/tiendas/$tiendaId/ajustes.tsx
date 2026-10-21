@@ -24,7 +24,12 @@ import {
 } from "@/lib/plantillas-correo";
 import { useAuth } from "@/lib/auth-context";
 import { FormularioSmtp } from "@/components/FormularioSmtp";
-import { guardarCredencialesWoo, credencialesWooMascaradas } from "@/lib/admin.functions";
+import {
+  guardarCredencialesWoo,
+  credencialesWooMascaradas,
+  tieneCredencialesWoo,
+} from "@/lib/admin.functions";
+import { usePermisos } from "@/hooks/use-permisos";
 import {
   sincronizarWoo,
   sincronizarClientesWoo,
@@ -78,11 +83,16 @@ type TiendaForm = {
 
 function Ajustes() {
   const { tiendaId } = Route.useParams();
+  // Todos los niveles ven la pantalla. Cambiar los datos de la tienda, las
+  // credenciales y el correo es de administrador (la base lo exige igual);
+  // sincronizar y recuperar envíos, de quien escribe (admin y editor).
   const { isAdmin } = useAuth();
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
 
   const guardarCreds = useServerFn(guardarCredencialesWoo);
   const getCredsMask = useServerFn(credencialesWooMascaradas);
+  const getTieneCreds = useServerFn(tieneCredencialesWoo);
   const sync = useServerFn(sincronizarWoo);
   const syncClientes = useServerFn(sincronizarClientesWoo);
   const [sincronizandoClientes, setSincronizandoClientes] = useState(false);
@@ -97,9 +107,19 @@ function Ajustes() {
       (await supabase.from("tiendas").select("*").eq("id", tiendaId).maybeSingle()).data,
   });
 
+  // Las claves enmascaradas, solo el administrador. Los demás solo necesitan
+  // saber si hay credenciales (para poder sincronizar).
   const { data: creds, refetch: refetchCreds } = useQuery({
-    queryKey: ["creds-mask", tiendaId],
-    queryFn: () => getCredsMask({ data: { tienda_id: tiendaId } }),
+    queryKey: ["creds-mask", tiendaId, isAdmin],
+    queryFn: async () =>
+      isAdmin
+        ? getCredsMask({ data: { tienda_id: tiendaId } })
+        : {
+            ...(await getTieneCreds({ data: { tienda_id: tiendaId } })),
+            ck_mask: null,
+            cs_mask: null,
+            updated_at: null,
+          },
   });
 
   const [form, setForm] = useState<TiendaForm>({});
@@ -235,15 +255,11 @@ function Ajustes() {
     }
   }
 
-  if (!isAdmin) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          Solo administradores
-        </CardContent>
-      </Card>
-    );
-  }
+  const soloLectura = !isAdmin && (
+    <p className="text-xs text-muted-foreground">
+      Solo un administrador puede cambiar los datos de la tienda.
+    </p>
+  );
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -289,6 +305,7 @@ function Ajustes() {
                 v={form.woo_url}
                 on={(v) => set("woo_url", v)}
                 placeholder="https://mitienda.com"
+                disabled={!isAdmin}
               />
               <div className="flex items-center justify-between border rounded-lg px-4 py-3">
                 <div>
@@ -300,6 +317,7 @@ function Ajustes() {
                 <Switch
                   checked={!!form.sync_enabled}
                   onCheckedChange={(c) => set("sync_enabled", c)}
+                  disabled={!isAdmin}
                 />
               </div>
             </CardContent>
@@ -309,59 +327,68 @@ function Ajustes() {
 
           <DiagnosticoLineas tiendaId={tiendaId} />
 
-          <RecuperarEnvios tiendaId={tiendaId} />
+          {escribir && <RecuperarEnvios tiendaId={tiendaId} />}
 
-          <CredencialesCard
-            tieneCreds={!!creds?.tiene}
-            ckMask={creds?.ck_mask ?? null}
-            csMask={creds?.cs_mask ?? null}
-            updatedAt={creds?.updated_at ?? null}
-            onSave={async (ck, cs) => {
-              await guardarCreds({
-                data: { tienda_id: tiendaId, consumer_key: ck, consumer_secret: cs },
-              });
-              await refetchCreds();
-            }}
-          />
-
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-              Guardar cambios
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={sincronizarAhora}
-              disabled={!form.sync_enabled || !creds?.tiene || !!progresoSync}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${progresoSync ? "animate-spin" : ""}`} />
-              {progresoSync
-                ? `Sincronizando… ${numero(progresoSync.pedidos, 0)} pedidos` +
-                  (progresoSync.quedan ? `, quedan unos ${numero(progresoSync.quedan, 0)}` : "")
-                : "Sincronizar ahora"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                setSincronizandoClientes(true);
-                try {
-                  const r = await syncClientes({ data: { tienda_id: tiendaId } });
-                  toast.success(
-                    `Clientes al día: ${r.clientes_registrados} con cuenta, ${r.clientes_invitados} de invitado nuevos (revisados ${r.pedidos_revisados} pedidos)`,
-                  );
-                  qc.invalidateQueries();
-                } catch (e) {
-                  toast.error((e as Error).message);
-                } finally {
-                  // También si se cortó: lo ya escrito tiene que verse.
-                  void invalidarTrasGuardar(qc);
-                  setSincronizandoClientes(false);
-                }
+          {isAdmin && (
+            <CredencialesCard
+              tieneCreds={!!creds?.tiene}
+              ckMask={creds?.ck_mask ?? null}
+              csMask={creds?.cs_mask ?? null}
+              updatedAt={creds?.updated_at ?? null}
+              onSave={async (ck, cs) => {
+                await guardarCreds({
+                  data: { tienda_id: tiendaId, consumer_key: ck, consumer_secret: cs },
+                });
+                await refetchCreds();
               }}
-              disabled={!form.sync_enabled || !creds?.tiene || sincronizandoClientes}
-            >
-              <Users className="h-4 w-4 mr-2" />
-              {sincronizandoClientes ? "Sincronizando clientes…" : "Sincronizar clientes"}
-            </Button>
+            />
+          )}
+
+          {soloLectura}
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && (
+              <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+                Guardar cambios
+              </Button>
+            )}
+            {escribir && (
+              <Button
+                variant="secondary"
+                onClick={sincronizarAhora}
+                disabled={!form.sync_enabled || !creds?.tiene || !!progresoSync}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${progresoSync ? "animate-spin" : ""}`} />
+                {progresoSync
+                  ? `Sincronizando… ${numero(progresoSync.pedidos, 0)} pedidos` +
+                    (progresoSync.quedan ? `, quedan unos ${numero(progresoSync.quedan, 0)}` : "")
+                  : "Sincronizar ahora"}
+              </Button>
+            )}
+            {escribir && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setSincronizandoClientes(true);
+                  try {
+                    const r = await syncClientes({ data: { tienda_id: tiendaId } });
+                    toast.success(
+                      `Clientes al día: ${r.clientes_registrados} con cuenta, ${r.clientes_invitados} de invitado nuevos (revisados ${r.pedidos_revisados} pedidos)`,
+                    );
+                    qc.invalidateQueries();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    // También si se cortó: lo ya escrito tiene que verse.
+                    void invalidarTrasGuardar(qc);
+                    setSincronizandoClientes(false);
+                  }
+                }}
+                disabled={!form.sync_enabled || !creds?.tiene || sincronizandoClientes}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                {sincronizandoClientes ? "Sincronizando clientes…" : "Sincronizar clientes"}
+              </Button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             «Sincronizar ahora» vuelve a traer los 100 últimos pedidos y todo lo que ha cambiado en
@@ -385,28 +412,56 @@ function Ajustes() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <Field label="Nombre comercial" v={form.nombre} on={(v) => set("nombre", v)} />
+              <Field
+                label="Nombre comercial"
+                v={form.nombre}
+                on={(v) => set("nombre", v)}
+                disabled={!isAdmin}
+              />
               <Field
                 label="Razón social"
                 v={form.razon_social}
                 on={(v) => set("razon_social", v)}
+                disabled={!isAdmin}
               />
-              <Field label="CIF / NIF" v={form.cif} on={(v) => set("cif", v)} />
+              <Field label="CIF / NIF" v={form.cif} on={(v) => set("cif", v)} disabled={!isAdmin} />
               <Field
                 label="Email fiscal"
                 v={form.email_fiscal}
                 on={(v) => set("email_fiscal", v)}
+                disabled={!isAdmin}
               />
-              <Field label="Teléfono" v={form.telefono} on={(v) => set("telefono", v)} />
-              <Field label="Dirección" v={form.direccion} on={(v) => set("direccion", v)} />
+              <Field
+                label="Teléfono"
+                v={form.telefono}
+                on={(v) => set("telefono", v)}
+                disabled={!isAdmin}
+              />
+              <Field
+                label="Dirección"
+                v={form.direccion}
+                on={(v) => set("direccion", v)}
+                disabled={!isAdmin}
+              />
               <Field
                 label="Código postal"
                 v={form.codigo_postal}
                 on={(v) => set("codigo_postal", v)}
+                disabled={!isAdmin}
               />
-              <Field label="Ciudad" v={form.ciudad} on={(v) => set("ciudad", v)} />
-              <Field label="Provincia" v={form.provincia} on={(v) => set("provincia", v)} />
-              <Field label="País" v={form.pais} on={(v) => set("pais", v)} />
+              <Field
+                label="Ciudad"
+                v={form.ciudad}
+                on={(v) => set("ciudad", v)}
+                disabled={!isAdmin}
+              />
+              <Field
+                label="Provincia"
+                v={form.provincia}
+                on={(v) => set("provincia", v)}
+                disabled={!isAdmin}
+              />
+              <Field label="País" v={form.pais} on={(v) => set("pais", v)} disabled={!isAdmin} />
               <div className="md:col-span-2 space-y-2">
                 <Label className="text-xs">Logo de la tienda</Label>
                 <p className="text-xs text-muted-foreground">
@@ -417,7 +472,7 @@ function Ajustes() {
                 <Input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
-                  disabled={subiendoLogo}
+                  disabled={subiendoLogo || !isAdmin}
                   onChange={(e) => {
                     const archivo = e.target.files?.[0];
                     e.target.value = "";
@@ -435,7 +490,7 @@ function Ajustes() {
                     />
                   </div>
                 )}
-                {form.logo_url && (
+                {form.logo_url && isAdmin && (
                   <Button variant="ghost" size="sm" onClick={() => set("logo_url", "")}>
                     Quitar el logo
                   </Button>
@@ -446,9 +501,13 @@ function Ajustes() {
               </div>
             </CardContent>
           </Card>
-          <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-            Guardar cambios
-          </Button>
+          {isAdmin ? (
+            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+              Guardar cambios
+            </Button>
+          ) : (
+            soloLectura
+          )}
         </TabsContent>
 
         {/* === FACTURACIÓN === */}
@@ -466,12 +525,14 @@ function Ajustes() {
                 v={form.iva_default}
                 on={(v) => set("iva_default", v)}
                 step="0.01"
+                disabled={!isAdmin}
               />
               <FieldNumber
                 label="Gastos de envío por defecto (€)"
                 v={form.gastos_envio_default}
                 on={(v) => set("gastos_envio_default", v)}
                 step="0.01"
+                disabled={!isAdmin}
               />
               {"prefijo" in form && (
                 <div className="space-y-1">
@@ -480,6 +541,7 @@ function Ajustes() {
                     v={form.prefijo}
                     on={(v) => set("prefijo", normalizarPrefijo(v))}
                     placeholder="DTFC"
+                    disabled={!isAdmin}
                   />
                   <p className="text-xs text-muted-foreground">
                     Mayúsculas y números, hasta 8. Los presupuestos se numeran PRES-
@@ -490,9 +552,13 @@ function Ajustes() {
               )}
             </CardContent>
           </Card>
-          <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
-            Guardar cambios
-          </Button>
+          {isAdmin ? (
+            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+              Guardar cambios
+            </Button>
+          ) : (
+            soloLectura
+          )}
         </TabsContent>
 
         {/* === CORREOS === */}
@@ -611,16 +677,23 @@ function Field({
   v,
   on,
   placeholder,
+  disabled,
 }: {
   label: string;
   v?: string | null;
   on: (v: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
-      <Input value={v ?? ""} onChange={(e) => on(e.target.value)} placeholder={placeholder} />
+      <Input
+        value={v ?? ""}
+        onChange={(e) => on(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
     </div>
   );
 }
@@ -630,11 +703,13 @@ function FieldNumber({
   v,
   on,
   step,
+  disabled,
 }: {
   label: string;
   v?: number | null;
   on: (v: number) => void;
   step?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1">
@@ -644,6 +719,7 @@ function FieldNumber({
         step={step ?? "1"}
         value={v ?? 0}
         onChange={(e) => on(Number(e.target.value))}
+        disabled={disabled}
       />
     </div>
   );
@@ -802,7 +878,8 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
         </CardContent>
       </Card>
 
-      <ServidorDeCorreo tiendaId={tiendaId} />
+      {/* El servidor de correo lleva credenciales: solo el administrador. */}
+      {isAdmin && <ServidorDeCorreo tiendaId={tiendaId} />}
 
       <Card>
         <CardHeader>

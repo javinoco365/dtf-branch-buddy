@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePermisos } from "@/hooks/use-permisos";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -98,6 +99,9 @@ export function MotorConciliacion({
   alCambiar: () => void;
 }) {
   const qc = useQueryClient();
+  // El visor ve la conciliación (lo pendiente, lo propuesto y lo hecho), pero
+  // no aplica, confirma, enlaza ni deshace nada.
+  const { escribir } = usePermisos();
   const { data: banco } = useCuentasBanco();
   const [sugerir, setSugerir] = useState<Movimiento | null>(null);
 
@@ -219,10 +223,12 @@ export function MotorConciliacion({
               propuestos de {sinConciliar.length} movimientos sin conciliar
             </span>
           </div>
-          <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
-            <Wand2 className="h-4 w-4 mr-2" />
-            Aplicar la propuesta
-          </Button>
+          {escribir && (
+            <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
+              <Wand2 className="h-4 w-4 mr-2" />
+              Aplicar la propuesta
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -301,10 +307,12 @@ export function MotorConciliacion({
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => setSugerir(m)}>
-                            <Lightbulb className="h-4 w-4 mr-1" />
-                            Sugerencias
-                          </Button>
+                          {escribir && (
+                            <Button variant="outline" size="sm" onClick={() => setSugerir(m)}>
+                              <Lightbulb className="h-4 w-4 mr-1" />
+                              Sugerencias
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -354,27 +362,29 @@ export function MotorConciliacion({
             estado="revisar"
             cuentaDe={cuentaDe}
             vacio="No hay nada por revisar."
-            acciones={(e) => (
-              <>
-                <Button
-                  size="sm"
-                  disabled={confirmar.isPending}
-                  onClick={() => confirmar.mutate(e.grupo)}
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  Confirmar
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="No es esto: deshacer"
-                  disabled={deshacer.isPending}
-                  onClick={() => deshacer.mutate(e.grupo)}
-                >
-                  <Undo2 className="h-4 w-4" />
-                </Button>
-              </>
-            )}
+            acciones={(e) =>
+              escribir && (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={confirmar.isPending}
+                    onClick={() => confirmar.mutate(e.grupo)}
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Confirmar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="No es esto: deshacer"
+                    disabled={deshacer.isPending}
+                    onClick={() => deshacer.mutate(e.grupo)}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )
+            }
           />
         </TabsContent>
 
@@ -383,17 +393,19 @@ export function MotorConciliacion({
             estado="conciliada"
             cuentaDe={cuentaDe}
             vacio="Todavía no has conciliado nada."
-            acciones={(e) => (
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Deshacer"
-                disabled={deshacer.isPending}
-                onClick={() => deshacer.mutate(e.grupo)}
-              >
-                <Undo2 className="h-4 w-4" />
-              </Button>
-            )}
+            acciones={(e) =>
+              escribir && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Deshacer"
+                  disabled={deshacer.isPending}
+                  onClick={() => deshacer.mutate(e.grupo)}
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              )
+            }
           />
         </TabsContent>
 
@@ -705,6 +717,7 @@ function HistorialTraspasos({
   ocupado: boolean;
   alDesmarcar: (movimientoId: string) => void;
 }) {
+  const { escribir } = usePermisos();
   const verFn = useServerFn(verTraspasos);
   const { data, error, isPending, isFetching, setPedida } = usePaginaHistorial(
     "traspasos",
@@ -754,15 +767,17 @@ function HistorialTraspasos({
                   {eur(Math.abs(sale.importe))}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="No es un traspaso"
-                    disabled={ocupado}
-                    onClick={() => alDesmarcar(sale.id)}
-                  >
-                    <Undo2 className="h-4 w-4" />
-                  </Button>
+                  {escribir && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="No es un traspaso"
+                      disabled={ocupado}
+                      onClick={() => alDesmarcar(sale.id)}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

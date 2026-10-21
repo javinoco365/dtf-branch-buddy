@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
+import { leerMiNivel } from "./nivel-sesion";
+import { puede } from "@/dominio/permisos";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esMiembroTienda, exigirMiembroEmpresa } from "./acceso";
 import { leerTodas, trozos } from "./paginar";
@@ -192,8 +194,49 @@ async function guardarPdfTrasEmitir(userId: string, facturaId: string): Promise<
 }
 
 /**
+ * La URL firmada (diez minutos) del PDF A4 de una factura o ticket de tienda.
+ * Si no está guardado, lo genera y lo guarda antes; un borrador se imprime
+ * aparte, tal como está ahora. Quien llama ya ha comprobado el acceso a la
+ * tienda y que puede escribir (generar es guardar un fichero).
+ *
+ * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
+ */
+async function pdfFacturaTienda(
+  sb: any,
+  factura: { id: string; tienda_id: string; estado: string },
+  userId: string,
+): Promise<{ ok: true; path: string; url: string }> {
+  // Un borrador se imprime tal como está ahora, aparte, y no cuenta como su PDF.
+  if (factura.estado === "borrador") {
+    const { pdfData } = await leerDatosPdfFactura(sb, factura.id, userId);
+    const blob = await generarFacturaPDF(pdfData);
+    const rutaBorrador = `${factura.tienda_id}/borradores/${factura.id}.pdf`;
+    const { error } = await sb.storage
+      .from("facturas")
+      .upload(rutaBorrador, new Uint8Array(await blob.arrayBuffer()), {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (error) throw new Error(`No se pudo generar el PDF: ${error.message}`);
+    const f = await sb.storage.from("facturas").createSignedUrl(rutaBorrador, 60 * 10);
+    if (f.error || !f.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
+    return { ok: true, path: rutaBorrador, url: f.data.signedUrl as string };
+  }
+
+  const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+  let firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+  if (firmada.error || !firmada.data?.signedUrl) {
+    await guardarPdfTienda(sb, factura.id, userId);
+    firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+  }
+  if (firmada.error || !firmada.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
+  return { ok: true, path: ruta, url: firmada.data.signedUrl as string };
+}
+
+/**
  * Abre el PDF A4 de una factura o ticket de tienda: si no está guardado, lo
- * guarda; después devuelve una URL firmada de diez minutos.
+ * guarda; después devuelve una URL firmada de diez minutos. Para quien
+ * escribe (al emitir). Para solo abrirlo, abrirFacturaPDF.
  */
 export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
   .middleware([exigeEscribir])
@@ -207,32 +250,49 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!factura) throw new Error("Factura no encontrada");
     await comprobarAccesoTienda(sb, factura.tienda_id, context.userId);
+    return pdfFacturaTienda(sb, factura, context.userId);
+  });
 
-    // Un borrador se imprime tal como está ahora, aparte, y no cuenta como su PDF.
-    if (factura.estado === "borrador") {
-      const { pdfData } = await leerDatosPdfFactura(sb, factura.id, context.userId);
-      const blob = await generarFacturaPDF(pdfData);
-      const rutaBorrador = `${factura.tienda_id}/borradores/${factura.id}.pdf`;
-      const { error } = await sb.storage
-        .from("facturas")
-        .upload(rutaBorrador, new Uint8Array(await blob.arrayBuffer()), {
-          contentType: "application/pdf",
-          upsert: true,
-        });
-      if (error) throw new Error(`No se pudo generar el PDF: ${error.message}`);
-      const f = await sb.storage.from("facturas").createSignedUrl(rutaBorrador, 60 * 10);
-      if (f.error || !f.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
-      return { ok: true, path: rutaBorrador, url: f.data.signedUrl as string };
+/**
+ * Abre el PDF de una factura o ticket de tienda, para cualquier nivel (el
+ * visor también lo ve todo). La factura se lee con la sesión del usuario: si
+ * la RLS no se la deja ver, no hay URL.
+ *
+ * Si el PDF ya está guardado, se firma y ya. Si no lo está (o es un
+ * borrador), hay que generarlo y guardarlo, que es escribir: solo admin y
+ * editor; a un visor se le dice por qué no sale.
+ */
+export const abrirFacturaPDF = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: factura } = await tabla(context.supabase, "facturas")
+      .select("id, tienda_id, estado")
+      .eq("id", data.factura_id)
+      .maybeSingle();
+    if (!factura) throw new Error("Factura no encontrada");
+
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+
+    if (factura.estado !== "borrador") {
+      const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+      const firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+      if (!firmada.error && firmada.data?.signedUrl) {
+        return { ok: true as const, path: ruta, url: firmada.data.signedUrl as string };
+      }
     }
 
-    const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
-    let firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
-    if (firmada.error || !firmada.data?.signedUrl) {
-      await guardarPdfTienda(sb, factura.id, context.userId);
-      firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
+    const nivel = await leerMiNivel(context.supabase, context.userId);
+    if (!puede(nivel, "escribir")) {
+      throw new Error(
+        factura.estado === "borrador"
+          ? "Un borrador no tiene PDF guardado: solo lo puede imprimir un editor o un administrador."
+          : "El PDF de este documento todavía no está guardado. Se guarda la primera vez que lo abre un editor o un administrador.",
+      );
     }
-    if (firmada.error || !firmada.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
-    return { ok: true, path: ruta, url: firmada.data.signedUrl as string };
+    await comprobarAccesoTienda(sb, factura.tienda_id, context.userId);
+    return pdfFacturaTienda(sb, factura, context.userId);
   });
 
 /**

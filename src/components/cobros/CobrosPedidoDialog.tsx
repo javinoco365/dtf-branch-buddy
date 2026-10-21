@@ -36,6 +36,7 @@ import {
   type MetodoCobroManual,
 } from "@/dominio/cobros";
 import { SiPuede } from "@/components/SiPuede";
+import { usePermisos } from "@/hooks/use-permisos";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -88,6 +89,8 @@ export function CobrosPedidoDialog({
   const qc = useQueryClient();
   const registrar = useServerFn(registrarCobro);
   const borrar = useServerFn(borrarCobro);
+  // Ver los cobros, cualquiera; registrar, quien escribe; borrar, admin.
+  const { escribir } = usePermisos();
   const catalogos = useServerFn(listarCatalogosCaja);
 
   const resumen = resumenCobros(pedido.total, cobros);
@@ -314,7 +317,7 @@ export function CobrosPedidoDialog({
             Es un pedido de la tienda online: se cobra en la web, y su cobro llega al sincronizar
             cuando WooCommerce lo da por pagado.
           </p>
-        ) : (
+        ) : !escribir ? null : (
           <div className="space-y-3 rounded-md border p-3">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
               Registrar cobro

@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useFiltrosUrl } from "@/lib/filtros-url";
 import {
   BarraFiltros,
@@ -95,6 +96,8 @@ const textoProducto = (v: VarianteCatalogo) =>
   "—";
 
 function StockPage() {
+  // El visor ve el stock y el historial; no marca, mueve, cuenta ni fusiona.
+  const { escribir, borrar: puedeBorrar } = usePermisos();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const listFn = useServerFn(listStock);
@@ -293,12 +296,14 @@ function StockPage() {
             <span className="font-medium mr-auto">
               {marcadas.size} variante{marcadas.size === 1 ? "" : "s"}
             </span>
-            <Button size="sm" onClick={() => crearDesdeStock("/panel/textil/presupuestos")}>
-              Crear presupuesto
-            </Button>
-            <Button size="sm" onClick={() => crearDesdeStock("/panel/textil/pedidos")}>
-              Crear pedido
-            </Button>
+            <SiPuede accion="escribir">
+              <Button size="sm" onClick={() => crearDesdeStock("/panel/textil/presupuestos")}>
+                Crear presupuesto
+              </Button>
+              <Button size="sm" onClick={() => crearDesdeStock("/panel/textil/pedidos")}>
+                Crear pedido
+              </Button>
+            </SiPuede>
             <Button size="sm" variant="ghost" onClick={() => setMarcadas(new Set())}>
               Quitar selección
             </Button>
@@ -362,7 +367,7 @@ function StockPage() {
                     <TableCell>
                       <Checkbox
                         aria-label="Elegir para un presupuesto o un pedido"
-                        disabled={!vendible}
+                        disabled={!vendible || !escribir}
                         checked={marcadas.has(it.id)}
                         onCheckedChange={(c) => marcar(it.id, c === true)}
                       />
@@ -401,7 +406,7 @@ function StockPage() {
                     </TableCell>
                     <TableCell className="text-right">{fmtEUR(Number(it.precio_venta))}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      {escaner && v?.repetida && (
+                      {escaner && v?.repetida && puedeBorrar && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -412,23 +417,25 @@ function StockPage() {
                           <GitMerge className="h-4 w-4 text-amber-600" />
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Otro movimiento: merma, devolución o ajuste"
-                        aria-label="Otro movimiento"
-                        onClick={() => setOtro(it)}
-                      >
-                        <ArrowLeftRight className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Recuento físico"
-                        onClick={() => setRecuento(it)}
-                      >
-                        <ClipboardCheck className="h-4 w-4" />
-                      </Button>
+                      <SiPuede accion="escribir">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Otro movimiento: merma, devolución o ajuste"
+                          aria-label="Otro movimiento"
+                          onClick={() => setOtro(it)}
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Recuento físico"
+                          onClick={() => setRecuento(it)}
+                        >
+                          <ClipboardCheck className="h-4 w-4" />
+                        </Button>
+                      </SiPuede>
                       <Button
                         variant="ghost"
                         size="icon"

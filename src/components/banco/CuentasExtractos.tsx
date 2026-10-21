@@ -207,61 +207,65 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
                 if (f) analizar.mutate({ fichero: f });
               }}
             />
-            <Button
-              onClick={() => ficheroRef.current?.click()}
-              disabled={!cuentaId || analizar.isPending}
-            >
-              {analizar.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <FileUp className="h-4 w-4 mr-2" />
-              )}
-              Subir extracto
-            </Button>
-          </div>
-
-          <form
-            className="flex flex-wrap items-end gap-2 border-t pt-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              guardar.mutate();
-            }}
-          >
-            <div className="space-y-1.5">
-              <Label className="text-xs">Banco</Label>
-              <Input
-                required
-                value={nueva.banco}
-                placeholder="Ej. BBVA"
-                onChange={(e) => setNueva({ ...nueva, banco: e.target.value })}
-                className="w-36"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Alias</Label>
-              <Input
-                required
-                value={nueva.alias}
-                placeholder="Ej. Principal"
-                onChange={(e) => setNueva({ ...nueva, alias: e.target.value })}
-                className="w-36"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">IBAN</Label>
-              <Input
-                value={nueva.iban}
-                placeholder="ES00 0000 0000 0000 0000 0000"
-                onChange={(e) => setNueva({ ...nueva, iban: e.target.value })}
-                className="w-72 max-md:w-full"
-              />
-            </div>
             <SiPuede accion="escribir">
-              <Button type="submit" size="sm" variant="outline" disabled={guardar.isPending}>
-                <Plus className="h-4 w-4 mr-1" /> Añadir cuenta
+              <Button
+                onClick={() => ficheroRef.current?.click()}
+                disabled={!cuentaId || analizar.isPending}
+              >
+                {analizar.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4 mr-2" />
+                )}
+                Subir extracto
               </Button>
             </SiPuede>
-          </form>
+          </div>
+
+          <SiPuede accion="escribir">
+            <form
+              className="flex flex-wrap items-end gap-2 border-t pt-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                guardar.mutate();
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label className="text-xs">Banco</Label>
+                <Input
+                  required
+                  value={nueva.banco}
+                  placeholder="Ej. BBVA"
+                  onChange={(e) => setNueva({ ...nueva, banco: e.target.value })}
+                  className="w-36"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Alias</Label>
+                <Input
+                  required
+                  value={nueva.alias}
+                  placeholder="Ej. Principal"
+                  onChange={(e) => setNueva({ ...nueva, alias: e.target.value })}
+                  className="w-36"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">IBAN</Label>
+                <Input
+                  value={nueva.iban}
+                  placeholder="ES00 0000 0000 0000 0000 0000"
+                  onChange={(e) => setNueva({ ...nueva, iban: e.target.value })}
+                  className="w-72 max-md:w-full"
+                />
+              </div>
+              <SiPuede accion="escribir">
+                <Button type="submit" size="sm" variant="outline" disabled={guardar.isPending}>
+                  <Plus className="h-4 w-4 mr-1" /> Añadir cuenta
+                </Button>
+              </SiPuede>
+            </form>
+          </SiPuede>
 
           {extractos.length > 0 && (
             <Table movil="tarjetas">

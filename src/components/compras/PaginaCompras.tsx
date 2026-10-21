@@ -1,4 +1,5 @@
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { usePermisos } from "@/hooks/use-permisos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { enRango } from "@/dominio/periodos";
 import {
@@ -167,6 +168,9 @@ const COMPRA_VACIA: CompraLeida = {
 };
 
 export function PaginaCompras({ modo }: { modo: Modo }) {
+  // El visor ve las compras, sus ficheros y los proveedores; no sube, da de
+  // alta, adjunta, paga ni revisa.
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const ficheroRef = useRef<HTMLInputElement>(null);
   const [revisando, setRevisando] = useState<Revision | null>(null);
@@ -577,7 +581,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               general ? "Compras" : "Compras_textil",
             )}
           />
-          {!cola && (
+          {!cola && escribir && (
             <>
               <input
                 ref={ficheroRef}
@@ -603,13 +607,15 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               </Button>
             </>
           )}
-          <Button
-            variant="outline"
-            disabled={sinGenerales}
-            onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
-          >
-            A mano
-          </Button>
+          <SiPuede accion="escribir">
+            <Button
+              variant="outline"
+              disabled={sinGenerales}
+              onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
+            >
+              A mano
+            </Button>
+          </SiPuede>
           {escaner && (
             <Button variant="outline" onClick={() => setViendoProveedores(true)}>
               <Users className="h-4 w-4 mr-2" /> Proveedores
@@ -663,7 +669,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         </Card>
       )}
 
-      {cola && (
+      {cola && escribir && (
         <SubidaFacturas
           deshabilitado={lector?.disponible === false}
           categoria={general ? undefined : "textil"}
@@ -900,7 +906,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           <FileText className="h-4 w-4" />
                         </Button>
                       ) : (
-                        !c.borrada_en && (
+                        !c.borrada_en &&
+                        escribir && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -920,7 +927,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           </Button>
                         )
                       )}
-                      {(general || (proformas && esProforma(c))) &&
+                      {escribir &&
+                        (general || (proformas && esProforma(c))) &&
                         recibidas &&
                         c.estado === "registrada" &&
                         !c.borrada_en &&
@@ -1873,20 +1881,22 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
                     <TableCell className="font-mono text-xs">{p.nif ?? "—"}</TableCell>
                     <TableCell>{p.activo ? "Sí" : <Badge variant="outline">No</Badge>}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setEditando({
-                            id: p.id,
-                            nombre: p.nombre,
-                            nif: p.nif ?? "",
-                            activo: p.activo,
-                          })
-                        }
-                      >
-                        Editar
-                      </Button>
+                      <SiPuede accion="escribir">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setEditando({
+                              id: p.id,
+                              nombre: p.nombre,
+                              nif: p.nif ?? "",
+                              activo: p.activo,
+                            })
+                          }
+                        >
+                          Editar
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 ),

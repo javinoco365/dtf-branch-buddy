@@ -152,8 +152,9 @@ function Usuarios() {
         <CardHeader>
           <CardTitle className="text-base">Usuarios</CardTitle>
           <CardDescription>
-            Para ver los datos de una tienda hay que tener acceso a ella; los administradores ven
-            todas.
+            Con un nivel activo se ve todo (todas las tiendas y la empresa), salvo las credenciales
+            de WooCommerce, el correo saliente y esta gestión de usuarios. El nivel decide qué se
+            puede cambiar. El acceso a tiendas solo cuenta para quien todavía no tiene nivel.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -243,11 +244,13 @@ function ListaUsuarios({
   const textoTiendas = (u: UsuarioListado) =>
     u.nivel === "admin"
       ? "Todas (administrador)"
-      : u.tienda_ids.length === 0
-        ? "Ninguna"
-        : u.tienda_ids.length === tiendas.length && tiendas.length > 1
-          ? "Todas"
-          : u.tienda_ids.map((id) => nombreTienda.get(id) ?? "—").join(", ");
+      : u.nivel && u.activo
+        ? "Todas (por su nivel)"
+        : u.tienda_ids.length === 0
+          ? "Ninguna"
+          : u.tienda_ids.length === tiendas.length && tiendas.length > 1
+            ? "Todas"
+            : u.tienda_ids.map((id) => nombreTienda.get(id) ?? "—").join(", ");
 
   const selectorNivel = (u: UsuarioListado) => (
     <Select

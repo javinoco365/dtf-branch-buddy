@@ -14,7 +14,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
-  avisoSinTiendas,
   esNivel,
   impedimentoAlta,
   impedimentoCambioUsuario,
@@ -245,13 +244,10 @@ export const cambiarNivelUsuario = createServerFn({ method: "POST" })
     const activo = lista.find((u) => u.id === data.user_id)?.activo ?? true;
     await fijarNivel(sb, context.userId, data.user_id, data.nivel, activo);
 
-    // Quien se dio de alta como admin no tiene tiendas: al bajarlo a editor o
-    // visor vería las pantallas vacías. Se avisa en la respuesta.
-    const { count, error } = await tabla(sb, "tienda_usuarios")
-      .select("tienda_id", { count: "exact", head: true })
-      .eq("user_id", data.user_id);
-    const aviso = error ? null : avisoSinTiendas(data.nivel, count ?? 0);
-    return { ok: true, aviso };
+    // Desde 20261031400000 cualquier nivel activo ve todas las tiendas: ya no
+    // hay que avisar de que alguien sin tiendas asignadas verá las pantallas
+    // vacías. `aviso` se queda en la respuesta para la pantalla.
+    return { ok: true, aviso: null as string | null };
   });
 
 export const cambiarActivoUsuario = createServerFn({ method: "POST" })

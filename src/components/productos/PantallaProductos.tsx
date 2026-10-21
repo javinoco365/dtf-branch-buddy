@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,6 +85,7 @@ type Ambito = "todos" | "tienda" | "generales";
  * genéricos, porque la sincronización los identifica por tienda.
  */
 export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar } = useFiltrosUrl({ q: "", tipo: "todos", ambito: "todos" });
@@ -285,6 +287,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       <Switch
                         checked={p.activo}
                         onCheckedChange={(v) => toggleActivo.mutate({ id: p.id, activo: v })}
+                        disabled={!escribir}
                       />
                     </TableCell>
                     <TableCell>

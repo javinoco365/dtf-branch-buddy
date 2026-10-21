@@ -290,6 +290,16 @@ ORDER BY 1;
 -- SEG-03 (escritura): 20261031300400. Un editor sin ninguna tienda no escribe
 -- en banco ni en stock de la empresa, ni lee sus conciliaciones.
 -- ---------------------------------------------------------------------------
+-- Desde 20261031400000 un editor con nivel activo ve y escribe en todas las
+-- empresas (hoy no hay relación usuario-empresa; lo prueba D2). Lo que se
+-- prueba aquí es que estas políticas limitan por empresa, para el día en que
+-- rol_ve_empresa() se limite a las del usuario: se pone como si el editor no
+-- fuera de esta empresa. Se deshace con el ROLLBACK del final.
+CREATE OR REPLACE FUNCTION public.rol_ve_empresa(_user_id UUID, _empresa_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT false
+$$;
+
 DO $$
 DECLARE v_mov UUID; v_compra UUID;
 BEGIN

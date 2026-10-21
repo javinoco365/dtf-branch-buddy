@@ -273,7 +273,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {tiendas.length === 0 && !collapsed && (
                 <div className="px-3 py-2 text-xs text-sidebar-foreground/50">
-                  {isAdmin ? "Crea tu primera tienda" : "Sin tiendas asignadas"}
+                  {isAdmin ? "Crea tu primera tienda" : "No hay tiendas"}
                 </div>
               )}
               {tiendas.map((t) => {

@@ -14,6 +14,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { CLASES_ARCHIVO, entraEnArchivo, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
 import { urlsArchivo } from "@/lib/archivo.functions";
+import { usePermisos } from "@/hooks/use-permisos";
 import { rellenarPdfsTienda } from "@/lib/facturas.functions";
 import { rellenarPdfsTextil } from "@/lib/textil.functions";
 import { descargarBlob } from "@/lib/csv";
@@ -50,6 +51,7 @@ export function DescargarPdfs({
   const [abierto, setAbierto] = useState(false);
   const [fase, setFase] = useState<Fase>({ tipo: "listo" });
   const cancelar = useRef<AbortController | null>(null);
+  const { escribir } = usePermisos();
   const urlsFn = useServerFn(urlsArchivo);
   const rellenarTiendaFn = useServerFn(rellenarPdfsTienda);
   const rellenarTextilFn = useServerFn(rellenarPdfsTextil);
@@ -59,8 +61,11 @@ export function DescargarPdfs({
     const control = new AbortController();
     cancelar.current = control;
     try {
-      // 1. El PDF de las ventas que no lo tienen guardado.
-      const pendientes = validos.filter((d) => d.origen !== "compra" && !d.tieneFichero);
+      // 1. El PDF de las ventas que no lo tienen guardado. Guardarlo es
+      // escribir: un visor descarga lo que ya hay y el resto va a FALTAN.txt.
+      const pendientes = escribir
+        ? validos.filter((d) => d.origen !== "compra" && !d.tieneFichero)
+        : [];
       let hechos = 0;
       setFase({ tipo: "generando", hechos, total: pendientes.length });
       for (const origen of ["tienda", "textil"] as const) {
@@ -148,7 +153,12 @@ export function DescargarPdfs({
           {fase.tipo === "listo" && (
             <div className="space-y-1 text-sm text-muted-foreground">
               {ventasSinPdf > 0 && (
-                <p>{ventasSinPdf} venta(s) sin el PDF guardado: se generan antes de empaquetar.</p>
+                <p>
+                  {ventasSinPdf} venta(s) sin el PDF guardado:{" "}
+                  {escribir
+                    ? "se generan antes de empaquetar."
+                    : "no entran (tu nivel no genera PDF); van en FALTAN.txt."}
+                </p>
               )}
               {comprasSinFichero > 0 && (
                 <p>{comprasSinFichero} compra(s) sin fichero: irán en la lista FALTAN.txt.</p>

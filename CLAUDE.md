@@ -75,11 +75,25 @@ Cada usuario tiene **un** nivel en `user_roles` (desde 20261031200000-200300):
 
 - **admin**: todo, incluida la gestión de usuarios. `info@ronocadesarrollos.com` es admin.
 - **editor**: ve todo, crea y modifica; **no borra** ni gestiona usuarios.
-- **visor**: solo ve; no crea, no cambia, no borra.
+- **visor**: ve todo; no crea, no cambia, no borra.
+
+**Ver todo** (20261031400000): con un nivel activo, cualquiera de los tres, se ven todas las
+tiendas y todas las empresas, la auditoría, los perfiles y niveles de los demás y los PDF
+textil. La regla vive en un solo sitio, `rol_ve_empresa()` (hoy: nivel activo ⇒ todas); cuando
+haya varias empresas con usuarios distintos, se añade la relación usuario-empresa y se cambia
+solo esa función. `tienda_usuarios` ya no limita lo que ve quien tiene nivel; solo cuenta para
+quien aún no tiene fila en `user_roles` (alta a medias), que ve sus tiendas y no escribe.
+**Nadie salvo el admin ve** las credenciales de WooCommerce (`tienda_credenciales`, solo por
+servidor y enmascaradas), el SMTP (`smtp_config`), los intentos de acceso ni las filas de
+auditoría de esas tablas, ni Ajustes > Usuarios (la lista sale de Supabase Auth con la clave de
+servicio: último acceso, invitaciones). Una lectura nueva no se cierra a admin salvo que sea un
+secreto; una pantalla nueva se ve con cualquier nivel y oculta o desactiva lo que escribe
+(`usePermisos()`, `<SiPuede>`, `<CamposSegunNivel>` para un formulario entero de solo lectura).
 
 Sin fila en `user_roles`, o con `activo = false`, no se escribe nada (se deniega por defecto).
-Con `activo = false` tampoco se lee: `has_role()`, `mis_tiendas()`, `mis_empresas()`,
-`is_tienda_member()` y `es_miembro_empresa()` no cuentan a los desactivados (20261031300200).
+Con `activo = false` tampoco se lee: `has_role()`, `rol_puede_ver()`, `mis_tiendas()`,
+`mis_empresas()`, `is_tienda_member()` y `es_miembro_empresa()` no cuentan a los desactivados
+(20261031300200, 20261031400000).
 En el servidor, comprobar admin con `exigirAdmin`/`esAdminActivo` y pertenencia con
 `exigirMiembroTienda`/`esMiembroTienda` (`src/lib/acceso.ts`), nunca leyendo `user_roles` o
 `tienda_usuarios` a mano.
@@ -191,6 +205,7 @@ dar por hecho que puedes usarlo:
 | Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                                                                  |
 | Niveles admin / editor / visor              | Hecho en la base (20261031200000-200300: políticas de escritura, guardia, funciones; 300200: un desactivado no ve ni escribe; 300300: marcar una compra como borrada es de admin) y en Ajustes > Usuarios. Pendiente de aplicar en producción                |
 | Lectura por empresa y seguridad de octubre  | Hecho en la base (20261031100100 `mis_tiendas()`/`mis_empresas()`, 20261031300000-300100; 300400: escritura de banco y stock y lectura de conciliaciones por empresa), sin aplicar. Toda función que recree una de los niveles conserva `rol_exigir_quien()` |
+| Editor y visor lo ven todo                  | Hecho en la base (20261031400000, `rol_puede_ver()`/`rol_ve_empresa()`; prueba D2) y en la interfaz (pantallas abiertas a todos los niveles, escritura oculta o desactivada), sin aplicar. Va después de 300400                                              |
 
 Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
 trabajos: `npm run verify`, y las migraciones y pruebas SQL de
