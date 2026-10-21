@@ -354,7 +354,7 @@ export function DocumentoPedidoDialog({
                     <TableCell className="text-right tabular-nums">
                       {eur(l.precio_unitario)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{l.iva_rate} %</TableCell>
+                    <TableCell className="text-right tabular-nums">{l.iva_rate}&nbsp;%</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

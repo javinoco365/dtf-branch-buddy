@@ -78,6 +78,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -250,7 +251,7 @@ function PedidosPage() {
       setOpen(false);
       setEditing(null);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
   const setEst = useMutation({
     mutationFn: ({ id, estado }: any) => estFn({ data: { id, estado } }),
@@ -258,7 +259,7 @@ function PedidosPage() {
       inv();
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
@@ -267,7 +268,7 @@ function PedidosPage() {
       qc.invalidateQueries({ queryKey: ["textil-stock"] });
       toast.success("Eliminado");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const defaultMarcaId = (empresa as any)?.textil_marca_predeterminada_id ?? null;
@@ -526,7 +527,7 @@ function PedidosPage() {
             </DialogHeader>
             {errorStock ? (
               <p className="text-sm text-destructive">
-                No se ha podido leer el stock: {errorStock.message}
+                No se ha podido leer el stock: {mensajeDeError(errorStock)}
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">Cargando el stock…</p>

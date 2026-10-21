@@ -397,13 +397,13 @@ function TarjetaObjetivo({
           <Explicacion titulo={titulo} definicion={DEFINICIONES[clave]} />
         </div>
         <div className="mt-2 text-xl font-bold tracking-tight tabular-nums md:mt-3 md:text-3xl">
-          {a.porcentaje.toLocaleString("es-ES")} %
+          {a.porcentaje.toLocaleString("es-ES")}&nbsp;%
         </div>
         <Progress
           value={Math.min(100, a.porcentaje)}
           className="mt-3"
           indicadorClassName={COLOR_BARRA[tono]}
-          aria-label={`${titulo}: ${a.porcentaje.toLocaleString("es-ES")} %`}
+          aria-label={`${titulo}: ${a.porcentaje.toLocaleString("es-ES")}\u00A0%`}
         />
         <p className="mt-2 text-xs text-muted-foreground">
           {formato(conseguido)} de {formato(objetivo)}

@@ -111,7 +111,7 @@ export function textoAviso(a: Aviso, frente?: string): string {
     case "deuda_antigua":
       return `${a.pedidos} ${a.pedidos === 1 ? "pedido debe" : "pedidos deben"} ${eur(a.importe)} desde hace más de 60 días.`;
     case "caida_ventas":
-      return `Lo vendido cae un ${numero(a.porcentaje, 1)} %${frente ? ` frente a ${frente}` : ""}.`;
+      return `Lo vendido cae un ${numero(a.porcentaje, 1)}\u00A0%${frente ? ` frente a ${frente}` : ""}.`;
     case "web_sin_pagar":
       return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). ${a.cuentan ? "Cuentan" : "No cuentan"} en lo vendido (se cambia en Ajustes).`;
     case "banco_sin_casar":

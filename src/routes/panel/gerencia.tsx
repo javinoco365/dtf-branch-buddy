@@ -35,6 +35,7 @@ import {
   type FuenteGerencia,
 } from "@/dominio/gerencia-datos";
 import { CANALES, type Canal, type FiltroGerencia } from "@/dominio/gerencia";
+import { mensajeDeError } from "@/lib/errores";
 
 // Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
 // las once (y la librería de gráficas) para enseñar solo una. Estos módulos se
@@ -324,7 +325,7 @@ function Gerencia() {
       {ventas.error && !enAjustes && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pedidos: {ventas.error.message}
+            No se han podido cargar los pedidos: {mensajeDeError(ventas.error)}
           </CardContent>
         </Card>
       )}

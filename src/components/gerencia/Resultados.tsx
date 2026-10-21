@@ -39,6 +39,7 @@ import { comparacionCompras, comprasParaComparar } from "@/dominio/compras";
 import { totalComparacion, totalImpuestos } from "@/dominio/sumatorios-gerencia-b";
 import { DESTINO_AJUSTES, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
+import { mensajeDeError } from "@/lib/errores";
 
 export function Resultados({ d }: { d: DatosGerencia }) {
   // Los modelos son trimestrales: se leen los trimestres enteros que toca el
@@ -196,7 +197,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
       ? [["Mermas y ajustes de almacén", "almacen", "resta"] as (typeof filas)[number]]
       : []),
     ["Beneficio antes de impuestos", "bai", "total"],
-    [`Sociedades (${numero(d.ajustes.tipo_is, 0)} %)`, "sociedades", "resta"],
+    [`Sociedades (${numero(d.ajustes.tipo_is, 0)}\u00A0%)`, "sociedades", "resta"],
     ["Beneficio neto", "neto", "total"],
   ];
   const columnas = [
@@ -236,7 +237,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
           icon={Building2}
           pie={
             <span className="text-muted-foreground">
-              Al {numero(d.ajustes.tipo_is, 0)} % del beneficio documentado (A)
+              Al {numero(d.ajustes.tipo_is, 0)}&nbsp;% del beneficio documentado (A)
             </span>
           }
         />
@@ -277,8 +278,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
 
       {movimientos.error && (
         <Nota>
-          No se han podido leer los movimientos del almacén textil ({movimientos.error.message}): la
-          cuenta sale sin las mermas y ajustes de almacén.
+          No se han podido leer los movimientos del almacén textil (
+          {mensajeDeError(movimientos.error)}): la cuenta sale sin las mermas y ajustes de almacén.
         </Nota>
       )}
 
@@ -421,7 +422,7 @@ export function Resultados({ d }: { d: DatosGerencia }) {
             {sinPrimeraVenta && (
               <p className="text-xs text-status-pendiente">
                 {TEXTO_SIN_PRIMERA_VENTA}
-                {primeraVenta.error ? ` (${primeraVenta.error.message})` : ""}.
+                {primeraVenta.error ? ` (${mensajeDeError(primeraVenta.error)})` : ""}.
               </p>
             )}
           </CardHeader>

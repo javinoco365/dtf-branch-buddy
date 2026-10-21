@@ -292,7 +292,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                       <TableCell className="font-medium">{t.etiqueta}</TableCell>
                       <TableCell className="text-right tabular-nums">{t.envios}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {numero((t.envios / tiempos.envios) * 100, 1)} %
+                        {numero((t.envios / tiempos.envios) * 100, 1)}&nbsp;%
                       </TableCell>
                     </TableRow>
                   ))}

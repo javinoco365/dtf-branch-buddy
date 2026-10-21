@@ -63,6 +63,7 @@ import {
   totalesCliente,
 } from "@/dominio/sumatorios-pedidos";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 type Cliente = {
   id: string;
@@ -199,7 +200,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
       if (editing?.id) qc.invalidateQueries({ queryKey: ["cliente", editing.id] });
       setEditing(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   // Pedidos, facturas, apuntes de caja y documentos del textil llevan
@@ -215,7 +216,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
       refrescar();
       setBorrando(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const titulo =

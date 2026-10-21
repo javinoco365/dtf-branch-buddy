@@ -37,6 +37,7 @@ import {
 } from "@/dominio/cobros";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
+import { avisarError } from "@/lib/errores";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -187,7 +188,7 @@ export function CobrosPedidoDialog({
       setNotas("");
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido registrar el cobro"),
+    onError: (e: Error) => avisarError(e, "No se ha podido registrar el cobro"),
   });
 
   const baja = useMutation({
@@ -197,7 +198,7 @@ export function CobrosPedidoDialog({
       setBorrando(null);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido borrar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido borrar"),
   });
 
   const etiqueta = ETIQUETA_ESTADO_COBRO[resumen.estado];

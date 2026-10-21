@@ -40,6 +40,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
+import { mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
@@ -166,7 +167,7 @@ function DashboardGlobal() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pedidos: {error.message}
+            No se han podido cargar los pedidos: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}

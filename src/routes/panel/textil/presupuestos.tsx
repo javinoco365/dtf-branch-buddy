@@ -89,6 +89,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -232,7 +233,9 @@ function PresupuestosPage() {
       toast.success(`PDF descargado: ${r.nombre}`, { id: "pdf-presupuesto-textil" });
     },
     onError: (e: Error) =>
-      toast.error(`No se pudo generar el PDF: ${e.message}`, { id: "pdf-presupuesto-textil" }),
+      toast.error(`No se pudo generar el PDF: ${mensajeDeError(e)}`, {
+        id: "pdf-presupuesto-textil",
+      }),
   });
 
   const save = useMutation({
@@ -264,7 +267,7 @@ function PresupuestosPage() {
       // El PDF de lo que se acaba de guardar, listo para mandarlo.
       if (r?.id) pdfMut.mutate(r.id);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
@@ -283,7 +286,7 @@ function PresupuestosPage() {
       invalidate();
       toast.success(r.numero ? `Pedido ${r.numero} creado` : "Pedido creado");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const defaultMarcaId = (empresa as any)?.textil_marca_predeterminada_id ?? null;

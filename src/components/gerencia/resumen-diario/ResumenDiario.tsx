@@ -55,6 +55,7 @@ import { ErrorPestana, Nota } from "../comun";
 import { Esquema } from "./Esquema";
 import { Desglose } from "./Desglose";
 import { Jornada } from "./Jornada";
+import { avisarError } from "@/lib/errores";
 
 /** El rango cortado en el final de hoy, si todavía no ha acabado. */
 function transcurrido(r: Rango): Rango {
@@ -321,7 +322,7 @@ function BotonInforme({ datos }: { datos: DatosBoton | null }) {
         blob,
       );
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudo generar el informe"),
+    onError: (e: Error) => avisarError(e, "No se pudo generar el informe"),
   });
   return (
     <Button
@@ -392,7 +393,7 @@ function RecuperarFechas({ tiendas }: { tiendas: readonly Tienda[] }) {
       queryClient.invalidateQueries({ queryKey: ["gerencia"] });
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudieron recuperar las fechas"),
+    onError: (e: Error) => avisarError(e, "No se pudieron recuperar las fechas"),
   });
   if (!isAdmin || tiendas.length === 0) return null;
   return (

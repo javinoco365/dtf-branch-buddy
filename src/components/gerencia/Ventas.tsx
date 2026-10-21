@@ -210,7 +210,9 @@ function TablaDesglose({
                   <TableCell className="text-right tabular-nums">
                     {f.pedidos > 0 ? eur(f.ticket) : "—"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{numero(f.peso, 1)} %</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {numero(f.peso, 1)}&nbsp;%
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

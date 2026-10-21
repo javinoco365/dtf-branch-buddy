@@ -69,6 +69,7 @@ import { SeccionesPlantilla } from "@/components/plantillas/SeccionesPlantilla";
 import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
+import { avisarError } from "@/lib/errores";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -230,7 +231,7 @@ function ConfiguracionPdfPage() {
       );
       await qc.invalidateQueries({ queryKey: CLAVE_LISTA });
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar la plantilla"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar la plantilla"),
   });
 
   const descartar = () => setEdicion(null);

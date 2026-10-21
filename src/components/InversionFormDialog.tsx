@@ -23,6 +23,7 @@ import {
 import { guardarInversion, type MovimientoInversion } from "@/lib/inversion.functions";
 import type { SocioCaja } from "@/lib/caja.functions";
 import type { TipoInversion } from "@/dominio/inversion";
+import { avisarError } from "@/lib/errores";
 
 export function InversionFormDialog({
   open,
@@ -82,7 +83,7 @@ export function InversionFormDialog({
       toast.success(esEdicion ? "Apunte actualizado" : "Apunte guardado");
       onSaved();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar"),
   });
 
   return (

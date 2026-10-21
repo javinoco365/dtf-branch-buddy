@@ -82,6 +82,7 @@ import {
 } from "lucide-react";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
+import { avisarError } from "@/lib/errores";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -215,7 +216,7 @@ function Facturas() {
       toast.success("Factura marcada como pagada");
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   // Solo la última de cada serie se puede borrar; su número lo coge la siguiente.
@@ -244,7 +245,7 @@ function Facturas() {
       qc.invalidateQueries({ queryKey: ["pedidos-para-facturar"] });
       qc.removeQueries({ queryKey: ["preparar-factura-pedido"] });
     },
-    onError: (e: any) => toast.error(e.message ?? "No se pudo borrar"),
+    onError: (e: any) => avisarError(e, "No se pudo borrar"),
   });
 
   // Anular no borra ni modifica la original: emite una rectificativa con las
@@ -259,7 +260,7 @@ function Facturas() {
       toast.success(`Anulada con la rectificativa ${r.referencia}`);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
-    onError: (e: any) => toast.error(e.message ?? "No se pudo anular"),
+    onError: (e: any) => avisarError(e, "No se pudo anular"),
   });
 
   /**
@@ -284,7 +285,7 @@ function Facturas() {
       }
     } catch (e: any) {
       ventana?.close();
-      toast.error(e?.message ?? "No se pudo abrir el PDF");
+      avisarError(e, "No se pudo abrir el PDF");
     } finally {
       setGenerandoId(null);
     }
@@ -394,7 +395,14 @@ function Facturas() {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
+                  <TableCell>
+                    {f.cliente_nombre ??
+                      (f.tipo === "simplificada" ? (
+                        <span className="text-muted-foreground">Venta de mostrador</span>
+                      ) : (
+                        "—"
+                      ))}
+                  </TableCell>
                   <TableCell>
                     <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
@@ -661,7 +669,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
       }
       onDone();
     } catch (e: any) {
-      toast.error(e.message ?? "Error emitiendo factura");
+      avisarError(e, "Error emitiendo factura");
     } finally {
       setEnviando(false);
     }

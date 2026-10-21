@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { estadoSmtp, guardarSmtp, probarSmtp } from "@/lib/smtp.functions";
+import { avisarError } from "@/lib/errores";
 
 /**
  * El formulario del servidor de correo.
@@ -52,7 +53,7 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string }) {
       setClave("");
       qc.invalidateQueries({ queryKey: ["smtp-estado"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar"),
+    onError: (e: any) => avisarError(e, "No se pudo guardar"),
   });
 
   const probar = useMutation({
@@ -61,7 +62,7 @@ export function FormularioSmtp({ tiendaId }: { tiendaId: string }) {
       if (r?.ok) toast.success(`Correo de prueba enviado a ${destinatario}`);
       else toast.error(r?.error ?? "No se pudo enviar");
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo enviar"),
+    onError: (e: any) => avisarError(e, "No se pudo enviar"),
   });
 
   return (

@@ -122,7 +122,7 @@ function Dashboard() {
                 {sinCostes
                   ? "Configura los costes en Ajustes › Datos de la empresa"
                   : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)}${
-                      margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
+                      margenPct !== null ? ` · ${numero(margenPct, 1)}\u00A0% de la bruta` : ""
                     }`}
               </span>
             }

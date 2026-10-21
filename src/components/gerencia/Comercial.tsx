@@ -117,7 +117,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Conversión"
           explicacion="g_conversion"
-          valor={e.conversion === null ? "—" : `${numero(e.conversion, 1)} %`}
+          valor={e.conversion === null ? "—" : `${numero(e.conversion, 1)}\u00A0%`}
           frente={frente}
           delta={
             e.conversion !== null && ep?.conversion != null
@@ -128,7 +128,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
           pie={
             e.conversionImporte !== null ? (
               <span className="text-muted-foreground">
-                En importe, {numero(e.conversionImporte, 1)} %
+                En importe, {numero(e.conversionImporte, 1)}&nbsp;%
               </span>
             ) : undefined
           }

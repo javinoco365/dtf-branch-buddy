@@ -36,6 +36,7 @@ import { analizarExtracto, guardarCuenta, importarExtracto } from "@/lib/banco.f
 import { useCuentasBanco } from "./useCuentasBanco";
 import type { Decimal, OrdenFecha } from "@/dominio/extractos";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 /**
  * Las cuentas del banco y sus extractos. Al subir un extracto se ve primero
@@ -84,7 +85,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
       setCuentaId(r.id);
       qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar la cuenta"),
+    onError: (e: any) => avisarError(e, "No se pudo guardar la cuenta"),
   });
 
   const formulario = (
@@ -126,7 +127,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
         saldo_inicial: v.saldo_inicial ?? "",
         saldo_final: v.saldo_final ?? "",
       }),
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo leer el extracto"),
+    onError: (e: any) => avisarError(e, "No se pudo leer el extracto"),
   });
 
   const importarFn = useServerFn(importarExtracto);
@@ -143,7 +144,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
       qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
       alImportar();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo importar"),
+    onError: (e: any) => avisarError(e, "No se pudo importar"),
   });
 
   // Elegir una opción o escribir un saldo vuelve a leer el fichero con ella.

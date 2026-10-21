@@ -162,12 +162,21 @@ export function duplicadosDe(c: CompraComparable, otras: readonly CompraComparab
   );
 }
 
+/**
+ * «2026-10-02» → «02/10/2026», como en el resto de la app. Lo que no sea una
+ * fecha ISO se deja como está.
+ */
+export function fechaLegible(fecha: string): string {
+  const m = fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : fecha;
+}
+
 /** El aviso de un duplicado, para la persona. */
 export function avisoDuplicado(d: Duplicado): string {
   const cual = [
     d.de.proveedor,
     d.de.numero && `n.º ${d.de.numero}`,
-    d.de.fecha && `del ${d.de.fecha}`,
+    d.de.fecha && `del ${fechaLegible(d.de.fecha)}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -417,13 +426,13 @@ export function motivosRevision(d: {
     for (const s of (d.proformas ?? []).slice(0, 3)) {
       const p = s.proforma;
       motivos.push(
-        `Puede ser la factura de la proforma ${p.numero ?? "(sin número)"} del ${p.fecha} (${p.proveedor}): cásala al revisarla.`,
+        `Puede ser la factura de la proforma ${p.numero ?? "(sin número)"}${p.fecha ? ` del ${fechaLegible(p.fecha)}` : ""} (${p.proveedor}): cásala al revisarla.`,
       );
     }
   }
   if (d.confianza < UMBRAL_CONFIANZA) {
     motivos.push(
-      `La IA no está segura de su lectura (confianza ${Math.round(d.confianza * 100)} %).`,
+      `La IA no está segura de su lectura (confianza ${Math.round(d.confianza * 100)}\u00A0%).`,
     );
   }
   for (const duda of d.dudas) if (duda.trim()) motivos.push(`La IA duda: ${duda.trim()}`);

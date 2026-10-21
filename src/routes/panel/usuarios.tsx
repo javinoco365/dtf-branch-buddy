@@ -67,6 +67,7 @@ import {
   listarUsuarios,
   type UsuarioListado,
 } from "@/lib/usuarios.functions";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -161,7 +162,7 @@ function Usuarios() {
           {usuarios.isLoading ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : usuarios.error ? (
-            <p className="text-sm text-destructive">{(usuarios.error as Error).message}</p>
+            <p className="text-sm text-destructive">{mensajeDeError(usuarios.error)}</p>
           ) : lista.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay usuarios.</p>
           ) : (
@@ -217,7 +218,7 @@ function ListaUsuarios({
       else toast.success("Nivel cambiado");
       qc.invalidateQueries({ queryKey: ["usuarios"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   const reactivar = useMutation({
     mutationFn: (user_id: string) => cambiarActivo({ data: { user_id, activo: true } }),
@@ -225,7 +226,7 @@ function ListaUsuarios({
       toast.success("Usuario reactivado");
       qc.invalidateQueries({ queryKey: ["usuarios"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   const enlace = useMutation({
     mutationFn: (email: string) =>
@@ -234,7 +235,7 @@ function ListaUsuarios({
         enlace: r.enlace,
       })),
     onSuccess: onEnlace,
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const impedimento = (u: UsuarioListado, cambio: { nivel?: Nivel; activo?: boolean }) =>
@@ -464,7 +465,7 @@ function AltaUsuario({
       limpiar();
       onCerrar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   return (
@@ -585,7 +586,7 @@ function TiendasUsuario({
       qc.invalidateQueries({ queryKey: ["usuarios"] });
       cerrar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   return (
     <Dialog open={!!usuario} onOpenChange={(o) => !o && cerrar()}>
@@ -624,7 +625,7 @@ function ConfirmarDesactivar({
       qc.invalidateQueries({ queryKey: ["usuarios"] });
       onCerrar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   return (
     <AlertDialog open={!!usuario} onOpenChange={(o) => !o && onCerrar()}>

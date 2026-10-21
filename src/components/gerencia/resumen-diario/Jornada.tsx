@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { guardarAjustesGerencia } from "@/lib/gerencia.functions";
 import type { AjustesJornada } from "@/dominio/gerencia";
 import { Campo } from "../comun";
+import { avisarError } from "@/lib/errores";
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const decimal = (t: string) => Number(t.replace(",", "."));
@@ -80,7 +81,7 @@ export function Jornada({
       queryClient.invalidateQueries({ queryKey: ["gerencia-ajustes"] });
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudo guardar"),
+    onError: (e: Error) => avisarError(e, "No se pudo guardar"),
   });
 
   // Quien solo ve, ve la jornada; cambiarla es escribir.

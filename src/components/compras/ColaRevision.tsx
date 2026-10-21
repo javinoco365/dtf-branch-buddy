@@ -18,9 +18,11 @@ import {
 import { eur, fechaCorta } from "@/lib/format";
 import { releerFacturaRecibida, verFicheroCompra } from "@/lib/compras.functions";
 import { UMBRAL_CONFIANZA } from "@/dominio/cola-compras";
+import { errorLecturaParaPersonas } from "@/dominio/errores";
 import { esProforma } from "@/dominio/proformas";
 import { totalesCola } from "@/dominio/sumatorios-facturas";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 /**
  * Las facturas que ha leído la IA y aún no ha confirmado nadie, y las que no
@@ -41,18 +43,20 @@ export function ColaRevision({
   const releer = useMutation({
     mutationFn: (id: string) => releerFn({ data: { id } }),
     onSuccess: (r: any) => {
-      if (r.resultado === "error") toast.error(r.motivo);
-      else toast.success("Leída otra vez");
+      if (r.resultado === "error") {
+        const { texto, detalle } = errorLecturaParaPersonas(String(r.motivo ?? ""));
+        toast.error(texto, detalle ? { description: detalle } : undefined);
+      } else toast.success("Leída otra vez");
       qc.invalidateQueries({ queryKey: ["compras"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo volver a leer"),
+    onError: (e: any) => avisarError(e, "No se pudo volver a leer"),
   });
   const ver = async (id: string) => {
     try {
       const { url } = await verFn({ data: { id } });
       window.open(url, "_blank", "noopener");
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudo abrir el fichero");
+      avisarError(e, "No se pudo abrir el fichero");
     }
   };
 
@@ -114,19 +118,19 @@ export function ColaRevision({
                       <EtiquetaTono
                         tono={Number(c.confianza) < UMBRAL_CONFIANZA ? "atencion" : "bien"}
                       >
-                        Confianza {Math.round(Number(c.confianza) * 100)} %
+                        Confianza {Math.round(Number(c.confianza) * 100)}&nbsp;%
                       </EtiquetaTono>
                     )}
                   </TableCell>
                   <TableCell className="max-w-md text-sm">
-                    {motivos.length === 0 ? (
+                    {error ? (
+                      <ErrorDeLectura texto={motivos.join(" ")} />
+                    ) : motivos.length === 0 ? (
                       <span className="text-muted-foreground">Nada en especial</span>
                     ) : (
                       <ul className="space-y-0.5">
                         {motivos.map((m, i) => (
-                          <li key={i} className={error ? "text-destructive" : ""}>
-                            {m}
-                          </li>
+                          <li key={i}>{m}</li>
                         ))}
                       </ul>
                     )}
@@ -195,5 +199,24 @@ export function ColaRevision({
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Por qué no se pudo leer una factura, dicho para quien la sube, y el error
+ * técnico plegado debajo para quien tenga que mirarlo.
+ */
+function ErrorDeLectura({ texto }: { texto: string }) {
+  const { texto: legible, detalle } = errorLecturaParaPersonas(texto);
+  return (
+    <div className="space-y-1">
+      <p className="text-status-cancelado">{legible}</p>
+      {detalle && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none">Ver detalle</summary>
+          <p className="mt-1">{detalle}</p>
+        </details>
+      )}
+    </div>
   );
 }

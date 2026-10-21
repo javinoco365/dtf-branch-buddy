@@ -23,6 +23,7 @@ import {
   type PedidoParaFacturar,
 } from "@/lib/facturas.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
+import { avisarError } from "@/lib/errores";
 
 type Modo = "ticket" | "factura";
 
@@ -131,7 +132,7 @@ export function FacturarPedidosDialog({
         setEmitiendo({ hechos: Math.min(i + TANDA, ids.length), total: ids.length });
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudieron emitir");
+      avisarError(e, "No se pudieron emitir");
     }
     setEmitiendo(null);
     setResultado(acumulado);

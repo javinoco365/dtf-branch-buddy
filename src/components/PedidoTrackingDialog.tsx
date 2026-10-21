@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { usePermisos } from "@/hooks/use-permisos";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { TRANSPORTISTAS_CONOCIDOS, transportistaConocido } from "@/dominio/transportistas";
+import { avisarError } from "@/lib/errores";
 
 export function PedidoTrackingDialog({
   open,
@@ -89,7 +90,7 @@ export function PedidoTrackingDialog({
       toast.success("Tracking guardado");
       onSaved();
     },
-    onError: (e: any) => toast.error(e?.message || "Error al guardar tracking"),
+    onError: (e: any) => avisarError(e, "Error al guardar tracking"),
   });
 
   return (

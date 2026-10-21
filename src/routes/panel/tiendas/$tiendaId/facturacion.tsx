@@ -35,6 +35,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
+import { mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -156,7 +157,7 @@ function FacturacionTienda() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se ha podido cargar la facturación: {error.message}
+            No se ha podido cargar la facturación: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}

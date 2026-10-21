@@ -20,6 +20,7 @@ import { rellenarPdfsTextil } from "@/lib/textil.functions";
 import { descargarBlob } from "@/lib/csv";
 import { numero } from "@/lib/format";
 import { AVISO_DOCUMENTOS, montarZipArchivo, type Falta } from "@/lib/zip-archivo";
+import { avisarError } from "@/lib/errores";
 
 type Fase =
   | { tipo: "listo" }
@@ -106,7 +107,7 @@ export function DescargarPdfs({
         toast.info("Descarga cancelada");
       } else {
         setFase({ tipo: "listo" });
-        toast.error((e as Error)?.message ?? "No se pudo preparar el ZIP");
+        avisarError(e, "No se pudo preparar el ZIP");
       }
     } finally {
       cancelar.current = null;

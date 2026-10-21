@@ -29,6 +29,7 @@ import {
   type MovimientoCaja,
   type SocioCaja,
 } from "@/lib/caja.functions";
+import { avisarError } from "@/lib/errores";
 
 const SIN_CLIENTE = "__sin_cliente__";
 const SIN_SOCIO = "__sin_socio__";
@@ -126,7 +127,7 @@ export function CajaFormDialog({
       toast.success(esEdicion ? "Apunte actualizado" : "Apunte guardado");
       onSaved();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar"),
   });
 
   return (
@@ -318,7 +319,7 @@ function NuevoClienteDialog({
       onCreado(cliente);
       onOpenChange(false);
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido crear el cliente"),
+    onError: (e: Error) => avisarError(e, "No se ha podido crear el cliente"),
   });
 
   return (

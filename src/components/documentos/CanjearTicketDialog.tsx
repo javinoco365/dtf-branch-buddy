@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { eur } from "@/lib/format";
+import { avisarError } from "@/lib/errores";
 
 export type DatosCanje = { nombre: string; nif: string; direccion: string };
 
@@ -77,7 +78,7 @@ export function CanjearTicketDialog({
       onOpenChange(false);
     } catch (e: any) {
       ventana?.close();
-      toast.error(e?.message ?? "No se pudo canjear el ticket");
+      avisarError(e, "No se pudo canjear el ticket");
     } finally {
       setCanjeando(false);
     }

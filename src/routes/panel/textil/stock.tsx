@@ -81,6 +81,7 @@ import { precioRecomendado } from "@/dominio/precio-recomendado";
 import type { ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
 import { TextoRecomendado } from "@/components/textil/CrearVarianteDialog";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -173,7 +174,7 @@ function StockPage() {
       setOtro(null);
       setRecuento(null);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const productoFn = useServerFn(guardarProductoTextil);
@@ -210,7 +211,7 @@ function StockPage() {
     onError: (e: any) => {
       // Si el producto llegó a crearse, que ya salga en el desplegable.
       qc.invalidateQueries({ queryKey: ["textil-productos"] });
-      toast.error(e.message);
+      avisarError(e);
     },
   });
   const del = useMutation({
@@ -225,7 +226,7 @@ function StockPage() {
           : "Variante eliminada",
       );
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
   const fusionarFn = useServerFn(fusionarVariantes);
   const fusionar = useMutation({
@@ -236,7 +237,7 @@ function StockPage() {
       toast.success("Variantes fusionadas: las existencias y el historial pasan a la buena");
       setFusionando(null);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const columnas = escaner ? 15 : 13;

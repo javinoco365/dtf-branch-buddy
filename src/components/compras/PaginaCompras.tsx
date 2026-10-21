@@ -134,6 +134,7 @@ import { sumarImportes } from "@/dominio/sumatorios";
 import { totalesCompras } from "@/dominio/sumatorios-facturas";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -153,7 +154,7 @@ const SIN_GASTO = "ninguno";
 const SIN_FORMA = "sin_forma";
 /** En el desplegable, de menos a más: sin retención primero. */
 const TIPOS_IRPF_DE_MENOS_A_MAS = [...TIPOS_IRPF].sort((a, b) => a - b);
-const porcentaje = (t: number) => `${Math.round(t * 100)} %`;
+const porcentaje = (t: number) => `${Math.round(t * 100)}\u00A0%`;
 /** Una compra borrada (borrado lógico) se enseña con ese estado. */
 const estadoDe = (c: any): string => (c.borrada_en ? "borrada" : String(c.estado));
 
@@ -192,7 +193,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
     } catch (e: any) {
       // Sin lo que leyó la IA, la revisión saldría con otro tipo de documento
       // o sin la referencia de la proforma: mejor no abrirla a medias.
-      toast.error(e?.message ?? "No se pudo abrir la revisión. Vuelve a intentarlo.");
+      avisarError(e, "No se pudo abrir la revisión. Vuelve a intentarlo.");
     } finally {
       setAbriendoRevision(null);
     }
@@ -416,7 +417,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         toast.success("Factura leída. Revísala antes de registrarla.");
       }
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo leer la factura"),
+    onError: (e: any) => avisarError(e, "No se pudo leer la factura"),
   });
 
   const registrarFn = useServerFn(guardarYRegistrarCompra);
@@ -436,7 +437,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       toast.success("Fichero guardado");
       qc.invalidateQueries({ queryKey: ["compras"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar el fichero"),
+    onError: (e: any) => avisarError(e, "No se pudo guardar el fichero"),
     onSettled: () => setAdjuntandoA(null),
   });
   const verFn = useServerFn(verFicheroCompra);
@@ -449,7 +450,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       else window.location.href = url;
     } catch (e: any) {
       ventana?.close();
-      toast.error(e?.message ?? "No se pudo abrir el fichero");
+      avisarError(e, "No se pudo abrir el fichero");
     }
   }
   /**
@@ -548,7 +549,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       qc.invalidateQueries({ queryKey: ["almacen-controles"] });
       qc.invalidateQueries({ queryKey: ["gerencia-pagos-proveedores"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo registrar la compra"),
+    onError: (e: any) => avisarError(e, "No se pudo registrar la compra"),
   });
 
   const borrarFn = useServerFn(borrarCompra);
@@ -560,7 +561,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       qc.invalidateQueries({ queryKey: ["compras"] });
       qc.invalidateQueries({ queryKey: ["gerencia-compras"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo borrar"),
+    onError: (e: any) => avisarError(e, "No se pudo borrar"),
   });
 
   const pagarFn = useServerFn(pagarCompra);
@@ -572,7 +573,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       qc.invalidateQueries({ queryKey: ["compras"] });
       qc.invalidateQueries({ queryKey: ["proformas-pendientes"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo cambiar el pago"),
+    onError: (e: any) => avisarError(e, "No se pudo cambiar el pago"),
   });
 
   return (
@@ -645,12 +646,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         <Card className="border-amber-500/50">
           <CardContent className="flex gap-3 py-4 text-sm">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">El lector de facturas no está configurado.</p>
+            <div className="space-y-1">
+              <p className="font-medium">La lectura automática de facturas no está activada.</p>
               <p className="text-muted-foreground">
-                Falta el secreto <span className="font-mono">facturas_key</span> en el Vault de
-                Supabase. Mientras tanto puedes dar las compras de alta a mano.
+                Mientras tanto, da las compras de alta con «A mano».
               </p>
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer select-none">Para quien lo configura</summary>
+                <p className="mt-1">
+                  Falta el secreto <span className="font-mono">facturas_key</span> en el Vault de
+                  Supabase (o la variable ANTHROPIC_API_KEY en el servidor).
+                </p>
+              </details>
             </div>
           </CardContent>
         </Card>
@@ -1773,7 +1780,7 @@ function explicarTrato(categoria: string): string {
     case "comparar":
       return "Su IVA va al 303. Ya cuesta en cada pedido (por metro o por envío): Gerencia lo compara.";
     case "amortizar":
-      return `Su IVA va al 303 entero. Al resultado va un ${c.amortizacion} % al año (amortización).`;
+      return `Su IVA va al 303 entero. Al resultado va un ${c.amortizacion}\u00A0% al año (amortización).`;
     default:
       return "Su IVA va al 303 y cuesta entera el día de la factura.";
   }
@@ -1822,7 +1829,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
       qc.invalidateQueries({ queryKey: ["proveedores"] });
       qc.invalidateQueries({ queryKey: ["escaner-memoria"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar el proveedor"),
+    onError: (e: any) => avisarError(e, "No se pudo guardar el proveedor"),
   });
   const proveedores = data?.proveedores ?? [];
 

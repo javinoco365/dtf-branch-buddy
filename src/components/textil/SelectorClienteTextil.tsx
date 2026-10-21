@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
 import { upsertTextilCliente } from "@/lib/textil.functions";
+import { avisarError } from "@/lib/errores";
 
 export type ClienteTextil = {
   id: string;
@@ -175,7 +176,7 @@ function NuevoClienteTextilDialog({
       onCreado(cliente);
       onOpenChange(false);
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido crear el cliente"),
+    onError: (e: Error) => avisarError(e, "No se ha podido crear el cliente"),
   });
 
   return (

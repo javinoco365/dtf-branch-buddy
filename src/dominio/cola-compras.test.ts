@@ -274,7 +274,7 @@ describe("motivos de revisión", () => {
       categoria: null,
     });
     expect(m).toEqual([
-      "La IA no está segura de su lectura (confianza 60 %).",
+      "La IA no está segura de su lectura (confianza 60\u00A0%).",
       "La IA duda: el número está borroso",
       "Línea 1: 2 × 50 son 100, no 110.",
       "El IVA leído no cuadra con ningún tipo: elige el tipo a mano.",
@@ -468,9 +468,9 @@ describe("proformas en la cola", () => {
         proformas: [pf("a", "P1"), pf("b", null), pf("c", "P3"), pf("d", "P4")],
       }),
     ).toEqual([
-      "Puede ser la factura de la proforma P1 del 2026-10-01 (Textiles Sur): cásala al revisarla.",
-      "Puede ser la factura de la proforma (sin número) del 2026-10-01 (Textiles Sur): cásala al revisarla.",
-      "Puede ser la factura de la proforma P3 del 2026-10-01 (Textiles Sur): cásala al revisarla.",
+      "Puede ser la factura de la proforma P1 del 01/10/2026 (Textiles Sur): cásala al revisarla.",
+      "Puede ser la factura de la proforma (sin número) del 01/10/2026 (Textiles Sur): cásala al revisarla.",
+      "Puede ser la factura de la proforma P3 del 01/10/2026 (Textiles Sur): cásala al revisarla.",
     ]);
     expect(motivosRevision({ ...base, tipoDocumento: undefined })).toEqual([]);
   });

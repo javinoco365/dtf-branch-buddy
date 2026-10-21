@@ -120,6 +120,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export type { Direccion };
 
@@ -257,7 +258,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo sincronizar"),
+    onError: (e: any) => avisarError(e, "No se pudo sincronizar"),
   });
 
   // Todos los pedidos de la tienda (o de todas), no solo los del periodo: es
@@ -273,7 +274,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         description: r.avisos.join(" ") || undefined,
       });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo exportar"),
+    onError: (e: any) => avisarError(e, "No se pudo exportar"),
   });
   // Exportar mientras se sincroniza leería pedidos a medio reescribir. Por la
   // clave, y no por el estado de cada botón, para que el bloqueo siga aunque
@@ -327,7 +328,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       if (res?.woo_synced) toast.success("Estado actualizado y sincronizado con WooCommerce");
       else toast.success("Estado actualizado");
     },
-    onError: (e: any) => toast.error(e?.message || "Error al actualizar estado"),
+    onError: (e: any) => avisarError(e, "Error al actualizar estado"),
   });
 
   const deleteMut = useMutation({
@@ -337,7 +338,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       toast.success("Pedido borrado");
       setBorrar(null);
     },
-    onError: (e: any) => toast.error(e?.message || "Error al borrar"),
+    onError: (e: any) => avisarError(e, "Error al borrar"),
   });
 
   // Las mismas funciones en cada pintado, para que una fila solo se vuelva a
@@ -632,7 +633,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           <Card>
             <CardContent className="py-6 text-sm text-destructive">
               {data ? "No se han podido actualizar" : "No se han podido cargar"} los pedidos:{" "}
-              {error.message}
+              {mensajeDeError(error)}
             </CardContent>
           </Card>
         )}
@@ -1085,7 +1086,7 @@ function BotonDocumento({ documento }: { documento: DocumentoDeLista }) {
       else window.location.href = r.url;
     } catch (e: any) {
       ventana?.close();
-      toast.error(e?.message ?? "No se pudo abrir el PDF");
+      avisarError(e, "No se pudo abrir el PDF");
     } finally {
       setAbriendo(false);
     }

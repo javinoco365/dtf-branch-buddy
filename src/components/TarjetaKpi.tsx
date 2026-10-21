@@ -113,7 +113,7 @@ export function LineaVariacion({
       <span className="whitespace-nowrap">
         {forma.tipo === "veces"
           ? `×${numeroJusto(forma.valor, 1)}`
-          : `${subiendo ? "+" : "−"}${numero(forma.valor, 1)} %`}
+          : `${subiendo ? "+" : "−"}${numero(forma.valor, 1)}\u00A0%`}
       </span>
       <span className="font-normal text-muted-foreground">frente a {frente}</span>
     </div>

@@ -192,7 +192,7 @@ const menos = (x: number) => (x ? -x : 0);
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 /** «+12,4 %» de una variación en tanto por uno. */
-const textoVariacion = (v: number) => `${signo(v)}${numero(Math.abs(v) * 100, 1)} %`;
+const textoVariacion = (v: number) => `${signo(v)}${numero(Math.abs(v) * 100, 1)}\u00A0%`;
 
 /** Un triángulo hacia arriba (verde) o hacia abajo (rojo) y la variación. */
 function variacion(

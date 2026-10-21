@@ -36,6 +36,7 @@ import { listarCatalogosCaja } from "@/lib/caja.functions";
 import { InversionFormDialog } from "@/components/InversionFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/inversion")({
   head: () => ({ meta: [{ title: "Inversión · DTF Culture" }] }),
@@ -90,7 +91,7 @@ function InversionPage() {
       setBorrando(null);
       qc.invalidateQueries({ queryKey: ["inversion"] });
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido borrar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido borrar"),
   });
 
   // Se exporta lo que se ve: los apuntes con los filtros puestos.
@@ -194,7 +195,7 @@ function InversionPage() {
                     {eur(s.pendiente)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {numero(s.porcentaje, 1)} %
+                    {numero(s.porcentaje, 1)}&nbsp;%
                   </TableCell>
                 </TableRow>
               ))}
@@ -225,7 +226,7 @@ function InversionPage() {
                     definición, si alguien ha aportado algo.
                   */}
                   <TableCell className="text-right font-bold tabular-nums">
-                    {totales.aportado > 0 ? `${numero(100, 1)} %` : ""}
+                    {totales.aportado > 0 ? `${numero(100, 1)}\u00A0%` : ""}
                   </TableCell>
                 </TableRow>
               </TableFooter>
@@ -285,7 +286,7 @@ function InversionPage() {
               {error && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-destructive py-8">
-                    {(error as Error).message}
+                    {mensajeDeError(error)}
                   </TableCell>
                 </TableRow>
               )}

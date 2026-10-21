@@ -44,6 +44,7 @@ import {
   type ResumenCasado,
   type TipoDocumentoCompra,
 } from "@/dominio/tipos-textil";
+import { mensajeDeError } from "@/lib/errores";
 
 /**
  * Factura o proforma: lo propone la IA y lo decide la persona. Sin elegir
@@ -320,7 +321,7 @@ function ComparacionTallas({ proformaId, datos }: { proformaId: string; datos: D
   if (error) {
     return (
       <p className="text-destructive">
-        No se ha podido leer lo que metió la proforma: {(error as Error).message}
+        No se ha podido leer lo que metió la proforma: {mensajeDeError(error)}
       </p>
     );
   }

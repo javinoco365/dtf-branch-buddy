@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Destino } from "./destinos";
 import { SiPuede } from "@/components/SiPuede";
+import { mensajeDeError } from "@/lib/errores";
 
 /** «Ver detalle →», a la pantalla con la lista que hay detrás de una cifra. */
 export function VerDetalle({
@@ -51,7 +52,7 @@ export function ErrorPestana({ que, error }: { que: string; error: Error }) {
   return (
     <Card>
       <CardContent className="py-6 text-sm text-destructive">
-        No se han podido cargar {que}: {error.message}
+        No se han podido cargar {que}: {mensajeDeError(error)}
       </CardContent>
     </Card>
   );

@@ -209,7 +209,14 @@ function ArchivoPage() {
                   <TableCell className="font-mono text-xs whitespace-nowrap">
                     {d.referencia || "—"}
                   </TableCell>
-                  <TableCell>{d.tercero ?? "—"}</TableCell>
+                  <TableCell>
+                    {d.tercero ??
+                      (d.clase === "ticket" ? (
+                        <span className="text-muted-foreground">Venta de mostrador</span>
+                      ) : (
+                        "—"
+                      ))}
+                  </TableCell>
                   <TableCell className="text-right font-medium">{eur(d.total)}</TableCell>
                   <TableCell>
                     {/* Un documento emitido se genera al descargarlo: es lo

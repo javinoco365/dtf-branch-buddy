@@ -33,7 +33,12 @@ export const numero = (n: number | null | undefined, decimales = 2) =>
     maximumFractionDigits: decimales,
   }).format(Number(n ?? 0));
 
-export const metros = (n: number | null | undefined) => `${numero(n, 2)} m`;
+/** «12,50 m», con un espacio que no se parte: la unidad no se queda sola en otra línea. */
+export const metros = (n: number | null | undefined) => `${numero(n, 2)}\u00A0m`;
+
+/** «57,5 %», con el mismo espacio que no se parte. */
+export const porcentaje = (n: number | null | undefined, decimales = 1) =>
+  `${numero(n, decimales)}\u00A0%`;
 
 /** Una cantidad o un tipo con los decimales que tenga, hasta `max`: 1 · 2,5 · 10,125. */
 export const numeroJusto = (n: number | null | undefined, max = 3) =>

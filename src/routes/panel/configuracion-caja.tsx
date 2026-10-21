@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArrowLeft, Plus, Wallet } from "lucide-react";
-import { toast } from "sonner";
 import {
   guardarConceptoCaja,
   guardarSocioCaja,
@@ -26,6 +25,7 @@ import {
   type SocioCaja,
 } from "@/lib/caja.functions";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/configuracion-caja")({
   head: () => ({ meta: [{ title: "Caja · Ajustes · DTF Culture" }] }),
@@ -112,7 +112,7 @@ function Conceptos({ conceptos }: { conceptos: ConceptoCaja[] }) {
       qc.invalidateQueries({ queryKey: CLAVE });
       setNombre("");
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar"),
   });
 
   const ingresos = conceptos.filter((c) => c.categoria === "ingreso");
@@ -209,7 +209,7 @@ function Socios({ socios }: { socios: SocioCaja[] }) {
       qc.invalidateQueries({ queryKey: CLAVE });
       setNombre("");
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar"),
   });
 
   return (

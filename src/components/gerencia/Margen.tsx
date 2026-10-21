@@ -29,7 +29,7 @@ import { totalMargen, totalTramosMargen, type TotalMargen } from "@/dominio/suma
 import type { DatosGerencia } from "./destinos";
 import { Nota } from "./comun";
 
-const pct = (p: number | null) => (p === null ? "—" : `${numero(p, 1)} %`);
+const pct = (p: number | null) => (p === null ? "—" : `${numero(p, 1)}\u00A0%`);
 
 export function Margen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;

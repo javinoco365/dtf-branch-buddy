@@ -43,6 +43,7 @@ import {
 import { CajaFormDialog } from "@/components/CajaFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/caja")({
   head: () => ({ meta: [{ title: "Caja · DTF Culture" }] }),
@@ -112,7 +113,7 @@ function CajaPage() {
       setBorrando(null);
       qc.invalidateQueries({ queryKey: ["caja"] });
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido borrar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido borrar"),
   });
 
   function exportar() {
@@ -281,7 +282,7 @@ function CajaPage() {
               {error && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-destructive py-8">
-                    {(error as Error).message}
+                    {mensajeDeError(error)}
                   </TableCell>
                 </TableRow>
               )}
