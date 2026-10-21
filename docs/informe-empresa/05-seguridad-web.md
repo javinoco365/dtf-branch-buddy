@@ -33,11 +33,11 @@ Describe la aplicación **tal como estaba el 20-10**. Comprobado en el código d
 | W1 | Arreglado: `src/dominio/csv.ts` neutraliza las celdas que empiezan por `= + - @`, tabulador o retorno |
 | W2 | En parte: ya hay cabeceras y CSP (en modo «solo informar»). Falta MFA y pasar la CSP a obligatoria |
 | W3 | **Abierto**: `bun.lock` sigue con 62 paquetes del registro de Lovable y sin `nodemailer`. Pista nueva: la captura 8 tiene abierta una pestaña «Deployments – Vercel», así que producción probablemente se despliega en Vercel (el `CLAUDE.md` dice que la compilación por defecto apunta a Cloudflare). Hay que mirar en Vercel la orden de instalación |
-| W4 | **Abierto** (igual que S3) |
+| W4 | Arreglado en la rama el 21-10 (igual que S3): `npm audit` da 0 avisos, también con las de desarrollo |
 | W5, W6, W7, W10, W11 | Abiertos; casi todo son decisiones o ajustes de panel |
 | W8 | Arreglado: la descarga del logo no sigue redirecciones ni pide direcciones internas |
 | W9 | Arreglado: la URL de seguimiento tiene que ser `https` |
-| W12 | **Abierto**: la CI sigue con `npm ci --no-audit` y sin paso de auditoría |
+| W12 | En parte (21-10): la CI audita las dependencias de producción (`npm audit --omit=dev --audit-level=high`) y arranca el servidor compilado. Faltan Dependabot y fijar las _actions_ por SHA |
 
 ## Resumen
 
@@ -327,7 +327,7 @@ privacidad de las tiendas. Para Anthropic, revisar si conviene la retención cer
 | Punto                          | Estado visto en el código                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
 | MFA                            | Pendiente (S4). Rebajaría W2 y W5                                                           |
-| Actualizar `nodemailer`        | Pendiente (S3, W4)                                                                          |
+| Actualizar `nodemailer`        | Hecho en la rama el 21-10: 10.1.7 (S3, W4)                                                  |
 | Cabeceras CSP/HSTS/X-Frame     | Hecho en la rama el 21-10 (S5); falta pasar la CSP a obligatoria                            |
 | Límite de intentos de inicio de sesión | Hecho en SQL. **A comprobar** que el hook está activo. Tiene el efecto secundario de W5 |
 

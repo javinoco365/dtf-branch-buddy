@@ -8,14 +8,14 @@ Se retoma solo cuando se trate este tema.
 
 ## Seguridad (semana 1)
 - [ ] Doble factor (MFA) para los tres socios y exigirlo para entrar al panel.
-- [ ] Actualizar `nodemailer`: tiene un fallo grave publicado que puede mezclar credenciales SMTP entre tiendas.
+- [x] Actualizar `nodemailer`: tiene un fallo grave publicado que puede mezclar credenciales SMTP entre tiendas. (21-10: 10.1.7, y la CI audita las dependencias.)
 - [ ] Regenerar las claves de WooCommerce de cada tienda y vaciar las columnas en claro (`consumer_key`, `consumer_secret`).
 - [ ] Cabeceras de seguridad en `src/server.ts`: CSP, HSTS y X-Frame-Options.
 - [ ] Confirmar en Supabase que la copia recuperable al minuto (PITR) está activa, y que hay límite de intentos de inicio de sesión.
 - [ ] Confirmar con el Anexo B que no queda activa ninguna política `FOR ALL` ni ninguna política abierta en las tablas de dinero.
 
 ## Técnica
-- [ ] CI: compilar como producción, arrancar el servidor y pedir «/» (lo que habría evitado la caída del 16-10).
+- [x] CI: compilar como producción, arrancar el servidor y pedir «/» (lo que habría evitado la caída del 16-10). (21-10: `scripts/probar-arranque.sh`, job «Arranque del servidor».)
 - [ ] Alertas de errores en producción (Sentry o similar).
 - [ ] Regenerar los tipos de Supabase (hoy cubren 25 de unas 60 tablas) y comprobar en CI que están al día.
 - [ ] Pruebas de los 5 flujos de dinero: emitir, cobrar, conciliar, borrar la última factura y sincronizar Woo.
