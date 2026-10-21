@@ -13,8 +13,14 @@
 > administrador (antes bastaba ser de la tienda); eso reduce quién puede borrar, no el
 > problema de fondo. Sobre H1: la captura 2 enseña que la tienda tiene el plugin WowInvoice
 > instalado, aunque para ese pedido dice «Invoice not published»; hay que confirmar que no
-> emite. H2 es una decisión consciente de Javier (CLAUDE.md, 8/9-10-2026); la gravedad
+> emite. H2 es una decisión consciente de Javier (CLAUDE.md, 9-10-2026); la gravedad
 > «crítica» vale mientras los tickets se sigan mandando al cliente como factura.
+>
+> **Segunda revisión (21-10-2026, tarde).** Las decisiones que salen de este informe (quién
+> factura, fecha de los documentos, límite del ticket) están en la sección 2 de
+> `00-informe-director.md`, con lo que falta para tomarlas. Ojo con las letras: los **bloques de
+> consultas** de `consultas-cuadre.sql` van de A a J (el bloque H es el almacén), y no tienen
+> nada que ver con los **hallazgos** H1-H24 de este informe.
 
 Va acompañado de `consultas-cuadre.sql` (en esta misma carpeta): un paquete de consultas de
 solo lectura para ejecutar en producción. Cada hallazgo dice qué consulta lo comprueba.
@@ -34,7 +40,7 @@ termina en «TODO EN VERDE» y las 132 pruebas de dominio fiscal pasan.
    facturas llevan «FACTURA SIMPLIFICADA», el NIF, numeración legal y se mandan por correo al
    cliente. Si la gestoría emite además su propia factura por la misma venta, esa operación
    tiene dos facturas. Y desde el 1-1-2027, si el CRM expide, es un sistema de facturación
-   sujeto a Verifactu. Faltan 72 días.
+   sujeto a Verifactu. Faltan 72 días (a 21-10-2026).
 2. **Los documentos llevan la fecha del pedido como fecha de expedición.** Un ticket emitido
    en noviembre por un pedido de septiembre dice que se expidió en septiembre. Eso es antedatar
    la factura, y además cambia un trimestre cuyo 303 ya se ha presentado.
@@ -123,7 +129,10 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
   **1-1-2027** (fecha de CLAUDE.md para sujetos pasivos del IS; confírmala con la gestoría), un
   programa que expide facturas tiene que cumplir el Reglamento de sistemas de facturación
   (RD 1007/2023): integridad, inalterabilidad, registros de alta y anulación, y nada de borrar
-  facturas. Eso choca de frente con H2 y H3.
+  facturas. Eso choca de frente con H2 y H3. Para quien **usa** un programa que no cumple, el
+  art. 201 bis LGT prevé una multa fija de **50.000 € por ejercicio**: más que la venta anual que
+  se deduce de las capturas (unos 26.500-32.000 € de base; informe 06). A confirmar con la
+  gestoría.
 - **Arreglo (decisión, no código).** Antes de diciembre, una de dos:
   - **(a) El CRM no factura.** Sus documentos pasan a ser internos: otro título («Resumen de
     pedido», «Nota de entrega»), sin serie fiscal, sin desglose de IVA como factura, y **no se
@@ -474,6 +483,10 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 ---
 
 ## 4. Lo que hay que ejecutar en producción y qué esperar
+
+La columna «Bloque» es la letra de la consulta en `consultas-cuadre.sql`; la columna
+«Hallazgo», el hallazgo de este informe que comprueba. El bloque H (almacén) no es el
+hallazgo H.
 
 `consultas-cuadre.sql` va en una transacción `READ ONLY` que termina en `ROLLBACK`. Lo he
 ejecutado entero contra el banco local y no da ningún error. Orden recomendado:

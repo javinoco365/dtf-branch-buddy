@@ -113,7 +113,8 @@ La auditoría guarda quién fue, pero el cuadre de caja ya se ha roto. Con
 `diagnosticoNumeroWoo`, un invitado a la tienda A ve pedidos de la tienda B.
 
 Hoy los tres usuarios son administradores, así que el daño real depende de S2. **Pero el modelo
-de datos ya admite usuarios invitados por tienda** (`crearUsuarioInvitado`, `tienda_usuarios`).
+de datos ya admite usuarios invitados por tienda** (`tienda_usuarios`; desde el 21-10, también
+los niveles editor y solo lectura).
 El día que se invite a alguien de producción, estas funciones le dan más permisos que la RLS.
 
 **Arreglo:** en todas las que escriben con la clave de servicio, comprobar primero el acceso con
@@ -143,8 +144,8 @@ porque no es miembro. Pero con S1 puede borrar apuntes de caja y gastos fijos, l
 facturas textil y hacer que se envíen correos a clientes.
 
 **Arreglo:** en Supabase → Authentication → Sign In / Providers, desactivar «Allow new users to
-sign up». Las altas ya se hacen con `auth.admin.createUser` desde `crearUsuarioInvitado`, que no
-depende de ese ajuste. Fijarlo también en `config.toml` (`[auth] enable_signup = false`) para que
+sign up». Las altas ya se hacen con `auth.admin.createUser` (desde el 21-10, en Ajustes ›
+Usuarios; `crearUsuarioInvitado` se ha quitado), que no depende de ese ajuste. Fijarlo también en `config.toml` (`[auth] enable_signup = false`) para que
 quede escrito. Y comprobar en Authentication → Users que no hay cuentas que no sean de los socios.
 
 ## S3 · `nodemailer` vulnerable — Alta
@@ -295,7 +296,7 @@ antes a un helper de acceso reconocido (`exigirAdmin`, `exigirMiembro…`, lectu
 | MFA para los tres socios                      | **Pendiente.** El middleware no mira `aal` (S4)                                                            |
 | Actualizar `nodemailer`                       | **Pendiente.** Sigue en 9.1.1 (S3)                                                                         |
 | Regenerar claves Woo y vaciar columnas en claro | **A comprobar en producción.** `tienda_credenciales_leer()` sigue con lectura de respaldo de las columnas |
-| Cabeceras CSP/HSTS/X-Frame-Options            | **Pendiente** (S5)                                                                                         |
+| Cabeceras CSP/HSTS/X-Frame-Options            | Hecho en la rama el 21-10 (S5); CSP aún en «solo informar»                                                 |
 | PITR y límite de intentos de inicio de sesión | **A comprobar** en el panel de Supabase                                                                     |
 | Ninguna política `FOR ALL` ni abierta (Anexo B) | `FOR ALL`: hecho (20261023100000). Políticas abiertas en banco y stock: **no estaba hecho** (SEG-03 de `03-seguridad-bd.md`); lo cierran 20261031300100 y 20261031300400, sin aplicar. **Falta ejecutar el Anexo B en producción** |
 

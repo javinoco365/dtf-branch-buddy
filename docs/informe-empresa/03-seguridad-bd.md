@@ -153,7 +153,8 @@ Las otras dos vistas (`clientes_posibles_duplicados`, `pedidos_pendientes_cobro`
 contraseña, y la vista existe para el caso exacto en que hay duplicados (las fichas de
 WooCommerce los generan). No depende del registro público.
 
-**Arreglo propuesto** (migración nueva; **no la he escrito**: lo pide Javier):
+**Arreglo propuesto** (migración nueva; no la escribí en este informe. **Ya escrita el 21-10
+en `20261031300000`, sin aplicar**):
 
 ```sql
 ALTER VIEW public.clientes_duplicados_por_email SET (security_invoker = true);
@@ -270,6 +271,7 @@ las puede llamar por `/rest/v1/rpc/…` y no miran la empresa del objeto:
 Además, `factura_borrar_ultima()` exige solo `is_tienda_member`: un **usuario de tienda no
 administrador** puede borrar la última factura de la serie. `CLAUDE.md` dice que los socios
 son administradores; si se crea un usuario de tienda, ¿debe poder? Decisión de Javier.
+**(Superado el 21-10: `20261031200300` exige nivel administrador.)**
 
 **Arreglo propuesto.** En cada función de escritura, el mismo patrón que ya usa
 `textil_compra_registrar` (`IF auth.uid() IS NOT NULL AND NOT es_miembro_empresa(auth.uid(),

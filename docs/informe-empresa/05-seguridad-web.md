@@ -105,7 +105,8 @@ un solo sitio.
 `client.ts` crea el cliente de Supabase con `persistSession: true`, y `brokeredPreviewStorage()`
 devuelve `localStorage` fuera de Lovable. El token de acceso (1 h) y el **de refresco, que no
 caduca mientras se use**, se pueden leer desde cualquier JavaScript que corra en el origen del CRM.
-No hay CSP que lo frene (S5 sigue pendiente: `src/server.ts` no añade ninguna cabecera).
+No había CSP que lo frene (desde el 21-10 hay una en modo «solo informar», que todavía no
+bloquea nada: ver la tabla de estado).
 
 Hoy no he encontrado ninguna XSS. El riesgo está en lo que vendrá: un fallo futuro o, sobre todo,
 **un paquete npm comprometido** que llegue al _bundle_ del cliente (hay 60 dependencias directas de producción, y
@@ -325,9 +326,9 @@ privacidad de las tiendas. Para Anthropic, revisar si conviene la retención cer
 
 | Punto                          | Estado visto en el código                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| MFA                            | Pendiente (S4). Rebaja W2 y W5                                                              |
+| MFA                            | Pendiente (S4). Rebajaría W2 y W5                                                           |
 | Actualizar `nodemailer`        | Pendiente (S3, W4)                                                                          |
-| Cabeceras CSP/HSTS/X-Frame     | Pendiente (S5): `src/server.ts` sigue sin añadir ninguna                                    |
+| Cabeceras CSP/HSTS/X-Frame     | Hecho en la rama el 21-10 (S5); falta pasar la CSP a obligatoria                            |
 | Límite de intentos de inicio de sesión | Hecho en SQL. **A comprobar** que el hook está activo. Tiene el efecto secundario de W5 |
 
 ## Orden recomendado

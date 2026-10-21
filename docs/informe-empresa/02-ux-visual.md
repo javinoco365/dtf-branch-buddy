@@ -22,9 +22,10 @@ cientos de clientes) **no se han visto** con su tamaño real. Tampoco he hablado
 lo de que «Javier adora las tablas y el resto entiende mejor lo visual» es la premisa del
 encargo, no algo que haya medido.
 
-**Dónde están las capturas.** Todas en
-`/tmp/claude-0/-home-user-dtf-branch-buddy/6486619b-6048-50f0-93e1-d917981aeb74/scratchpad/ux/`
-(no se suben al repositorio). En el texto se citan así:
+**Dónde están las capturas.** Se hicieron en una carpeta temporal de la sesión de trabajo
+(`…/scratchpad/ux/`), que **no se sube al repositorio y no está a tu alcance**. Para verlas,
+regenéralas con `pruebas-visuales/capturar.mjs` contra el Supabase de prueba (mismo nombre de
+fichero que la cita). En el texto se citan así:
 
 | Cita         | Ruta dentro de `…/scratchpad/ux/` |
 | ------------ | --------------------------------- |
@@ -353,7 +354,7 @@ añade la parte visual a ese plan, y no está en él:
 | A4  | **Formatos**: fechas de Compras con `format.ts`; `whitespace-nowrap` en «m», «%» y «€»; mayúscula inicial en todas las etiquetas de estado.                                                                                                                                                                                                                        | Compras, Gerencia › Ventas, Facturas                      |
 | A5  | **Errores para personas** con el detalle técnico plegado.                                                                                                                                                                                                                                                                                                          | Compras (lector de facturas), sincronización              |
 | A6  | **Móvil**: cifras en 2 columnas y más compactas; filtros plegados en una sola línea («Octubre 2026 · Todas ▾»); avisos arriba en Gerencia; tarjeta de stock compacta.                                                                                                                                                                                              | Dashboard, Gerencia, Stock (solo `max-md:`)               |
-| A7  | **Tableta 768–1023 px**: menú plegado a iconos por defecto en ese ancho; correo de la cabecera oculto.                                                                                                                                                                                                                                                             | `AppShell`, `AppSidebar`                                  |
+| A7  | ~~**Tableta 768–1023 px**: menú plegado a iconos por defecto en ese ancho; correo de la cabecera oculto.~~ Sustituida el 21-10 por el cajón por debajo de 1280 px (`07-dispositivos.md`).                                                                                                                                                                                                                                                             | `AppShell`, `AppSidebar`                                  |
 | A8  | **Gerencia**: avisos arriba; barras de objetivo con semáforo.                                                                                                                                                                                                                                                                                                      | Gerencia › Resumen                                        |
 
 ### B · El conmutador «Tabla / Visual» y el inicio por perfil (1–2 semanas)
@@ -380,9 +381,10 @@ timestamptz)` con `UNIQUE (usuario_id, clave)`, RLS por operación (cada uno lee
    solo lo suyo; **sin `FOR ALL`**) y el trigger de auditoría, como toda tabla nueva. Migración
    solo como fichero, con su reversión y su prueba; la aplica Javier. **No la he escrito.**
 
-**B2. Inicio por perfil.** El «perfil» es una **preferencia de presentación**, no un permiso:
-los tres usuarios siguen siendo administradores con acceso a todo, y cualquiera puede cambiar
-de perfil desde el propio inicio.
+**B2. Inicio por perfil.** El «perfil» es una **preferencia de presentación**, no un permiso,
+y cualquiera puede cambiar de perfil desde el propio inicio. Desde el 21-10 sí hay permisos
+(administrador, editor, solo lectura): el inicio de cada perfil no puede enseñar nada que el
+nivel del usuario no permita.
 
 | Perfil             | Qué ve al entrar                                                                                                                                                                                                                                            |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

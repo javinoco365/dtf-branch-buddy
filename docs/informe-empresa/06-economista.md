@@ -18,6 +18,15 @@ Va en la misma carpeta que `01-contable-fiscal.md` (criterios fiscales y cuadres
 > funcionaba» en las capturas, no sé si sigue igual; y WowInvoice está instalado, pero no hay
 > prueba de que emita. Todo lo demás de este informe son escenarios con supuestos a la vista,
 > no datos de la empresa.
+>
+> **Segunda revisión (21-10-2026, tarde).** Rehechas las cuentas de las secciones 6 y 8. Tres
+> estaban mal: (1) en §6.2, el punto muerto más bajo de la tabla (333 m) ya supera el ritmo
+> actual (~320 m), así que **ningún** escenario cubre la estructura, no «salvo fijos por debajo
+> de 1.500 €»; (2) en §6.3, con 10 minutos a 20 €/h el pedido de 1 m gana 0,67 €, no pierde: pierde
+> a partir de 12 minutos; (3) en §8.2, pasar de 3,6 a 5 m por pedido baja el coste de servir por
+> metro un 28 %, no un 25 %. Añadida la sanción de Verifactu en §7.1 y la venta anual ajustada
+> a 26.500-32.000 €. Las decisiones que salen de aquí (pedido mínimo, quién factura) están en la
+> sección 2 de `00-informe-director.md`.
 
 ---
 
@@ -122,7 +131,8 @@ cada uno, en la sección 8.
   nada. Te recomiendo no mirar variaciones porcentuales hasta tener tres meses comparables (ver
   8.3, «variación con base mínima»).
 - **Ritmo: unos 300-325 m y 2.200-2.700 € de base al mes** en DTF Culture (85,56 m en 8 días
-  naturales ≈ 325 m/mes; en 6 días laborables ≈ 14 m/día). Al año, unos 27.000-32.000 € de
+  naturales ≈ 320 m/mes; en 6 días laborables ≈ 14 m/día). Base al mes: 588,95 ÷ 8 × 30 ≈
+  2.200 € sin envío y 709,26 ÷ 8 × 30 ≈ 2.660 € con envío. Al año, unos 26.500-32.000 € de
   base. Es una microempresa en la cifra de negocio, aunque tenga estructura de pyme.
 - **Ocupación de la máquina ≈ 5 %** (si la capacidad real se parece a la de por defecto).
   70 m/h × 4 h × ~21 días = 5.880 m/mes de capacidad frente a ~300 m vendidos. La propia definición de la app (`rd_capacidad`) dice que por debajo del 50 %
@@ -319,11 +329,13 @@ Ocupación necesaria               = punto muerto ÷ capacidad mensual (≈ 5.88
 | 3,50 € | 3,50 € | 429 m | 857 m | 1.429 m |
 | 4,50 € (con merma y comisiones) | 2,50 € | 600 m | 1.200 m | 2.000 m |
 
-Ritmo actual visto en las capturas: **~300-325 m al mes**.
+Ritmo actual visto en las capturas: **~320 m al mes**. El precio medio real es 6,88 €/m, un
+poco por debajo de los 7 € de la tabla: los márgenes reales son unos 0,12 €/m más bajos.
 
-**Lectura:** salvo que los fijos de la parte DTF sean de verdad bajos (por debajo de unos
-1.500 € al mes, lo que exige que nadie cobre sueldo de ella), **la parte DTF hoy no cubre su
-estructura**. La buena noticia es que el punto muerto, en cualquier escenario razonable, está
+**Lectura:** el punto muerto más bajo de la tabla (333 m) ya está por encima de lo que se vende,
+así que **en ningún escenario la parte DTF cubre hoy su estructura**. Para cubrirla con el
+volumen actual harían falta, a la vez, un coste variable de 2,50 €/m y unos fijos de menos de
+1.440 € al mes (320 m × 4,50 €), lo que exige que nadie cobre sueldo de ella. La buena noticia es que el punto muerto, en cualquier escenario razonable, está
 entre el 6 % y el 35 % de la capacidad: **es alcanzable sin invertir en máquina**. Es un
 problema de ventas, no de producción.
 
@@ -339,7 +351,9 @@ Con el mismo precio, un coste variable de 3 €/m y un **coste fijo de servir ca
 | 10 m | 70,00 € | 30,00 € | 3,00 € | 37,00 € |
 | 30 m | 210,00 € | 90,00 € | 3,00 € | 117,00 € |
 
-Con 10 minutos de una persona a 20 €/hora de coste empresa, el pedido de 1 m **pierde dinero**.
+Sin el coste de servirlo, el pedido de 1 m deja 4 € (7 − 3). A 20 €/hora de coste empresa, eso
+paga 12 minutos de trabajo: con 10 minutos deja 0,67 €; con 15 minutos (5 €) **pierde 1 €**, y
+aún sin contar la comisión de cobro.
 La consulta 1 de la sección 9 te dice cuántos pedidos tienes en cada tramo: si una parte grande
 está por debajo de 2 m, el pedido mínimo (o un cargo de preparación de 2-3 €) es la medida de
 más impacto inmediato.
@@ -363,9 +377,9 @@ Ordenados por lo que pueden costar, no por lo probables que son.
 
 | Riesgo | Por qué | Qué cuesta si sale mal |
 | --- | --- | --- |
-| **Verifactu el 1-1-2027 (72 días)** | El CRM ya emite tickets y facturas con NIF y numeración (captura 5). Si emite, es sistema de facturación sujeto (informe 01, H1) | Sanciones por sistema no conforme, y tener que parar de facturar en enero |
+| **Verifactu el 1-1-2027 (72 días)** | El CRM ya emite tickets y facturas con NIF y numeración (captura 5). Si emite, es sistema de facturación sujeto (informe 01, H1) | Multa fija de **50.000 € por ejercicio** a quien use un programa no conforme (art. 201 bis LGT; a confirmar con la gestoría), más que la venta de un año; y tener que parar de facturar en enero |
 | **Doble factura** | La tienda tiene el plugin WowInvoice instalado (captura 2; en ese pedido dice «Invoice not published», hay que confirmar que no emite) además del CRM, y la gestoría emite las suyas | Dos facturas por una venta: IVA repercutido de más o inspección |
-| **«Grupo B»** | La app separa lo documentado (A) de pedidos sin documento y gastos sin justificante (B). El IVA se devenga igual (informe 01, H6). Un ticket número 3 el 24-9 con decenas de pedidos ya hechos sugiere muchos pedidos sin documento (lo confirma o desmiente la consulta B6 de `consultas-cuadre.sql`) | En una inspección, el B se presume venta no declarada. Objetivo: **B = 0** |
+| **«Grupo B»** | La app separa lo documentado (A) de pedidos sin documento y gastos sin justificante (B). El IVA se devenga igual (informe 01, H6). Que el ticket del 24-9 sea el número 3 es un indicio de pedidos sin documento, no una prueba: también puede que se documenten con factura (serie F) o que la serie empezara tarde. Lo confirma o desmiente la consulta B6 de `consultas-cuadre.sql` | En una inspección, el B se presume venta no declarada. Objetivo: **B = 0** |
 | **Fecha de los documentos** | Llevan la fecha del pedido, no la de expedición (informe 01, H2) | Antedatar; cambiar trimestres ya presentados |
 
 **Mi recomendación:** que la gestoría o un proveedor certificado sea el único sistema que emite
@@ -442,7 +456,7 @@ volumen actual (~300 m/mes); donde depende de un dato que no tengo, lo digo.
 | # | Acción | Impacto estimado | Esfuerzo |
 | --- | --- | --- | --- |
 | 9 | **Plan comercial B2B con objetivo en metros**: lista de 100 talleres, tiendas de personalización, clubes y empresas de merchandising a menos de 24 h; muestra gratuita (1 m con su diseño); seguimiento en Presupuestos. Ya tenéis el marcador «Captación de talleres» | Cada cliente B2B de 30 m/mes a 4 €/m de margen son 120 €/mes. Con 10 así, el DTF duplica su volumen | Una persona, 1 día a la semana |
-| 10 | **Escalera de precios por tramos** y envío gratis a partir de un importe que cubra el coste real del envío | Subir el pedido medio de 3,6 m hacia 5 m reduce el coste de servir por metro un 25 % | Medio día de análisis + Woo |
+| 10 | **Escalera de precios por tramos** y envío gratis a partir de un importe que cubra el coste real del envío | Subir el pedido medio de 3,6 m a 5 m reduce el coste de servir por metro un 28 % (de 0,83 a 0,60 €/m con 3 € por pedido) | Medio día de análisis + Woo |
 | 11 | **Medir el coste de captación por tienda**: apuntar la publicidad por tienda y mes, y dividir entre clientes nuevos | Saber si cada euro de Google Ads deja dinero o lo quema | Bajo (ver 8.3, nº 14) |
 | 12 | **Ficha de cliente unificada y reactivación de dormidos** (mejoras 5 y 10 de la auditoría) | Un cliente recuperado cuesta 5-7 veces menos que uno nuevo | Medio |
 | 13 | **Avisos de cobro a 7, 15 y 30 días y pago por enlace** (mejoras 1 y 9) | Solo si hay venta a crédito relevante; la consulta 4 dirá cuánto | Medio |
