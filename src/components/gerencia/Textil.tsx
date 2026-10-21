@@ -38,6 +38,7 @@ import { proformasSinFactura, proformasTextil, resumenProformas } from "@/domini
 import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
+import { mensajeDeError } from "@/lib/errores";
 
 const SIN_MARCA = "sin-marca";
 const FILAS = 10;
@@ -116,7 +117,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Vendido textil"
           explicacion="g_vendido"
@@ -149,7 +150,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
           icon={Coins}
           pie={
             <span className="text-muted-foreground">
-              {pct === null ? "Sin ventas" : `${numero(pct, 1)} % de la bruta`}
+              {pct === null ? "Sin ventas" : `${numero(pct, 1)}\u00A0% de la bruta`}
               {c.textilSinCoste > 0 && ` · ${c.textilSinCoste} sin salir del almacén`}
             </span>
           }
@@ -196,7 +197,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
                       <TableCell className="text-right tabular-nums">{m.pedidos}</TableCell>
                       <TableCell className="text-right tabular-nums">{eur(m.vendido)}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {numero(m.peso, 1)} %
+                        {numero(m.peso, 1)}&nbsp;%
                       </TableCell>
                     </TableRow>
                   ))}
@@ -306,7 +307,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
             )}
             {errorProformas && (
               <p className="text-xs text-destructive">
-                No se han podido leer las proformas sin factura: {errorProformas.message}
+                No se han podido leer las proformas sin factura: {mensajeDeError(errorProformas)}
               </p>
             )}
             {proformas && proformas.proformas > 0 && (
@@ -466,7 +467,7 @@ function CuentaDelAlmacen({
       <CardContent className="space-y-3">
         {error ? (
           <p className="text-sm text-destructive">
-            No se han podido leer los movimientos del almacén: {error.message}
+            No se han podido leer los movimientos del almacén: {mensajeDeError(error)}
           </p>
         ) : datos === undefined ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -615,7 +616,7 @@ function ControlesDelAlmacen({
       <CardContent className="space-y-3">
         {error ? (
           <p className="text-sm text-destructive">
-            No se han podido leer los controles: {error.message}
+            No se han podido leer los controles: {mensajeDeError(error)}
           </p>
         ) : disponible === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>

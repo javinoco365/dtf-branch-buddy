@@ -17,7 +17,7 @@ import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/per
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
-import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
+import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import type { LucideIcon } from "lucide-react";
@@ -35,6 +35,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
+import { mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -83,7 +84,9 @@ function FacturacionTienda() {
   ).cobrado;
 
   const grafica = useMemo(() => {
-    const { por, tramos } = tramosGrafica({ desde, hasta });
+    const { por, tramos: todos } = tramosGrafica({ desde, hasta });
+    // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
+    const tramos = tramosHastaHoy(todos, new Date());
     const totales = agruparPorRangos(pedidos, tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
   }, [pedidos, desde, hasta]);
@@ -154,13 +157,13 @@ function FacturacionTienda() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se ha podido cargar la facturación: {error.message}
+            No se ha podido cargar la facturación: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}
@@ -177,7 +180,7 @@ function FacturacionTienda() {
 
       {!cargando && !error && !sinDatos && (
         <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
               explicacion="vendido"

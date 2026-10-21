@@ -37,6 +37,7 @@ import {
 } from "@/dominio/cobros";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
+import { avisarError } from "@/lib/errores";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -187,7 +188,7 @@ export function CobrosPedidoDialog({
       setNotas("");
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido registrar el cobro"),
+    onError: (e: Error) => avisarError(e, "No se ha podido registrar el cobro"),
   });
 
   const baja = useMutation({
@@ -197,7 +198,7 @@ export function CobrosPedidoDialog({
       setBorrando(null);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido borrar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido borrar"),
   });
 
   const etiqueta = ETIQUETA_ESTADO_COBRO[resumen.estado];
@@ -212,8 +213,7 @@ export function CobrosPedidoDialog({
         <DialogHeader>
           <DialogTitle>Cobros del pedido {pedido.numero}</DialogTitle>
           <DialogDescription>
-            Todo lo cobrado cuenta en la Facturación Consolidada. El efectivo, además, entra en
-            Caja.
+            Todo lo cobrado cuenta en «Lo cobrado». El efectivo, además, entra en Caja.
           </DialogDescription>
         </DialogHeader>
 
@@ -410,8 +410,8 @@ export function CobrosPedidoDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {metodo === "efectivo"
-                ? "Cuenta en la Consolidada como efectivo y se apunta como ingreso en Caja con el concepto elegido, propina incluida."
-                : "Cuenta en la Consolidada. No pasa por Caja."}
+                ? "Cuenta en «Lo cobrado» como efectivo y se apunta como ingreso en Caja con el concepto elegido, propina incluida."
+                : "Cuenta en «Lo cobrado». No pasa por Caja."}
             </p>
             <div className="flex justify-end">
               <Button
@@ -436,10 +436,10 @@ export function CobrosPedidoDialog({
             borrando?.metodo === "efectivo"
               ? [
                   "Se borra también su apunte de ingreso en Caja",
-                  "Deja de contar en la Facturación Consolidada",
+                  "Deja de contar en «Lo cobrado»",
                   "El importe vuelve a pendiente",
                 ]
-              : ["Deja de contar en la Facturación Consolidada", "El importe vuelve a pendiente"]
+              : ["Deja de contar en «Lo cobrado»", "El importe vuelve a pendiente"]
           }
           cargando={baja.isPending}
           onConfirmar={() => borrando && baja.mutate(borrando.id)}

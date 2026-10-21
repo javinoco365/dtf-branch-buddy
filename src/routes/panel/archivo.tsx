@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
@@ -157,8 +158,10 @@ function ArchivoPage() {
             </Badge>
           ))}
           {resumen.sinFichero > 0 && (
-            <Badge variant="outline" className="font-normal text-status-pendiente">
-              Sin fichero: <span className="ml-1 font-semibold">{resumen.sinFichero}</span>
+            // Gris: casi todos son documentos emitidos, que se generan al
+            // descargar. Las compras sin fichero se marcan en su fila.
+            <Badge variant="outline" className="font-normal text-muted-foreground">
+              Sin fichero guardado: <span className="ml-1 font-semibold">{resumen.sinFichero}</span>
             </Badge>
           )}
         </div>
@@ -206,15 +209,24 @@ function ArchivoPage() {
                   <TableCell className="font-mono text-xs whitespace-nowrap">
                     {d.referencia || "—"}
                   </TableCell>
-                  <TableCell>{d.tercero ?? "—"}</TableCell>
+                  <TableCell>
+                    {d.tercero ??
+                      (d.clase === "ticket" ? (
+                        <span className="text-muted-foreground">Venta de mostrador</span>
+                      ) : (
+                        "—"
+                      ))}
+                  </TableCell>
                   <TableCell className="text-right font-medium">{eur(d.total)}</TableCell>
                   <TableCell>
+                    {/* Un documento emitido se genera al descargarlo: es lo
+                        normal. Una compra sin fichero sí es un hueco. */}
                     {d.tieneFichero ? (
                       <span className="text-xs text-muted-foreground">{d.ext.toUpperCase()}</span>
+                    ) : d.origen === "compra" ? (
+                      <EtiquetaTono tono="atencion">Sin fichero</EtiquetaTono>
                     ) : (
-                      <span className="text-xs text-status-pendiente">
-                        {d.origen === "compra" ? "Sin fichero" : "Se genera al descargar"}
-                      </span>
+                      <span className="text-xs text-muted-foreground">Se genera al descargar</span>
                     )}
                   </TableCell>
                 </TableRow>

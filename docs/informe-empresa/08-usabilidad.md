@@ -57,23 +57,38 @@ cifra). Lo que cuesta es **orientarse y ver de un golpe lo que importa**:
 | 9   | Fechas ISO, unidades partidas, minúsculas    | Facturas de compra, Gerencia › Ventas, Facturas     | Parece otro programa dentro del programa                                          |
 | 10  | Errores en jerga técnica                     | Lector de facturas, sincronización, avisos de error | Quien sube una factura no sabe qué hacer con «Vault» o «fuera de rango»           |
 
-## 3. Qué cambia en esta rama
+## 3. Qué ha cambiado en esta rama
 
-Se va completando en el pull request; cada punto es un commit aparte.
+Un commit por punto. Todo es interfaz: sin migraciones ni cambios de datos ni de servidor.
 
-| Punto | Cambio                                                                                                                                                                       |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1, 8  | **Menú por tareas** (Inicio · Ventas · Dinero · Tiendas · Textil · Sistema) con nombres claros, sin el selector de tienda repetido; **título de la pantalla en la cabecera** |
-| 2, 9  | **Semáforo único de estados**: una regla en `src/dominio/` y un solo componente, en todas las pantallas; etiquetas legibles y con mayúscula                                  |
-| 3     | Comparaciones: sin «Sin datos en…»; con base pequeña, «×60» en vez de «5 992 %»                                                                                              |
-| 4, 5  | Gerencia: **avisos arriba**, con color por gravedad; barras de objetivo con semáforo                                                                                         |
-| 6     | Gráficas solo hasta hoy                                                                                                                                                      |
-| 7     | Móvil: cifras en dos columnas, más compactas                                                                                                                                 |
-| 9, 10 | Fechas con `src/lib/format.ts`, unidades sin partir, errores para personas con el detalle técnico plegado                                                                    |
+| Punto | Cambio                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, 8  | **Menú por tareas**: Inicio y Gerencia arriba; Ventas; Dinero; Tiendas; Textil; Sistema. «Dashboard Global» pasa a «Inicio», «Pedidos Consolidados» a «Pedidos», «Facturación Consolidada» a «Lo cobrado». Fuera el desplegable de tienda repetido. La cabecera dice dónde estás («Dinero › Lo cobrado», «Tienda Uno › Facturas») y en el móvil el botón del menú son las tres rayas. Un solo mapa (`src/dominio/navegacion.ts`) para menú y cabecera |
+| 2, 9  | **Semáforo único de estados** (`src/dominio/estados.ts` + `EtiquetaEstado`): gris lo que no pide nada, azul en marcha, ámbar hay que hacer algo, verde terminado, rojo torcido. En Pedidos, Textil, Facturas, Presupuestos, Compras, Conciliación y Archivo. «WooCommerce» pasa a texto discreto                                                                                                                                                      |
+| 2     | **Facturas de compra**: la columna Estado dice si se debe («Por pagar» / «Pagada»). Antes el botón de cada fila, que es una acción, decía «Pagada» en las que estaban sin pagar; ahora dice «Marcar pagada» / «Marcar por pagar»                                                                                                                                                                                                                      |
+| 3     | Sin «Sin datos en…» en cada tarjeta; con base pequeña, «×61» en vez de «+5 992,9 %»                                                                                                                                                                                                                                                                                                                                                                   |
+| 4, 5  | Gerencia › Resumen: **avisos lo primero**, con color por gravedad; barras de objetivo verde / ámbar / rojo                                                                                                                                                                                                                                                                                                                                            |
+| 6     | Gráficas del periodo en curso hasta hoy; «Top productos por metros» como lista con barra                                                                                                                                                                                                                                                                                                                                                              |
+| 7     | Móvil: cifras dos por fila en todas las pantallas; en Gerencia, filtros plegados en una línea y aviso de que hay más pestañas. Gerencia › Resumen pasa de 3 112 a unos 1 700 px de alto                                                                                                                                                                                                                                                               |
+| 8     | Panel de cada tienda con título, «Este mes» y «Desde el principio» separados, y las tarjetas de siempre                                                                                                                                                                                                                                                                                                                                               |
+| 9     | Fechas `02/10/2026` en los avisos de compras, unidades que no se parten («57,5 %», «12,50 m»), «Venta de mostrador» en los tickets sin cliente                                                                                                                                                                                                                                                                                                        |
+| 10    | **Errores para personas** (`src/dominio/errores.ts`): los técnicos («Failed to fetch», «row-level security», «duplicate key»…) se dicen en llano y con qué hacer, con el original en pequeño debajo. En 103 avisos y en los errores de las pantallas. El lector de facturas explica qué hacer y pliega el detalle técnico                                                                                                                             |
 
-## 4. Lo que queda para que lo decidas
+## 4. Qué probar a mano
 
-Cambian la forma de trabajar, no solo cómo se ve, así que van aparte y con tu visto bueno:
+1. **Menú**: en el ordenador, los grupos Ventas, Dinero, Tiendas, Textil y Sistema; al entrar en
+   una tienda, la cabecera dice «Tienda X › Pantalla» y su entrada se ve marcada en el menú.
+2. **Pedidos**: cada estado con su color; el desplegable del estado sigue cambiándolo.
+3. **Facturas de compra**: una compra sin pagar dice «Por pagar» y el botón «Marcar pagada»;
+   al pulsarlo pide la fecha y pasa a «Pagada».
+4. **Gerencia** en el móvil: arriba, la línea de filtros («Octubre 2026 · Todas las tiendas»),
+   que se despliega al tocarla; debajo, los avisos y las cifras de dos en dos.
+5. **Un error**: sin conexión (modo avión) y pulsando guardar en cualquier sitio, el aviso dice
+   «No hay conexión con el servidor…», no «Failed to fetch».
+
+## 5. Lo que queda
+
+**Para que lo decidas** (cambian la forma de trabajar, no solo cómo se ve):
 
 - **Tablero de pedidos** (columnas Pendiente · En marcha · Listo · Enviado) como alternativa a la
   tabla, para el taller.
@@ -83,3 +98,12 @@ Cambian la forma de trabajar, no solo cómo se ve, así que van aparte y con tu 
   enlaces viejos redirigidos.
 - **Agrupar las once pestañas de Gerencia** en cuatro (Resumen · Ventas y clientes · Dinero ·
   Producción) y llevar «Ajustes» a Ajustes generales.
+
+**Retoques pendientes** (sin decisión, en una rama aparte):
+
+- Pedidos: una sola cabecera de columnas fija en vez de repetirla en cada día.
+- Facturas de tienda: la flecha roja de anular sin texto, mejor dentro de un menú «⋮».
+- Conciliación: el alta de cuenta, detrás de un botón «Añadir cuenta».
+- Tiendas: «Borrar» no al lado de «Editar» con el mismo peso.
+- Caja e Inversión: el mismo ancho y margen de página que el resto.
+- Pedidos en el móvil: los filtros plegados como en Gerencia.

@@ -684,7 +684,7 @@ async function componer(d: PresupuestoPDFData, p: PlantillaPresupuesto, conNumer
   const cifras: Record<ColumnaCifra, (l: LineaDocumentoPresupuesto) => string> = {
     cantidad: (l) => cantidadConUnidad(l.cantidad, l.unidad),
     precio: (l) => eurUnitario(l.precio_unitario),
-    iva: (l) => `${numeroJusto(l.iva_rate, 2)} %`,
+    iva: (l) => `${numeroJusto(l.iva_rate, 2)}\u00A0%`,
     importe: (l) => eur(l.importe),
   };
   // Lo que necesita cada columna para que nada se parta a media palabra: su
@@ -865,7 +865,9 @@ async function componer(d: PresupuestoPDFData, p: PlantillaPresupuesto, conNumer
     { etiqueta: rs.base, valor: eur(doc_.base) },
     ...doc_.iva.map((r) => ({
       etiqueta:
-        r.tipo == null ? rs.iva.trim() : `${rs.iva.trim()} (${numeroJusto(r.tipo, 2)} %)`.trim(),
+        r.tipo == null
+          ? rs.iva.trim()
+          : `${rs.iva.trim()} (${numeroJusto(r.tipo, 2)}\u00A0%)`.trim(),
       valor: eur(r.cuota),
     })),
   ];

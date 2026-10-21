@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Marca, MARCA_NOMBRE } from "@/components/Marca";
+import { avisarError } from "@/lib/errores";
 
 // A esta página llevan los enlaces que genera un administrador en Ajustes >
 // Usuarios (invitación o «poner contraseña»). Supabase deja la sesión en la
@@ -63,7 +64,7 @@ function ElegirClave() {
     const { error } = await supabase.auth.updateUser({ password: clave });
     setGuardando(false);
     if (error) {
-      toast.error(error.message);
+      avisarError(error);
       return;
     }
     toast.success("Contraseña guardada");

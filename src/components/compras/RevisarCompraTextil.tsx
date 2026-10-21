@@ -1014,7 +1014,7 @@ export function RevisarCompraTextil({
               <SelectContent>
                 {TIPOS_IVA.map((t) => (
                   <SelectItem key={t} value={String(t)}>
-                    {`${Math.round(t * 100)} %`}
+                    {`${Math.round(t * 100)}\u00A0%`}
                   </SelectItem>
                 ))}
               </SelectContent>

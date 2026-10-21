@@ -41,6 +41,7 @@ import {
   resumenBorradoTienda,
 } from "@/lib/tiendas.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
@@ -127,7 +128,7 @@ function TiendasIndex() {
       toast.success(v.activa ? "Tienda activada" : "Tienda desactivada");
       refrescar();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo cambiar el estado"),
+    onError: (e: any) => avisarError(e, "No se pudo cambiar el estado"),
   });
 
   const borrarFn = useServerFn(eliminarTienda);
@@ -138,7 +139,7 @@ function TiendasIndex() {
       setBorrando(null);
       refrescar();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo borrar la tienda"),
+    onError: (e: any) => avisarError(e, "No se pudo borrar la tienda"),
   });
 
   // El resumen se pide al abrir el aviso: sin él no se puede decir qué se
@@ -320,7 +321,7 @@ function EditarTiendaDialog({ tienda, onDone }: { tienda: any; onDone: () => voi
       toast.success("Tienda actualizada");
       onDone();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo guardar"),
+    onError: (e: any) => avisarError(e, "No se pudo guardar"),
   });
 
   return (
@@ -446,7 +447,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
       setTab("identidad");
       onDone();
     } catch (e: any) {
-      toast.error(e?.message ?? "Error creando la tienda");
+      avisarError(e, "Error creando la tienda");
     } finally {
       setSaving(false);
     }

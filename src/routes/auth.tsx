@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Marca, MARCA_NOMBRE } from "@/components/Marca";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -63,7 +64,7 @@ function AuthPage() {
       toast.success("Bienvenido");
       navigate({ to: "/panel" });
     } catch (err: any) {
-      toast.error(err.message ?? "Error al iniciar sesión");
+      avisarError(err, "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }

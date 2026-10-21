@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { StatusBadge } from "@/components/StatusBadge";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { eur, eurConSigno, eurUnitarioFijo, fechaCorta, numeroJusto } from "@/lib/format";
 import { entradasDeProforma } from "@/lib/compras.functions";
 import { sumarCantidades } from "@/dominio/sumatorios";
@@ -44,6 +44,7 @@ import {
   type ResumenCasado,
   type TipoDocumentoCompra,
 } from "@/dominio/tipos-textil";
+import { mensajeDeError } from "@/lib/errores";
 
 /**
  * Factura o proforma: lo propone la IA y lo decide la persona. Sin elegir
@@ -257,7 +258,7 @@ function LineaPago({
   return (
     <div className="space-y-1">
       <p className="flex flex-wrap items-center gap-2">
-        <StatusBadge estado={pago.pagada ? "pagada" : "pendiente"} />
+        <EtiquetaEstado tipo="pago_compra" valor={pago.pagada ? "pagada" : "pendiente"} />
         <span>
           El pago de la proforma (
           {pago.pagada ? `pagada el ${fechaCorta(pago.fecha)}` : "pendiente de pago"},{" "}
@@ -320,7 +321,7 @@ function ComparacionTallas({ proformaId, datos }: { proformaId: string; datos: D
   if (error) {
     return (
       <p className="text-destructive">
-        No se ha podido leer lo que metió la proforma: {(error as Error).message}
+        No se ha podido leer lo que metió la proforma: {mensajeDeError(error)}
       </p>
     );
   }

@@ -8,7 +8,7 @@ import type { AvisoResumen } from "@/dominio/resumen-diario";
 
 /** 0,734 → «73 %». */
 export const porcentaje = (v: number | null | undefined) =>
-  v == null ? "—" : `${numero(v * 100, 0)} %`;
+  v == null ? "—" : `${numero(v * 100, 0)}\u00A0%`;
 
 /** 11,5 → «11,5 h»; más de dos días, en días. */
 export const horas = (h: number | null) =>

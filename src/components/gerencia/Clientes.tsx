@@ -54,7 +54,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
         grupo={d.grupo}
         texto="Clientes no se separa en A y B: enseña todos los pedidos."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Clientes activos"
           explicacion="g_clientes_activos"
@@ -90,7 +90,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Compraron {eur(r.vendidoRecurrentes)}</span>}
         />
         <TarjetaKpi
-          titulo={`El ${PARTE_PARETO} % de las ventas`}
+          titulo={`El ${PARTE_PARETO}\u00A0% de las ventas`}
           explicacion="g_pareto"
           valor={
             r.pareto
@@ -102,7 +102,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
           pie={
             r.pareto ? (
               <span className="text-muted-foreground">
-                El {numero(r.pareto.porcentajeClientes, 1)} % de los clientes activos
+                El {numero(r.pareto.porcentajeClientes, 1)}&nbsp;% de los clientes activos
               </span>
             ) : undefined
           }
@@ -144,9 +144,11 @@ export function Clientes({ d }: { d: DatosGerencia }) {
                     <TableCell>{etiquetaCanal(c.canal)}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.pedidos}</TableCell>
                     <TableCell className="text-right tabular-nums">{eur(c.vendido)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{numero(c.peso, 1)} %</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {numero(c.acumulado, 1)} %
+                      {numero(c.peso, 1)}&nbsp;%
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {numero(c.acumulado, 1)}&nbsp;%
                     </TableCell>
                   </TableRow>
                 ))}

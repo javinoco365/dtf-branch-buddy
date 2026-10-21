@@ -60,9 +60,10 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
+import { mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
-  head: () => ({ meta: [{ title: "Facturación Consolidada · DTF Culture" }] }),
+  head: () => ({ meta: [{ title: "Lo cobrado · DTF Culture" }] }),
   component: FacturacionGlobal,
 });
 
@@ -268,7 +269,7 @@ function FacturacionGlobal() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Facturación Consolidada</h1>
+          <h1 className="text-2xl font-bold">Lo cobrado</h1>
           <p className="text-muted-foreground">
             Todo lo cobrado, de las tiendas y del textil, con su método de cobro
           </p>
@@ -381,7 +382,7 @@ function FacturacionGlobal() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se ha podido cargar la facturación: {error.message}
+            No se ha podido cargar la facturación: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}
@@ -389,14 +390,14 @@ function FacturacionGlobal() {
       {!disponible && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            La Facturación Consolidada se calcula con los cobros, que necesitan la migración{" "}
+            «Lo cobrado» se calcula con los cobros, que necesitan la migración{" "}
             <code>20260929100000_cobros.sql</code>.
           </CardContent>
         </Card>
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}

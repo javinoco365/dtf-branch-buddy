@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -6,7 +7,6 @@ import { toast } from "sonner";
 import { FileText, MoreVertical, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -68,29 +68,17 @@ import { descargarBlob } from "@/lib/csv";
 import {
   ESTADOS_PRESUPUESTO,
   estadoVisible,
-  etiquetaEstadoPresupuesto,
   filtrarPresupuestos,
   validoHasta,
   type EstadoPresupuesto,
-  type EstadoVisiblePresupuesto,
   type FiltroPresupuestos,
 } from "@/dominio/presupuestos";
 import { totalesPresupuestos } from "@/dominio/sumatorios-facturas";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/presupuestos")({
   component: PresupuestosTienda,
 });
-
-const VARIANTE: Record<
-  EstadoVisiblePresupuesto,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  borrador: "outline",
-  enviado: "secondary",
-  aceptado: "default",
-  rechazado: "destructive",
-  caducado: "outline",
-};
 
 function PresupuestosTienda() {
   const { tiendaId } = Route.useParams();
@@ -164,7 +152,7 @@ function PresupuestosTienda() {
       toast.success(`PDF descargado: ${r.nombre}`, { id: "pdf-presupuesto" });
     },
     onError: (e: Error) =>
-      toast.error(`No se pudo generar el PDF: ${e.message}`, { id: "pdf-presupuesto" }),
+      toast.error(`No se pudo generar el PDF: ${mensajeDeError(e)}`, { id: "pdf-presupuesto" }),
   });
 
   const estadoMut = useMutation({
@@ -173,7 +161,7 @@ function PresupuestosTienda() {
       toast.success("Estado actualizado");
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const confirmarMut = useMutation({
@@ -185,7 +173,7 @@ function PresupuestosTienda() {
       qc.invalidateQueries({ queryKey: ["pedidos"] });
       qc.invalidateQueries({ queryKey: ["cobros-pendientes-pedidos"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const borrarMut = useMutation({
@@ -195,7 +183,7 @@ function PresupuestosTienda() {
       setBorrando(null);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   return (
@@ -232,7 +220,7 @@ function PresupuestosTienda() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los presupuestos: {(error as Error).message}
+            No se han podido cargar los presupuestos: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}
@@ -324,9 +312,7 @@ function PresupuestosTienda() {
                         {p.cliente_nombre ?? "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={VARIANTE[visible]}>
-                          {etiquetaEstadoPresupuesto(visible)}
-                        </Badge>
+                        <EtiquetaEstado tipo="presupuesto" valor={visible} />
                         {p.pedido?.numero && (
                           <div className="text-xs text-muted-foreground mt-1">
                             Pedido <span className="font-mono">{p.pedido.numero}</span>

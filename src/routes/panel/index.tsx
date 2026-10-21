@@ -24,7 +24,7 @@ import {
   variacion,
 } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
-import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
+import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import {
@@ -40,9 +40,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
+import { mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/")({
-  head: () => ({ meta: [{ title: "Dashboard Global · DTF Culture" }] }),
+  head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
   component: DashboardGlobal,
 });
 
@@ -100,7 +101,9 @@ function DashboardGlobal() {
   const sinCostes = costeMetro === 0 && costePer.produccion === 0;
 
   const grafica = useMemo(() => {
-    const { por, tramos } = tramosGrafica({ desde, hasta });
+    const { por, tramos: todos } = tramosGrafica({ desde, hasta });
+    // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
+    const tramos = tramosHastaHoy(todos, new Date());
     const totales = agruparPorRangos(pedidos, tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
   }, [pedidos, desde, hasta]);
@@ -145,8 +148,8 @@ function DashboardGlobal() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard Global</h1>
-          <p className="text-muted-foreground">Vista consolidada agregando todas las tiendas</p>
+          <h1 className="text-2xl font-bold">Inicio</h1>
+          <p className="text-muted-foreground">Las cifras del periodo, de todas las tiendas</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -164,13 +167,13 @@ function DashboardGlobal() {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pedidos: {error.message}
+            No se han podido cargar los pedidos: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}
 
       {cargando && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
           ))}
@@ -187,7 +190,7 @@ function DashboardGlobal() {
 
       {!cargando && !error && !sinDatos && (
         <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
               explicacion="vendido"

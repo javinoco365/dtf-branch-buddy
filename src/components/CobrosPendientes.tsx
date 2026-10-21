@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
+import { avisarError } from "@/lib/errores";
 
 type Factura = {
   id: string;
@@ -85,7 +86,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
       qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
       qc.invalidateQueries({ queryKey: ["facturas"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const filtradas = useMemo(() => {

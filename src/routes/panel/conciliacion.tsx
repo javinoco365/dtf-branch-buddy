@@ -39,6 +39,7 @@ import { useCuentasBanco } from "@/components/banco/useCuentasBanco";
 import { MotorConciliacion } from "@/components/banco/MotorConciliacion";
 import { verConciliacion } from "@/lib/conciliacion.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -142,7 +143,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
       );
       refrescar();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo leer el extracto"),
+    onError: (e: any) => avisarError(e, "No se pudo leer el extracto"),
   });
 
   const conciliarFn = useServerFn(conciliar);
@@ -162,7 +163,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
       refrescar();
     },
     onError: (e: any) => {
-      toast.error(e?.message ?? "No se pudo conciliar");
+      avisarError(e, "No se pudo conciliar");
       refrescar();
     },
   });
@@ -174,7 +175,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
       toast.success("Conciliación deshecha. La factura vuelve a pendiente de cobro.");
       refrescar();
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo deshacer"),
+    onError: (e: any) => avisarError(e, "No se pudo deshacer"),
   });
 
   // Quien solo ve, ve las propuestas; los botones y desplegables, desactivados.

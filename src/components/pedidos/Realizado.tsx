@@ -18,6 +18,7 @@ import {
   realizadoOtroDia,
 } from "@/dominio/realizado";
 import type { FechaPedido } from "@/dominio/dia-pedido";
+import { avisarError } from "@/lib/errores";
 
 /** '20/10 · 09:15' de 'yyyy-mm-ddThh:mm:ss'. */
 const corto = (momento: string) =>
@@ -79,7 +80,7 @@ export function RealizadoEn({
       queryClient.invalidateQueries({ queryKey: ["textil-pedidos"] });
       queryClient.invalidateQueries({ queryKey: ["gerencia"] });
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudo corregir la fecha"),
+    onError: (e: Error) => avisarError(e, "No se pudo corregir la fecha"),
   });
 
   // Solo los pedidos ya realizados (o cancelados después) llevan fecha.

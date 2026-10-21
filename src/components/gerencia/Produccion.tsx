@@ -67,7 +67,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
         grupo={d.grupo}
         texto="El taller y los envíos son de todos los pedidos; «Pedidos del periodo por estado» sí sigue el grupo elegido."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="En el taller"
           explicacion="g_taller"
@@ -292,7 +292,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                       <TableCell className="font-medium">{t.etiqueta}</TableCell>
                       <TableCell className="text-right tabular-nums">{t.envios}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {numero((t.envios / tiempos.envios) * 100, 1)} %
+                        {numero((t.envios / tiempos.envios) * 100, 1)}&nbsp;%
                       </TableCell>
                     </TableRow>
                   ))}

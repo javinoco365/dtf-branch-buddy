@@ -38,6 +38,7 @@ import type { BorradorTienda } from "@/dominio/presupuesto-ia";
 import { ImagenesPresupuesto } from "./ImagenesPresupuesto";
 import { useImagenesPresupuesto } from "./useImagenesPresupuesto";
 import { AvisosIa } from "./CrearPresupuestoIa";
+import { avisarError } from "@/lib/errores";
 
 const LIBRE = "__libre__";
 
@@ -284,7 +285,7 @@ export function PresupuestoFormDialog({
       toast.success(presupuesto ? "Presupuesto actualizado" : "Presupuesto creado");
       onGuardado(r);
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido guardar"),
   });
 
   const { escribir } = usePermisos();
@@ -368,7 +369,7 @@ export function PresupuestoFormDialog({
                 </Label>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox checked={aplicaIva} onCheckedChange={(v) => setAplicaIva(v === true)} />
-                  Con IVA ({IVA_GENERAL} %)
+                  Con IVA ({IVA_GENERAL}&nbsp;%)
                 </label>
               </div>
               <div className="rounded-md border divide-y">

@@ -91,7 +91,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
         </Nota>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="IVA repercutido"
           explicacion="g_iva_repercutido"
@@ -267,7 +267,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                   {iva.porTipoIva.map((t) => (
                     <TableRow key={t.tipo}>
                       <TableCell className="font-medium">
-                        {t.tipo === 0 ? "Sin desglose" : `${numero(t.tipo, 0)} %`}
+                        {t.tipo === 0 ? "Sin desglose" : `${numero(t.tipo, 0)}\u00A0%`}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{eur(t.base)}</TableCell>
                       <TableCell className="text-right tabular-nums">{eur(t.cuota)}</TableCell>

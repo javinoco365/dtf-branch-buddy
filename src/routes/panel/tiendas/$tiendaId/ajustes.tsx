@@ -56,6 +56,7 @@ import {
   Users,
 } from "lucide-react";
 import { invalidarTrasGuardar } from "@/lib/cache";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
   component: Ajustes,
@@ -163,7 +164,7 @@ function Ajustes() {
       set("logo_url", data.publicUrl);
       toast.success("Logo subido. Guarda los cambios para asociarlo a la tienda.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo subir el logo");
+      avisarError(e, "No se pudo subir el logo");
     } finally {
       setSubiendoLogo(false);
     }
@@ -198,7 +199,7 @@ function Ajustes() {
       qc.invalidateQueries({ queryKey: ["tienda", tiendaId] });
       qc.invalidateQueries({ queryKey: ["tiendas-sidebar"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   // Por tandas: cada llamada trae lo que cabe en el tiempo de una función y
@@ -244,7 +245,7 @@ function Ajustes() {
       avisos.forEach((a) => toast.warning(a));
     } catch (e) {
       toast.error(
-        `${(e as Error).message}` +
+        `${mensajeDeError(e)}` +
           (suma.pedidos
             ? ` (antes de fallar se guardaron ${numero(suma.pedidos, 0)} pedidos)`
             : ""),
@@ -376,7 +377,7 @@ function Ajustes() {
                     );
                     qc.invalidateQueries();
                   } catch (e) {
-                    toast.error((e as Error).message);
+                    avisarError(e);
                   } finally {
                     // También si se cortó: lo ya escrito tiene que verse.
                     void invalidarTrasGuardar(qc);
@@ -593,7 +594,7 @@ function CredencialesCard({
       setCk("");
       setCs("");
     } catch (e) {
-      toast.error((e as Error).message);
+      avisarError(e);
     } finally {
       setSaving(false);
     }
@@ -775,7 +776,7 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
       toast.success("Remitente guardado");
       qc.invalidateQueries({ queryKey: ["tienda-remitente", tiendaId] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo guardar");
+      avisarError(e, "No se pudo guardar");
     } finally {
       setGuardando(false);
     }
@@ -825,7 +826,7 @@ function PlantillasCorreo({ tiendaId, isAdmin }: { tiendaId: string; isAdmin: bo
       toast.success("Plantilla guardada");
       qc.invalidateQueries({ queryKey: ["plantilla-correo", tiendaId, "pedido_enviado"] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo guardar");
+      avisarError(e, "No se pudo guardar");
     } finally {
       setGuardando(false);
     }
@@ -1097,7 +1098,7 @@ function DiagnosticoNumero({ tiendaId }: { tiendaId: string }) {
   const diagnosticar = useServerFn(diagnosticoNumeroWoo);
   const mut = useMutation({
     mutationFn: () => diagnosticar({ data: { tienda_id: tiendaId } }),
-    onError: (e: Error) => toast.error(e.message || "No se ha podido consultar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido consultar"),
   });
 
   return (
@@ -1196,7 +1197,7 @@ function RecuperarEnvios({ tiendaId }: { tiendaId: string }) {
       );
       qc.invalidateQueries();
     } catch (e) {
-      toast.error((e as Error).message || "No se ha podido consultar WooCommerce");
+      avisarError(e, "No se ha podido consultar WooCommerce");
     } finally {
       // También si se cortó a medias: lo ya recuperado tiene que verse.
       void invalidarTrasGuardar(qc);
@@ -1234,7 +1235,7 @@ function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
   const diagnosticar = useServerFn(diagnosticoLineasWoo);
   const mut = useMutation({
     mutationFn: () => diagnosticar({ data: { tienda_id: tiendaId, numero } }),
-    onError: (e: Error) => toast.error(e.message || "No se ha podido consultar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido consultar"),
   });
 
   return (

@@ -11,6 +11,7 @@ import {
   rangoDe,
   textoRango,
   tramosGrafica,
+  tramosHastaHoy,
   type Rango,
   type Seleccion,
 } from "./periodos";
@@ -218,5 +219,24 @@ describe("tramosGrafica", () => {
     );
     expect(dias(t.tramos[0])).toEqual(["2026-1-15", "2026-1-31"]);
     expect(dias(t.tramos[3])).toEqual(["2026-4-1", "2026-4-10"]);
+  });
+});
+
+describe("tramosHastaHoy", () => {
+  it("en el mes en curso, la gráfica llega hasta hoy", () => {
+    const { tramos } = tramosGrafica(rangoDe({ tipo: "mes", ref: HOY })!);
+    const hasta = tramosHastaHoy(tramos, HOY);
+    expect(hasta).toHaveLength(5);
+    expect(hasta.at(-1)?.etiqueta).toBe("5 oct");
+  });
+
+  it("un mes pasado sale entero", () => {
+    const { tramos } = tramosGrafica(rangoDe({ tipo: "mes", ref: d(2026, 9, 10) })!);
+    expect(tramosHastaHoy(tramos, HOY)).toHaveLength(30);
+  });
+
+  it("un periodo entero en el futuro se deja como está", () => {
+    const { tramos } = tramosGrafica(rangoDe({ tipo: "mes", ref: d(2026, 12, 1) })!);
+    expect(tramosHastaHoy(tramos, HOY)).toHaveLength(31);
   });
 });

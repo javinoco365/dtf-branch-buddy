@@ -38,6 +38,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { tabla } from "@/lib/rpc";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 export type Producto = {
   id: string;
@@ -153,7 +154,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
       qc.invalidateQueries({ queryKey: ["productos"] });
       setEditing(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const toggleActivo = useMutation({
@@ -177,7 +178,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
       qc.invalidateQueries({ queryKey: ["productos"] });
       setBorrando(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   return (

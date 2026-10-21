@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar,
   SidebarContent,
@@ -18,85 +17,102 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  LayoutDashboard,
+  Boxes,
+  Building2,
+  ChevronRight,
+  Coins,
+  FilePen,
+  FileText,
+  FileUp,
+  FolderArchive,
   Gauge,
+  HandCoins,
+  Landmark,
+  LayoutDashboard,
+  type LucideIcon,
+  Package,
+  PiggyBank,
+  Plus,
+  Receipt,
+  ReceiptText,
+  Settings,
+  Shirt,
+  ShoppingCart,
   Store,
   Users,
-  ShoppingCart,
-  FileText,
-  Settings,
-  Building2,
-  Receipt,
   Wallet,
-  Coins,
-  PiggyBank,
-  ChevronRight,
-  Plus,
-  List,
-  Shirt,
-  Boxes,
-  FileUp,
-  Landmark,
-  FileSpreadsheet,
-  FilePen,
-  Package,
-  ReceiptText,
-  FolderArchive,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { tabla } from "@/lib/rpc";
 import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
+import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
+import {
+  ENTRADA_GESTIONAR_TIENDAS,
+  MENU_PRINCIPAL,
+  MENU_SISTEMA,
+  SUBMENU_TEXTIL,
+  SUBMENU_TIENDA,
+  entradaActiva,
+  type ClaveIcono,
+  type EntradaMenu,
+} from "@/dominio/navegacion";
 
+const ICONOS: Record<ClaveIcono, LucideIcon> = {
+  inicio: LayoutDashboard,
+  gerencia: Gauge,
+  pedidos: ShoppingCart,
+  clientes: Users,
+  productos: Package,
+  cobros: Wallet,
+  cobrado: HandCoins,
+  compras: ReceiptText,
+  banco: Landmark,
+  caja: Coins,
+  inversion: PiggyBank,
+  archivo: FolderArchive,
+  presupuestos: FilePen,
+  facturas: FileText,
+  facturacion: Receipt,
+  ajustes: Settings,
+  usuarios: Users,
+  tiendas: Building2,
+  stock: Boxes,
+  "compras-textil": FileUp,
+};
+
+const ESTILO_GRUPO =
+  "uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50";
+
+/**
+ * La barra lateral. Qué entradas hay y cómo se llaman sale de
+ * `src/dominio/navegacion.ts`, el mismo mapa que pone el título en la
+ * cabecera: así el nombre de cada pantalla es el mismo en los dos sitios.
+ */
 export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   // En el cajón (móvil y tablet) el menú sale siempre entero, aunque en el
   // ordenador se hubiese plegado a iconos.
   const collapsed = state === "collapsed" && !isMobile;
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   // En el cajón, al elegir una pantalla el menú se cierra solo: si no, se
   // queda tapando la pantalla que se acaba de abrir.
   useEffect(() => {
     setOpenMobile(false);
   }, [pathname, setOpenMobile]);
+  // Con una tienda desplegada, su pantalla puede quedar por debajo del borde
+  // del menú: se trae a la vista para que se vea dónde se está.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      // La más concreta: la pantalla de la tienda antes que la propia tienda.
+      const activa =
+        document.querySelector('[data-sidebar="menu-sub-button"][data-active="true"]') ??
+        document.querySelector('[data-sidebar="menu-button"][data-active="true"]');
+      activa?.scrollIntoView({ block: "nearest" });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [pathname]);
   const navigate = useNavigate();
-
-  const { data: tiendas = [] } = useQuery({
-    queryKey: ["tiendas-sidebar", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      // Una tienda desactivada desaparece del día a día. Sigue existiendo, y
-      // se vuelve a activar desde la lista de tiendas.
-      //
-      // El filtro se hace aquí y no en la consulta a propósito. Nombrar la
-      // columna `activa` en el select o en un .eq() hace que PostgREST
-      // devuelva error mientras la migración que la añade no esté aplicada, y
-      // ese error dejaba el menú de tiendas VACÍO sin decir por qué: parecía
-      // que no había tiendas cuando lo que faltaba era una columna. Con
-      // select("*") la consulta funciona antes y después, y una tienda sin el
-      // campo se trata como activa.
-      const { data, error } = await tabla(supabase, "tiendas").select("*").order("nombre");
-      if (error) throw error;
-      return ((data ?? []) as { activa?: boolean }[]).filter((t) => t.activa !== false) as {
-        id: string;
-        nombre: string;
-        color: string | null;
-      }[];
-    },
-  });
-
-  const currentTiendaId = pathname.match(/^\/panel\/tiendas\/([^/]+)/)?.[1];
-  const selectedValue =
-    currentTiendaId && tiendas.some((t) => t.id === currentTiendaId) ? currentTiendaId : "";
+  const { data: tiendas = [] } = useTiendasMenu();
 
   return (
     <Sidebar collapsible="icon">
@@ -105,171 +121,24 @@ export function AppSidebar() {
           <Marca soloIcono={collapsed} />
         </div>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Global / Consolidado
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/gerencia")}>
-                  <Link to="/panel/gerencia">
-                    <Gauge />
-                    <span>Gerencia</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel"}>
-                  <Link to="/panel">
-                    <LayoutDashboard />
-                    <span>Dashboard Global</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith("/panel/facturacion-global")}
-                >
-                  <Link to="/panel/facturacion-global">
-                    <Receipt />
-                    <span>Facturación Consolidada</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/compras"}>
-                  <Link to="/panel/compras">
-                    <ReceiptText />
-                    <span>Facturas de compra</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/archivo"}>
-                  <Link to="/panel/archivo">
-                    <FolderArchive />
-                    <span>Archivo</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/pedidos"}>
-                  <Link to="/panel/pedidos">
-                    <ShoppingCart />
-                    <span>Pedidos Consolidados</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/clientes"}>
-                  <Link to="/panel/clientes">
-                    <Users />
-                    <span>Clientes</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/productos"}>
-                  <Link to="/panel/productos">
-                    <Package />
-                    <span>Productos generales</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/conciliacion"}>
-                  <Link to="/panel/conciliacion">
-                    <Landmark />
-                    <span>Conciliación bancaria</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/cobros"}>
-                  <Link to="/panel/cobros">
-                    <Wallet />
-                    <span>Cobros Pendientes</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/caja"}>
-                  <Link to="/panel/caja">
-                    <Coins />
-                    <span>Caja</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/panel/inversion"}>
-                  <Link to="/panel/inversion">
-                    <PiggyBank />
-                    <span>Inversión</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {MENU_PRINCIPAL.map((seccion) => (
+          <SidebarGroup key={seccion.titulo ?? "inicio"}>
+            {seccion.titulo && (
+              <SidebarGroupLabel className={ESTILO_GRUPO}>{seccion.titulo}</SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {seccion.entradas.map((e) => (
+                  <Entrada key={e.ruta} entrada={e} pathname={pathname} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
 
         <SidebarGroup>
-          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Tiendas
-          </SidebarGroupLabel>
+          <SidebarGroupLabel className={ESTILO_GRUPO}>Tiendas</SidebarGroupLabel>
           <SidebarGroupContent>
-            {!collapsed && (
-              <div className="px-2 pb-2">
-                <Select
-                  value={selectedValue}
-                  onValueChange={(v) => {
-                    if (v === "__new__") {
-                      navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any });
-                    } else if (v === "__manage__") {
-                      navigate({ to: "/panel/tiendas" });
-                    } else {
-                      navigate({
-                        to: "/panel/tiendas/$tiendaId",
-                        params: { tiendaId: v },
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-sidebar-accent/40 border-sidebar-border">
-                    <SelectValue placeholder="Selecciona una tienda…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiendas.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ background: t.color ?? "hsl(var(--primary))" }}
-                          />
-                          {t.nombre}
-                        </span>
-                      </SelectItem>
-                    ))}
-                    {tiendas.length > 0 && <SelectSeparator />}
-                    {isAdmin && (
-                      <SelectItem value="__new__">
-                        <span className="flex items-center gap-2 text-primary">
-                          <Plus className="h-3.5 w-3.5" />
-                          Nueva tienda
-                        </span>
-                      </SelectItem>
-                    )}
-                    <SelectItem value="__manage__">
-                      <span className="flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5" />
-                        Gestionar tiendas
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             <SidebarMenu>
               {tiendas.length === 0 && !collapsed && (
                 <div className="px-3 py-2 text-xs text-sidebar-foreground/50">
@@ -278,12 +147,12 @@ export function AppSidebar() {
               )}
               {tiendas.map((t) => {
                 const base = `/panel/tiendas/${t.id}`;
-                const isOpen = pathname.startsWith(base);
+                const abierta = pathname === base || pathname.startsWith(`${base}/`);
                 return (
-                  <Collapsible key={t.id} defaultOpen={isOpen} className="group/collapsible">
+                  <Collapsible key={t.id} defaultOpen={abierta} className="group/collapsible">
                     <SidebarMenuItem>
                       <CollapsibleTrigger asChild>
-                        <SidebarMenuButton isActive={isOpen}>
+                        <SidebarMenuButton isActive={abierta} tooltip={t.nombre}>
                           <Store style={{ color: t.color ?? undefined }} />
                           <span className="truncate">{t.nombre}</span>
                           <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
@@ -291,69 +160,46 @@ export function AppSidebar() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/pedidos"
-                            tiendaId={t.id}
-                            label="Pedidos"
-                            icon={ShoppingCart}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/presupuestos"
-                            tiendaId={t.id}
-                            label="Presupuestos"
-                            icon={FilePen}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/facturas"
-                            tiendaId={t.id}
-                            label="Facturas"
-                            icon={FileText}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/facturacion"
-                            tiendaId={t.id}
-                            label="Facturación"
-                            icon={Receipt}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/productos"
-                            tiendaId={t.id}
-                            label="Productos"
-                            icon={Package}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/clientes"
-                            tiendaId={t.id}
-                            label="Clientes"
-                            icon={Users}
-                            pathname={pathname}
-                          />
-                          <SubItem
-                            to="/panel/tiendas/$tiendaId/ajustes"
-                            tiendaId={t.id}
-                            label="Ajustes"
-                            icon={Settings}
-                            pathname={pathname}
-                          />
+                          {SUBMENU_TIENDA.map((s) => {
+                            const ruta = s.segmento ? `${base}/${s.segmento}` : base;
+                            const Icono = ICONOS[s.icono];
+                            return (
+                              <SidebarMenuSubItem key={s.segmento || "resumen"}>
+                                <SidebarMenuSubButton asChild isActive={pathname === ruta}>
+                                  <Link to={ruta as never}>
+                                    <Icono className="h-4 w-4" />
+                                    <span>{s.etiqueta}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          })}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     </SidebarMenuItem>
                   </Collapsible>
                 );
               })}
+              <Entrada entrada={ENTRADA_GESTIONAR_TIENDAS} pathname={pathname} />
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Nueva tienda"
+                    onClick={() =>
+                      navigate({ to: "/panel/tiendas", search: { nueva: 1 } as never })
+                    }
+                  >
+                    <Plus />
+                    <span>Nueva tienda</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Textil Personalizado
-          </SidebarGroupLabel>
+          <SidebarGroupLabel className={ESTILO_GRUPO}>Textil</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <Collapsible
@@ -362,63 +208,30 @@ export function AppSidebar() {
               >
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuButton isActive={pathname.startsWith("/panel/textil")}>
+                    <SidebarMenuButton
+                      isActive={pathname.startsWith("/panel/textil")}
+                      tooltip="Textil personalizado"
+                    >
                       <Shirt />
-                      <span>Textil Personalizado</span>
+                      <span>Textil personalizado</span>
                       <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      <TextilSub
-                        to="/panel/textil"
-                        label="Resumen"
-                        icon={LayoutDashboard}
-                        pathname={pathname}
-                        exact
-                      />
-                      <TextilSub
-                        to="/panel/textil/stock"
-                        label="Stock"
-                        icon={Boxes}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/compras"
-                        label="Compras"
-                        icon={FileUp}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/pedidos"
-                        label="Pedidos"
-                        icon={ShoppingCart}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/presupuestos"
-                        label="Presupuestos"
-                        icon={FileSpreadsheet}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/facturas"
-                        label="Facturas"
-                        icon={FileText}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/clientes"
-                        label="Clientes"
-                        icon={Users}
-                        pathname={pathname}
-                      />
-                      <TextilSub
-                        to="/panel/textil/ajustes"
-                        label="Ajustes"
-                        icon={Settings}
-                        pathname={pathname}
-                      />
+                      {SUBMENU_TEXTIL.map((e) => {
+                        const Icono = ICONOS[e.icono];
+                        return (
+                          <SidebarMenuSubItem key={e.ruta}>
+                            <SidebarMenuSubButton asChild isActive={entradaActiva(e, pathname)}>
+                              <Link to={e.ruta as never}>
+                                <Icono className="h-4 w-4" />
+                                <span>{e.etiqueta}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
@@ -428,71 +241,12 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50">
-            Sistema
-          </SidebarGroupLabel>
+          <SidebarGroupLabel className={ESTILO_GRUPO}>Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <Collapsible
-                defaultOpen={pathname.startsWith("/panel/tiendas")}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton isActive={pathname.startsWith("/panel/tiendas")}>
-                      <Building2 />
-                      <span>Gestión de Tiendas</span>
-                      <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild isActive={pathname === "/panel/tiendas"}>
-                          <Link to="/panel/tiendas">
-                            <List className="h-4 w-4" />
-                            <span>Listado</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      {isAdmin && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                navigate({ to: "/panel/tiendas", search: { nueva: 1 } as any })
-                              }
-                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-primary"
-                            >
-                              <Plus className="h-4 w-4" />
-                              <span>Nueva tienda</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      )}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname.startsWith("/panel/configuracion")}>
-                  <Link to="/panel/configuracion">
-                    <Settings />
-                    <span>Ajustes</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {isAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/panel/usuarios"}>
-                    <Link to="/panel/usuarios">
-                      <Users />
-                      <span>Usuarios</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
+              {MENU_SISTEMA.filter((e) => !e.soloAdmin || isAdmin).map((e) => (
+                <Entrada key={e.ruta} entrada={e} pathname={pathname} />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -508,55 +262,20 @@ export function AppSidebar() {
   );
 }
 
-function SubItem({
-  to,
-  tiendaId,
-  label,
-  icon: Icon,
-  pathname,
-}: {
-  to: string;
-  tiendaId: string;
-  label: string;
-  icon: any;
-  pathname: string;
-}) {
-  const resolved = to.replace("$tiendaId", tiendaId);
-  const active = pathname === resolved;
+function Entrada({ entrada, pathname }: { entrada: EntradaMenu; pathname: string }) {
+  const Icono = ICONOS[entrada.icono];
   return (
-    <SidebarMenuSubItem>
-      <SidebarMenuSubButton asChild isActive={active}>
-        <Link to={to as any} params={{ tiendaId } as any}>
-          <Icon className="h-4 w-4" />
-          <span>{label}</span>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={entradaActiva(entrada, pathname)}
+        tooltip={entrada.etiqueta}
+      >
+        <Link to={entrada.ruta as never}>
+          <Icono />
+          <span>{entrada.etiqueta}</span>
         </Link>
-      </SidebarMenuSubButton>
-    </SidebarMenuSubItem>
-  );
-}
-
-function TextilSub({
-  to,
-  label,
-  icon: Icon,
-  pathname,
-  exact,
-}: {
-  to: string;
-  label: string;
-  icon: any;
-  pathname: string;
-  exact?: boolean;
-}) {
-  const active = exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
-  return (
-    <SidebarMenuSubItem>
-      <SidebarMenuSubButton asChild isActive={active}>
-        <Link to={to as any}>
-          <Icon className="h-4 w-4" />
-          <span>{label}</span>
-        </Link>
-      </SidebarMenuSubButton>
-    </SidebarMenuSubItem>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

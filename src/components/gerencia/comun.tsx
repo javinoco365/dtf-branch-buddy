@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Destino } from "./destinos";
 import { SiPuede } from "@/components/SiPuede";
+import { mensajeDeError } from "@/lib/errores";
 
 /** «Ver detalle →», a la pantalla con la lista que hay detrás de una cifra. */
 export function VerDetalle({
@@ -38,7 +39,7 @@ export function Nota({ children }: { children: React.ReactNode }) {
 /** Mientras carga una pestaña: el hueco de las tarjetas. */
 export function CargandoPestana() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => (
         <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
       ))}
@@ -51,7 +52,7 @@ export function ErrorPestana({ que, error }: { que: string; error: Error }) {
   return (
     <Card>
       <CardContent className="py-6 text-sm text-destructive">
-        No se han podido cargar {que}: {error.message}
+        No se han podido cargar {que}: {mensajeDeError(error)}
       </CardContent>
     </Card>
   );

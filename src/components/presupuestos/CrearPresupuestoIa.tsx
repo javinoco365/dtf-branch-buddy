@@ -47,6 +47,7 @@ import {
 } from "@/dominio/imagenes-presupuesto";
 import { MAXIMO_BYTES_DOCUMENTO_IA, MAXIMO_BYTES_IMAGEN_IA } from "@/dominio/presupuesto-ia";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 export type ModoIa = "documento" | "texto";
 
@@ -210,7 +211,7 @@ export function PresupuestoIaDialog({
       }
       onBorrador({ propuesta, imagenes: elegidas });
     },
-    onError: (e: Error) => toast.error(e.message || "La IA no ha podido montar el presupuesto"),
+    onError: (e: Error) => avisarError(e, "La IA no ha podido montar el presupuesto"),
   });
 
   const elegirImagenes = (lista: FileList) => {

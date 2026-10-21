@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { infoEstado } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { enRango } from "@/dominio/periodos";
@@ -47,6 +49,7 @@ import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-factur
 import { totalesDocumentos } from "@/dominio/sumatorios";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -121,7 +124,7 @@ function FacturasPage() {
       qc.removeQueries({ queryKey: ["preparar-documento-textil"] });
       toast.success("Borrada. Su número lo cogerá la siguiente.");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
 
   const [generando, setGenerando] = useState<string | null>(null);
@@ -157,7 +160,7 @@ function FacturasPage() {
       toast.success(`Ticket anulado con la rectificativa ${r.referencia}`);
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "No se pudo anular"),
+    onError: (e: any) => avisarError(e, "No se pudo anular"),
   });
 
   /**
@@ -189,7 +192,7 @@ function FacturasPage() {
       else window.location.href = url;
     } catch (e: any) {
       ventana?.close();
-      toast.error(e?.message ?? "No se pudo generar el PDF");
+      avisarError(e, "No se pudo generar el PDF");
     } finally {
       setGenerando(null);
     }
@@ -223,7 +226,7 @@ function FacturasPage() {
             { valor: "todos", etiqueta: "Todos los estados" },
             ...[...new Set((data as any[]).map((f) => String(f.estado)))]
               .sort()
-              .map((e) => ({ valor: e, etiqueta: e })),
+              .map((e) => ({ valor: e, etiqueta: infoEstado("factura", e).etiqueta })),
           ]}
         />
         <SelectorPeriodo periodo={periodo} />
@@ -279,7 +282,14 @@ function FacturasPage() {
                     )}
                   </TableCell>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
-                  <TableCell>{f.cliente_nombre ?? "—"}</TableCell>
+                  <TableCell>
+                    {f.cliente_nombre ??
+                      (f.tipo === "simplificada" ? (
+                        <span className="text-muted-foreground">Venta de mostrador</span>
+                      ) : (
+                        "—"
+                      ))}
+                  </TableCell>
                   <TableCell>
                     {f.marca ? (
                       <span className="flex items-center gap-1.5 text-xs">
@@ -294,7 +304,7 @@ function FacturasPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{f.estado}</Badge>
+                    <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
                   <TableCell className="text-right">

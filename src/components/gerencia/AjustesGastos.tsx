@@ -47,6 +47,7 @@ import {
 import { rangoDe } from "@/dominio/periodos";
 import { conJustificante as conJustificanteGasto, gastosDelGrupo } from "@/dominio/grupos";
 import { Acciones, Campo } from "./comun";
+import { avisarError } from "@/lib/errores";
 
 function useRefrescar() {
   const qc = useQueryClient();
@@ -86,7 +87,7 @@ export function DatosFiscales({
       toast.success("Datos fiscales guardados");
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   if (!disponible) {
@@ -234,7 +235,7 @@ export function GastosFijos({
       setF(vacio);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   const mutBorrar = useMutation({
     mutationFn: (id: string) => borrar({ data: { id } }),
@@ -243,7 +244,7 @@ export function GastosFijos({
       setBorrando(null);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   const esteMes = rangoDe({ tipo: "mes", ref: new Date() })!;
@@ -458,12 +459,12 @@ export function GastosFijos({
                       </TableCell>
                       {conImpuestos && (
                         <TableCell className="text-right tabular-nums">
-                          {numero(Number(g.iva_pct ?? 0), 0)} %
+                          {numero(Number(g.iva_pct ?? 0), 0)}&nbsp;%
                         </TableCell>
                       )}
                       {conImpuestos && (
                         <TableCell className="text-right tabular-nums">
-                          {numero(Number(g.irpf_pct ?? 0), 0)} %
+                          {numero(Number(g.irpf_pct ?? 0), 0)}&nbsp;%
                         </TableCell>
                       )}
                       {conImpuestos && (

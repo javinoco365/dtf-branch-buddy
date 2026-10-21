@@ -61,6 +61,7 @@ import { tramoDePagina } from "@/dominio/paginacion";
 import { totalesConSigno } from "@/dominio/sumatorios";
 import { totalesEnlaces } from "@/dominio/sumatorios-banco";
 import { useCuentasBanco } from "./useCuentasBanco";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export type DatosConciliacion = {
   /** Los movimientos sin conciliar (ni traspaso) de la ventana. */
@@ -148,7 +149,7 @@ export function MotorConciliacion({
     qc.invalidateQueries({ queryKey: ["compras"] });
     qc.invalidateQueries({ queryKey: ["facturas"] });
   };
-  const aviso = (e: any, porDefecto: string) => toast.error(e?.message ?? porDefecto);
+  const aviso = (e: any, porDefecto: string) => avisarError(e, porDefecto);
 
   const aplicarFn = useServerFn(aplicarPlan);
   const aplicar = useMutation({
@@ -555,7 +556,7 @@ function HistorialEnlaces({
     <TablaEnlaces
       enlaces={data?.enlaces ?? []}
       cuentaDe={cuentaDe}
-      vacio={error ? `No se pudo leer: ${error.message}` : isPending ? "Cargando…" : vacio}
+      vacio={error ? `No se pudo leer: ${mensajeDeError(error)}` : isPending ? "Cargando…" : vacio}
       acciones={acciones}
       parcial={!!data && data.total > data.porPagina}
       paginas={
@@ -748,7 +749,7 @@ function HistorialTraspasos({
               <TableRow>
                 <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                   {error
-                    ? `No se pudo leer: ${error.message}`
+                    ? `No se pudo leer: ${mensajeDeError(error)}`
                     : isPending
                       ? "Cargando…"
                       : "No hay traspasos entre cuentas propias."}

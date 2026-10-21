@@ -30,6 +30,7 @@ import {
   type DatosGerencia,
 } from "./destinos";
 import { NotaGrupo, VerDetalle } from "./comun";
+import { mensajeDeError } from "@/lib/errores";
 
 export function Tesoreria({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -54,7 +55,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
         grupo={d.grupo}
         texto="La tesorería es el dinero que entra y sale: no se separa en A y B."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Cobrado"
           explicacion="g_cobrado"
@@ -169,7 +170,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
                       <TableCell className="text-right tabular-nums">{m.cobros}</TableCell>
                       <TableCell className="text-right tabular-nums">{eur(m.cobrado)}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {t.cobrado > 0 ? `${numero((m.cobrado / t.cobrado) * 100, 1)} %` : "—"}
+                        {t.cobrado > 0 ? `${numero((m.cobrado / t.cobrado) * 100, 1)}\u00A0%` : "—"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -286,7 +287,7 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
       <CardContent className="space-y-4">
         {consulta.error ? (
           <p className="text-sm text-destructive">
-            No se han podido leer las facturas de compra: {consulta.error.message}
+            No se han podido leer las facturas de compra: {mensajeDeError(consulta.error)}
           </p>
         ) : consulta.data === undefined ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -435,7 +436,7 @@ function AnticiposProveedores({ hoy }: { hoy: Date }) {
       <CardContent className="space-y-4">
         {consulta.error ? (
           <p className="text-sm text-destructive">
-            No se han podido leer las proformas: {consulta.error.message}
+            No se han podido leer las proformas: {mensajeDeError(consulta.error)}
           </p>
         ) : !anticipos || anticipos.proformas === 0 ? (
           <p className="text-sm text-muted-foreground">

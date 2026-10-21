@@ -33,6 +33,7 @@ import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import { mismaDireccion, normalizarDireccion, type Direccion } from "@/dominio/direcciones";
+import { avisarError } from "@/lib/errores";
 
 type Linea = {
   descripcion: string;
@@ -226,7 +227,7 @@ export function PedidoFormDialog({
       toast.success(esEdicion ? "Pedido actualizado" : "Pedido creado");
       onSaved();
     },
-    onError: (e: any) => toast.error(e?.message || "Error al guardar"),
+    onError: (e: any) => avisarError(e, "Error al guardar"),
   });
 
   function setLinea(i: number, patch: Partial<Linea>) {
@@ -374,7 +375,7 @@ export function PedidoFormDialog({
                 onCheckedChange={(v) => alternarIva(v === true)}
               />
               <Label htmlFor="aplica-iva" className="font-normal cursor-pointer">
-                Aplicar IVA ({IVA_GENERAL} %)
+                Aplicar IVA ({IVA_GENERAL}&nbsp;%)
               </Label>
             </div>
             {!aplicaIva && (

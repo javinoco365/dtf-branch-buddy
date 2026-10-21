@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FileWarning, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { avisarError } from "@/lib/errores";
 
 type Tanda = {
   generados: number;
@@ -60,7 +61,7 @@ export function PdfsPendientes({
         toast.success(`${hechos} PDF guardado(s)`);
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "No se pudieron generar los PDF");
+      avisarError(e, "No se pudieron generar los PDF");
     } finally {
       setProgreso(null);
       alTerminar();

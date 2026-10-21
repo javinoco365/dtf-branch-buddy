@@ -242,7 +242,7 @@ export function LineasEditor({
               <span>
                 Coste previsto {eur(margen.coste)} · Margen previsto{" "}
                 <span className="font-medium text-foreground">{eur(margen.margen)}</span>
-                {margen.porcentaje !== null && ` (${numero(margen.porcentaje, 1)} %)`}
+                {margen.porcentaje !== null && ` (${numero(margen.porcentaje, 1)}\u00A0%)`}
               </span>
             ) : (
               <span>Margen previsto: —</span>

@@ -13,6 +13,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { leerEstadoSeries, fijarInicioSerie, type EstadoSerie } from "@/lib/facturas.functions";
 import { useAuth } from "@/lib/auth-context";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/configuracion-empresa")({
   head: () => ({ meta: [{ title: "Datos de la empresa · DTF Culture" }] }),
@@ -117,7 +118,7 @@ function EmpresaPage() {
       // (Dashboard, Gerencia, Resumen diario), que vale 10 min: todo a viejo.
       void invalidarTrasGuardar(qc);
     } catch (e: any) {
-      toast.error(e?.message ?? "Error al guardar");
+      avisarError(e, "Error al guardar");
     } finally {
       setSaving(false);
     }
@@ -456,7 +457,7 @@ function PorDondeVaLaNumeracion({ empresaId, isAdmin }: { empresaId: string; isA
       setValor("");
       qc.invalidateQueries({ queryKey: clave });
     },
-    onError: (e: Error) => toast.error(e.message || "No se ha podido fijar"),
+    onError: (e: Error) => avisarError(e, "No se ha podido fijar"),
   });
 
   if (isLoading || !data) return null;

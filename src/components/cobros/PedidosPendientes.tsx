@@ -43,6 +43,7 @@ import {
   type FiltroPendientes,
   type PedidoPendiente,
 } from "@/dominio/pendientes";
+import { mensajeDeError } from "@/lib/errores";
 
 /** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
 const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
@@ -195,7 +196,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pendientes: {(error as Error).message}
+            No se han podido cargar los pendientes: {mensajeDeError(error)}
           </CardContent>
         </Card>
       )}

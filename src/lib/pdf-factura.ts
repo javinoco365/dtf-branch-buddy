@@ -125,7 +125,7 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
             numeroJusto(it.cantidad),
             it.unidad,
             eurUnitario(it.precio_unitario),
-            `${numeroJusto(it.iva_rate, 2)} %`,
+            `${numeroJusto(it.iva_rate, 2)}\u00A0%`,
             eur(importeLineaSinIva(it)),
           ]),
         }
@@ -181,7 +181,7 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
     doc.text(eur(pie.base), xR, finalY, { align: "right" });
     pie.iva.forEach((r, i) => {
       const yIva = finalY + 5 * (i + 1);
-      doc.text(r.tipo == null ? "IVA =" : `IVA ${numeroJusto(r.tipo, 2)} % =`, xR - 50, yIva);
+      doc.text(r.tipo == null ? "IVA =" : `IVA ${numeroJusto(r.tipo, 2)}\u00A0% =`, xR - 50, yIva);
       doc.text(eur(r.cuota), xR, yIva, { align: "right" });
     });
     doc.setFont("helvetica", "bold");

@@ -212,6 +212,21 @@ export function variacion(actual: number, anterior: number): number | null {
 }
 
 /**
+ * Cómo se dice una variación. Con una base muy pequeña el porcentaje se
+ * dispara («+5 992,9 %» sobre 14 €) y no informa: desde diez veces lo
+ * anterior se dice cuántas veces («×61»), con un decimal por debajo de veinte.
+ */
+export function formaVariacion(
+  delta: number,
+): { tipo: "porcentaje"; valor: number } | { tipo: "veces"; valor: number } {
+  if (delta >= 900) {
+    const veces = 1 + delta / 100;
+    return { tipo: "veces", valor: redondear(veces, veces >= 20 ? 0 : 1) };
+  }
+  return { tipo: "porcentaje", valor: Math.abs(delta) };
+}
+
+/**
  * Total facturado por día, sobre el esqueleto de días que se le pase.
  *
  * Recibe los días en lugar de deducirlos para que los días sin ventas aparezcan

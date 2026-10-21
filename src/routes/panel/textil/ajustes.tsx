@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
+import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
   head: () => ({ meta: [{ title: "Ajustes textil · DTF Culture" }] }),
@@ -63,7 +64,7 @@ function AjustesPage() {
       setOpen(false);
       setEditing(null);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => avisarError(e),
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),

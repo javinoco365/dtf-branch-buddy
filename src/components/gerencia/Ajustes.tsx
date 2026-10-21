@@ -25,6 +25,7 @@ import { eur, metros } from "@/lib/format";
 import { useAjustesGerencia } from "@/lib/gerencia";
 import { borrarObjetivo, guardarAjustesGerencia, guardarObjetivo } from "@/lib/gerencia.functions";
 import type { Objetivo } from "@/dominio/gerencia";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 /**
  * Gerencia › Ajustes: lo que Gerencia necesita saber y solo sabe la empresa.
@@ -37,7 +38,9 @@ export function Ajustes() {
   if (isPending) return <p className="text-sm text-muted-foreground">Cargando ajustes…</p>;
   if (error) {
     return (
-      <p className="text-sm text-destructive">No se han podido leer los ajustes: {error.message}</p>
+      <p className="text-sm text-destructive">
+        No se han podido leer los ajustes: {mensajeDeError(error)}
+      </p>
     );
   }
   if (!data.disponible) {
@@ -85,7 +88,7 @@ function AjusteWebSinPagar({ cuenta }: { cuenta: boolean }) {
       toast.success("Ajuste guardado");
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   return (
@@ -105,8 +108,8 @@ function AjusteWebSinPagar({ cuenta }: { cuenta: boolean }) {
             <span className="font-medium">Contar los pedidos web sin pagar como vendidos</span>
             <span className="block text-muted-foreground">
               En WooCommerce, un pedido «pendiente de pago» o «en espera» puede no pagarse nunca.
-              Apagado, Gerencia no los cuenta en lo vendido hasta que se paguen. No cambia el
-              Dashboard ni la Facturación de las tiendas.
+              Apagado, Gerencia no los cuenta en lo vendido hasta que se paguen. No cambia el Inicio
+              ni la Facturación de las tiendas.
             </span>
           </span>
         </label>
@@ -154,7 +157,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
       setF(vacio);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
   const mutBorrar = useMutation({
     mutationFn: (id: string) => borrar({ data: { id } }),
@@ -163,7 +166,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
       setBorrando(null);
       refrescar();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => avisarError(e),
   });
 
   return (

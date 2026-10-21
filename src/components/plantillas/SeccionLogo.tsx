@@ -7,6 +7,7 @@ import { MAXIMOS, MINIMOS } from "./limites";
 import { conElemento, deLaBase, useEditor } from "./editor";
 import { CampoInterruptor, CampoNumero } from "./Campos";
 import { useMaquetaCabecera } from "./use-maqueta-cabecera";
+import { avisarError } from "@/lib/errores";
 
 const TIPOS: Record<string, string> = {
   "image/png": "png",
@@ -55,7 +56,7 @@ export function SeccionLogo() {
       fijarLogoPropio(data.publicUrl);
       toast.success("Logo subido. Pulsa «Guardar» para quedarte con él.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo subir el logo");
+      avisarError(e, "No se pudo subir el logo");
     } finally {
       setSubiendo(false);
     }
