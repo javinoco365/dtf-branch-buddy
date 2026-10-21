@@ -62,6 +62,7 @@ import {
   leerFacturaCompra,
   listCompras,
   pagarCompra,
+  verCompra,
   verFicheroCompra,
 } from "@/lib/compras.functions";
 import { guardarProveedor, listProveedores } from "@/lib/escaner-textil.functions";
@@ -128,6 +129,7 @@ import {
 } from "@/dominio/compras";
 import { sumarImportes } from "@/dominio/sumatorios";
 import { totalesCompras } from "@/dominio/sumatorios-facturas";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -172,6 +174,22 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const general = modo === "general";
 
   const listFn = useServerFn(listCompras);
+  // Lo que leyó la IA no viene en la lista: se pide al abrir la revisión.
+  const verCompraFn = useServerFn(verCompra);
+  const [abriendoRevision, setAbriendoRevision] = useState<string | null>(null);
+  async function revisarDeLaCola(c: any) {
+    setAbriendoRevision(c.id);
+    try {
+      const { lectura_ia } = await verCompraFn({ data: { id: c.id } });
+      setRevisando(desdeFila({ ...c, lectura_ia }));
+    } catch (e: any) {
+      // Sin lo que leyó la IA, la revisión saldría con otro tipo de documento
+      // o sin la referencia de la proforma: mejor no abrirla a medias.
+      toast.error(e?.message ?? "No se pudo abrir la revisión. Vuelve a intentarlo.");
+    } finally {
+      setAbriendoRevision(null);
+    }
+  }
   const { data, isLoading } = useQuery({
     queryKey: ["compras", modo],
     queryFn: () => listFn({ data: { soloTextil: !general } }),
@@ -362,6 +380,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 
   const leerFn = useServerFn(leerFacturaCompra);
   const leer = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (fichero: File) => {
       const fd = new FormData();
       fd.append("fichero", fichero);
@@ -647,13 +666,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
         <SubidaFacturas
           deshabilitado={lector?.disponible === false}
           categoria={general ? undefined : "textil"}
-          alTerminarUna={() => qc.invalidateQueries({ queryKey: ["compras"] })}
+          alTerminarUna={() => {
+            qc.invalidateQueries({ queryKey: ["compras"] });
+            void invalidarTrasGuardar(qc);
+          }}
         />
       )}
       {cola && (
         <ColaRevision
           compras={enLaCola}
-          onRevisar={(c) => setRevisando(desdeFila(c))}
+          onRevisar={(c) => {
+            if (!abriendoRevision) void revisarDeLaCola(c);
+          }}
           onBorrar={(c) => setBorrando(c)}
         />
       )}

@@ -12,7 +12,10 @@
  * guarda nada: el borrador abre el editor y lo guarda la persona.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+// Solo el tipo arriba: el SDK (~150 KB comprimido) se carga al leer un
+// documento, no al preguntar si hay lector (hayLectorConfigurado), que se hace
+// cada vez que se abre Compras o Presupuestos.
+import type Anthropic from "@anthropic-ai/sdk";
 import { claveLector } from "./lector-facturas.server";
 // Reexportado para que presupuestos-ia.functions lo cargue con el mismo
 // import() que el resto: lector-facturas.server se importa aquí de forma
@@ -117,7 +120,8 @@ async function pedirPresupuesto(e: {
     ].join("\n"),
   });
 
-  const cliente = new Anthropic({ apiKey: clave });
+  const { default: SdkAnthropic } = await import("@anthropic-ai/sdk");
+  const cliente = new SdkAnthropic({ apiKey: clave });
   let respuesta: Anthropic.Beta.BetaMessage;
   try {
     respuesta = await cliente.beta.messages.create({
@@ -138,7 +142,7 @@ async function pedirPresupuesto(e: {
     });
   } catch (err) {
     // El cuerpo del error puede traer la petición entera. Solo el código.
-    if (err instanceof Anthropic.APIError) {
+    if (err instanceof SdkAnthropic.APIError) {
       const status = err.status ?? 0;
       // Los 4xx no se arreglan repitiendo (los 429 ya los repite el SDK).
       if (status >= 400 && status < 500) {

@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useCobrosPeriodo, usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import {
@@ -37,7 +39,7 @@ import {
   Undo2,
   Wallet,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Dashboard Global · DTF Culture" }] }),
@@ -108,6 +110,13 @@ function DashboardGlobal() {
     [consultaLineas.data],
   );
 
+  // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
+  // se atenúan y no se exportan.
+  const deAntes =
+    consultaPedidos.isPlaceholderData ||
+    consultaAnterior.isPlaceholderData ||
+    consultaCobros.isPlaceholderData ||
+    consultaCobrosAnt.isPlaceholderData;
   const cargando = consultaPedidos.isPending;
   const error = consultaPedidos.error;
   const sinDatos = !cargando && !error && pedidos.length === 0;
@@ -143,12 +152,14 @@ function DashboardGlobal() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0}>
+          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
         </div>
       </div>
+
+      <AvisoActualizando activo={deAntes} />
 
       {error && (
         <Card>
@@ -175,7 +186,7 @@ function DashboardGlobal() {
       )}
 
       {!cargando && !error && !sinDatos && (
-        <>
+        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
@@ -268,26 +279,9 @@ function DashboardGlobal() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={grafica.datos}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => eur(v)}
-                      labelStyle={{ color: "var(--color-foreground)" }}
-                      contentStyle={{
-                        background: "var(--color-card)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ConGrafica>
+                  <IngresosPorTramo datos={grafica.datos} etiquetaConColor />
+                </ConGrafica>
               </CardContent>
             </Card>
 
@@ -303,36 +297,14 @@ function DashboardGlobal() {
                     Los pedidos de este periodo no tienen líneas de detalle.
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis
-                        type="number"
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(v) => `${v} m`}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="producto"
-                        width={140}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => metros(v)}
-                        contentStyle={{
-                          background: "var(--color-card)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                        }}
-                      />
-                      <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ConGrafica>
+                    <TopProductosMetros datos={topProductos} />
+                  </ConGrafica>
                 )}
               </CardContent>
             </Card>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

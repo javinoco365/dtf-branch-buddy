@@ -22,6 +22,7 @@ import {
   rellenarPdfsTienda,
   type PedidoParaFacturar,
 } from "@/lib/facturas.functions";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 type Modo = "ticket" | "factura";
 
@@ -144,8 +145,10 @@ export function FacturarPedidosDialog({
     }
     qc.invalidateQueries({ queryKey: ["pedidos"] });
     qc.invalidateQueries({ queryKey: ["pedidos-para-facturar"] });
+    void invalidarTrasGuardar(qc);
     await guardarPdfs(acumulado.emitidos.map((e) => e.id));
     qc.invalidateQueries({ queryKey: ["facturas"] });
+    void invalidarTrasGuardar(qc);
   }
 
   /**

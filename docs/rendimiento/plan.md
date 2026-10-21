@@ -655,6 +655,16 @@ pestaña a 1440 y 390 px, `npm run verify`.
 **Ganancia esperada:** Tesorería y Clientes dejan de esperar a ventas y documentos; 30–60 %
 menos peticiones por pestaña.
 
+**Estado (21-10-2026): hecha** en dos commits. `montarDatosGerencia` y `FUENTES_DE_PESTANA`
+en `src/dominio/gerencia-datos.ts`; prueba de igualdad contra el cuerpo antiguo (12 estados
+de lectura × 3 grupos × 6 filtros) y, por pestaña, campo a campo; la prueba de arquitectura
+`gerencia-pestanas.test.ts` lee el código de cada pestaña y falla si lee un campo cuya lectura
+no pide. En lugar de la doble lectura temporal `?comparar=1`, esas pruebas (no hay que
+retirarlas). Las ventas, sus documentos y los ajustes se siguen pidiendo en todas las
+pestañas (la insignia está en todas): Tesorería solo gana 4 peticiones (31 → 27); Clientes
+30 → 17, Comercial 36 → 23, Margen 28 → 19 (con los datos de `pruebas-visuales`). Capturas de
+las diez pestañas, ordenador y móvil: idénticas.
+
 ---
 
 ## Fase 9 — `listPedidos` en una consulta (PR `rend/f9-listpedidos-una-consulta`)
@@ -709,6 +719,20 @@ cifras iguales; `npm run verify`.
 **Ganancia esperada:** Pedidos año de ~15 (tras F2) a 2 viajes; dentro del límite de 50
 subpeticiones del plan gratuito.
 
+**Estado (21-10-2026): puntos 1 y 2 hechos; el 3, pendiente.**
+- Tope de lo incrustado **comprobado**: con PostgREST 12.2.3 y `db-max-rows = 1000`, un pedido
+  de 1500 líneas llega con 1000. `leerListaPedidos` (`src/lib/pedidos-lista.ts`) vuelve a leer
+  como antes los pedidos que llegan con 1000 líneas, y lee la lista entera como antes
+  (`leerListaPedidosPorPartes`) si llegan 1000 cobros o documentos de un pedido, si la consulta
+  falla o si no trae lo incrustado. `facturas!rectifica_a_id` desde una factura devuelve las que
+  la rectifican (comprobado). Se conserva así el respaldo `faltaLaTabla` de cobros.
+- Banco (2.409 pedidos de octubre): 84 peticiones → 8. JSON igual salvo el orden de las líneas
+  de 75 pedidos que antes compartían trozo con el de 1500 líneas (antes se releían por id).
+- **Pendiente, el punto 3** (fila sustituida con `setQueryData`, cambio de estado optimista,
+  excepción `meta` en la invalidación de la F4): toca la invalidación global y el riesgo de
+  «fila distinta a la de la lista»; va en su propio PR, con `leerPedidoFila` montada con la
+  misma función que la lista.
+
 ---
 
 ## Fase 10 — Fiscal por trimestre (PR `rend/f10-fiscal-trimestre`)
@@ -730,6 +754,9 @@ para el IVA soportado.
 
 **Ganancia:** cambiar de mes reutiliza 15 de 16 trimestres; la pestaña Resultados deja de
 leer 5 años cada vez.
+
+**Estado (21-10-2026): pendiente, sin empezar** (riesgo alto sobre el 303; necesita su doble
+lectura y las pruebas de `impuestosPorTrimestre`).
 
 ---
 
@@ -766,6 +793,8 @@ falla con cualquier MAL. Las aplica Javier.
 
 **Ganancia:** documentos de Gerencia año de ~25 (tras F2) a 1–2 peticiones.
 
+**Estado (21-10-2026): pendiente, sin empezar.** Ninguna migración escrita en este bloque.
+
 ---
 
 ## Fase 12 — Servidor (PR `rend/f12-servidor`)
@@ -788,6 +817,19 @@ falla con cualquier MAL. Las aplica Javier.
    petición** (fichero generado, no se edita): comprobar con el medidor de la 0.2 que el JWKS
    no se pide en cada server function (la caché de supabase-js debe compartirse entre
    clientes del mismo Worker caliente). Si se pidiera cada vez, la ganancia es nula.
+
+**Estado (21-10-2026): punto 1 hecho; 2, 3 y 4 pendientes.**
+- Por qué entraban canvg y core-js en cada página del panel: el medidor usaba `performance`
+  suelto, que la compilación del servidor sustituye por el de unenv, y rolldown lo metió en el
+  trozo de canvg. Con `globalThis.performance`, el trozo del panel evalúa 2,4 MB en vez de
+  3,5 MB. `@anthropic-ai/sdk` pasa a `import()` dentro de la lectura (`cola-compras.server`
+  1,1 → 0,36 MB). nodemailer, juice/cheerio, jspdf, html2canvas y canvg ya se cargaban con
+  `import()`; recharts solo desde los trozos de gráficas (`React.lazy`).
+- El tamaño subido **no baja** (13 MB, 2,9 MB comprimido, al borde de los 3 MB del plan
+  gratuito de Workers): un `import()` sigue dentro del Worker. Bajarlo exige sacar librerías del
+  servidor (por ejemplo, generar los PDF solo en el navegador): tarea aparte.
+- 12.2 (`placement`) espera a saber dónde se despliega (fase 0); 12.3 (retirar sondas) espera a
+  que Javier confirme las migraciones en producción; 12.4 es configuración de Javier.
 
 ---
 

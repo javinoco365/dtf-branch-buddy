@@ -1,0 +1,480 @@
+{
+  "_nota": "Casos de prueba de montarDatosGerencia (gerencia-datos.test.ts). No se muestran en ninguna pantalla.",
+  "tiendas": [
+    { "id": "t-norte", "nombre": "Tienda Norte" },
+    { "id": "t-sur", "nombre": "Tienda Sur" }
+  ],
+  "rango": { "desde": "2026-10-01T00:00:00+02:00", "hasta": "2026-10-31T23:59:59.999+01:00" },
+  "previo": { "desde": "2026-09-01T00:00:00+02:00", "hasta": "2026-09-30T23:59:59.999+02:00" },
+  "hoy": "2026-10-21T10:00:00+02:00",
+  "ventas": [
+    {
+      "id": "p-1",
+      "fecha_pedido": "2026-10-02T09:00:00Z",
+      "tienda_id": "t-norte",
+      "estado": "completado",
+      "subtotal": 100,
+      "iva": 21,
+      "envio": 0,
+      "total": 121,
+      "metros_total": 2,
+      "canal": "manual",
+      "origen": "manual",
+      "cliente_id": "c-1",
+      "coste_metro_snapshot": 3.1
+    },
+    {
+      "id": "p-2",
+      "fecha_pedido": "2026-10-03T09:00:00Z",
+      "tienda_id": "t-norte",
+      "estado": "cancelado",
+      "subtotal": 50,
+      "iva": 10.5,
+      "envio": 0,
+      "total": 60.5,
+      "metros_total": 1,
+      "canal": "manual",
+      "origen": "manual",
+      "cliente_id": "c-2"
+    },
+    {
+      "id": "p-3",
+      "fecha_pedido": "2026-10-05T10:00:00Z",
+      "tienda_id": "t-sur",
+      "estado": "completado",
+      "subtotal": "200.00",
+      "iva": "42.00",
+      "envio": "5.00",
+      "total": "247.00",
+      "metros_total": "4.5",
+      "devuelto": "30.00",
+      "canal": "web",
+      "origen": "woocommerce",
+      "cliente_id": "c-3",
+      "coste_metro_snapshot": null
+    },
+    {
+      "id": "p-4",
+      "fecha_pedido": "2026-10-07T10:00:00Z",
+      "tienda_id": "t-sur",
+      "estado": "pendiente",
+      "subtotal": 80,
+      "iva": 16.8,
+      "envio": 4,
+      "total": 100.8,
+      "metros_total": 1.5,
+      "canal": "web",
+      "origen": "woocommerce",
+      "cliente_id": "c-4"
+    },
+    {
+      "id": "p-5",
+      "fecha_pedido": "2026-10-31T23:15:00Z",
+      "tienda_id": "t-sur",
+      "estado": "procesando",
+      "subtotal": 40,
+      "iva": 8.4,
+      "envio": 0,
+      "total": 48.4,
+      "metros_total": 0.8,
+      "canal": "web",
+      "origen": "woocommerce",
+      "cliente_id": "c-3"
+    },
+    {
+      "id": "p-6",
+      "fecha_pedido": "2026-10-12T08:00:00Z",
+      "tienda_id": "t-norte",
+      "estado": "completado",
+      "subtotal": 300,
+      "iva": 63,
+      "envio": 0,
+      "total": 363,
+      "metros_total": 6,
+      "canal": "manual",
+      "origen": "manual",
+      "cliente_id": null
+    },
+    {
+      "id": "x-1",
+      "fecha_pedido": "2026-10-09T12:00:00",
+      "tienda_id": "textil-personalizado",
+      "estado": "entregado",
+      "subtotal": 150,
+      "iva": 31.5,
+      "envio": 0,
+      "total": 181.5,
+      "metros_total": 0,
+      "canal": "textil",
+      "cliente_id": "c-5",
+      "marca_id": "m-1",
+      "coste_textil": null
+    },
+    {
+      "id": "x-2",
+      "fecha_pedido": "2026-10-15T12:00:00",
+      "tienda_id": "textil-personalizado",
+      "estado": "entregado",
+      "subtotal": 90,
+      "iva": 18.9,
+      "envio": 0,
+      "total": 108.9,
+      "metros_total": 0,
+      "canal": "textil",
+      "cliente_id": "c-6",
+      "marca_id": null,
+      "coste_textil": 40.25
+    }
+  ],
+  "ventasPrevias": [
+    {
+      "id": "p-10",
+      "fecha_pedido": "2026-09-04T09:00:00Z",
+      "tienda_id": "t-norte",
+      "estado": "completado",
+      "subtotal": 90,
+      "iva": 18.9,
+      "envio": 0,
+      "total": 108.9,
+      "metros_total": 2,
+      "canal": "manual",
+      "origen": "manual",
+      "cliente_id": "c-1"
+    },
+    {
+      "id": "p-11",
+      "fecha_pedido": "2026-09-10T09:00:00Z",
+      "tienda_id": "t-sur",
+      "estado": "pendiente",
+      "subtotal": 60,
+      "iva": 12.6,
+      "envio": 3,
+      "total": 75.6,
+      "metros_total": 1,
+      "canal": "web",
+      "origen": "woocommerce",
+      "cliente_id": "c-4"
+    },
+    {
+      "id": "x-10",
+      "fecha_pedido": "2026-09-20T12:00:00",
+      "tienda_id": "textil-personalizado",
+      "estado": "entregado",
+      "subtotal": 70,
+      "iva": 14.7,
+      "envio": 0,
+      "total": 84.7,
+      "metros_total": 0,
+      "canal": "textil",
+      "cliente_id": "c-5",
+      "coste_textil": null
+    }
+  ],
+  "docs": [
+    {
+      "id": "f-1",
+      "tipo": "ordinaria",
+      "estado": "emitida",
+      "rectifica_a_id": null,
+      "pedido_id": "p-1"
+    },
+    {
+      "id": "s-3",
+      "tipo": "simplificada",
+      "estado": "canjeada",
+      "rectifica_a_id": null,
+      "pedido_id": "p-3"
+    },
+    {
+      "id": "f-3",
+      "tipo": "ordinaria",
+      "estado": "emitida",
+      "rectifica_a_id": null,
+      "pedido_id": "p-3"
+    },
+    {
+      "id": "f-6",
+      "tipo": "ordinaria",
+      "estado": "rectificada",
+      "rectifica_a_id": null,
+      "pedido_id": "p-6"
+    },
+    {
+      "id": "r-6",
+      "tipo": "rectificativa",
+      "estado": "emitida",
+      "rectifica_a_id": "f-6",
+      "pedido_id": null
+    },
+    {
+      "id": "r-9",
+      "tipo": "rectificativa",
+      "estado": "emitida",
+      "rectifica_a_id": "f-99",
+      "pedido_id": null
+    },
+    {
+      "id": "tx-1",
+      "tipo": "simplificada",
+      "estado": "emitida",
+      "rectifica_a_id": null,
+      "pedido_id": "x-1"
+    }
+  ],
+  "docsPrevios": [
+    {
+      "id": "f-10",
+      "tipo": "ordinaria",
+      "estado": "emitida",
+      "rectifica_a_id": null,
+      "pedido_id": "p-10"
+    }
+  ],
+  "ajustes": {
+    "ajustes": {
+      "web_sin_pagar_cuenta": true,
+      "tipo_is": 15,
+      "cuota_is_anterior": null,
+      "precio_metro": 7
+    },
+    "gastos": [
+      {
+        "id": "g-1",
+        "concepto": "Alquiler",
+        "importe_mensual": 800,
+        "periodicidad": "mensual",
+        "tipo": "alquiler",
+        "iva_pct": 21,
+        "irpf_pct": 19,
+        "con_justificante": true,
+        "desde": "2026-01-01",
+        "hasta": null,
+        "notas": null
+      },
+      {
+        "id": "g-2",
+        "concepto": "Ayudante",
+        "importe_mensual": 300,
+        "periodicidad": "mensual",
+        "tipo": "otros",
+        "iva_pct": 0,
+        "irpf_pct": 0,
+        "con_justificante": false,
+        "desde": "2026-06-01",
+        "hasta": null,
+        "notas": null
+      },
+      {
+        "id": "g-3",
+        "concepto": "Seguro",
+        "importe_mensual": 240,
+        "periodicidad": "anual",
+        "tipo": "otros",
+        "iva_pct": 0,
+        "irpf_pct": 0,
+        "con_justificante": true,
+        "desde": "2026-03-01",
+        "hasta": null,
+        "notas": null
+      }
+    ],
+    "objetivos": [{ "id": "o-1", "desde": "2026-10-01", "metros": 50, "vendido": 2000 }]
+  },
+  "compras": [
+    {
+      "id": "k-1",
+      "estado": "registrada",
+      "base": 800,
+      "iva": 168,
+      "irpf": 152,
+      "total": 816,
+      "fecha": "2026-10-01",
+      "categoria": "otros",
+      "gasto_id": "g-1"
+    },
+    {
+      "id": "k-2",
+      "estado": "registrada",
+      "base": 120,
+      "iva": 25.2,
+      "total": 145.2,
+      "fecha": "2026-10-08",
+      "categoria": "publicidad",
+      "gasto_id": null
+    },
+    {
+      "id": "k-3",
+      "estado": "registrada",
+      "base": 2400,
+      "iva": 504,
+      "total": 2904,
+      "fecha": "2026-04-15",
+      "categoria": "maquinaria",
+      "gasto_id": null
+    },
+    {
+      "id": "k-4",
+      "estado": "subida",
+      "base": 50,
+      "iva": 10.5,
+      "total": 60.5,
+      "fecha": "2026-10-10",
+      "categoria": "material",
+      "gasto_id": null
+    }
+  ],
+  "cobros": {
+    "disponible": true,
+    "cobros": [
+      {
+        "id": "co-1",
+        "fecha": "2026-10-02T11:00:00",
+        "fecha_cobro": "2026-10-02",
+        "fecha_pedido": "2026-10-02",
+        "tienda_id": "t-norte",
+        "pedido_id": "p-1",
+        "pedido_numero": "N-1",
+        "cliente": "Cliente 1",
+        "metodo": "transferencia",
+        "origen": "pedido",
+        "importe": 121,
+        "propina": 0,
+        "base": 100,
+        "iva": 21,
+        "envio": 0,
+        "metros": 2
+      },
+      {
+        "id": "co-2",
+        "fecha": "2026-10-05T12:00:00",
+        "fecha_cobro": "2026-10-05",
+        "fecha_pedido": "2026-10-05",
+        "tienda_id": "t-sur",
+        "pedido_id": "p-3",
+        "pedido_numero": "S-3",
+        "cliente": "Cliente 3",
+        "metodo": "web",
+        "origen": "web",
+        "importe": 217,
+        "propina": 0,
+        "base": 175.21,
+        "iva": 36.79,
+        "envio": 5,
+        "metros": 4.5
+      },
+      {
+        "id": "co-3",
+        "fecha": "2026-10-09T12:00:00",
+        "fecha_cobro": "2026-10-09",
+        "fecha_pedido": "2026-10-09",
+        "tienda_id": "textil-personalizado",
+        "pedido_id": "x-1",
+        "pedido_numero": "T-1",
+        "cliente": null,
+        "metodo": "efectivo",
+        "origen": "pedido",
+        "importe": 100,
+        "propina": 2,
+        "base": 82.64,
+        "iva": 17.36,
+        "envio": 0,
+        "metros": 0
+      }
+    ]
+  },
+  "cobrosPrevios": {
+    "disponible": true,
+    "cobros": [
+      {
+        "id": "co-10",
+        "fecha": "2026-09-04T12:00:00",
+        "fecha_cobro": "2026-09-04",
+        "fecha_pedido": "2026-09-04",
+        "tienda_id": "t-norte",
+        "pedido_id": "p-10",
+        "pedido_numero": "N-10",
+        "cliente": "Cliente 1",
+        "metodo": "tarjeta",
+        "origen": "pedido",
+        "importe": 108.9,
+        "propina": 0,
+        "base": 90,
+        "iva": 18.9,
+        "envio": 0,
+        "metros": 2
+      }
+    ]
+  },
+  "pendientes": {
+    "disponible": true,
+    "pedidos": [
+      {
+        "tipo": "tienda",
+        "id": "p-6",
+        "tienda_id": "t-norte",
+        "numero": "N-6",
+        "fecha": "2026-10-12",
+        "cliente_id": null,
+        "cliente_nombre": null,
+        "origen": "manual",
+        "estado": "completado",
+        "total": 363,
+        "cobrado": 0,
+        "pendiente": 363,
+        "ultimo_cobro": null
+      },
+      {
+        "tipo": "tienda",
+        "id": "p-4",
+        "tienda_id": "t-sur",
+        "numero": "S-4",
+        "fecha": "2026-10-07",
+        "cliente_id": "c-4",
+        "cliente_nombre": "Cliente 4",
+        "origen": "woocommerce",
+        "estado": "pendiente",
+        "total": 100.8,
+        "cobrado": 0,
+        "pendiente": 100.8,
+        "ultimo_cobro": null
+      },
+      {
+        "tipo": "textil",
+        "id": "x-1",
+        "tienda_id": null,
+        "numero": "T-1",
+        "fecha": "2026-10-09",
+        "cliente_id": "c-5",
+        "cliente_nombre": "Cliente 5",
+        "origen": "textil",
+        "estado": "entregado",
+        "total": 181.5,
+        "cobrado": 100,
+        "pendiente": 81.5,
+        "ultimo_cobro": "2026-10-09"
+      }
+    ]
+  },
+  "caja": {
+    "movimientos": [
+      {
+        "id": "m-1",
+        "fecha": "2026-10-03",
+        "categoria": "ingreso",
+        "concepto_id": "cc-1",
+        "concepto_nombre": "Venta mostrador",
+        "cliente_id": null,
+        "cliente_nombre": null,
+        "socio_id": null,
+        "socio_nombre": null,
+        "importe": 45,
+        "observaciones": null
+      }
+    ]
+  },
+  "banco": [
+    { "fecha": "2026-10-04", "importe": 121, "conciliado": true },
+    { "fecha": "2026-10-06", "importe": "-80.50", "conciliado": false },
+    { "fecha": "2026-10-11", "importe": 300, "conciliado": false }
+  ]
+}

@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PedidosTableLazy } from "@/components/PedidosTableLazy";
+// Normal y no con lazy(): la ruta ya va en su propio trozo, y con lazy la
+// tabla empezaba a pedir los pedidos un viaje más tarde.
+import { PedidosTable } from "@/components/PedidosTable";
+import { PedidosErrorBoundary } from "@/components/pedidos/PedidosErrorBoundary";
 
 export const Route = createFileRoute("/panel/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos Consolidados · DTF Culture" }] }),
@@ -15,7 +18,9 @@ function PedidosGlobal() {
           Vista unificada de pedidos de todas las tiendas. Filtra y exporta.
         </p>
       </div>
-      <PedidosTableLazy />
+      <PedidosErrorBoundary>
+        <PedidosTable />
+      </PedidosErrorBoundary>
     </div>
   );
 }

@@ -1,17 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarClock, DownloadCloud, FileText, Loader2 } from "lucide-react";
+import { DownloadCloud, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { endOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { useAuth } from "@/lib/auth-context";
@@ -70,38 +64,15 @@ function transcurrido(r: Rango): Rango {
 
 type Tienda = { id: string; nombre: string; color?: string | null };
 
-/**
- * El botón «Resumen diario» de Gerencia y su ventana: cómo ha ido el día (o
- * la semana, el mes…), por tienda y textil, para los socios. Página 1, el
- * esquema; página 2, el desglose. Se imprime (o se guarda en PDF) con una
- * página para cada parte.
- */
-export function BotonResumenDiario(props: {
-  tiendas: readonly Tienda[];
-  /** Los gastos fijos con las compras que cuentan como gasto; nulo mientras cargan. */
-  gastos: readonly GastoFijo[] | null;
-  objetivos: readonly Objetivo[];
-}) {
-  const [abierto, setAbierto] = useState(false);
-  return (
-    <>
-      <Button size="sm" onClick={() => setAbierto(true)} className="max-md:w-full">
-        <CalendarClock className="h-4 w-4" />
-        Resumen diario
-      </Button>
-      <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent className="resumen-imprimible grid-cols-1 max-w-6xl max-h-[94vh] overflow-y-auto max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:max-w-none max-md:rounded-none max-md:p-4">
-          {/* Solo montado mientras está abierto: cerrado no lee nada. */}
-          {abierto && <Contenido {...props} />}
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 const HOY: Seleccion["tipo"] = "hoy";
 
-function Contenido({
+/**
+ * Lo que hay dentro de la ventana del Resumen diario: cómo ha ido el día (o
+ * la semana, el mes…), por tienda y textil, para los socios. Página 1, el
+ * esquema; página 2, el desglose. Se carga aparte, al abrir la ventana (ver
+ * BotonResumenDiario.tsx): solo se importa con import().
+ */
+export function ContenidoResumenDiario({
   tiendas,
   gastos,
   objetivos,
@@ -143,35 +114,54 @@ function Contenido({
     [tiendas],
   );
 
-  const calcular = (r: Rango, datos?: DatosResumen, documentos?: DocumentoParaResumen[]) =>
-    datos && documentos
-      ? resumenPeriodo({
-          desde: diaDeFecha(r.desde),
-          hasta: diaDeFecha(r.hasta),
-          hoy: diaRealizado(new Date().toISOString()) ?? diaDeFecha(new Date()),
-          negocios,
-          pedidos: datos.pedidos,
-          cobros: datos.cobros,
-          documentos,
-          ajustes: {
-            horaCorte: jornada.hora_corte,
-            metrosHora: jornada.metros_hora,
-            jornadaInicio: jornada.jornada_inicio,
-            jornadaFin: jornada.jornada_fin,
-            costeEnvioDefecto: jornada.coste_envio_defecto,
-            costeMetroActual: costeMetro,
-          },
-          // Los gastos y el objetivo de lo que ha pasado del periodo: un año en
-          // curso no carga los gastos de los meses que aún no han llegado.
-          gastosFijos: gastos ? gastosFijosDelRango(gastos, transcurrido(r)) : null,
-          objetivo: objetivoDelRango(objetivos, transcurrido(r)),
-        })
-      : null;
+  // En useMemo: resumenPeriodo recorre todos los pedidos, cobros y documentos
+  // del periodo, y antes se repetía en cada repintado del diálogo (cada tecla,
+  // cada consulta que llegaba). Mismas entradas, mismo resultado.
+  const { resumen, resumenPrevio } = useMemo(() => {
+    const calcular = (r: Rango, datos?: DatosResumen, documentos?: DocumentoParaResumen[]) =>
+      datos && documentos
+        ? resumenPeriodo({
+            desde: diaDeFecha(r.desde),
+            hasta: diaDeFecha(r.hasta),
+            hoy: diaRealizado(new Date().toISOString()) ?? diaDeFecha(new Date()),
+            negocios,
+            pedidos: datos.pedidos,
+            cobros: datos.cobros,
+            documentos,
+            ajustes: {
+              horaCorte: jornada.hora_corte,
+              metrosHora: jornada.metros_hora,
+              jornadaInicio: jornada.jornada_inicio,
+              jornadaFin: jornada.jornada_fin,
+              costeEnvioDefecto: jornada.coste_envio_defecto,
+              costeMetroActual: costeMetro,
+            },
+            // Los gastos y el objetivo de lo que ha pasado del periodo: un año en
+            // curso no carga los gastos de los meses que aún no han llegado.
+            gastosFijos: gastos ? gastosFijosDelRango(gastos, transcurrido(r)) : null,
+            objetivo: objetivoDelRango(objetivos, transcurrido(r)),
+          })
+        : null;
 
-  const resumen: Resumen | null = calcular(rango, actual.data, docs.data);
-  const resumenPrevio: Resumen | null = comparacion
-    ? calcular(previo, anterior.data, docsPrevios.data)
-    : null;
+    const resumen: Resumen | null = calcular(rango, actual.data, docs.data);
+    const resumenPrevio: Resumen | null = comparacion
+      ? calcular(previo, anterior.data, docsPrevios.data)
+      : null;
+    return { resumen, resumenPrevio };
+  }, [
+    rango,
+    previo,
+    comparacion,
+    actual.data,
+    anterior.data,
+    docs.data,
+    docsPrevios.data,
+    negocios,
+    jornada,
+    costeMetro,
+    gastos,
+    objetivos,
+  ]);
 
   // Los gastos fijos uno a uno, para ver de dónde sale el total.
   const gastosDelPeriodo = useMemo(
@@ -312,6 +302,7 @@ type DatosBoton = Omit<DatosInformeSocios, "empresa" | "generado">;
  */
 function BotonInforme({ datos }: { datos: DatosBoton | null }) {
   const generar = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: async (d: DatosBoton) => {
       const [{ generarInformeSocios }, empresa] = await Promise.all([
         import("@/lib/pdf-informe-socios"),

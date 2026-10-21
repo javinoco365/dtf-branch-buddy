@@ -37,9 +37,13 @@ export function FacturarPedidoDialog({
       preparar={() => prepararFn({ data: { pedido_id: pedidoId } })}
       emitir={async (p) => {
         // Las líneas y el receptor base salen de la preparación, que ya está en caché.
+        // staleTime 0: se emite con lo que hay ahora en la base, aunque la
+        // preparación en caché sea de hace menos de un minuto (otro usuario
+        // puede haber cambiado el pedido entretanto).
         const prep = await qc.fetchQuery({
           queryKey: ["preparar-factura-pedido", pedidoId],
           queryFn: () => prepararFn({ data: { pedido_id: pedidoId } }),
+          staleTime: 0,
         });
         if (prep.ya_facturado) throw new Error(`El pedido ya tiene ${prep.factura.referencia}`);
         if (p.documento === "ticket") {

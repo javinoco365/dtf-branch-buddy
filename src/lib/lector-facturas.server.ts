@@ -11,7 +11,10 @@
  * quien lo confirma, la persona que revisa la cola.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+// Solo el tipo arriba: el SDK (~150 KB comprimido) se carga al leer un
+// documento, no al preguntar si hay lector (hayLectorConfigurado), que se hace
+// cada vez que se abre Compras o Presupuestos.
+import type Anthropic from "@anthropic-ai/sdk";
 import { ESQUEMA_LECTURA_JSON } from "@/dominio/cola-compras";
 import { CATEGORIAS_COMPRA } from "@/dominio/compras";
 
@@ -115,7 +118,8 @@ export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<
     ? { type: "image", source: { type: "base64", media_type: tipoMime, data: datos } }
     : { type: "document", source: { type: "base64", media_type: "application/pdf", data: datos } };
 
-  const cliente = new Anthropic({ apiKey: clave });
+  const { default: SdkAnthropic } = await import("@anthropic-ai/sdk");
+  const cliente = new SdkAnthropic({ apiKey: clave });
   let respuesta: Anthropic.Beta.BetaMessage;
   try {
     respuesta = await cliente.beta.messages.create({
@@ -145,7 +149,7 @@ export async function leerFactura(bytes: Uint8Array, tipoMime: string): Promise<
     });
   } catch (e) {
     // El cuerpo del error puede traer la petición entera. Solo el código.
-    if (e instanceof Anthropic.APIError) {
+    if (e instanceof SdkAnthropic.APIError) {
       throw new Error(`El lector de facturas ha respondido ${e.status ?? "sin código"}.`);
     }
     throw new Error("No se ha podido llegar al lector de facturas.");

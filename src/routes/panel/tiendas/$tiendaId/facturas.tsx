@@ -79,6 +79,14 @@ import {
   Undo2,
 } from "lucide-react";
 
+/**
+ * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
+ * desglose de IVA (eran la mayor parte de cada fila). Del receptor, solo el
+ * correo, para «Enviar por correo». El PDF los lee en el servidor al abrirlo.
+ */
+const CAMPOS_LISTA_FACTURAS =
+  "id, tienda_id, pedido_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url, sustituye_a_id, rectifica_a_id, receptor_email:receptor_snapshot->>email";
+
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
 });
@@ -118,7 +126,7 @@ function Facturas() {
         await leerTodas<any>((a, b) =>
           supabase
             .from("facturas")
-            .select("*")
+            .select(CAMPOS_LISTA_FACTURAS)
             .eq("tienda_id", tiendaId)
             .order("fecha", { ascending: false })
             .order("id")
@@ -556,7 +564,7 @@ function Facturas() {
           facturaId={porCorreo.id}
           referencia={referenciaFactura(porCorreo.serie, porCorreo.ejercicio, porCorreo.numero)}
           esTicket={porCorreo.tipo === "simplificada"}
-          emailInicial={porCorreo.receptor_snapshot?.email ?? null}
+          emailInicial={porCorreo.receptor_email ?? null}
         />
       )}
     </div>

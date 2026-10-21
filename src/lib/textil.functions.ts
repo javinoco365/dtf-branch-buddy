@@ -201,6 +201,60 @@ export const listStock = createServerFn({ method: "GET" })
     return (data ?? []) as FilaStock[];
   });
 
+/**
+ * Lo que enseña Textil › Inicio, sin descargar la historia entera con sus
+ * líneas: recuentos y las pocas columnas que hacen falta. Las cifras son las
+ * mismas que salían de las listas completas:
+ *
+ * - Pedidos y presupuestos: recuento exacto. Las listas se leían enteras por
+ *   páginas, así que es el mismo número.
+ * - Stock: `id, cantidad, cantidad_minima` de todas las variantes. «Bajo
+ *   mínimo» compara dos columnas, y eso PostgREST no lo filtra: se cuenta en
+ *   la pantalla, como antes.
+ * - Facturas: `fecha, total` de todas (sin líneas ni snapshots). «Este mes»
+ *   se calcula en la pantalla, como antes, con la hora del navegador.
+ * - Clientes: la misma lectura que la lista (una página, sin paginar), solo
+ *   con el id. Un recuento exacto daría otro número si hay más de 1000.
+ */
+export const resumenTextilInicio = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = context.supabase;
+    const [stock, pedidos, presupuestos, facturas, clientes] = await Promise.all([
+      leerTodas<{ id: string; cantidad: number; cantidad_minima: number }>((a, b) =>
+        tabla(sb, "textil_stock")
+          .select("id, cantidad, cantidad_minima")
+          .order("nombre")
+          .order("id")
+          .range(a, b),
+      ),
+      sb.from("textil_pedidos").select("id", { count: "exact", head: true }),
+      sb.from("textil_presupuestos").select("id", { count: "exact", head: true }),
+      leerTodas<{ fecha: string; total: number }>((a, b) =>
+        sb
+          .from("textil_facturas")
+          .select("fecha, total")
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+      tabla(sb, "clientes").select("id").order("nombre"),
+    ]);
+    for (const r of [stock, pedidos, presupuestos, facturas, clientes]) {
+      if (r.error) throw new Error(r.error.message);
+    }
+    return {
+      stock: (stock.data ?? []).map((s) => ({
+        cantidad: s.cantidad,
+        cantidad_minima: s.cantidad_minima,
+      })),
+      pedidos: pedidos.count ?? 0,
+      presupuestos: presupuestos.count ?? 0,
+      facturas: facturas.data ?? [],
+      clientes: (clientes.data ?? []).length,
+    };
+  });
+
 const stockSchema = z.object({
   id: z.string().uuid().optional(),
   sku: z.string().optional().nullable(),
@@ -935,8 +989,24 @@ export const listTextilFacturas = createServerFn({ method: "GET" })
         .range(a, b),
     );
     if (error) throw error;
-    return data ?? [];
+    // Sin los snapshots de emisor, receptor y líneas ni el desglose de IVA: la
+    // lista no los usa (las líneas vienen en `items`) y eran la mayor parte de
+    // cada fila. El PDF y el correo los leen en el servidor. Se quitan aquí y
+    // no en la consulta para no nombrar columnas que dependen de migraciones.
+    return (data ?? []).map((f: any) => {
+      const fila = { ...f };
+      for (const campo of SNAPSHOTS_FACTURA) delete fila[campo];
+      return fila;
+    });
   });
+
+/** Lo que pesa de una factura y la lista no enseña. */
+const SNAPSHOTS_FACTURA = [
+  "emisor_snapshot",
+  "receptor_snapshot",
+  "lineas_snapshot",
+  "desglose_iva",
+] as const;
 
 /**
  * Borra una factura textil: un borrador, o la última emitida de su serie

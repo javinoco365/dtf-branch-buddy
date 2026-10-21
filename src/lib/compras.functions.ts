@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
+import type { Json } from "@/integrations/supabase/types";
 import {
   AVISO_MIGRACION_ESCANER,
   AVISO_MIGRACION_PROFORMAS,
@@ -470,18 +471,30 @@ export const listCompras = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ soloTextil: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
-    const prueba = await tabla(context.supabase, "textil_compras").select("categoria").limit(1);
-    const generales = !faltaLaColumna(prueba.error);
-    const prueba2 = await tabla(context.supabase, "textil_compras").select("liquido").limit(1);
+    // Las cinco comprobaciones de migración no dependen unas de otras: van a
+    // la vez (cinco conexiones, por debajo del tope de seis de un Worker). Si
+    // alguna lanza, se lanza la misma que en serie: escáner antes que proformas.
+    const t = () => tabla(context.supabase, "textil_compras");
+    const [prueba, prueba2, prueba3, pruebaEscaner, pruebaProformas] = await Promise.allSettled([
+      t().select("categoria").limit(1),
+      t().select("liquido").limit(1),
+      t().select("revision").limit(1),
+      escanerAplicado(context.supabase),
+      proformasAplicado(context.supabase),
+    ]);
+    const resultado = <T>(r: PromiseSettledResult<T>): T => {
+      if (r.status === "rejected") throw r.reason;
+      return r.value;
+    };
+    const generales = !faltaLaColumna(resultado(prueba).error);
     // Con la migración 20261014100000 la base calcula los importes.
-    const recibidas = !faltaLaColumna(prueba2.error);
-    const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
+    const recibidas = !faltaLaColumna(resultado(prueba2).error);
     // Con la migración 20261015100000 hay cola de revisión y subida de varias.
-    const cola = !faltaLaColumna(prueba3.error);
+    const cola = !faltaLaColumna(resultado(prueba3).error);
     // Con las migraciones 20261028…: revisión con el escáner textil.
-    const escaner = await escanerAplicado(context.supabase);
+    const escaner = resultado(pruebaEscaner);
     // Con las migraciones 20261029…: proformas y casado con su factura.
-    const proformas = await proformasAplicado(context.supabase);
+    const proformas = resultado(pruebaProformas);
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const { data: compras, error } = await leerTodas<any>((a, b) => {
       let consulta = tabla(context.supabase, "textil_compras").select(
@@ -499,13 +512,42 @@ export const listCompras = createServerFn({ method: "GET" })
     });
     if (error) throw new Error(error.message);
     return {
-      compras: (compras ?? []) as any[],
+      // Sin `lectura_ia`, la respuesta en bruto de la IA: era lo que más pesaba
+      // de cada fila y solo hace falta al revisar una compra de la cola, que
+      // la pide aparte con verCompra. Se quita aquí y no en la consulta para
+      // no tener que nombrar las columnas, que cambian según las migraciones.
+      compras: (compras ?? []).map((c: any) => {
+        const fila = { ...c };
+        delete fila.lectura_ia;
+        return fila;
+      }) as any[],
       generales,
       recibidas,
       cola,
       escaner,
       proformas,
     };
+  });
+
+/**
+ * Lo que leyó la IA de una compra (`lectura_ia`), para revisarla: la lista no
+ * lo trae. Nulo si no lo tiene o si la columna aún no existe.
+ */
+export const verCompra = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: fila, error } = await tabla(context.supabase, "textil_compras")
+      .select("lectura_ia")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) {
+      if (faltaLaColumna(error)) return { lectura_ia: null };
+      throw new Error(error.message);
+    }
+    if (!fila)
+      throw new Error("No se encuentra la compra: puede que la haya borrado otro usuario.");
+    return { lectura_ia: (fila.lectura_ia ?? null) as Json | null };
   });
 
 /**

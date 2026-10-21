@@ -37,6 +37,7 @@ import { CuentasExtractos } from "@/components/banco/CuentasExtractos";
 import { useCuentasBanco } from "@/components/banco/useCuentasBanco";
 import { MotorConciliacion } from "@/components/banco/MotorConciliacion";
 import { verConciliacion } from "@/lib/conciliacion.functions";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -64,6 +65,7 @@ function ConciliacionPage() {
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ["banco-cuentas"] });
     qc.invalidateQueries({ queryKey: ["conciliacion-motor"] });
+    void invalidarTrasGuardar(qc);
   };
   return (
     <div className="space-y-6">
@@ -123,6 +125,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
     qc.invalidateQueries({ queryKey: ["conciliacion"] });
     qc.invalidateQueries({ queryKey: ["facturas"] });
     qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
+    void invalidarTrasGuardar(qc);
   }
 
   const importarFn = useServerFn(importarExtracto);
