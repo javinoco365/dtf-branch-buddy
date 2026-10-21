@@ -54,7 +54,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
         grupo={d.grupo}
         texto="La tesorería es el dinero que entra y sale: no se separa en A y B."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Cobrado"
           explicacion="g_cobrado"

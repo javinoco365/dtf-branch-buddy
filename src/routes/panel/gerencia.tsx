@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SelectFiltro } from "@/components/filtros/Filtros";
+import { FiltrosPlegables, SelectFiltro } from "@/components/filtros/Filtros";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
 import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/BotonResumenDiario";
@@ -22,7 +22,7 @@ import {
   usePendientesCobro,
   useVentasGerencia,
 } from "@/lib/gerencia";
-import { PERIODOS_CUADRO } from "@/dominio/periodos";
+import { etiquetaPeriodo, PERIODOS_CUADRO } from "@/dominio/periodos";
 import { esGrupo, GRUPOS, type Grupo } from "@/dominio/grupos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import {
@@ -72,7 +72,7 @@ if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => und
 /** Mientras llega el código de una pestaña: lo mismo que mientras llegan los datos. */
 function EsqueletoPestana() {
   return (
-    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="mt-4 grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
       {Array.from({ length: 8 }).map((_, i) => (
         <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
       ))}
@@ -247,6 +247,15 @@ function Gerencia() {
     { valor: "todos", etiqueta: "Todos los canales" },
     ...CANALES.map((c) => ({ valor: c.valor, etiqueta: c.etiqueta })),
   ];
+  // Lo elegido, en una línea: lo que se lee en el móvil con los filtros plegados.
+  const resumenFiltros = [
+    etiquetaPeriodo(periodo.seleccion),
+    opcionesTienda.find((o) => o.valor === filtro.tienda)?.etiqueta,
+    filtro.canal !== "todos" ? opcionesCanal.find((o) => o.valor === filtro.canal)?.etiqueta : null,
+    grupo !== "total" ? GRUPOS.find((g) => g.valor === grupo)?.etiqueta : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   // Los ajustes no dependen del periodo ni de los filtros.
   const enAjustes = f.pestana === "ajustes";
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
@@ -275,38 +284,40 @@ function Gerencia() {
             />
           </div>
         </div>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground max-md:hidden">
           Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
           (con el ratón encima, o tocándolo en el móvil).
         </p>
       </div>
 
-      <Card className={enAjustes ? "hidden" : undefined}>
-        <CardContent className="p-4 flex flex-wrap items-center gap-2">
-          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
-          <SelectFiltro
-            etiqueta="Tienda"
-            valor={filtro.tienda}
-            alCambiar={(tienda) => cambiar({ tienda })}
-            opciones={opcionesTienda}
-            ancho="w-[190px] max-md:w-[calc(50%-0.25rem)]"
-          />
-          <SelectFiltro
-            etiqueta="Canal"
-            valor={filtro.canal}
-            alCambiar={(canal) => cambiar({ canal })}
-            opciones={opcionesCanal}
-            ancho="w-[170px] max-md:w-[calc(50%-0.25rem)]"
-          />
-          <SelectFiltro
-            etiqueta="Números"
-            valor={grupo}
-            alCambiar={(g) => cambiar({ grupo: g })}
-            opciones={GRUPOS.map((g) => ({ valor: g.valor, etiqueta: g.etiqueta }))}
-            ancho="w-[190px] max-md:w-full"
-          />
-        </CardContent>
-      </Card>
+      <FiltrosPlegables resumen={resumenFiltros} className={enAjustes ? "hidden" : undefined}>
+        <Card>
+          <CardContent className="p-4 flex flex-wrap items-center gap-2">
+            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
+            <SelectFiltro
+              etiqueta="Tienda"
+              valor={filtro.tienda}
+              alCambiar={(tienda) => cambiar({ tienda })}
+              opciones={opcionesTienda}
+              ancho="w-[190px] max-md:w-[calc(50%-0.25rem)]"
+            />
+            <SelectFiltro
+              etiqueta="Canal"
+              valor={filtro.canal}
+              alCambiar={(canal) => cambiar({ canal })}
+              opciones={opcionesCanal}
+              ancho="w-[170px] max-md:w-[calc(50%-0.25rem)]"
+            />
+            <SelectFiltro
+              etiqueta="Números"
+              valor={grupo}
+              alCambiar={(g) => cambiar({ grupo: g })}
+              opciones={GRUPOS.map((g) => ({ valor: g.valor, etiqueta: g.etiqueta }))}
+              ancho="w-[190px] max-md:w-full"
+            />
+          </CardContent>
+        </Card>
+      </FiltrosPlegables>
 
       <AvisoActualizando activo={deAntes && !enAjustes} />
 
@@ -319,19 +330,27 @@ function Gerencia() {
       )}
 
       <Tabs value={f.pestana} onValueChange={(pestana) => cambiar({ pestana })}>
-        <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto md:max-lg:h-auto md:max-lg:flex-wrap md:max-lg:justify-start">
-          <TabsTrigger value="resumen">Resumen</TabsTrigger>
-          <TabsTrigger value="ventas">Ventas</TabsTrigger>
-          <TabsTrigger value="tesoreria">Cobros y tesorería</TabsTrigger>
-          <TabsTrigger value="clientes">Clientes</TabsTrigger>
-          <TabsTrigger value="comercial">Comercial</TabsTrigger>
-          <TabsTrigger value="produccion">Producción</TabsTrigger>
-          <TabsTrigger value="margen">Margen</TabsTrigger>
-          <TabsTrigger value="resultados">Resultados</TabsTrigger>
-          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-          <TabsTrigger value="textil">Textil</TabsTrigger>
-          <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
-        </TabsList>
+        {/* En el móvil las pestañas se desplazan de lado: un degradado a la
+            derecha avisa de que hay más. */}
+        <div className="relative">
+          <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto max-md:pr-8 md:max-lg:h-auto md:max-lg:flex-wrap md:max-lg:justify-start">
+            <TabsTrigger value="resumen">Resumen</TabsTrigger>
+            <TabsTrigger value="ventas">Ventas</TabsTrigger>
+            <TabsTrigger value="tesoreria">Cobros y tesorería</TabsTrigger>
+            <TabsTrigger value="clientes">Clientes</TabsTrigger>
+            <TabsTrigger value="comercial">Comercial</TabsTrigger>
+            <TabsTrigger value="produccion">Producción</TabsTrigger>
+            <TabsTrigger value="margen">Margen</TabsTrigger>
+            <TabsTrigger value="resultados">Resultados</TabsTrigger>
+            <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+            <TabsTrigger value="textil">Textil</TabsTrigger>
+            <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
+          </TabsList>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-lg bg-gradient-to-l from-background md:hidden"
+          />
+        </div>
 
         <TabsContent value="ajustes" className="mt-4">
           <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>

@@ -54,7 +54,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
         grupo={d.grupo}
         texto="Clientes no se separa en A y B: enseña todos los pedidos."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Clientes activos"
           explicacion="g_clientes_activos"

@@ -91,7 +91,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
         </Nota>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="IVA repercutido"
           explicacion="g_iva_repercutido"
