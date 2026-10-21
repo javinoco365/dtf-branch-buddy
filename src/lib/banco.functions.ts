@@ -244,6 +244,49 @@ export const listMovimientosBanco = createServerFn({ method: "GET" })
   });
 
 /**
+ * Los movimientos de unos días, con lo justo para Gerencia: fecha, importe y
+ * si están conciliados. Antes Gerencia leía todos los movimientos de la
+ * historia con todas sus columnas y filtraba los días en el navegador; los
+ * días son los mismos (la fecha es un DATE), así que las cifras también.
+ */
+export const listMovimientosBancoRango = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data: filas, error } = await leerTodas<{
+      fecha: string;
+      importe: number | string;
+      conciliacion: unknown;
+    }>((a, b) =>
+      tabla(context.supabase, "banco_movimientos")
+        .select("fecha, importe, conciliacion:banco_conciliaciones(id)")
+        .gte("fecha", data.desde)
+        .lte("fecha", data.hasta)
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
+    if (error) throw new Error(error.message);
+    // La conciliación llega como lista o como objeto según PostgREST vea la
+    // relación (es única por movimiento): conciliado si hay alguna.
+    return (filas ?? []).map((m) => ({
+      fecha: m.fecha,
+      importe: m.importe,
+      conciliado: Array.isArray(m.conciliacion)
+        ? m.conciliacion.length > 0
+        : m.conciliacion != null,
+    }));
+  });
+
+/**
  * Qué factura paga cada ingreso, según el CRM.
  *
  * El emparejamiento vive en `src/dominio/conciliacion.ts` y se prueba sin base

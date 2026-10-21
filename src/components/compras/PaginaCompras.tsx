@@ -62,6 +62,7 @@ import {
   leerFacturaCompra,
   listCompras,
   pagarCompra,
+  verCompra,
   verFicheroCompra,
 } from "@/lib/compras.functions";
 import { guardarProveedor, listProveedores } from "@/lib/escaner-textil.functions";
@@ -173,6 +174,22 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   const general = modo === "general";
 
   const listFn = useServerFn(listCompras);
+  // Lo que leyó la IA no viene en la lista: se pide al abrir la revisión.
+  const verCompraFn = useServerFn(verCompra);
+  const [abriendoRevision, setAbriendoRevision] = useState<string | null>(null);
+  async function revisarDeLaCola(c: any) {
+    setAbriendoRevision(c.id);
+    try {
+      const { lectura_ia } = await verCompraFn({ data: { id: c.id } });
+      setRevisando(desdeFila({ ...c, lectura_ia }));
+    } catch (e: any) {
+      // Sin lo que leyó la IA, la revisión saldría con otro tipo de documento
+      // o sin la referencia de la proforma: mejor no abrirla a medias.
+      toast.error(e?.message ?? "No se pudo abrir la revisión. Vuelve a intentarlo.");
+    } finally {
+      setAbriendoRevision(null);
+    }
+  }
   const { data, isLoading } = useQuery({
     queryKey: ["compras", modo],
     queryFn: () => listFn({ data: { soloTextil: !general } }),
@@ -658,7 +675,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       {cola && (
         <ColaRevision
           compras={enLaCola}
-          onRevisar={(c) => setRevisando(desdeFila(c))}
+          onRevisar={(c) => {
+            if (!abriendoRevision) void revisarDeLaCola(c);
+          }}
           onBorrar={(c) => setBorrando(c)}
         />
       )}

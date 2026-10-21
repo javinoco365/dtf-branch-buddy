@@ -24,7 +24,7 @@ import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/pagina
 import { leerPorIds } from "@/lib/leer-por-ids";
 import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
-import { listMovimientosBanco } from "@/lib/banco.functions";
+import { listMovimientosBancoRango } from "@/lib/banco.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
 import {
   ventaDeTextil,
@@ -173,26 +173,18 @@ export function useCajaPeriodo(rango: RangoFechas) {
 
 /** Los movimientos del banco del rango, con si están casados o no. */
 export function useBancoPeriodo(rango: RangoFechas) {
-  const listar = useServerFn(listMovimientosBanco);
-  const consulta = useQuery({ queryKey: ["banco-movimientos"], queryFn: () => listar() });
+  const listar = useServerFn(listMovimientosBancoRango);
   const desde = dia(rango.desde);
   const hasta = dia(rango.hasta);
-  const data = useMemo<MovimientoBancoResumen[] | undefined>(
-    () =>
-      (
-        consulta.data as
-          { fecha: string; importe: number | string; conciliacion?: unknown }[] | undefined
-      )
-        ?.filter((m) => m.fecha >= desde && m.fecha <= hasta)
-        .map((m) => ({
-          fecha: m.fecha,
-          importe: m.importe,
-          conciliado: Array.isArray(m.conciliacion)
-            ? m.conciliacion.length > 0
-            : m.conciliacion != null,
-        })),
-    [consulta.data, desde, hasta],
-  );
+  // Solo los días del periodo, y solo fecha, importe y conciliación: antes se
+  // leía toda la historia del banco con todas sus columnas para quedarse con
+  // estos días. Clave propia: Conciliación sigue con la suya, completa.
+  const consulta = useQuery({
+    queryKey: ["gerencia-banco", desde, hasta],
+    // Un rango vacío (desde > hasta) no tiene días: nada que pedir.
+    queryFn: () => (desde > hasta ? Promise.resolve([]) : listar({ data: { desde, hasta } })),
+  });
+  const data: MovimientoBancoResumen[] | undefined = consulta.data;
   return { data, isPending: consulta.isPending, error: consulta.error };
 }
 

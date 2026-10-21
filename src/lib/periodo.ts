@@ -135,13 +135,31 @@ const CAMPOS_COBRO = "id, fecha, importe, propina, metodo, previo";
  * `disponible` sale en falso si la migración de cobros todavía no está
  * aplicada, en vez de romper la pantalla entera.
  */
-export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
+export function useCobrosPeriodo(
+  rango: RangoFechas,
+  criterio: CriterioFecha,
+  /**
+   * Solo los de esa tienda (sin los de otras ni los del textil), leídos así
+   * en la base y no filtrados después. Va al final de la clave, con «todas»
+   * por defecto, para que las pantallas de toda la empresa (Dashboard,
+   * Gerencia) sigan compartiendo la suya.
+   */
+  tiendaId?: string,
+) {
+  const alcance = tiendaId ?? "todas";
   return useQuery({
-    queryKey: ["cobros-periodo", criterio, rango.desde.toISOString(), rango.hasta.toISOString()],
+    queryKey: [
+      "cobros-periodo",
+      criterio,
+      rango.desde.toISOString(),
+      rango.hasta.toISOString(),
+      alcance,
+    ],
     // Al cambiar de periodo, los del anterior hasta que llegue el nuevo (la
-    // pantalla avisa con isPlaceholderData); con otro criterio, no.
+    // pantalla avisa con isPlaceholderData); con otro criterio o de otra
+    // tienda, no.
     placeholderData: delPeriodoAnterior<{ disponible: boolean; cobros: CobroConsolidado[] }>(
-      (clave) => clave[1] === criterio,
+      (clave) => clave[1] === criterio && clave[4] === alcance,
     ),
     queryFn: async (): Promise<{ disponible: boolean; cobros: CobroConsolidado[] }> => {
       // Un rango vacío (el de las pantallas que no comparan) no trae nada.
@@ -154,6 +172,7 @@ export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
       let textil = tabla(supabase, "cobros").select(
         `${CAMPOS_COBRO}, pedido:textil_pedidos!inner(id, numero, fecha, cliente_nombre, total, iva, envio)`,
       );
+      if (tiendaId) tiendas = tiendas.eq("pedido.tienda_id", tiendaId);
       if (criterio === "pedido") {
         const tramo = tramoDeConsulta(dias.desde, dias.hasta);
         tiendas = tiendas
@@ -167,7 +186,10 @@ export function useCobrosPeriodo(rango: RangoFechas, criterio: CriterioFecha) {
 
       const [rt, rx] = await Promise.all([
         leerTodas<unknown>((a, b) => tiendas.order("id").range(a, b)),
-        leerTodas<unknown>((a, b) => textil.order("id").range(a, b)),
+        // Con una tienda, el textil no hace falta.
+        tiendaId
+          ? Promise.resolve({ data: [] as unknown[], error: null })
+          : leerTodas<unknown>((a, b) => textil.order("id").range(a, b)),
       ]);
       // Solo «la tabla no existe»; cualquier otro error se enseña.
       if (faltaLaTabla(rt.error)) return { disponible: false, cobros: [] };

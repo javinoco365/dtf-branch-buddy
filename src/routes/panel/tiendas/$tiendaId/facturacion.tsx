@@ -68,8 +68,10 @@ function FacturacionTienda() {
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta, tiendaId });
   const consultaLineas = useLineasPeriodo({ desde, hasta, tiendaId });
   // Lo cobrado, por la fecha del cobro: el dinero que entró en el periodo.
-  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
-  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
+  // Solo los de esta tienda, leídos así en la base (cobrosDeTiendas, abajo,
+  // deja los mismos: los de esta tienda).
+  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro", tiendaId);
+  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro", tiendaId);
 
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const k = useMemo(() => calcularKpis(pedidos), [pedidos]);

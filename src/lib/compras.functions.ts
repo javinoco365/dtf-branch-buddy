@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
+import type { Json } from "@/integrations/supabase/types";
 import {
   AVISO_MIGRACION_ESCANER,
   AVISO_MIGRACION_PROFORMAS,
@@ -511,13 +512,42 @@ export const listCompras = createServerFn({ method: "GET" })
     });
     if (error) throw new Error(error.message);
     return {
-      compras: (compras ?? []) as any[],
+      // Sin `lectura_ia`, la respuesta en bruto de la IA: era lo que más pesaba
+      // de cada fila y solo hace falta al revisar una compra de la cola, que
+      // la pide aparte con verCompra. Se quita aquí y no en la consulta para
+      // no tener que nombrar las columnas, que cambian según las migraciones.
+      compras: (compras ?? []).map((c: any) => {
+        const fila = { ...c };
+        delete fila.lectura_ia;
+        return fila;
+      }) as any[],
       generales,
       recibidas,
       cola,
       escaner,
       proformas,
     };
+  });
+
+/**
+ * Lo que leyó la IA de una compra (`lectura_ia`), para revisarla: la lista no
+ * lo trae. Nulo si no lo tiene o si la columna aún no existe.
+ */
+export const verCompra = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: fila, error } = await tabla(context.supabase, "textil_compras")
+      .select("lectura_ia")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) {
+      if (faltaLaColumna(error)) return { lectura_ia: null };
+      throw new Error(error.message);
+    }
+    if (!fila)
+      throw new Error("No se encuentra la compra: puede que la haya borrado otro usuario.");
+    return { lectura_ia: (fila.lectura_ia ?? null) as Json | null };
   });
 
 /**
