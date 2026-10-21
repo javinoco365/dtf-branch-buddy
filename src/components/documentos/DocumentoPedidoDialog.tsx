@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { AlertTriangle, FileText, Receipt } from "lucide-react";
 import { eur } from "@/lib/format";
+import { invalidarTrasGuardar } from "@/lib/cache";
 import { calcularTotales } from "@/dominio/importes";
 import { diaEnEspana, diaLegible } from "@/dominio/fecha-documento";
 import {
@@ -176,6 +177,10 @@ export function DocumentoPedidoDialog({
         tipo_fiscal: tipoFiscal,
         notas: notas.trim() || null,
       });
+      // Emitido: todo lo leído pasa a viejo (Gerencia › Fiscal, pedidos sin
+      // documento...), también si luego falla el PDF. emitir() no va por
+      // useMutation y la invalidación central no lo ve.
+      void invalidarTrasGuardar(qc);
       const emitido =
         documento === "ticket"
           ? `Ticket ${r.referencia} emitido`
@@ -191,7 +196,6 @@ export function DocumentoPedidoDialog({
           `${emitido}, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
         );
       }
-      qc.invalidateQueries({ queryKey: claveQuery });
       alEmitir();
     } catch (e: any) {
       ventana?.close();

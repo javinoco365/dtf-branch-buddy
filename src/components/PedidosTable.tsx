@@ -1,4 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useMemo, useState } from "react";
+import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { useFiltrosUrl, usePeriodoUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
@@ -69,7 +70,7 @@ import {
 } from "@/lib/pedidos.functions";
 import { generarYSubirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
-import { resumenCobros } from "@/dominio/cobros";
+import { resumenCobros, type ResumenCobros } from "@/dominio/cobros";
 import { claseFilaCobrada } from "@/components/cobros/fila-cobrada";
 import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
@@ -86,6 +87,9 @@ import {
   textoSincronizado,
 } from "@/lib/sync-woo";
 import { exportarPedidosParaAnalisis } from "@/lib/export-analisis";
+import { delPeriodoAnterior } from "@/lib/cache";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 const PedidoFormDialog = lazy(() =>
   import("@/components/PedidoFormDialog").then((m) => ({ default: m.PedidoFormDialog })),
 );
@@ -110,6 +114,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SiPuede } from "@/components/SiPuede";
 
 export type { Direccion };
 
@@ -193,6 +198,23 @@ function estadoVariant(estado: string): "default" | "secondary" | "destructive" 
   return "secondary";
 }
 
+/**
+ * El resumen de cobros de cada pedido, calculado una vez por pedido. La clave
+ * es el propio objeto: la caché de datos conserva el mismo objeto mientras el
+ * pedido no cambia, y uno que cambia llega como objeto nuevo y se recalcula.
+ * Antes se calculaba hasta cinco veces por pedido (filtro, exportación,
+ * tarjeta, fila…).
+ */
+const cobrosCalculados = new WeakMap<PedidoFila, ResumenCobros>();
+function cobroDe(p: PedidoFila): ResumenCobros {
+  let r = cobrosCalculados.get(p);
+  if (!r) {
+    r = resumenCobros(p.total, p.cobros ?? []);
+    cobrosCalculados.set(p, r);
+  }
+  return r;
+}
+
 const CLAVE_SINCRONIZAR = ["sincronizar-woo"];
 const CLAVE_EXPORTAR = ["exportar-analisis"];
 
@@ -200,9 +222,17 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const queryClient = useQueryClient();
   // Los filtros viven en la dirección: sobreviven a recargar y se comparten.
   const { valores: f, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS);
+  const buscar = useCallback((q: string) => cambiar({ q }), [cambiar]);
   // Sin «todo»: una tienda con años de pedidos no se carga de una vez.
   const periodo = usePeriodoUrl("mes");
-  const [busqueda, setBusqueda] = useTextoDiferido(f.q, (q) => cambiar({ q }));
+  // Una sola vista montada: tarjetas en el móvil, tabla en el ordenador.
+  // Antes se montaban las dos y el CSS escondía una: cada pedido se pintaba
+  // dos veces. Al imprimir se montan las dos, como antes (ver useEsMovil).
+  // Las tarjetas salen también en la tablet en vertical (< 1024 px): allí la
+  // tabla de once columnas tampoco cabe y se desplazaba de lado.
+  const vista = useEsMovil(CONSULTA_TABLET);
+  const conTarjetas = vista.movil || vista.imprimiendo;
+  const conTabla = !vista.movil || vista.imprimiendo;
   const estadoFiltro = f.estado;
   // En la vista global se puede elegir tienda, y se pide solo esa al servidor.
   const tiendaConsulta = tiendaId ?? (f.tienda !== "todas" ? f.tienda : undefined);
@@ -247,6 +277,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   // sigue hablando de lo que se exportó.
   const exportarAnalisis = useMutation({
     mutationKey: CLAVE_EXPORTAR,
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (tienda: string | undefined) => exportarPedidosParaAnalisis({ tiendaId: tienda }),
     onSuccess: (r) => {
       toast.success(`Exportados ${numero(r.pedidos, 0)} pedidos de ${r.alcance}`, {
@@ -268,8 +299,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isPlaceholderData } = useQuery({
     queryKey,
+    // Al cambiar de periodo, los pedidos del anterior hasta que llegan los
+    // nuevos: avisados, atenuados y sin poder actuar sobre ellos (abajo). Al
+    // cambiar de tienda, no: se verían pedidos de la otra.
+    placeholderData: delPeriodoAnterior<Awaited<ReturnType<typeof list>>>(
+      (clave) => clave[1] === (tiendaConsulta ?? "all"),
+    ),
     // Los días del periodo, no los instantes: el servidor filtra por el día
     // del pedido, el mismo que lleva su ticket (ver dia-pedido.ts).
     queryFn: () =>
@@ -282,7 +319,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       }),
   });
 
-  const pedidos: PedidoFila[] = (data?.pedidos ?? []) as any;
+  // La misma lista mientras no lleguen datos nuevos: si no, cada pintado
+  // recalcularía filtros, días y totales.
+  const pedidos = useMemo<PedidoFila[]>(() => (data?.pedidos ?? []) as any, [data]);
   const cobrosDisponibles = data?.cobrosDisponibles ?? true;
   const horaCorte = data?.horaCorte ?? HORA_CORTE_POR_DEFECTO;
   // Los metros realizados cada día (de pedidos de ese día o de otros). Sin la
@@ -312,6 +351,23 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     onError: (e: any) => toast.error(e?.message || "Error al borrar"),
   });
 
+  // Las mismas funciones en cada pintado, para que una fila solo se vuelva a
+  // pintar si cambia su pedido o si se abre o cierra. Reciben el pedido de la
+  // fila que las llama (el de ese momento), no lo guardan.
+  const { mutate: mutarEstado } = estadoMut;
+  const acciones = useMemo<AccionesPedido>(
+    () => ({
+      alternar: (id) => setExpandida((actual) => (actual === id ? null : id)),
+      cambiarEstado: (id, estado) => mutarEstado({ id, estado }),
+      editar: setEditar,
+      verTracking: setTracking,
+      borrar: setBorrar,
+      facturar: setFacturar,
+      cobrar: setCobrando,
+    }),
+    [mutarEstado],
+  );
+
   const filtrados = useMemo(() => {
     const q = f.q.trim().toLowerCase();
     return pedidos.filter((p) => {
@@ -320,7 +376,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       if (f.origen === "manual" && p.origen === "woocommerce") return false;
       if (f.cobro !== "todos") {
         // «Pendiente» incluye lo cobrado en parte: es lo que falta por cobrar.
-        const e = resumenCobros(p.total, p.cobros ?? []).estado;
+        const e = cobroDe(p).estado;
         if (f.cobro === "pendiente" && e !== "pendiente" && e !== "parcial") return false;
         if (f.cobro === "parcial" && e !== "parcial") return false;
         if (f.cobro === "cobrado" && e !== "cobrado" && e !== "excedido") return false;
@@ -385,7 +441,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         "Pendiente",
       ],
       ...filtrados.map((p) => {
-        const cobro = resumenCobros(p.total, p.cobros ?? []);
+        const cobro = cobroDe(p);
         return [
           diaDelPedido(p),
           p.numero,
@@ -443,7 +499,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuItem onClick={exportar}>
+              <DropdownMenuItem onClick={exportar} disabled={isPlaceholderData}>
                 <Download />
                 <div>
                   <div>CSV</div>
@@ -480,24 +536,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             <Receipt className="h-4 w-4 mr-2" /> Facturar
           </Button>
           {tiendaId && (
-            <Button size="sm" onClick={() => setNuevoOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-            </Button>
+            <SiPuede accion="escribir">
+              <Button size="sm" onClick={() => setNuevoOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+              </Button>
+            </SiPuede>
           )}
         </div>
       </div>
 
       <Card>
         <CardContent className="p-4 flex flex-wrap gap-2 items-center">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente, email o nº pedido…"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+          <CuadroBusqueda valor={f.q} alBuscar={buscar} />
           {!tiendaId && (
             <Select value={f.tienda} onValueChange={(tienda) => cambiar({ tienda })}>
               <SelectTrigger className="w-[170px] max-md:w-[calc(50%-0.25rem)]" aria-label="Tienda">
@@ -574,7 +624,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         </Card>
       )}
 
-      <div className="space-y-6">
+      <div {...propsDatosDeAntes(isPlaceholderData, "space-y-6")}>
+        <AvisoActualizando activo={isPlaceholderData} />
         {isLoading && (
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
@@ -601,15 +652,15 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         )}
         {grupos.map((g) => (
           <div key={g.fecha}>
-            <div className="flex items-center justify-between pb-2 border-b mb-2">
-              <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:text-xs">
+            <div className="flex items-center justify-between pb-2 border-b mb-2 max-md:gap-2">
+              <div className="text-sm font-semibold uppercase tracking-wider text-primary max-md:min-w-0 max-md:text-xs">
                 {format(parseISO(g.fecha), "EEEE, d 'DE' MMMM yyyy", { locale: es }).toUpperCase()}
               </div>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm max-md:flex-wrap max-md:justify-end max-md:gap-y-1">
                 {/* En el ordenador los metros del día van en su pie, debajo de
                     su columna. En el móvil no hay pie: van aquí, debajo del
                     importe, para que la fecha no se parta en dos líneas. */}
-                <div className="text-right leading-tight md:hidden">
+                <div className="text-right leading-tight lg:hidden">
                   <div className="font-semibold">{eur(g.totales.total)}</div>
                   <div className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                     <MetrosSuma totales={g.totales} />
@@ -618,7 +669,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     )}
                   </div>
                 </div>
-                <span className="font-semibold max-md:hidden">{eur(g.totales.total)}</span>
+                <span className="font-semibold max-lg:hidden">{eur(g.totales.total)}</span>
                 <Badge variant="outline" className="whitespace-nowrap">
                   {describirPedidos(g.totales.pedidos)}
                 </Badge>
@@ -634,30 +685,25 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             </div>
             {/* En el móvil, una tarjeta por pedido: una tabla de once columnas
                 no cabe en 390 px y desplazarla de lado esconde lo importante. */}
-            <div className="space-y-2 md:hidden">
-              {g.lista.map((p) => {
-                const abierta = expandida === p.id;
-                return (
+            {conTarjetas && (
+              <div className="grid gap-2 md:grid-cols-2 md:items-start lg:hidden">
+                {g.lista.map((p) => (
                   <TarjetaPedido
                     key={p.id}
                     pedido={p}
-                    abierta={abierta}
+                    abierta={expandida === p.id}
                     mostrarTienda={!tiendaId}
-                    onToggle={() => setExpandida(abierta ? null : p.id)}
-                    onEstadoChange={(estado) => estadoMut.mutate({ id: p.id, estado })}
-                    onEditar={() => setEditar(p)}
-                    onTracking={() => setTracking(p)}
-                    onBorrar={() => setBorrar(p)}
-                    onFacturar={() => setFacturar(p)}
-                    onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
+                    conCobros={cobrosDisponibles}
+                    acciones={acciones}
                     horaCorte={horaCorte}
                   />
-                );
-              })}
-            </div>
-            <Card className="max-md:hidden">
-              <CardContent className="p-0">
-                {/*
+                ))}
+              </div>
+            )}
+            {conTabla && (
+              <Card className="max-lg:hidden">
+                <CardContent className="p-0">
+                  {/*
                   Cada día es una tabla aparte, y una tabla HTML reparte el
                   ancho de sus columnas según SU propio contenido. Con anchos
                   automáticos, un grupo con nombres largos sacaba las columnas
@@ -675,6 +721,10 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   de 1440. Allí la tabla mide 1134, o 1117 si el navegador
                   tiene barra de desplazamiento fija (Windows, o un Mac con
                   ratón): el mínimo de 1104 cabe en las dos y no se desplaza.
+                  Por debajo de 1440 (un portátil de 1366, con la barra
+                  lateral) Total, Cobrado y Pendiente bajan a w-24 y el mínimo
+                  a 1056, que cabe en los 1060 que quedan. Por debajo de 1024
+                  ya no hay tabla: tarjetas.
                   Con 1120 sobraba un píxel y salía una barra horizontal bajo
                   cada día. Llegaron a sumar 1184, más que la propia tabla, y
                   Cliente se quedaba en cero: el nombre desaparecía y su
@@ -687,56 +737,51 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
                   del total del periodo: si cambian aquí, cambian allí.
                 */}
-                <Table className="table-fixed min-w-[1104px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10" />
-                      <TableHead className="w-36">
-                        {tiendaId ? "Nº Pedido" : "Nº Pedido · Tienda"}
-                      </TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead className="w-32">Origen</TableHead>
-                      <TableHead className="w-32">Estado</TableHead>
-                      <TableHead className="w-24 text-right">Metros</TableHead>
-                      <TableHead className="w-28 text-right">Total</TableHead>
-                      <TableHead className="w-28 text-right">Cobrado</TableHead>
-                      <TableHead className="w-28 text-right">Pendiente</TableHead>
-                      <TableHead className="w-12">Env.</TableHead>
-                      <TableHead className="w-12" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {g.lista.map((p) => {
-                      const abierta = expandida === p.id;
-                      return (
+                  <Table className="table-fixed min-w-[1104px] max-[1440px]:min-w-[1056px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10" />
+                        <TableHead className="w-36">
+                          {tiendaId ? "Nº Pedido" : "Nº Pedido · Tienda"}
+                        </TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead className="w-32">Origen</TableHead>
+                        <TableHead className="w-32">Estado</TableHead>
+                        <TableHead className="w-24 text-right">Metros</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">Total</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">Cobrado</TableHead>
+                        <TableHead className="w-28 text-right max-[1440px]:w-24">
+                          Pendiente
+                        </TableHead>
+                        <TableHead className="w-12">Env.</TableHead>
+                        <TableHead className="w-12" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {g.lista.map((p) => (
                         <FilaPedido
                           key={p.id}
                           pedido={p}
-                          abierta={abierta}
+                          abierta={expandida === p.id}
                           mostrarTienda={!tiendaId}
-                          onToggle={() => setExpandida(abierta ? null : p.id)}
-                          onEstadoChange={(estado) => estadoMut.mutate({ id: p.id, estado })}
-                          onEditar={() => setEditar(p)}
-                          onTracking={() => setTracking(p)}
-                          onBorrar={() => setBorrar(p)}
-                          onFacturar={() => setFacturar(p)}
-                          onCobros={cobrosDisponibles ? () => setCobrando(p) : undefined}
+                          conCobros={cobrosDisponibles}
+                          acciones={acciones}
                           horaCorte={horaCorte}
                         />
-                      );
-                    })}
-                  </TableBody>
-                  <TableFooter>
-                    <FilaTotales
-                      titulo="Total del día"
-                      totales={g.totales}
-                      conCobros={cobrosDisponibles}
-                      realizados={realizadosPorDia ? (realizadosPorDia[g.fecha] ?? 0) : undefined}
-                    />
-                  </TableFooter>
-                </Table>
-              </CardContent>
-            </Card>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <FilaTotales
+                        titulo="Total del día"
+                        totales={g.totales}
+                        conCobros={cobrosDisponibles}
+                        realizados={realizadosPorDia ? (realizadosPorDia[g.fecha] ?? 0) : undefined}
+                      />
+                    </TableFooter>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
           </div>
         ))}
         {!isLoading && grupos.length > 0 && (
@@ -755,7 +800,10 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 «Pendiente» delante de cada cifra (las etiquetas salen de la
                 cabecera).
               */}
-              <Table movil="tarjetas" className="table-fixed min-w-[1104px]">
+              <Table
+                movil="tarjetas-tablet"
+                className="table-fixed min-w-[1104px] max-[1440px]:min-w-[1056px]"
+              >
                 <ColumnasPedidos />
                 <TableHeader className="hidden">
                   <TableRow>
@@ -904,9 +952,9 @@ function ColumnasPedidos() {
       <col className="w-32" />
       <col className="w-32" />
       <col className="w-24" />
-      <col className="w-28" />
-      <col className="w-28" />
-      <col className="w-28" />
+      <col className="w-28 max-[1440px]:w-24" />
+      <col className="w-28 max-[1440px]:w-24" />
+      <col className="w-28 max-[1440px]:w-24" />
       <col className="w-12" />
       <col className="w-12" />
     </colgroup>
@@ -961,21 +1009,43 @@ function FilaTotales({
   );
 }
 
+/** Lo que se puede hacer con un pedido de la lista. Las mismas funciones siempre. */
+type AccionesPedido = {
+  alternar: (id: string) => void;
+  cambiarEstado: (id: string, estado: string) => void;
+  editar: (p: PedidoFila) => void;
+  verTracking: (p: PedidoFila) => void;
+  borrar: (p: PedidoFila) => void;
+  facturar: (p: PedidoFila) => void;
+  cobrar: (p: PedidoFila) => void;
+};
+
 type PropsPedido = {
   pedido: PedidoFila;
   abierta: boolean;
   mostrarTienda: boolean;
-  onToggle: () => void;
-  onEstadoChange: (estado: string) => void;
-  onEditar: () => void;
-  onTracking: () => void;
-  onBorrar: () => void;
-  onFacturar: () => void;
-  /** Sin él, la migración de cobros no está aplicada y no se ofrece. */
-  onCobros?: () => void;
+  /** Sin la migración de cobros no se ofrecen: «—». */
+  conCobros: boolean;
+  acciones: AccionesPedido;
   /** Lo que entra a esta hora o después se hace al día siguiente ('hh:mm'). */
   horaCorte: string;
 };
+
+/**
+ * Las acciones de una fila o tarjeta con su pedido ya puesto. Se crean al
+ * pintar la fila, que solo se repinta si cambia su pedido o si se abre.
+ */
+function accionesDeFila(pedido: PedidoFila, conCobros: boolean, a: AccionesPedido) {
+  return {
+    onToggle: () => a.alternar(pedido.id),
+    onEstadoChange: (estado: string) => a.cambiarEstado(pedido.id, estado),
+    onEditar: () => a.editar(pedido),
+    onTracking: () => a.verTracking(pedido),
+    onBorrar: () => a.borrar(pedido),
+    onFacturar: () => a.facturar(pedido),
+    onCobros: conCobros ? () => a.cobrar(pedido) : undefined,
+  };
+}
 
 /** Los metros realizados de los días entre `desde` y `hasta` ('yyyy-mm-dd', incluidos). */
 function sumarRealizados(porDia: Record<string, number>, desde: string, hasta: string): number {
@@ -1046,23 +1116,20 @@ function BotonDocumento({ documento }: { documento: DocumentoDeLista }) {
   );
 }
 
-function FilaPedido({
+const FilaPedido = memo(function FilaPedido({
   pedido,
   abierta,
   mostrarTienda,
-  onToggle,
-  onEstadoChange,
-  onEditar,
-  onTracking,
-  onBorrar,
-  onFacturar,
-  onCobros,
+  conCobros,
+  acciones,
   horaCorte,
 }: PropsPedido) {
+  const { onToggle, onEstadoChange, onEditar, onTracking, onBorrar, onFacturar, onCobros } =
+    accionesDeFila(pedido, conCobros, acciones);
   const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
   const numeroLabel = numeroVisible(pedido);
   const cancelado = pedido.estado === "cancelado";
-  const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
+  const cobro = cobroDe(pedido);
 
   return (
     <>
@@ -1180,28 +1247,25 @@ function FilaPedido({
       )}
     </>
   );
-}
+});
 
 /**
  * El mismo pedido que FilaPedido, en tarjeta, para el móvil. Arriba lo que se
  * busca de un vistazo (número, cliente, total); debajo el estado y lo que
  * queda por cobrar, que es lo que se toca; el resto al desplegar.
  */
-function TarjetaPedido({
+const TarjetaPedido = memo(function TarjetaPedido({
   pedido,
   abierta,
   mostrarTienda,
-  onToggle,
-  onEstadoChange,
-  onEditar,
-  onTracking,
-  onBorrar,
-  onFacturar,
-  onCobros,
+  conCobros,
+  acciones,
   horaCorte,
 }: PropsPedido) {
+  const { onToggle, onEstadoChange, onEditar, onTracking, onBorrar, onFacturar, onCobros } =
+    accionesDeFila(pedido, conCobros, acciones);
   const cancelado = pedido.estado === "cancelado";
-  const cobro = resumenCobros(pedido.total, pedido.cobros ?? []);
+  const cobro = cobroDe(pedido);
   const conTracking = !!pedido.tracking?.codigo_seguimiento;
 
   return (
@@ -1294,7 +1358,7 @@ function TarjetaPedido({
       </CardContent>
     </Card>
   );
-}
+});
 
 function SelectorEstado({
   estado,
@@ -1557,3 +1621,29 @@ function CantidadLinea({ linea }: { linea: PedidoFila["items"][number] }) {
     </span>
   );
 }
+
+/**
+ * El cuadro de búsqueda, con su propio estado: cada tecla repinta solo el
+ * cuadro y no la lista entera. La búsqueda va a la dirección (`q`) un momento
+ * después de dejar de escribir, como antes.
+ */
+const CuadroBusqueda = memo(function CuadroBusqueda({
+  valor,
+  alBuscar,
+}: {
+  valor: string;
+  alBuscar: (q: string) => void;
+}) {
+  const [busqueda, setBusqueda] = useTextoDiferido(valor, alBuscar);
+  return (
+    <div className="relative flex-1 min-w-[220px]">
+      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        placeholder="Buscar cliente, email o nº pedido…"
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+        className="pl-9"
+      />
+    </div>
+  );
+});

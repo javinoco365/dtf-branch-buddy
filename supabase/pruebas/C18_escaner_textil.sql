@@ -19,10 +19,8 @@ SET client_min_messages = warning;
 \ir ../migrations/20261028100200_escaner_textil_reglas.sql
 RESET client_min_messages;
 
--- Permisos que Supabase concede por defecto sobre public y el simulador no
--- (como en C11). Así lo que decide en cada caso es la RLS.
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+-- Los privilegios por defecto de Supabase los pone 00_entorno_supabase.sql;
+-- aquí no se concede nada más sobre tablas (como en C11).
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
 
 -- ---------------------------------------------------------------------------

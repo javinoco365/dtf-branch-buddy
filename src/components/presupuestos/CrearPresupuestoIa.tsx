@@ -46,6 +46,7 @@ import {
   recortarImagenes,
 } from "@/dominio/imagenes-presupuesto";
 import { MAXIMO_BYTES_DOCUMENTO_IA, MAXIMO_BYTES_IMAGEN_IA } from "@/dominio/presupuesto-ia";
+import { SiPuede } from "@/components/SiPuede";
 
 export type ModoIa = "documento" | "texto";
 
@@ -77,10 +78,12 @@ export function NuevoPresupuestoMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button disabled={disabled}>
-          <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
-          <ChevronDown className="h-4 w-4 ml-2" />
-        </Button>
+        <SiPuede accion="escribir">
+          <Button disabled={disabled}>
+            <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
+            <ChevronDown className="h-4 w-4 ml-2" />
+          </Button>
+        </SiPuede>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuItem onClick={onManual}>
@@ -160,6 +163,7 @@ export function PresupuestoIaDialog({
   }, [modo]);
 
   const montar = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: async () => {
       if (modo === "documento" && !documento) throw new Error("Elige el documento.");
       if (modo === "texto" && !texto.trim()) throw new Error("Escribe el presupuesto.");

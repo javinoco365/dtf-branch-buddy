@@ -202,7 +202,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
 
       <Card>
         <CardContent className="p-0">
-          <Table movil="tarjetas">
+          <Table movil="tarjetas-tablet">
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha</TableHead>

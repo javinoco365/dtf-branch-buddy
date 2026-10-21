@@ -73,6 +73,7 @@ import {
   QuitarFiltros,
   SelectFiltro,
 } from "@/components/filtros/Filtros";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -114,9 +115,20 @@ function PedidosPage() {
     queryFn: () => marcasFn(),
   });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
-  const { data: stock = [], isSuccess: stockCargado } = useQuery({
+  const [open, setOpen] = useState(false);
+  // «Desde el stock»: ?desde_stock=<id>,<id>… abre el documento nuevo con esas
+  // variantes y se quita de la dirección (al volver atrás no se abre otra vez).
+  const { desde_stock: desdeStock } = Route.useSearch();
+  // El stock solo hace falta en la ventana del pedido (y para «desde el
+  // stock»): la lista no lo usa, así que no se lee hasta abrirla.
+  const {
+    data: stock = [],
+    isSuccess: stockCargado,
+    error: errorStock,
+  } = useQuery({
     queryKey: ["textil-stock"],
     queryFn: () => stockFn(),
+    enabled: open || !!desdeStock,
   });
   // El catálogo con el disponible de cada variante (físico − reservado).
   const variantes = useMemo(
@@ -174,13 +186,9 @@ function PedidosPage() {
   // o si falta la migración, lo cobrado saldría a cero y el pendiente igual al total.
   const cobrosLeidos = datosCobros?.disponible === true;
 
-  const [open, setOpen] = useState(false);
   const [borrando, setBorrando] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
 
-  // «Desde el stock»: ?desde_stock=<id>,<id>… abre el documento nuevo con esas
-  // variantes y se quita de la dirección (al volver atrás no se abre otra vez).
-  const { desde_stock: desdeStock } = Route.useSearch();
   const navigate = useNavigate();
   const [lineasIniciales, setLineasIniciales] = useState<Linea[] | null>(null);
   useEffect(() => {
@@ -263,15 +271,17 @@ function PedidosPage() {
           <h1 className="text-2xl font-bold">Pedidos textil</h1>
           <p className="text-sm text-muted-foreground">Pedidos manuales del módulo textil.</p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setLineasIniciales(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-        </Button>
+        <SiPuede accion="escribir">
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setLineasIniciales(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+          </Button>
+        </SiPuede>
       </div>
       {!cobrosDisponibles && (
         <Card>
@@ -317,7 +327,7 @@ function PedidosPage() {
       </BarraFiltros>
       <Card>
         <CardContent className="p-0">
-          <Table movil="tarjetas">
+          <Table movil="tarjetas-tablet">
             <TableHeader>
               <TableRow>
                 <TableHead>Nº</TableHead>
@@ -405,9 +415,11 @@ function PedidosPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <SiPuede accion="borrar">
+                        <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 );
@@ -487,7 +499,25 @@ function PedidosPage() {
         />
       )}
 
-      {open && (
+      {/* Hasta que llega el stock no se abre el formulario: sin él no se
+          podría elegir prenda ni comprobar lo disponible. */}
+      {open && !stockCargado && (
+        <Dialog open onOpenChange={setOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{editing ? `Editar ${editing.numero}` : "Nuevo pedido"}</DialogTitle>
+            </DialogHeader>
+            {errorStock ? (
+              <p className="text-sm text-destructive">
+                No se ha podido leer el stock: {errorStock.message}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Cargando el stock…</p>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+      {open && stockCargado && (
         <PedidoDialog
           open={open}
           onOpenChange={setOpen}

@@ -162,6 +162,10 @@ seccion "Pedidos: cuándo se realizaron y coste real del envío" C17_pedidos_rea
 seccion "Escáner textil: compras, catálogo, stock y cuentas" C18_escaner_textil.sql
 seccion "Proformas: casar factura, regularizar el stock y pasar el pago" C19_proformas.sql
 seccion "Imágenes de los presupuestos" C20_presupuesto_imagenes.sql
+seccion "Rendimiento: índices y lectura con mis_tiendas()/mis_empresas()" C21_rendimiento_rls.sql
+seccion "Niveles de usuario: admin, editor y visor" D1_roles_permisos.sql
+seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
+  'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 
 # ---------------------------------------------------------------------------
 # Veredicto

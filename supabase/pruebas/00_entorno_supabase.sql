@@ -79,3 +79,15 @@ CREATE OR REPLACE FUNCTION storage.filename(name text) RETURNS text
 LANGUAGE sql IMMUTABLE AS $$
   SELECT (string_to_array(name, '/'))[array_length(string_to_array(name, '/'), 1)]
 $$;
+
+-- Privilegios por defecto del esquema public, como los deja Supabase: todo lo
+-- que crea postgres (tablas, vistas, secuencias y funciones) nace concedido a
+-- anon, authenticated y service_role. Sin esto el banco no ve los fallos de
+-- permisos que sí hay en producción: una vista sin security_invoker que anon
+-- puede leer, una función que solo se revocó FROM PUBLIC y sigue concedida a
+-- authenticated, o un REVOKE sobre auditoria que una prueba deshace sin
+-- querer. Las migraciones tienen que revocar lo que no quieran abrir, igual
+-- que en producción.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;

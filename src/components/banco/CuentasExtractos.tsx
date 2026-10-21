@@ -35,6 +35,7 @@ import { eur, fechaCorta } from "@/lib/format";
 import { analizarExtracto, guardarCuenta, importarExtracto } from "@/lib/banco.functions";
 import { useCuentasBanco } from "./useCuentasBanco";
 import type { Decimal, OrdenFecha } from "@/dominio/extractos";
+import { SiPuede } from "@/components/SiPuede";
 
 /**
  * Las cuentas del banco y sus extractos. Al subir un extracto se ve primero
@@ -255,9 +256,11 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
                 className="w-72 max-md:w-full"
               />
             </div>
-            <Button type="submit" size="sm" variant="outline" disabled={guardar.isPending}>
-              <Plus className="h-4 w-4 mr-1" /> Añadir cuenta
-            </Button>
+            <SiPuede accion="escribir">
+              <Button type="submit" size="sm" variant="outline" disabled={guardar.isPending}>
+                <Plus className="h-4 w-4 mr-1" /> Añadir cuenta
+              </Button>
+            </SiPuede>
           </form>
 
           {extractos.length > 0 && (

@@ -7,6 +7,8 @@ import { LogOut } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { MARCA_DESCRIPCION, MARCA_NOMBRE } from "@/components/Marca";
 import { BotonTema } from "@/components/BotonTema";
+import { MedidorRendimiento } from "@/components/MedidorRendimiento";
+import { usePermisos } from "@/hooks/use-permisos";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
@@ -40,9 +42,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Button>
             </div>
           </header>
+          <AvisoSoloLectura />
           <main className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">{children}</main>
         </div>
       </div>
+      <MedidorRendimiento />
     </SidebarProvider>
+  );
+}
+
+/** Para un visor (o un usuario sin nivel): que sepa por qué no puede cambiar nada. */
+function AvisoSoloLectura() {
+  const { escribir, nivel, cargando } = usePermisos();
+  if (cargando || escribir) return null;
+  return (
+    <div className="border-b bg-muted px-4 py-2 text-sm text-muted-foreground">
+      {nivel === "visor"
+        ? "Tienes acceso de solo lectura: puedes ver todo, pero no crear, cambiar ni borrar."
+        : "Tu usuario no tiene nivel de acceso o está desactivado: no puedes cambiar datos. Habla con un administrador."}
+    </div>
   );
 }

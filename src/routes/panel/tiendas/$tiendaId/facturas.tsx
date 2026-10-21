@@ -44,6 +44,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
+import { invalidarTrasGuardar } from "@/lib/cache";
 import { calcularTotales } from "@/dominio/importes";
 import { totalesDocumentos } from "@/dominio/sumatorios";
 import {
@@ -78,6 +79,15 @@ import {
   Mail,
   Undo2,
 } from "lucide-react";
+import { SiPuede } from "@/components/SiPuede";
+
+/**
+ * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
+ * desglose de IVA (eran la mayor parte de cada fila). Del receptor, solo el
+ * correo, para «Enviar por correo». El PDF los lee en el servidor al abrirlo.
+ */
+const CAMPOS_LISTA_FACTURAS =
+  "id, tienda_id, pedido_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url, sustituye_a_id, rectifica_a_id, receptor_email:receptor_snapshot->>email";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
@@ -118,7 +128,7 @@ function Facturas() {
         await leerTodas<any>((a, b) =>
           supabase
             .from("facturas")
-            .select("*")
+            .select(CAMPOS_LISTA_FACTURAS)
             .eq("tienda_id", tiendaId)
             .order("fecha", { ascending: false })
             .order("id")
@@ -297,9 +307,11 @@ function Facturas() {
           <TicketsPendientesDialog tiendaId={tiendaId} />
           <Dialog open={abierto} onOpenChange={setAbierto}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Nueva factura
-              </Button>
+              <SiPuede accion="escribir">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" /> Nueva factura
+                </Button>
+              </SiPuede>
             </DialogTrigger>
             <NuevaFacturaDialog
               tiendaId={tiendaId}
@@ -458,16 +470,18 @@ function Facturas() {
                           </Button>
                         )}
                       {sePuedeBorrar(f) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="Borrar (es la última de su serie)"
-                          aria-label="Borrar"
-                          disabled={borrar.isPending}
-                          onClick={() => setBorrando(f)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <SiPuede accion="borrar">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Borrar (es la última de su serie)"
+                            aria-label="Borrar"
+                            disabled={borrar.isPending}
+                            onClick={() => setBorrando(f)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </SiPuede>
                       )}
                     </div>
                   </TableCell>
@@ -556,7 +570,7 @@ function Facturas() {
           facturaId={porCorreo.id}
           referencia={referenciaFactura(porCorreo.serie, porCorreo.ejercicio, porCorreo.numero)}
           esTicket={porCorreo.tipo === "simplificada"}
-          emailInicial={porCorreo.receptor_snapshot?.email ?? null}
+          emailInicial={porCorreo.receptor_email ?? null}
         />
       )}
     </div>
@@ -564,6 +578,7 @@ function Facturas() {
 }
 
 function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: () => void }) {
+  const qc = useQueryClient();
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
@@ -652,6 +667,9 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
       // aquí como `serie-numero`, que con la serie ordinaria vacía anunciaba
       // "Factura -00001 emitida".
       const referencia = factura.referencia;
+      // Emitida: todo lo leído pasa a viejo (Gerencia › Fiscal, cifras del
+      // periodo...), también si luego falla el PDF. No va por useMutation.
+      void invalidarTrasGuardar(qc);
 
       try {
         const res = await generarPDFFn({ data: { factura_id: factura.id } });

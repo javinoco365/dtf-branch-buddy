@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ClaveRouteImport } from './routes/clave'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
 import { Route as PanelArchivoRouteImport } from './routes/panel/archivo'
@@ -58,6 +59,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClaveRoute = ClaveRouteImport.update({
+  id: '/clave',
+  path: '/clave',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PanelRouteRoute = PanelRouteRouteImport.update({
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/clave': typeof ClaveRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
@@ -307,6 +314,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/clave': typeof ClaveRoute
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/panel': typeof PanelRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/clave': typeof ClaveRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
@@ -392,6 +401,7 @@ export interface FileRouteTypes {
     | '/'
     | '/panel'
     | '/auth'
+    | '/clave'
     | '/panel/textil'
     | '/panel/archivo'
     | '/panel/caja'
@@ -433,6 +443,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/clave'
     | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
@@ -473,6 +484,7 @@ export interface FileRouteTypes {
     | '/'
     | '/panel'
     | '/auth'
+    | '/clave'
     | '/panel/textil'
     | '/panel/archivo'
     | '/panel/caja'
@@ -516,6 +528,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PanelRouteRoute: typeof PanelRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ClaveRoute: typeof ClaveRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clave': {
+      id: '/clave'
+      path: '/clave'
+      fullPath: '/clave'
+      preLoaderRoute: typeof ClaveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/panel': {
@@ -913,6 +933,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PanelRouteRoute: PanelRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ClaveRoute: ClaveRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

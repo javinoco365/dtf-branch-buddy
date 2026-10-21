@@ -1356,18 +1356,21 @@ export type Database = {
       };
       user_roles: {
         Row: {
+          activo: boolean;
           created_at: string;
           id: string;
           role: Database["public"]["Enums"]["app_role"];
           user_id: string;
         };
         Insert: {
+          activo?: boolean;
           created_at?: string;
           id?: string;
           role: Database["public"]["Enums"]["app_role"];
           user_id: string;
         };
         Update: {
+          activo?: boolean;
           created_at?: string;
           id?: string;
           role?: Database["public"]["Enums"]["app_role"];
@@ -1393,7 +1396,7 @@ export type Database = {
       };
     };
     Enums: {
-      app_role: "admin";
+      app_role: "admin" | "editor" | "visor";
       factura_estado: "borrador" | "emitida" | "pagada" | "vencida" | "anulada";
       pedido_estado:
         | "pendiente"
@@ -1527,7 +1530,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin"],
+      app_role: ["admin", "editor", "visor"],
       factura_estado: ["borrador", "emitida", "pagada", "vencida", "anulada"],
       pedido_estado: [
         "pendiente",

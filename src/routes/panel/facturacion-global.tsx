@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { eur, fechaCorta, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useCobrosPeriodo, useTiendas } from "@/lib/periodo";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
@@ -57,16 +59,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Cell,
-} from "recharts";
+import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
   head: () => ({ meta: [{ title: "Facturación Consolidada · DTF Culture" }] }),
@@ -208,6 +201,9 @@ function FacturacionGlobal() {
   const hayFiltro =
     filtro.metodo !== "todos" || filtro.tienda !== "todas" || filtro.origen !== "todos";
 
+  // Mientras llegan los del periodo nuevo se ven los del anterior: se avisa,
+  // se atenúan y no se exportan.
+  const deAntes = consultaCobros.isPlaceholderData || consultaPrevia.isPlaceholderData;
   const cargando = consultaCobros.isPending || consultaTiendas.isPending;
   const error = consultaCobros.error ?? consultaTiendas.error;
   const sinCobros = !cargando && !error && disponible && cobros.length === 0;
@@ -281,7 +277,7 @@ function FacturacionGlobal() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={cobros.length === 0}>
+          <Button onClick={exportar} size="sm" disabled={cobros.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
@@ -380,6 +376,8 @@ function FacturacionGlobal() {
         </CardContent>
       </Card>
 
+      <AvisoActualizando activo={deAntes} />
+
       {error && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">
@@ -418,7 +416,7 @@ function FacturacionGlobal() {
       )}
 
       {!cargando && !error && disponible && !sinCobros && (
-        <>
+        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaTotal
               titulo="Total cobrado"
@@ -585,29 +583,9 @@ function FacturacionGlobal() {
                     Ninguna tienda cobró en este periodo.
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={comparativa}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="tienda" tick={{ fontSize: 12 }} />
-                      <YAxis
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => eur(v)}
-                        contentStyle={{
-                          background: "var(--color-card)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                        }}
-                      />
-                      <Bar dataKey="total" name="Total cobrado" radius={[6, 6, 0, 0]}>
-                        {comparativa.map((_, i) => (
-                          <Cell key={i} fill={COLORES_BARRA[i % COLORES_BARRA.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ConGrafica>
+                    <ComparativaTiendas datos={comparativa} colores={COLORES_BARRA} />
+                  </ConGrafica>
                 )}
               </CardContent>
             </Card>
@@ -640,40 +618,9 @@ function FacturacionGlobal() {
               {consultaHistorico.isPending ? (
                 <Skeleton className="h-full w-full" />
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={historico}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="semana"
-                      tick={{ fontSize: 10 }}
-                      interval={0}
-                      angle={-30}
-                      textAnchor="end"
-                      height={50}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => eur(v)}
-                      contentStyle={{
-                        background: "var(--color-card)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                      {historico.map((_, i) => (
-                        <Cell
-                          key={i}
-                          fill="var(--color-primary)"
-                          fillOpacity={i === historico.length - 1 ? 1 : 0.55}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <ConGrafica>
+                  <CobradoPorSemana datos={historico} />
+                </ConGrafica>
               )}
             </CardContent>
           </Card>
@@ -741,7 +688,7 @@ function FacturacionGlobal() {
               </div>
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

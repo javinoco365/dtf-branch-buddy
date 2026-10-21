@@ -14,6 +14,7 @@ import {
   recortarImagenes,
 } from "@/dominio/imagenes-presupuesto";
 import { reducirImagenParaSubir } from "@/lib/reducir-imagen";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 type Ambito = "tienda" | "textil";
 
@@ -181,6 +182,7 @@ export function useImagenesPresupuesto({
         }
       }
       void qc.invalidateQueries({ queryKey: ["presupuesto-imagenes", ambito] });
+      void invalidarTrasGuardar(qc);
       return fallos;
     },
     [data, clave, consultar, quitadas, nuevas, ambito, quitar, subir, qc],

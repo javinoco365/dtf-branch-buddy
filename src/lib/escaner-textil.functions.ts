@@ -10,6 +10,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import { AVISO_MIGRACION_ESCANER, escanerAplicado, textoONulo } from "./escaner-textil";
@@ -159,7 +160,7 @@ export const leerMemoriaEscaner = createServerFn({ method: "POST" })
 
 /** Olvida una entrada de la memoria del escáner (la siguiente factura no la usará). */
 export const olvidarMemoriaEscaner = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await tabla(context.supabase, "textil_referencias_proveedor")
@@ -193,7 +194,7 @@ export const listProveedores = createServerFn({ method: "GET" })
  * mal leído). No toca sus compras: conservan el texto de su factura.
  */
 export const guardarProveedor = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -239,7 +240,7 @@ export const listProductosTextil = createServerFn({ method: "GET" })
 
 /** Alta o edición de un producto del catálogo textil. */
 export const guardarProductoTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -288,7 +289,7 @@ export type ResultadoFusion = { unidades: number; reservas: number; lineas: numb
  * base (`textil_stock_fusionar`), con autor.
  */
 export const fusionarVariantes = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) =>
     z.object({ origen: z.string().uuid(), destino: z.string().uuid() }).parse(d),
   )

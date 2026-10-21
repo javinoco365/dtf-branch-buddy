@@ -27,7 +27,11 @@ export const ESTADOS_PEDIDO: readonly { valor: string; etiqueta: string }[] = [
   { valor: "cancelado", etiqueta: "Cancelado" },
 ];
 
-/** Los que todavía no han salido del taller. */
+/**
+ * Los que todavía no han salido del taller.
+ * El índice parcial `pedidos_abiertos` (20261031100000_rendimiento_indices.sql) usa
+ * esta misma lista: si cambia, hay que rehacer el índice o deja de usarse.
+ */
 export const ESTADOS_ABIERTOS = ["pendiente", "en_produccion", "imprimiendo", "listo"] as const;
 
 export function etiquetaEstadoPedido(estado: string): string {

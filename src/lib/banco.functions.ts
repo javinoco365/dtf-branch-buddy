@@ -1,11 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { leerTodas, trozos } from "./paginar";
 import { cuadreExtracto, huellaMovimiento, normalizarIban } from "@/dominio/extractos";
 import { emparejar, type FacturaPendiente, type MovimientoBanco } from "@/dominio/conciliacion";
 import { referenciaFactura } from "./format";
+import { MAXIMO_BYTES_EXTRACTO } from "@/dominio/ficheros";
 
 async function empresaActiva(supabase: any): Promise<string> {
   const { data } = await tabla(supabase, "empresas")
@@ -28,6 +30,9 @@ const formularioExtracto = (d: unknown) => {
   if (!(d instanceof FormData)) throw new Error("Falta el fichero");
   const fichero = d.get("fichero");
   if (!(fichero instanceof File)) throw new Error("Falta el fichero");
+  if (fichero.size > MAXIMO_BYTES_EXTRACTO) {
+    throw new Error("El extracto pesa más de 5 MB: descárgalo por periodos más cortos.");
+  }
   const texto = (k: string) => {
     const v = d.get(k);
     return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -90,7 +95,7 @@ export const analizarExtracto = createServerFn({ method: "POST" })
  * sin extracto, como antes.
  */
 export const importarExtracto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(formularioExtracto)
   .handler(async ({ data, context }) => {
     const { leerExtracto } = await import("./extracto-banco.server");
@@ -176,23 +181,26 @@ export const importarExtracto = createServerFn({ method: "POST" })
 export const listCuentas = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const c = await tabla(context.supabase, "banco_cuentas")
-      .select("id, banco, alias, iban, activa")
-      .order("created_at");
+    // Cuentas y extractos a la vez; los errores se miran en el orden de antes.
+    const [c, e] = await Promise.all([
+      tabla(context.supabase, "banco_cuentas")
+        .select("id, banco, alias, iban, activa")
+        .order("created_at"),
+      tabla(context.supabase, "banco_extractos")
+        .select(
+          "id, cuenta_id, fichero, formato, desde, hasta, saldo_inicial, saldo_final, suma_movimientos, movimientos, nuevos, cuadra, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
     if (faltaLaTabla(c.error)) return { disponible: false, cuentas: [], extractos: [] };
     if (c.error) throw new Error(c.error.message);
-    const e = await tabla(context.supabase, "banco_extractos")
-      .select(
-        "id, cuenta_id, fichero, formato, desde, hasta, saldo_inicial, saldo_final, suma_movimientos, movimientos, nuevos, cuadra, created_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(20);
     if (e.error) throw new Error(e.error.message);
     return { disponible: true, cuentas: c.data ?? [], extractos: e.data ?? [] };
   });
 
 export const guardarCuenta = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -241,6 +249,49 @@ export const listMovimientosBanco = createServerFn({ method: "GET" })
   });
 
 /**
+ * Los movimientos de unos días, con lo justo para Gerencia: fecha, importe y
+ * si están conciliados. Antes Gerencia leía todos los movimientos de la
+ * historia con todas sus columnas y filtraba los días en el navegador; los
+ * días son los mismos (la fecha es un DATE), así que las cifras también.
+ */
+export const listMovimientosBancoRango = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
+    const { data: filas, error } = await leerTodas<{
+      fecha: string;
+      importe: number | string;
+      conciliacion: unknown;
+    }>((a, b) =>
+      tabla(context.supabase, "banco_movimientos")
+        .select("fecha, importe, conciliacion:banco_conciliaciones(id)")
+        .gte("fecha", data.desde)
+        .lte("fecha", data.hasta)
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+    );
+    if (error) throw new Error(error.message);
+    // La conciliación llega como lista o como objeto según PostgREST vea la
+    // relación (es única por movimiento): conciliado si hay alguna.
+    return (filas ?? []).map((m) => ({
+      fecha: m.fecha,
+      importe: m.importe,
+      conciliado: Array.isArray(m.conciliacion)
+        ? m.conciliacion.length > 0
+        : m.conciliacion != null,
+    }));
+  });
+
+/**
  * Qué factura paga cada ingreso, según el CRM.
  *
  * El emparejamiento vive en `src/dominio/conciliacion.ts` y se prueba sin base
@@ -253,14 +304,27 @@ export const listMovimientosBanco = createServerFn({ method: "GET" })
 export const proponerConciliacion = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data: movs, error: e1 } = await leerTodas<any>((a, b) =>
-      tabla(context.supabase, "banco_movimientos")
-        .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
-        .gt("importe", 0)
-        .order("fecha", { ascending: false })
-        .order("id")
-        .range(a, b),
-    );
+    // Ingresos y facturas a la vez; los errores se miran en el orden de antes.
+    const [{ data: movs, error: e1 }, { data: facs, error: e2 }] = await Promise.all([
+      leerTodas<any>((a, b) =>
+        tabla(context.supabase, "banco_movimientos")
+          .select("id, fecha, concepto, importe, banco_conciliaciones(id)")
+          .gt("importe", 0)
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+      leerTodas<any>((a, b) =>
+        tabla(context.supabase, "facturas")
+          .select(
+            "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
+          )
+          .in("estado", ["emitida", "vencida"])
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+    ]);
     if (e1) throw new Error(e1.message);
 
     const sinCasar: MovimientoBanco[] = (movs ?? [])
@@ -272,16 +336,6 @@ export const proponerConciliacion = createServerFn({ method: "GET" })
         importe: Number(m.importe),
       }));
 
-    const { data: facs, error: e2 } = await leerTodas<any>((a, b) =>
-      tabla(context.supabase, "facturas")
-        .select(
-          "id, serie, ejercicio, numero, fecha, total, cliente_nombre, banco_conciliaciones(id)",
-        )
-        .in("estado", ["emitida", "vencida"])
-        .order("fecha", { ascending: false })
-        .order("id")
-        .range(a, b),
-    );
     if (e2) throw new Error(e2.message);
 
     const pendientes: FacturaPendiente[] = (facs ?? [])
@@ -298,7 +352,7 @@ export const proponerConciliacion = createServerFn({ method: "GET" })
   });
 
 export const conciliar = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -319,7 +373,7 @@ export const conciliar = createServerFn({ method: "POST" })
   });
 
 export const desconciliar = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ movimiento_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const ok = await llamarRpc<boolean>(context.supabase, "banco_desconciliar", {

@@ -7,10 +7,9 @@
 -- falsificar cuando no lo hay.
 -- ============================================================================
 
--- Permisos que Supabase concede por defecto sobre el esquema public y el shim
--- no. Sin ellos no se puede probar ningún camino que no sea el de superusuario.
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+-- Los privilegios por defecto de Supabase sobre public los pone ya
+-- 00_entorno_supabase.sql (ALTER DEFAULT PRIVILEGES). Aquí no se concede nada
+-- más sobre tablas: un GRANT ALL taparía los REVOKE de las migraciones.
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
 
 INSERT INTO auth.users (id, email) VALUES
@@ -21,6 +20,12 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.user_roles (user_id, role)
 VALUES ('11111111-1111-1111-1111-111111111111', 'admin')
 ON CONFLICT (user_id, role) DO NOTHING;
+
+-- Desde 20261031200100 escribir exige nivel: «otro» es editor, como los
+-- usuarios que ya existían al aplicar esa migración.
+INSERT INTO public.user_roles (user_id, role)
+VALUES ('22222222-2222-2222-2222-222222222222', 'editor')
+ON CONFLICT DO NOTHING;
 
 CREATE OR REPLACE FUNCTION pg_temp.ultimo_autor() RETURNS TEXT
 LANGUAGE sql AS $$

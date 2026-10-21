@@ -1,4 +1,5 @@
 import type { LogoPDF } from "./pdf-factura";
+import { logoIncrustado, urlExternaSegura } from "@/dominio/urls";
 
 const FORMATOS: Record<string, LogoPDF["formato"]> = {
   "image/png": "PNG",
@@ -20,10 +21,27 @@ const MAX_BYTES = 2 * 1024 * 1024;
  */
 export async function descargarLogo(url: string | null | undefined): Promise<LogoPDF | null> {
   if (!url) return null;
+  // Un logo incrustado (data:image/...;base64) no sale a la red: se usa tal
+  // cual si es PNG, JPG o WEBP y no pasa del límite, como hasta ahora.
+  if (url.trim().toLowerCase().startsWith("data:")) {
+    const incrustado = logoIncrustado(url);
+    const formato = incrustado ? FORMATOS[incrustado.tipo] : undefined;
+    if (!incrustado || !formato || incrustado.bytes > MAX_BYTES) {
+      console.warn("[logo] logo incrustado no admitido");
+      return null;
+    }
+    return { dataUrl: url.trim(), formato };
+  }
+  // El logo lo escribe una persona (tiendas, marcas textil): el servidor no
+  // pide direcciones internas ni sigue redirecciones (W8).
+  if (!urlExternaSegura(url)) {
+    console.warn(`[logo] URL no admitida: ${url}`);
+    return null;
+  }
   try {
     // Con tope: un servidor de imágenes colgado no puede dejar la emisión
     // esperando hasta que la función se agote.
-    const respuesta = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const respuesta = await fetch(url, { signal: AbortSignal.timeout(5000), redirect: "error" });
     if (!respuesta.ok) {
       console.warn(`[logo] ${url} devolvió ${respuesta.status}`);
       return null;

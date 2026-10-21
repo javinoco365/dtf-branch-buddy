@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import { leerTodas } from "./paginar";
 import {
   ambitoPresupuesto,
@@ -110,7 +112,7 @@ const lineaSchema = z.object({
 });
 
 export const guardarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -214,7 +216,7 @@ export const guardarPresupuesto = createServerFn({ method: "POST" })
   });
 
 export const cambiarEstadoPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z.object({ id: z.string().uuid(), estado: z.enum(ESTADOS) }).parse(d),
   )
@@ -229,7 +231,7 @@ export const cambiarEstadoPresupuesto = createServerFn({ method: "POST" })
   });
 
 export const borrarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: actual } = await tabla(context.supabase, "presupuestos")
@@ -242,8 +244,13 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
     }
     // Las imágenes: sus filas se van en cascada; los ficheros, después.
     const rutas = await rutasImagenes(context.supabase, "tienda", data.id);
-    const { error } = await tabla(context.supabase, "presupuestos").delete().eq("id", data.id);
+    const { data: borrados, error } = await tabla(context.supabase, "presupuestos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     if (error) throw new Error(error.message);
+    // Si la RLS no ha dejado borrarlo, sus imágenes tampoco se tocan.
+    exigirFilas(borrados, "el presupuesto");
     if (rutas.length) {
       const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
       const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);
@@ -258,7 +265,7 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
  * transacción y con el presupuesto bloqueado: dos clics no crean dos pedidos.
  */
 export const confirmarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const pedidoId = await llamarRpc<string>(context.supabase, "confirmar_presupuesto", {

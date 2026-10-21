@@ -1,17 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
+import { esAdminActivo } from "./acceso";
 
 /** Solo un administrador toca el servidor de correo. */
 async function exigirAdmin(supabaseAdmin: any, userId: string) {
-  const { data } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!data) throw new Error("Solo un administrador puede configurar el correo");
+  if (!(await esAdminActivo(supabaseAdmin, userId))) {
+    throw new Error("Solo un administrador puede configurar el correo");
+  }
 }
 
 async function empresaActiva(cliente: any): Promise<string> {
@@ -61,7 +59,7 @@ const guardarSchema = z.object({
 });
 
 export const guardarSmtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => guardarSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -81,7 +79,7 @@ export const guardarSmtp = createServerFn({ method: "POST" })
 
 /** Quita la configuración propia de una tienda: vuelve a usar la general. */
 export const usarSmtpGeneral = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -102,7 +100,7 @@ export const usarSmtpGeneral = createServerFn({ method: "POST" })
  * nadie mira. Esto lo dice ahora y con el motivo del proveedor.
  */
 export const probarSmtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) =>
     z
       .object({

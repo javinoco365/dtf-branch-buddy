@@ -1,62 +1,12 @@
 import { eur, fechaCorta, numero } from "@/lib/format";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { escribirSeleccion, type Comparacion, type Seleccion } from "@/dominio/periodos";
-import type { CobroConsolidado } from "@/dominio/facturacion";
-import type { PedidoPendiente } from "@/dominio/pendientes";
-import type {
-  AjustesGerencia,
-  Aviso,
-  FiltroGerencia,
-  GastoFijo,
-  MovimientoBancoResumen,
-  Objetivo,
-  Venta,
-} from "@/dominio/gerencia";
+import { escribirSeleccion, type Seleccion } from "@/dominio/periodos";
+import type { Aviso, FiltroGerencia } from "@/dominio/gerencia";
 import type { MovimientoCaja } from "@/lib/caja.functions";
-import type { Grupo, PendienteDocumentar } from "@/dominio/grupos";
+import type { DatosGerencia as DatosGerenciaDominio } from "@/dominio/gerencia-datos";
 
-/** Todo lo que leen las pestañas, ya filtrado por tienda y canal. */
-export type DatosGerencia = {
-  /** Qué números se miran: total, documentados (A) o sin documento (B). */
-  grupo: Grupo;
-  /** Todas las ventas del periodo con los filtros y ajustes, de los dos grupos. */
-  ventasTodas: Venta[];
-  /** Los pedidos con factura o ticket vigente; nulo mientras se leen. */
-  documentados: ReadonlySet<string> | null;
-  /** Lo que falta por documentar en el periodo; nulo mientras se lee. */
-  pendiente: PendienteDocumentar | null;
-  filtro: FiltroGerencia;
-  seleccion: Seleccion;
-  rango: { desde: Date; hasta: Date };
-  comparacion: Comparacion | null;
-  costeMetro: number;
-  tiendas: readonly { id: string; nombre: string }[];
-  /**
-   * Las del grupo elegido, ya sin los pedidos web sin pagar si en Ajustes se
-   * ha dicho que no cuentan.
-   */
-  ventas: Venta[];
-  ventasPrevias: Venta[];
-  /** Los pedidos web sin pagar del periodo, cuenten o no. */
-  webSinPagar: { pedidos: number; importe: number };
-  ajustes: AjustesGerencia;
-  /**
-   * Todos los gastos de Ajustes, con y sin justificante, con sus facturas; y
-   * las compras que cuestan como un gasto (origen «compra» y «amortizacion»).
-   */
-  gastos: GastoFijo[];
-  /** Los del grupo elegido: A, con justificante; B, sin él; total, todos. */
-  gastosDelGrupo: GastoFijo[];
-  objetivos: Objetivo[];
-  cobros: CobroConsolidado[];
-  cobrosPrevios: CobroConsolidado[];
-  cobrosDisponibles: boolean;
-  pendientes: PedidoPendiente[];
-  pendientesDisponibles: boolean;
-  caja: MovimientoCaja[] | undefined;
-  banco: MovimientoBancoResumen[] | undefined;
-  hoy: Date;
-};
+/** Todo lo que leen las pestañas (ver dominio/gerencia-datos.ts). */
+export type DatosGerencia = DatosGerenciaDominio<MovimientoCaja>;
 
 export type Destino = { to: string; search?: Record<string, string> };
 

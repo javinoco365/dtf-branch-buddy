@@ -84,6 +84,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -221,6 +222,7 @@ function PresupuestosPage() {
    * se puede volver a pedir desde la fila.
    */
   const pdfMut = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (id: string) => pdfFn({ data: { id } }),
     onMutate: () => toast.loading("Generando el PDF…", { id: "pdf-presupuesto-textil" }),
     onSuccess: (r) => {
@@ -289,7 +291,7 @@ function PresupuestosPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between max-md:flex-wrap max-md:gap-3">
         <div>
           <h1 className="text-2xl font-bold">Presupuestos</h1>
           <p className="text-sm text-muted-foreground">
@@ -438,9 +440,11 @@ function PresupuestosPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <SiPuede accion="borrar">
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

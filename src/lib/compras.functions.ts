@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
+import { exigirMiembroEmpresa } from "./acceso";
 import { leerTodas } from "./paginar";
+import type { Json } from "@/integrations/supabase/types";
 import {
   AVISO_MIGRACION_ESCANER,
   AVISO_MIGRACION_PROFORMAS,
@@ -26,6 +29,7 @@ import {
   type RegistroCompra,
   type ResultadoRegistro,
 } from "@/dominio/tipos-textil";
+import { errorDeFirma, MAXIMO_BYTES_SUBIDA } from "@/dominio/ficheros";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -69,11 +73,14 @@ export const leerFacturaCompra = createServerFn({ method: "POST" })
     if (!(d instanceof FormData)) throw new Error("Falta el fichero");
     const fichero = d.get("fichero");
     if (!(fichero instanceof File)) throw new Error("Falta el fichero");
+    if (fichero.size > MAXIMO_BYTES_SUBIDA) throw new Error("El fichero pesa más de 10 MB.");
     return { fichero };
   })
   .handler(async ({ data }) => {
     const { leerYValidar } = await import("./cola-compras.server");
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     // Validada contra el esquema, con un reintento; si no, el error se ve.
     const r = await leerYValidar(bytes, data.fichero.type);
     if (!r.ok) throw new Error(r.error);
@@ -200,13 +207,13 @@ async function registrarBorrador(supabase: unknown, id: string): Promise<{ movid
 
 /** Guarda el borrador. Todavía no ha tocado el stock. */
 export const guardarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => compraSchema.parse(d))
   .handler(async ({ data, context }) => guardarBorrador(context.supabase, data));
 
 /** Registra la compra: las líneas casadas entran en el libro de stock. */
 export const registrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => registrarBorrador(context.supabase, data.id));
 
@@ -292,7 +299,7 @@ export type SalidaRegistroCompra = ResultadoRegistro & { atomica: boolean };
  * proforma entraría dos veces (contrato, A12).
  */
 export const guardarYRegistrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => registroSchema.parse(d))
   .handler(async ({ data, context }): Promise<SalidaRegistroCompra> => {
     const { lineas: lineasEntrada, lectura_ia, ...cab } = data;
@@ -470,18 +477,30 @@ export const listCompras = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ soloTextil: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
-    const prueba = await tabla(context.supabase, "textil_compras").select("categoria").limit(1);
-    const generales = !faltaLaColumna(prueba.error);
-    const prueba2 = await tabla(context.supabase, "textil_compras").select("liquido").limit(1);
+    // Las cinco comprobaciones de migración no dependen unas de otras: van a
+    // la vez (cinco conexiones, por debajo del tope de seis de un Worker). Si
+    // alguna lanza, se lanza la misma que en serie: escáner antes que proformas.
+    const t = () => tabla(context.supabase, "textil_compras");
+    const [prueba, prueba2, prueba3, pruebaEscaner, pruebaProformas] = await Promise.allSettled([
+      t().select("categoria").limit(1),
+      t().select("liquido").limit(1),
+      t().select("revision").limit(1),
+      escanerAplicado(context.supabase),
+      proformasAplicado(context.supabase),
+    ]);
+    const resultado = <T>(r: PromiseSettledResult<T>): T => {
+      if (r.status === "rejected") throw r.reason;
+      return r.value;
+    };
+    const generales = !faltaLaColumna(resultado(prueba).error);
     // Con la migración 20261014100000 la base calcula los importes.
-    const recibidas = !faltaLaColumna(prueba2.error);
-    const prueba3 = await tabla(context.supabase, "textil_compras").select("revision").limit(1);
+    const recibidas = !faltaLaColumna(resultado(prueba2).error);
     // Con la migración 20261015100000 hay cola de revisión y subida de varias.
-    const cola = !faltaLaColumna(prueba3.error);
+    const cola = !faltaLaColumna(resultado(prueba3).error);
     // Con las migraciones 20261028…: revisión con el escáner textil.
-    const escaner = await escanerAplicado(context.supabase);
+    const escaner = resultado(pruebaEscaner);
     // Con las migraciones 20261029…: proformas y casado con su factura.
-    const proformas = await proformasAplicado(context.supabase);
+    const proformas = resultado(pruebaProformas);
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     const { data: compras, error } = await leerTodas<any>((a, b) => {
       let consulta = tabla(context.supabase, "textil_compras").select(
@@ -499,13 +518,42 @@ export const listCompras = createServerFn({ method: "GET" })
     });
     if (error) throw new Error(error.message);
     return {
-      compras: (compras ?? []) as any[],
+      // Sin `lectura_ia`, la respuesta en bruto de la IA: era lo que más pesaba
+      // de cada fila y solo hace falta al revisar una compra de la cola, que
+      // la pide aparte con verCompra. Se quita aquí y no en la consulta para
+      // no tener que nombrar las columnas, que cambian según las migraciones.
+      compras: (compras ?? []).map((c: any) => {
+        const fila = { ...c };
+        delete fila.lectura_ia;
+        return fila;
+      }) as any[],
       generales,
       recibidas,
       cola,
       escaner,
       proformas,
     };
+  });
+
+/**
+ * Lo que leyó la IA de una compra (`lectura_ia`), para revisarla: la lista no
+ * lo trae. Nulo si no lo tiene o si la columna aún no existe.
+ */
+export const verCompra = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: fila, error } = await tabla(context.supabase, "textil_compras")
+      .select("lectura_ia")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) {
+      if (faltaLaColumna(error)) return { lectura_ia: null };
+      throw new Error(error.message);
+    }
+    if (!fila)
+      throw new Error("No se encuentra la compra: puede que la haya borrado otro usuario.");
+    return { lectura_ia: (fila.lectura_ia ?? null) as Json | null };
   });
 
 /**
@@ -542,7 +590,7 @@ export const entradasDeProforma = createServerFn({ method: "POST" })
  *   lógico) y deja de contar. La de textil, nunca: ya movió stock.
  */
 export const borrarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: compra } = await tabla(context.supabase, "textil_compras")
@@ -577,7 +625,7 @@ export const borrarCompra = createServerFn({ method: "POST" })
 
 /** Marca una factura recibida como pagada (con su fecha) o la vuelve a pendiente. */
 export const pagarCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -621,7 +669,7 @@ const ficheroDe = (d: unknown) => {
       `Formato no admitido (${fichero.type || "desconocido"}). Sube un PDF, un JPG o un PNG.`,
     );
   }
-  if (fichero.size > 10 * 1024 * 1024) throw new Error("El fichero pesa más de 10 MB.");
+  if (fichero.size > MAXIMO_BYTES_SUBIDA) throw new Error("El fichero pesa más de 10 MB.");
   return { fichero };
 };
 
@@ -645,12 +693,15 @@ const ficheroYCategoria = (d: unknown) => {
  * hace nada y lo dice.
  */
 export const subirFacturaRecibida = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator(ficheroYCategoria)
   .handler(async ({ data, context }) => {
     const { huellaDe, procesarFactura } = await import("./cola-compras.server");
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    // El tipo lo declara el navegador: se comprueba con los bytes (S12).
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     const huella = await huellaDe(bytes);
 
     const previas = await tabla(context.supabase, "textil_compras")
@@ -671,6 +722,9 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
     const borrada = filas.find((p) => p.borrada_en);
 
     const empresa_id = await empresaActiva(context.supabase);
+    // Antes de subir el fichero con la clave de servicio y de pagar la lectura
+    // con IA: quien sube tiene que ser de la empresa (hallazgo S1).
+    await exigirMiembroEmpresa(context.supabase, context.userId, empresa_id);
     const id = crypto.randomUUID();
     const ruta = `ronoca/${new Date().getFullYear()}/${id}.${TIPOS_FICHERO[data.fichero.type]}`;
     const admin = adminComoUsuario(context.userId);
@@ -703,7 +757,7 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
 
 /** Vuelve a leer con IA una factura de la cola (por ejemplo, una que dio error). */
 export const releerFacturaRecibida = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { procesarFactura } = await import("./cola-compras.server");
@@ -766,7 +820,7 @@ export const verFicheroCompra = createServerFn({ method: "POST" })
  * sin dejar rastro es justo lo que no se puede hacer.
  */
 export const adjuntarFicheroCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => {
     const { fichero } = ficheroDe(d);
     const id = z
@@ -787,6 +841,9 @@ export const adjuntarFicheroCompra = createServerFn({ method: "POST" })
     if (compra.fichero_ruta) throw new Error("Esta compra ya tiene su fichero.");
 
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    // El tipo lo declara el navegador: se comprueba con los bytes (S12).
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     const huella = await huellaDe(bytes);
     // El mismo fichero en otra compra viva es, casi seguro, la misma factura dos veces.
     const previas = await tabla(context.supabase, "textil_compras")

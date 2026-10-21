@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
+import { puede } from "@/dominio/permisos";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
+import { esAdminActivo, esMiembroTienda, exigirMiembroTienda } from "./acceso";
 import { leerTodas } from "./paginar";
 import { numero } from "./format";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
@@ -192,6 +195,11 @@ type ContextoSync = {
   bloqueo: string | null;
   /** Lo último escrito en woo_sincronizacion, para no reescribir lo mismo. */
   escrito: Record<string, string | number | null>;
+  /**
+   * Si quien sincroniza puede borrar (admin). Un editor sincroniza, pero los
+   * pedidos que ya no están en WooCommerce no los quita: lo dice en avisos.
+   */
+  puedeBorrar: boolean;
 };
 
 /** La sincronización perdió su turno: se para del todo, nada de seguir con otra parte. */
@@ -818,6 +826,12 @@ async function borrarPedidosDesaparecidos(
   const aBorrar = desaparecidos.filter((p) => !idsFacturados.has(p.id));
   r.protegidos_por_factura = desaparecidos.length - aBorrar.length;
 
+  if (aBorrar.length && !ctx.puedeBorrar) {
+    ctx.avisos.push(
+      `${aBorrar.length} pedido(s) ya no están en WooCommerce. Solo un administrador puede quitarlos: que sincronice un administrador.`,
+    );
+    return r;
+  }
   if (aBorrar.length) {
     await tabla(ctx.sb, "pedidos")
       .delete()
@@ -890,7 +904,7 @@ function cursorDePantalla(c: CursorWoo | null): CursorWoo | null {
  * el cliente de servicio.
  */
 export const sincronizarWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -905,32 +919,33 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    // Verificar pertenencia a la tienda
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    // Verificar pertenencia a la tienda. Las dos comprobaciones van a la vez;
+    // nada más se lee con el cliente de servicio hasta que una de las dos pase.
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
-    const { data: tienda } = await supabaseAdmin
-      .from("tiendas")
-      .select("woo_url, sync_enabled, nombre")
-      .eq("id", data.tienda_id)
-      .maybeSingle();
+    // Ya con acceso: tienda, credenciales y empresa a la vez. Los errores se
+    // miran en el mismo orden que en serie (tienda, credenciales, empresa).
+    const [rTienda, rCreds, rEmpresa] = await Promise.allSettled([
+      supabaseAdmin
+        .from("tiendas")
+        .select("woo_url, sync_enabled, nombre")
+        .eq("id", data.tienda_id)
+        .maybeSingle(),
+      leerCredencialesWoo(supabaseAdmin, data.tienda_id),
+      empresaDeTienda(supabaseAdmin, data.tienda_id),
+    ]);
+    if (rTienda.status === "rejected") throw rTienda.reason;
+    const { data: tienda } = rTienda.value;
     if (!tienda?.woo_url) throw new Error("La tienda no tiene URL de WooCommerce");
     if (!tienda.sync_enabled) throw new Error("La sincronización está desactivada");
 
-    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (rCreds.status === "rejected") throw rCreds.reason;
+    const creds = rCreds.value;
     if (!creds) throw new Error("Faltan credenciales de WooCommerce");
-    const empresaId = await empresaDeTienda(supabaseAdmin, data.tienda_id);
+    if (rEmpresa.status === "rejected") throw rEmpresa.reason;
+    const empresaId = rEmpresa.value;
 
     // El turno, antes de leer nada de por dónde iba: lo que se lea después ya
     // no lo cambia nadie más mientras dure esta llamada.
@@ -949,6 +964,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
       esquema: bloqueo ? "completo" : "sin_bloqueo",
       bloqueo,
       escrito: {},
+      puedeBorrar: puede(context.nivel, "borrar"),
     };
 
     try {
@@ -1198,25 +1214,15 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
  * No toca pedidos ni productos — de eso ya se encarga `sincronizarWoo`.
  */
 export const sincronizarClientesWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1309,6 +1315,9 @@ export const diagnosticoNumeroWoo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    // De la tienda o administrador, antes de tocar la clave de servicio: con
+    // ella se leen las credenciales de WooCommerce de la tienda (hallazgo S1).
+    await exigirMiembroTienda(context.supabase, context.userId, data.tienda_id);
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
@@ -1379,19 +1388,9 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     // La misma comprobación que la sincronización: de la tienda o administrador.
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1452,7 +1451,7 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
  * solo les pone lo que dice WooCommerce: se puede repetir sin estropear nada.
  */
 export const recuperarEnviosWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1467,19 +1466,9 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     // La misma comprobación que la sincronización: de la tienda o administrador.
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1538,7 +1527,7 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
  * huecos, y la base no deja tocar una corregida a mano.
  */
 export const recuperarRealizadoWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1551,13 +1540,9 @@ export const recuperarRealizadoWoo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rol) throw new Error("Solo un administrador puede recuperar las fechas");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo un administrador puede recuperar las fechas");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")

@@ -6,15 +6,15 @@
  * mando, las dos pantallas de facturación y la tabla de pedidos.
  */
 
+import { filasCSV } from "@/dominio/csv";
+
 /**
  * El texto de un CSV, con el BOM de UTF-8 delante: sin él, Excel en español
  * abre el fichero como Latin-1 y destroza todos los acentos y las eñes.
  */
 export function textoCSV(filas: (string | number)[][]): string {
-  const csv = filas
-    .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  return "\uFEFF" + csv;
+  // filasCSV neutraliza las celdas que una hoja leería como fórmula (W1).
+  return "\uFEFF" + filasCSV(filas);
 }
 
 /** Descarga un fichero generado en el navegador. */

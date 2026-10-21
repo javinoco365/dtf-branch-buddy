@@ -18,6 +18,7 @@ import {
 } from "@/dominio/presupuesto-ia";
 import { extraerJpegsDePdf } from "@/dominio/imagenes-presupuesto";
 import { aVarianteCatalogo, utilizable } from "@/dominio/stock-textil";
+import { MAXIMO_BYTES_SUBIDA } from "@/dominio/ficheros";
 
 /**
  * Crear un presupuesto con IA: desde un documento (PDF o imagen) o desde un
@@ -52,7 +53,11 @@ const entrada = z
     ambito: z.enum(["tienda", "textil"]),
     tiendaId: z.string().uuid().nullable(),
     texto: z.string().max(20_000, "El texto es demasiado largo: como mucho, 20.000 caracteres."),
-    fichero: z.instanceof(File).nullable(),
+    // Antes de leerlo entero: un fichero enorme no llega a la IA (S6).
+    fichero: z
+      .instanceof(File)
+      .refine((f) => f.size <= MAXIMO_BYTES_SUBIDA, "El fichero pesa más de 10 MB.")
+      .nullable(),
   })
   .refine((d) => d.ambito === "textil" || d.tiendaId, { message: "Falta la tienda" })
   .refine((d) => d.fichero || d.texto.trim(), {

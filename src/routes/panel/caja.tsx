@@ -42,6 +42,7 @@ import {
 } from "@/lib/caja.functions";
 import { CajaFormDialog } from "@/components/CajaFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/caja")({
   head: () => ({ meta: [{ title: "Caja · DTF Culture" }] }),
@@ -146,15 +147,17 @@ function CajaPage() {
           <Button variant="outline" onClick={exportar} disabled={visibles.length === 0}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
-          <Button
-            onClick={() => {
-              setEditando(undefined);
-              setAbierto(true);
-            }}
-            disabled={sinCatalogos}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
-          </Button>
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditando(undefined);
+                setAbierto(true);
+              }}
+              disabled={sinCatalogos}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+            </Button>
+          </SiPuede>
         </div>
       </div>
 
@@ -322,19 +325,23 @@ function CajaPage() {
                     {m.observaciones ?? ""}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditando(m);
-                        setAbierto(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <SiPuede accion="escribir">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditando(m);
+                          setAbierto(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
+                    <SiPuede accion="borrar">
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

@@ -177,6 +177,10 @@ const servidor = http.createServer((req, res) => {
   // Sesión
   if (ruta === "/auth/v1/user") return responder(res, 200, USUARIO);
   if (ruta === "/auth/v1/token") return responder(res, 200, sesion());
+  // Ajustes > Usuarios (niveles): la lista de cuentas, solo la de prueba.
+  if (ruta === "/auth/v1/admin/users" && req.method === "GET") {
+    return responder(res, 200, { users: [USUARIO], aud: "authenticated" });
+  }
   if (ruta.startsWith("/auth/v1/")) return responder(res, 200, {});
 
   // Funciones

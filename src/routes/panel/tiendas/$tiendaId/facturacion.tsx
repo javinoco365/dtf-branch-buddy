@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
+import { AvisoActualizando } from "@/components/AvisoActualizando";
+import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
@@ -32,7 +34,7 @@ import {
   ClipboardList,
   Undo2,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -66,8 +68,10 @@ function FacturacionTienda() {
   const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta, tiendaId });
   const consultaLineas = useLineasPeriodo({ desde, hasta, tiendaId });
   // Lo cobrado, por la fecha del cobro: el dinero que entró en el periodo.
-  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
-  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
+  // Solo los de esta tienda, leídos así en la base (cobrosDeTiendas, abajo,
+  // deja los mismos: los de esta tienda).
+  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro", tiendaId);
+  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro", tiendaId);
 
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
@@ -92,6 +96,13 @@ function FacturacionTienda() {
   // El IVA se cobra sobre la base entera: la bruta más el envío.
   const pctIva = k.base === 0 ? 0 : (k.iva / k.base) * 100;
 
+  // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
+  // se atenúan y no se exportan.
+  const deAntes =
+    consultaPedidos.isPlaceholderData ||
+    consultaAnterior.isPlaceholderData ||
+    consultaCobros.isPlaceholderData ||
+    consultaCobrosAnt.isPlaceholderData;
   const cargando = consultaPedidos.isPending;
   const error = consultaPedidos.error;
   const sinDatos = !cargando && !error && pedidos.length === 0;
@@ -131,12 +142,14 @@ function FacturacionTienda() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0}>
+          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
         </div>
       </div>
+
+      <AvisoActualizando activo={deAntes} />
 
       {error && (
         <Card>
@@ -163,7 +176,7 @@ function FacturacionTienda() {
       )}
 
       {!cargando && !error && !sinDatos && (
-        <>
+        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaKpi
               titulo="Vendido"
@@ -275,25 +288,9 @@ function FacturacionTienda() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={grafica.datos}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="dia" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => eur(v)}
-                      contentStyle={{
-                        background: "var(--color-card)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <ConGrafica>
+                  <IngresosPorTramo datos={grafica.datos} />
+                </ConGrafica>
               </CardContent>
             </Card>
 
@@ -309,36 +306,14 @@ function FacturacionTienda() {
                     Los pedidos de este periodo no tienen líneas de detalle.
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topProductos} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis
-                        type="number"
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(v) => `${v} m`}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="producto"
-                        width={140}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => metros(v)}
-                        contentStyle={{
-                          background: "var(--color-card)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                        }}
-                      />
-                      <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ConGrafica>
+                    <TopProductosMetros datos={topProductos} />
+                  </ConGrafica>
                 )}
               </CardContent>
             </Card>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

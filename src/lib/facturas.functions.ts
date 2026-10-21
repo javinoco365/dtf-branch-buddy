@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { esMiembroTienda, exigirMiembroEmpresa } from "./acceso";
 import { leerTodas, trozos } from "./paginar";
 import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
@@ -53,19 +55,9 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   if (fErr || !factura) throw new Error("Factura no encontrada");
 
   // Comprobar acceso a la tienda
-  const { data: miembro } = await supabaseAdmin
-    .from("tienda_usuarios")
-    .select("tienda_id")
-    .eq("tienda_id", factura.tienda_id)
-    .eq("user_id", userId)
-    .maybeSingle();
-  const { data: rol } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!miembro && !rol) throw new Error("Sin acceso a esta factura");
+  if (!(await esMiembroTienda(supabaseAdmin, userId, factura.tienda_id))) {
+    throw new Error("Sin acceso a esta factura");
+  }
 
   const { data: items } = await supabaseAdmin
     .from("factura_items")
@@ -204,7 +196,7 @@ async function guardarPdfTrasEmitir(userId: string, facturaId: string): Promise<
  * guarda; después devuelve una URL firmada de diez minutos.
  */
 export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -250,7 +242,7 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
  * falló al emitir. La pantalla la llama hasta que no quedan.
  */
 export const rellenarPdfsTienda = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -309,7 +301,7 @@ export const rellenarPdfsTienda = createServerFn({ method: "POST" })
  * enseña la pantalla a quien lo ha pedido.
  */
 export const enviarDocumentoPorCorreo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -458,7 +450,7 @@ type ResultadoEmision = {
 
 /** Emite una factura ordinaria. El número lo pone la base, no esta función. */
 export const emitirFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -507,16 +499,7 @@ export const emitirFactura = createServerFn({ method: "POST" })
 
 /** Miembro de la tienda o administrador. SECURITY DEFINER no mira la RLS, así que se mira aquí. */
 async function comprobarAccesoTienda(sb: Sb, tiendaId: string, userId: string) {
-  const [{ data: miembro }, { data: rol }] = await Promise.all([
-    sb
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", tiendaId)
-      .eq("user_id", userId)
-      .maybeSingle(),
-    sb.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
-  ]);
-  if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+  if (!(await esMiembroTienda(sb, userId, tiendaId))) throw new Error("Sin acceso a esta tienda");
 }
 
 /** Los límites del ticket de la empresa. Sin la migración de tickets, los de la ley. */
@@ -681,7 +664,7 @@ const tipoFiscalSchema = z.enum(["particular", "profesional"]).nullable().option
  * no, con el de la ficha del cliente.
  */
 export const emitirTicket = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1022,7 +1005,7 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
  * la petición no duplica nada.
  */
 export const emitirTicketsPedidos = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1038,7 +1021,7 @@ export const emitirTicketsPedidos = createServerFn({ method: "POST" })
  * pedido y de la ficha del cliente, y sin nombre no se emite.
  */
 export const emitirFacturasPedidos = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1153,7 +1136,7 @@ async function emitirEnBloque(
  * negativo. Las dos quedan en el libro y suman cero.
  */
 export const anularFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1208,7 +1191,7 @@ export const contadoresDeSerie = createServerFn({ method: "GET" })
  * conciliada; si no, lo dice. Queda en la auditoría.
  */
 export const borrarUltimaFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) =>
     z.object({ tipo: z.enum(["tienda", "textil"]), factura_id: z.string().uuid() }).parse(d),
   )
@@ -1238,7 +1221,7 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
 
 /** Cambia el estado de cobro. No toca nada del documento fiscal. */
 export const cambiarEstadoCobro = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1289,9 +1272,10 @@ export const leerEstadoSeries = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const series = await llamarRpc<EstadoSerie[]>(supabaseAdmin, "serie_estado", {
+    // Con la sesión del usuario, no con la clave de servicio: serie_estado()
+    // solo responde de las empresas de quien llama (hallazgo S1).
+    await exigirMiembroEmpresa(context.supabase, context.userId, data.empresa_id);
+    const series = await llamarRpc<EstadoSerie[]>(context.supabase, "serie_estado", {
       _empresa_id: data.empresa_id,
       _ejercicio: data.ejercicio ?? new Date().getFullYear(),
     });
@@ -1306,7 +1290,7 @@ export const leerEstadoSeries = createServerFn({ method: "POST" })
  * rendija entre la comprobación y la escritura.
  */
 export const fijarInicioSerie = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1356,7 +1340,7 @@ function lineasDeSnapshot(snapshot: unknown) {
  * del ticket.
  */
 export const canjearTicket = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({

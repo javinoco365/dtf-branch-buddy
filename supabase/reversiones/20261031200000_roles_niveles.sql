@@ -1,0 +1,14 @@
+-- ============================================================================
+-- REVERSIÓN de 20261031200000_roles_niveles.sql
+-- ============================================================================
+-- No se revierte. Postgres no permite quitar un valor de un enum: habría que
+-- crear un tipo nuevo, cambiar user_roles.role y recrear has_role() y todas
+-- las políticas que lo nombran. Después de revertir 20261031200100 nadie usa
+-- 'editor' ni 'visor', y dos valores sin usar no cambian nada.
+--
+-- Si de verdad hiciera falta, antes hay que comprobar que no queda ninguna fila
+-- con esos valores:
+--
+--   SELECT role, count(*) FROM public.user_roles GROUP BY role;
+-- ============================================================================
+SELECT 'Nada que revertir: los valores editor y visor se quedan en app_role' AS aviso;

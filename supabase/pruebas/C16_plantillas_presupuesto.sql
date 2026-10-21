@@ -52,7 +52,9 @@ SELECT CASE WHEN (SELECT count(*) FROM information_schema.columns
 -- Auditoría: AFTER INSERT OR UPDATE OR DELETE por fila = 1 + 4 + 8 + 16 = 29.
 SELECT CASE WHEN (SELECT count(*) FROM pg_trigger
                    WHERE tgrelid = 'public.plantillas_presupuesto'::regclass
-                     AND NOT tgisinternal) = 3
+                     AND NOT tgisinternal
+                     -- La guardia de niveles (20261031200100) va aparte.
+                     AND tgname <> 'rol_guardia') = 3
              AND EXISTS (SELECT 1 FROM pg_trigger
                           WHERE tgrelid = 'public.plantillas_presupuesto'::regclass
                             AND tgname = 'plantillas_presupuesto_auditoria'

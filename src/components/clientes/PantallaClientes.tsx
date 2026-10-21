@@ -62,6 +62,7 @@ import {
   describirPedidos,
   totalesCliente,
 } from "@/dominio/sumatorios-pedidos";
+import { SiPuede } from "@/components/SiPuede";
 
 type Cliente = {
   id: string;
@@ -234,10 +235,12 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
             misma lista.
           </p>
         </div>
-        <Button onClick={() => setEditing({ ...vacio })}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo cliente
-        </Button>
+        <SiPuede accion="escribir">
+          <Button onClick={() => setEditing({ ...vacio })}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo cliente
+          </Button>
+        </SiPuede>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -308,22 +311,26 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     </span>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Editar"
-                      onClick={() => setEditing(c)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Borrar"
-                      onClick={() => setBorrando(c)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <SiPuede accion="escribir">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Editar"
+                        onClick={() => setEditing(c)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
+                    <SiPuede accion="borrar">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Borrar"
+                        onClick={() => setBorrando(c)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

@@ -50,7 +50,7 @@ function ConfiguracionPage() {
             to="/panel/usuarios"
             icon={Users}
             title="Usuarios y permisos"
-            desc="Invita usuarios, asigna roles y vincúlalos a las tiendas a las que deben acceder."
+            desc="Crea usuarios, elige su nivel (administrador, editor o solo lectura), decide qué tiendas ve cada uno y desactívalos sin perder su historial."
             badge="Admin"
           />
         )}

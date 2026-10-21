@@ -4,6 +4,7 @@ import {
   CTT_EXPRESS,
   NACEX,
   transportistaConocido,
+  urlSeguimientoValida,
 } from "./transportistas";
 
 describe("CTT_EXPRESS.urlSeguimiento", () => {
@@ -59,5 +60,21 @@ describe("transportistaConocido", () => {
   it("no encuentra un transportista escrito a mano", () => {
     expect(transportistaConocido("SEUR")).toBeNull();
     expect(transportistaConocido("")).toBeNull();
+  });
+});
+
+describe("urlSeguimientoValida", () => {
+  it("admite las de los transportistas (https)", () => {
+    expect(urlSeguimientoValida(CTT_EXPRESS.urlSeguimiento("ABC123") ?? "")).toBe(true);
+    expect(urlSeguimientoValida("https://www.nacex.es/seguimiento?x=1")).toBe(true);
+  });
+
+  it("rechaza http, otros esquemas, credenciales y texto suelto", () => {
+    expect(urlSeguimientoValida("http://www.nacex.es/")).toBe(false);
+    expect(urlSeguimientoValida("javascript:alert(1)")).toBe(false);
+    expect(urlSeguimientoValida("https://usuario:clave@ejemplo.com/")).toBe(false);
+    expect(urlSeguimientoValida("https://localhost/")).toBe(false);
+    expect(urlSeguimientoValida("ABC123")).toBe(false);
+    expect(urlSeguimientoValida("")).toBe(false);
   });
 });

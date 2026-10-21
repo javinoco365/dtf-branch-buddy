@@ -28,6 +28,7 @@ import {
   rellenarPdfsTienda,
   type PedidoParaTicket,
 } from "@/lib/facturas.functions";
+import { invalidarTrasGuardar } from "@/lib/cache";
 
 /** De cuántos en cuántos se emite, como en «Facturar» de Pedidos. */
 const TANDA = 20;
@@ -90,6 +91,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     );
     setEmitiendo(null);
     // También si se cortó: lo que llegó a emitirse ya no está pendiente.
+    void invalidarTrasGuardar(qc);
     qc.invalidateQueries({ queryKey: ["pedidos-sin-documento"] });
     if (r.corte?.enLaPrimera) {
       // No respondió ni la primera tanda: sigue la lista, ya al día, para
@@ -109,6 +111,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
     }
     await guardarPdfs(r.emitidos.map((e) => e.id));
     qc.invalidateQueries({ queryKey: ["facturas"] });
+    void invalidarTrasGuardar(qc);
   }
 
   /**

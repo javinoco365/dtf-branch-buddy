@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { esAdminActivo, exigirFilas } from "./acceso";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import { escanerAplicado } from "./escaner-textil";
@@ -106,7 +108,7 @@ const marcaSchema = z.object({
 });
 
 export const upsertMarca = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => marcaSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { id, ...rest } = data;
@@ -130,7 +132,7 @@ export const upsertMarca = createServerFn({ method: "POST" })
   });
 
 export const deleteMarca = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("textil_marcas").delete().eq("id", data.id);
@@ -139,7 +141,7 @@ export const deleteMarca = createServerFn({ method: "POST" })
   });
 
 export const setMarcaPredeterminada = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ marca_id: z.string().uuid().nullable() }).parse(d))
   .handler(async ({ data, context }) => {
     // La empresa existe siempre: la migración 20260903100000 se asegura de ello.
@@ -201,6 +203,60 @@ export const listStock = createServerFn({ method: "GET" })
     return (data ?? []) as FilaStock[];
   });
 
+/**
+ * Lo que enseña Textil › Inicio, sin descargar la historia entera con sus
+ * líneas: recuentos y las pocas columnas que hacen falta. Las cifras son las
+ * mismas que salían de las listas completas:
+ *
+ * - Pedidos y presupuestos: recuento exacto. Las listas se leían enteras por
+ *   páginas, así que es el mismo número.
+ * - Stock: `id, cantidad, cantidad_minima` de todas las variantes. «Bajo
+ *   mínimo» compara dos columnas, y eso PostgREST no lo filtra: se cuenta en
+ *   la pantalla, como antes.
+ * - Facturas: `fecha, total` de todas (sin líneas ni snapshots). «Este mes»
+ *   se calcula en la pantalla, como antes, con la hora del navegador.
+ * - Clientes: la misma lectura que la lista (una página, sin paginar), solo
+ *   con el id. Un recuento exacto daría otro número si hay más de 1000.
+ */
+export const resumenTextilInicio = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = context.supabase;
+    const [stock, pedidos, presupuestos, facturas, clientes] = await Promise.all([
+      leerTodas<{ id: string; cantidad: number; cantidad_minima: number }>((a, b) =>
+        tabla(sb, "textil_stock")
+          .select("id, cantidad, cantidad_minima")
+          .order("nombre")
+          .order("id")
+          .range(a, b),
+      ),
+      sb.from("textil_pedidos").select("id", { count: "exact", head: true }),
+      sb.from("textil_presupuestos").select("id", { count: "exact", head: true }),
+      leerTodas<{ fecha: string; total: number }>((a, b) =>
+        sb
+          .from("textil_facturas")
+          .select("fecha, total")
+          .order("fecha", { ascending: false })
+          .order("id")
+          .range(a, b),
+      ),
+      tabla(sb, "clientes").select("id").order("nombre"),
+    ]);
+    for (const r of [stock, pedidos, presupuestos, facturas, clientes]) {
+      if (r.error) throw new Error(r.error.message);
+    }
+    return {
+      stock: (stock.data ?? []).map((s) => ({
+        cantidad: s.cantidad,
+        cantidad_minima: s.cantidad_minima,
+      })),
+      pedidos: pedidos.count ?? 0,
+      presupuestos: presupuestos.count ?? 0,
+      facturas: facturas.data ?? [],
+      clientes: (clientes.data ?? []).length,
+    };
+  });
+
 const stockSchema = z.object({
   id: z.string().uuid().optional(),
   sku: z.string().optional().nullable(),
@@ -233,7 +289,7 @@ function errorVariante(error: { code?: string; message: string }): Error {
 }
 
 export const upsertStockItem = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => stockSchema.parse(d))
   .handler(async ({ data, context }) => {
     // cantidad y coste_unitario no se escriben nunca aquí: los mueve el libro
@@ -284,7 +340,7 @@ export const upsertStockItem = createServerFn({ method: "POST" })
  * suyo («sobran» o «faltan»).
  */
 export const registrarMovimientoStock = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -349,7 +405,7 @@ export const listMovimientosStock = createServerFn({ method: "POST" })
   });
 
 export const deleteStockItem = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     // Se borra si nunca se movió; si tiene historia, se desactiva. Sus
@@ -383,7 +439,7 @@ const clienteSchema = z.object({
 });
 
 export const upsertTextilCliente = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => clienteSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { id, ...rest } = data;
@@ -406,7 +462,7 @@ export const upsertTextilCliente = createServerFn({ method: "POST" })
   });
 
 export const deleteTextilCliente = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await tabla(context.supabase, "clientes").delete().eq("id", data.id);
@@ -735,7 +791,7 @@ async function nextNumero(supabase: any, ambito: string, prefijo: string) {
 }
 
 export const upsertPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => presupuestoSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { items, id, ...header } = data;
@@ -804,13 +860,19 @@ export const upsertPresupuesto = createServerFn({ method: "POST" })
   });
 
 export const deletePresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     // Las imágenes: sus filas se van en cascada; los ficheros, después.
     const rutas = await rutasImagenes(context.supabase, "textil", data.id);
-    const { error } = await context.supabase.from("textil_presupuestos").delete().eq("id", data.id);
+    const { data: borrados, error } = await context.supabase
+      .from("textil_presupuestos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     if (error) throw error;
+    // Si la RLS no ha dejado borrar el presupuesto, sus imágenes tampoco se tocan.
+    exigirFilas(borrados, "el presupuesto");
     if (rutas.length) {
       const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
       const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);
@@ -820,7 +882,7 @@ export const deletePresupuesto = createServerFn({ method: "POST" })
   });
 
 export const updatePresupuestoEstado = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -847,7 +909,7 @@ export const updatePresupuestoEstado = createServerFn({ method: "POST" })
  * que aparta el stock igual y, si no hay existencias, falla igual.
  */
 export const confirmarPresupuestoTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: pres, error } = await context.supabase
@@ -935,8 +997,24 @@ export const listTextilFacturas = createServerFn({ method: "GET" })
         .range(a, b),
     );
     if (error) throw error;
-    return data ?? [];
+    // Sin los snapshots de emisor, receptor y líneas ni el desglose de IVA: la
+    // lista no los usa (las líneas vienen en `items`) y eran la mayor parte de
+    // cada fila. El PDF y el correo los leen en el servidor. Se quitan aquí y
+    // no en la consulta para no nombrar columnas que dependen de migraciones.
+    return (data ?? []).map((f: any) => {
+      const fila = { ...f };
+      for (const campo of SNAPSHOTS_FACTURA) delete fila[campo];
+      return fila;
+    });
   });
+
+/** Lo que pesa de una factura y la lista no enseña. */
+const SNAPSHOTS_FACTURA = [
+  "emisor_snapshot",
+  "receptor_snapshot",
+  "lineas_snapshot",
+  "desglose_iva",
+] as const;
 
 /**
  * Borra una factura textil: un borrador, o la última emitida de su serie
@@ -945,7 +1023,7 @@ export const listTextilFacturas = createServerFn({ method: "GET" })
  * un mensaje que se entiende; aquí, después, se quita su PDF.
  */
 export const deleteTextilFactura = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const r = await llamarRpc<{ referencia: string | null }>(
@@ -993,7 +1071,7 @@ const pedidoSchema = z.object({
 });
 
 export const upsertTextilPedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => pedidoSchema.parse(d))
   .handler(async ({ data, context }) => guardarPedidoTextil(context.supabase, data));
 
@@ -1091,7 +1169,7 @@ async function guardarPedidoTextil(
 }
 
 export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), estado: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
     // El cambio de estado es lo que mueve el stock de verdad: al marcar
@@ -1127,7 +1205,7 @@ export const updateTextilPedidoEstado = createServerFn({ method: "POST" })
   });
 
 export const deleteTextilPedido = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     // Antes de tocar el stock: si el pedido tiene cobros la base no dejará
@@ -1203,13 +1281,8 @@ export const getEmpresaGlobal = createServerFn({ method: "GET" })
  * que se congeló al emitir. Solo administradores, como hasta ahora.
  */
 async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId: string) {
-  const { data: esAdmin } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!esAdmin) throw new Error("Solo un administrador puede generar esta factura");
+  if (!(await esAdminActivo(supabaseAdmin, userId)))
+    throw new Error("Solo un administrador puede generar esta factura");
 
   const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
     .select("*")
@@ -1335,7 +1408,7 @@ async function guardarPdfTextilTrasEmitir(userId: string, facturaId: string): Pr
 }
 
 export const generarPdfFacturaTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -1353,7 +1426,7 @@ export const generarPdfFacturaTextil = createServerFn({ method: "POST" })
  * llama hasta que no quedan.
  */
 export const rellenarPdfsTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -1402,14 +1475,17 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-
-    const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
+    // La factura se lee con la sesión del usuario: si la RLS no se la deja
+    // ver, no hay URL. Antes se leía con la clave de servicio y cualquier
+    // cuenta sacaba el PDF de cualquier factura textil (hallazgo S1).
+    const { data: factura } = await tabla(context.supabase, "textil_facturas")
       .select("pdf_path")
       .eq("id", data.factura_id)
       .maybeSingle();
     if (!factura?.pdf_path) return { url: null };
+
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
 
     const { data: firmada } = await supabaseAdmin.storage
       .from("facturas")
@@ -1539,7 +1615,7 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
  * el nombre comercial y el logo; la identidad fiscal es la de la sociedad.
  */
 export const emitirDocumentoTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -1638,7 +1714,7 @@ async function leerTicketTextil(supabase: any, facturaId: string) {
  * 8-10-2026); si el ticket no es de un pedido, la del ticket.
  */
 export const canjearTicketTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -1685,7 +1761,7 @@ export const canjearTicketTextil = createServerFn({ method: "POST" })
  * modifica; los dos quedan en el libro y suman cero.
  */
 export const anularTicketTextil = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

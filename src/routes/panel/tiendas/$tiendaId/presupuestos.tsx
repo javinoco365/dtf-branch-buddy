@@ -150,6 +150,7 @@ function PresupuestosTienda() {
    * se puede volver a pedir desde el menú.
    */
   const pdfMut = useMutation({
+    meta: { invalida: false }, // no escribe nada: no recarga
     mutationFn: (id: string) => pdf({ data: { id } }),
     onMutate: () => toast.loading("Generando el PDF…", { id: "pdf-presupuesto" }),
     onSuccess: (r) => {

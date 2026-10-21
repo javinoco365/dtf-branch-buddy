@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import type { TipoInversion } from "@/dominio/inversion";
 
 /**
@@ -52,7 +54,7 @@ export const listarInversion = createServerFn({ method: "GET" })
   });
 
 export const guardarInversion = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -66,9 +68,8 @@ export const guardarInversion = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const empresa_id = await empresaActiva(supabaseAdmin);
+    const sb = context.supabase;
+    const empresa_id = await empresaActiva(sb);
 
     const fila = {
       empresa_id,
@@ -82,14 +83,16 @@ export const guardarInversion = createServerFn({ method: "POST" })
     };
 
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "inversion_movimientos")
+      const { data: tocadas, error } = await tabla(sb, "inversion_movimientos")
         .update(fila)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .select("id");
       if (error) throw new Error(error.message);
+      exigirFilas(tocadas, "el movimiento");
       return { id: data.id };
     }
 
-    const { data: creado, error } = await tabla(supabaseAdmin, "inversion_movimientos")
+    const { data: creado, error } = await tabla(sb, "inversion_movimientos")
       .insert(fila)
       .select("id")
       .single();
@@ -98,14 +101,15 @@ export const guardarInversion = createServerFn({ method: "POST" })
   });
 
 export const borrarInversion = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { error } = await tabla(supabaseAdmin, "inversion_movimientos")
+    const sb = context.supabase;
+    const { data: borradas, error } = await tabla(sb, "inversion_movimientos")
       .delete()
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .select("id");
     if (error) throw new Error(error.message);
+    exigirFilas(borradas, "el movimiento");
     return { ok: true };
   });

@@ -87,3 +87,18 @@ export function transportistaConocido(nombre: string): Transportista | null {
   if (!limpio) return null;
   return TRANSPORTISTAS_CONOCIDOS.find((t) => t.nombre.toLowerCase() === limpio) ?? null;
 }
+
+/**
+ * Si una URL de seguimiento se puede mandar al cliente: solo https y con
+ * dominio. Va al correo ({{seguimiento_url}}) y a la nota de WooCommerce que
+ * recibe el cliente; un «http://», un «javascript:» o un texto pegado por
+ * error saldría como si lo mandara DTI.
+ */
+export function urlSeguimientoValida(url: string): boolean {
+  try {
+    const u = new URL(url.trim());
+    return u.protocol === "https:" && u.hostname.includes(".") && !u.username && !u.password;
+  } catch {
+    return false;
+  }
+}

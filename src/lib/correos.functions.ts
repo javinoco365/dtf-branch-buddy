@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { renderizarPlantilla } from "@/dominio/plantillas";
 import { eur } from "@/lib/format";
 import { tabla } from "./rpc";
@@ -159,9 +159,18 @@ export async function avisarPedidoEnviado(
 
 /** La misma operación, disparada a mano desde la pantalla. */
 export const enviarAvisoPedidoEnviado = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ pedido_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<ResultadoAviso> => {
+    // El pedido tiene que verlo quien manda el aviso: se lee con su sesión y
+    // decide la RLS (de la tienda o administrador). Sin esto, cualquier cuenta
+    // mandaba correos a clientes de cualquier tienda (hallazgo S1).
+    const { data: visible } = await context.supabase
+      .from("pedidos")
+      .select("id")
+      .eq("id", data.pedido_id)
+      .maybeSingle();
+    if (!visible) throw new Error("Sin acceso a este pedido");
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     return avisarPedidoEnviado(adminComoUsuario(context.userId), data.pedido_id);
   });

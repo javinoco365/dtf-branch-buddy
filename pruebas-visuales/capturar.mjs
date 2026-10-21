@@ -3,6 +3,12 @@
 // Uso:
 //   node pruebas-visuales/capturar.mjs <carpeta> [--base http://localhost:8090]
 //                                      [--solo escritorio|movil] [--rutas a,b]
+//                                      [--tamanos todos|movil,tablet-v,...]
+//
+// Por omisión, ordenador (1440) y móvil (390). Con --tamanos todos, además
+// móvil pequeño, tablet vertical y horizontal, portátil y pantalla grande.
+// En cada captura se avisa si la página se sale de ancho (DESBORDE) y qué
+// elemento es el más ancho, que es lo primero que se mira en una tablet.
 //
 // Necesita la aplicación arrancada contra el Supabase de prueba (ver
 // pruebas-visuales/LEEME.md). La fecha del navegador se fija para que lo que
@@ -80,10 +86,22 @@ export const RUTAS = {
   "textil-ajustes": "/panel/textil/ajustes",
 };
 
-const TAMANOS = {
+const TODOS = {
   escritorio: { width: 1440, height: 900 },
   movil: { width: 390, height: 844 },
+  "movil-pequeno": { width: 360, height: 780 },
+  "tablet-v": { width: 820, height: 1180 },
+  "tablet-h": { width: 1180, height: 820 },
+  portatil: { width: 1366, height: 768 },
+  grande: { width: 1920, height: 1080 },
 };
+const LISTA = opcion("--tamanos");
+const TAMANOS =
+  LISTA === "todos"
+    ? TODOS
+    : LISTA
+      ? Object.fromEntries(LISTA.split(",").map((t) => [t, TODOS[t]]))
+      : { escritorio: TODOS.escritorio, movil: TODOS.movil };
 
 // Lunes 5 de octubre de 2026, a media mañana, hora de Madrid.
 const HOY = new Date("2026-10-05T10:00:00+02:00");
@@ -121,6 +139,22 @@ for (const [tamano, viewport] of Object.entries(TAMANOS)) {
       content: "*, *::before, *::after { transition: none !important; }",
     });
     await pagina.waitForTimeout(1500);
+    // ¿Se sale la página de ancho? Si sí, el elemento visible que más sobresale.
+    const desborde = await pagina.evaluate(() => {
+      const ancho = document.documentElement.clientWidth;
+      if (document.documentElement.scrollWidth <= ancho + 1) return null;
+      let peor = null;
+      for (const el of document.querySelectorAll("body *")) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.right <= ancho + 1) continue;
+        if (!peor || r.right > peor.derecha)
+          peor = {
+            derecha: Math.round(r.right),
+            que: `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`,
+          };
+      }
+      return { ancho: document.documentElement.scrollWidth, peor };
+    });
     // La captura de página entera cambia el tamaño de la ventana, y eso hace
     // que las gráficas se redibujen con animación: la foto las pillaba a
     // medias, y a medias distintas según lo que tardase la página. Así que
@@ -138,7 +172,12 @@ for (const [tamano, viewport] of Object.entries(TAMANOS)) {
       animations: "disabled",
       caret: "hide",
     });
-    console.log(`${tamano}/${nombre}${errores.length ? `  ERRORES: ${errores.join(" | ")}` : ""}`);
+    const aviso = desborde
+      ? `  DESBORDE: ${desborde.ancho}px (${desborde.peor?.que} hasta ${desborde.peor?.derecha})`
+      : "";
+    console.log(
+      `${tamano}/${nombre}${aviso}${errores.length ? `  ERRORES: ${errores.join(" | ")}` : ""}`,
+    );
     await pagina.close();
   }
   await contexto.close();

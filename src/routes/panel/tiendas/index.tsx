@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { invalidarTrasGuardar } from "@/lib/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,9 +113,11 @@ function TiendasIndex() {
     },
   });
 
+  // La tienda nueva o editada sale en tiendas, tiendas-listado,
+  // tiendas-para-cliente... (datos de referencia, 10 min): el alta y la
+  // edición escriben fuera de useMutation, así que se invalida todo aquí.
   function refrescar() {
-    qc.invalidateQueries({ queryKey: ["tiendas"] });
-    qc.invalidateQueries({ queryKey: ["tiendas-sidebar"] });
+    void invalidarTrasGuardar(qc);
   }
 
   const activarFn = useServerFn(activarTienda);
@@ -165,8 +168,7 @@ function TiendasIndex() {
             <NuevaTiendaWizard
               onDone={() => {
                 setOpen(false);
-                qc.invalidateQueries({ queryKey: ["tiendas"] });
-                qc.invalidateQueries({ queryKey: ["tiendas-sidebar"] });
+                refrescar();
               }}
             />
           </Dialog>
