@@ -36,6 +36,7 @@ export default defineConfig({
       "src/dominio/**/*.test.ts",
       "src/arquitectura/**/*.test.ts",
       "src/lib/paginar.test.ts",
+      "src/lib/pedidos-lista.test.ts",
       "src/lib/cache.test.ts",
     ],
     reporters: "dot",

@@ -12,6 +12,7 @@ import {
   FILAS_POR_PAGINA,
   juntarEnOrden,
   leerTodas,
+  leerTodasEnParalelo,
   PETICIONES_A_LA_VEZ,
   trozos,
 } from "./paginar";
@@ -267,4 +268,148 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
     realizadosPorDia,
     conRealizado,
   };
+}
+
+/**
+ * Lo que cuelga de cada pedido, incrustado en la misma consulta. Los alias
+ * llevan `_` delante para no pisar nunca una columna de `pedidos`, y se
+ * quitan antes de devolver la fila. Mismas columnas que leerListaPedidosPorPartes.
+ */
+const CAMPOS_CON_RELACIONES = [
+  "*",
+  "_lineas:pedido_items(*)",
+  "_cobros:cobros(*)",
+  "_envios:enlaces_seguimiento(id, pedido_id, transportista, url, codigo_seguimiento)",
+  "_cliente:clientes(id, nombre, email)",
+  "_tienda:tiendas(nombre)",
+  // La rectificativa que corrige cada documento, aunque no lleve el pedido:
+  // `facturas!rectifica_a_id` desde una factura son las que la rectifican
+  // (comprobado en el banco con PostgREST 12).
+  "_docs:facturas!pedido_id(id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id, _rect:facturas!rectifica_a_id(id))",
+].join(", ");
+
+type FilaConRelaciones = FechaPedido &
+  Record<string, any> & {
+    _lineas: any[];
+    _cobros: Cobro[];
+    _envios: any[];
+    _cliente: { id: string; nombre: string | null; email: string | null } | null;
+    _tienda: { nombre: string } | null;
+    _docs: (DocumentoLeido & { _rect: { id: string }[] })[];
+  };
+
+/**
+ * La lista de Pedidos en una consulta por página (con todo lo que cuelga de
+ * cada pedido incrustado), y las páginas a la vez: un año pasa de ~20 viajes
+ * en cadena a 2. Devuelve exactamente lo mismo que leerListaPedidosPorPartes.
+ *
+ * Supabase corta también lo incrustado: como mucho 1000 filas por pedido
+ * (max_rows; comprobado en el banco con un pedido de 1500 líneas). Un pedido
+ * que llega con 1000 líneas se vuelve a leer como antes; si llegan 1000
+ * cobros, envíos o documentos de un pedido, la lista entera se lee como
+ * antes. Y si la consulta falla (una relación que no existe en esta base, una
+ * migración sin aplicar), también: así no se pierde el respaldo de antes
+ * (lista sin cobros, sin documentos…).
+ */
+export async function leerListaPedidos(supabase: any, data: FiltroListaPedidos) {
+  const tramo = tramoDeConsulta(data.desde, data.hasta);
+  const extras = Promise.all([
+    tabla(supabase, "gerencia_ajustes").select("*").limit(1).maybeSingle(),
+    leerTodas<{ realizado_en: string | null; metros_total: number | null }>((a, b) => {
+      let q = tabla(supabase, "pedidos")
+        .select("realizado_en, metros_total")
+        .gte("realizado_en", tramo.desde)
+        .lt("realizado_en", tramo.hasta);
+      if (data.tiendaId) q = q.eq("tienda_id", data.tiendaId);
+      return q.order("realizado_en").order("id").range(a, b);
+    }),
+  ]);
+  extras.catch(() => {});
+  const { data: filas, error } = await leerTodasEnParalelo<FilaConRelaciones>((a, b, contar) => {
+    let query = tabla(supabase, "pedidos")
+      .select(CAMPOS_CON_RELACIONES, contar ? { count: "exact" } : undefined)
+      .gte("fecha_pedido", tramo.desde)
+      .lt("fecha_pedido", tramo.hasta);
+    if (data.tiendaId) query = query.eq("tienda_id", data.tiendaId);
+    return query
+      .neq("_docs.estado", "borrador")
+      .order("id", { referencedTable: "_docs" })
+      .order("fecha", { referencedTable: "_cobros", ascending: true })
+      .order("created_at", { referencedTable: "_cobros", ascending: true })
+      .order("id", { referencedTable: "_cobros" })
+      .order("id", { referencedTable: "_envios" })
+      .limit(1, { referencedTable: "_envios" })
+      .order("fecha_pedido", { ascending: false })
+      .order("id")
+      .range(a, b);
+  });
+  if (error) return leerListaPedidosPorPartes(supabase, data);
+  const unicos = new Map(filas.map((p) => [p.id as string, p]));
+  const pedidos = ordenarPedidos(
+    [...unicos.values()].filter((p) => pedidoEnDias(p, data.desde, data.hasta)),
+    "reciente",
+  );
+  const lleno = (l: readonly unknown[] | null | undefined) => (l?.length ?? 0) >= FILAS_POR_PAGINA;
+  // Sin lo incrustado (una API que no lo entiende), o con algo cortado en el
+  // tope, como antes: nunca una lista con cobros o documentos de menos.
+  const incompleto = pedidos.some(
+    (p) =>
+      ![p._lineas, p._cobros, p._envios, p._docs].every(Array.isArray) ||
+      lleno(p._cobros) ||
+      lleno(p._docs) ||
+      p._docs.some((d) => !Array.isArray(d._rect) || lleno(d._rect)),
+  );
+  if (incompleto) return leerListaPedidosPorPartes(supabase, data);
+
+  const [{ data: ajustes }, realizados] = await extras;
+  const conRealizado = !faltaLaColumna(realizados.error);
+  if (realizados.error && conRealizado) throw new Error(realizados.error.message);
+  const horaCorte = horaCorta(
+    (ajustes as { hora_corte?: string } | null)?.hora_corte,
+    HORA_CORTE_POR_DEFECTO,
+  );
+  const realizadosPorDia = Object.fromEntries(metrosRealizadosPorDia(realizados.data));
+  if (pedidos.length === 0) {
+    return { pedidos: [], cobrosDisponibles: true, horaCorte, realizadosPorDia, conRealizado };
+  }
+
+  // Los pedidos con 1000 líneas o más, otra vez con la lectura de antes.
+  const cortados = pedidos.filter((p) => lleno(p._lineas)).map((p) => p.id as string);
+  const { data: lineasCortadas, error: errLineas } = cortados.length
+    ? await lineasDePedidos(supabase, cortados)
+    : { data: [], error: null };
+  if (errLineas) return leerListaPedidosPorPartes(supabase, data);
+  const lineasDe = porPedido<any>(lineasCortadas);
+
+  return {
+    pedidos: pedidos.map((fila) => {
+      const { _lineas, _cobros, _envios, _cliente, _tienda, _docs, ...resto } = fila;
+      // Las columnas del pedido, con el mismo tipo que en la lectura por partes.
+      const p = resto as FechaPedido & Record<string, any>;
+      return {
+        ...p,
+        tienda_nombre: _tienda?.nombre ?? null,
+        cliente_nombre: p.cliente_nombre ?? _cliente?.nombre ?? null,
+        cliente_email: p.cliente_email ?? _cliente?.email ?? null,
+        items: lineasDe.get(p.id) ?? _lineas ?? [],
+        tracking: _envios?.[0] ?? null,
+        cobros: _cobros ?? [],
+        documento: documentoDeLista(_docs ?? []),
+      };
+    }),
+    cobrosDisponibles: true,
+    horaCorte,
+    realizadosPorDia,
+    conRealizado,
+  };
+}
+
+/** El documento que se enseña en la lista, con la misma regla que documentosDePedidos. */
+function documentoDeLista(
+  docs: readonly (DocumentoLeido & { _rect?: { id: string }[] })[],
+): DocumentoDeLista | null {
+  const rectificados = docs.filter((d) => (d._rect ?? []).length > 0).map((d) => d.id);
+  const d = documentoDelPedido(docs, rectificados);
+  if (!d || d.tipo === "rectificativa") return null;
+  return { id: d.id, tipo: d.tipo, referencia: referenciaFactura(d.serie, d.ejercicio, d.numero) };
 }

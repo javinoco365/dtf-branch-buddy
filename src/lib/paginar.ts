@@ -23,6 +23,50 @@ export async function leerTodas<T>(
   }
 }
 
+/**
+ * Como leerTodas, con las mismas filas y en el mismo orden, pero sin esperar
+ * página a página: la primera trae además cuántas hay (`count: "exact"`) y
+ * las demás se piden a la vez (como mucho `limite`).
+ *
+ * Mismo contrato que en serie: se para en la primera página con error (en
+ * su orden) o en la primera que llega corta. Si mientras se leía entraron
+ * filas y la última página llega llena, se sigue leyendo en serie, como
+ * siempre: nunca menos filas que leerTodas. Sin recuento, en serie.
+ *
+ * Solo para consultas con un orden total (por ejemplo `fecha desc, id`).
+ */
+export async function leerTodasEnParalelo<T>(
+  pagina: (
+    desde: number,
+    hasta: number,
+    contar: boolean,
+  ) => PromiseLike<Respuesta<T> & { count?: number | null }>,
+  limite = PETICIONES_A_LA_VEZ,
+): Promise<Respuesta<T> & { data: T[] }> {
+  const N = FILAS_POR_PAGINA;
+  const primera = await pagina(0, N - 1, true);
+  if (primera.error) return { data: [], error: primera.error };
+  const filas: T[] = [...(primera.data ?? [])];
+  if (filas.length < N) return { data: filas, error: null };
+  const restantes = Math.max(0, Math.ceil((primera.count ?? 0) / N) - 1);
+  const respuestas = await enParalelo(
+    Array.from({ length: restantes }, (_, i) => i + 1),
+    limite,
+    async (n) => await pagina(n * N, n * N + N - 1, false),
+  );
+  for (const { data, error } of respuestas) {
+    if (error) return { data: filas, error };
+    filas.push(...(data ?? []));
+    if ((data ?? []).length < N) return { data: filas, error: null };
+  }
+  for (let desde = (restantes + 1) * N; ; desde += N) {
+    const { data, error } = await pagina(desde, desde + N - 1, false);
+    if (error) return { data: filas, error };
+    filas.push(...(data ?? []));
+    if ((data ?? []).length < N) return { data: filas, error: null };
+  }
+}
+
 /** Parte una lista en trozos, para filtros `in` que no revienten la URL. */
 export function trozos<T>(lista: readonly T[], tam = 150): T[][] {
   const r: T[][] = [];

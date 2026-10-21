@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
-import { leerListaPedidosPorPartes } from "./pedidos-lista";
+import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
@@ -74,7 +74,7 @@ export const listPedidos = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data, context }) => leerListaPedidosPorPartes(context.supabase, data));
+  .handler(async ({ data, context }) => leerListaPedidos(context.supabase, data));
 
 /**
  * Corrige a mano el día y la hora en que se realizó un pedido de tienda o

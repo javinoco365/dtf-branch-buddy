@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enParalelo, juntarEnOrden } from "./paginar";
+import { enParalelo, juntarEnOrden, leerTodas, leerTodasEnParalelo } from "./paginar";
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,5 +82,69 @@ describe("juntarEnOrden", () => {
         { data: [3], error: "otro" },
       ]),
     ).toEqual({ data: [1, 2], error: "fallo" });
+  });
+});
+
+describe("leerTodasEnParalelo", () => {
+  type R = { data: number[] | null; error: { message: string } | null; count?: number | null };
+  /** Una tabla de `n` filas leída por páginas, con lo que se le pida torcer. */
+  function fuente(
+    n: number,
+    opciones: { fallaDesde?: number; crece?: number; sinCuenta?: boolean } = {},
+  ) {
+    let filas = Array.from({ length: n }, (_, i) => i);
+    const pedidas: number[] = [];
+    let primera = true;
+    const pagina = async (desde: number, hasta: number, contar = false): Promise<R> => {
+      pedidas.push(desde);
+      await esperar(desde % 3);
+      if (opciones.fallaDesde !== undefined && desde >= opciones.fallaDesde) {
+        return { data: null, error: { message: `falla ${desde}` } };
+      }
+      const r: R = { data: filas.slice(desde, hasta + 1), error: null };
+      if (contar) r.count = opciones.sinCuenta ? null : filas.length;
+      // Entran filas justo después de leer la primera página.
+      if (primera && opciones.crece) {
+        filas = [...filas, ...Array.from({ length: opciones.crece }, (_, i) => n + i)];
+      }
+      primera = false;
+      return r;
+    };
+    return { pagina, pedidas };
+  }
+
+  for (const n of [0, 5, 999, 1000, 1001, 2500, 3000, 7321]) {
+    it(`${n} filas: lo mismo que leerTodas`, async () => {
+      const enSerie = await leerTodas(fuente(n).pagina);
+      const aLaVez = await leerTodasEnParalelo(fuente(n).pagina);
+      expect(aLaVez).toEqual(enSerie);
+    });
+  }
+
+  it("un error para donde pararía en serie", async () => {
+    const enSerie = await leerTodas(fuente(4500, { fallaDesde: 2000 }).pagina);
+    const aLaVez = await leerTodasEnParalelo(fuente(4500, { fallaDesde: 2000 }).pagina);
+    expect(aLaVez).toEqual(enSerie);
+    expect(aLaVez.data).toHaveLength(2000);
+    expect(aLaVez.error?.message).toBe("falla 2000");
+  });
+
+  it("si entran filas mientras se lee, no se pierde ninguna", async () => {
+    const r = await leerTodasEnParalelo(fuente(3000, { crece: 1500 }).pagina);
+    expect(r.data).toHaveLength(4500);
+    expect(r.data).toEqual(Array.from({ length: 4500 }, (_, i) => i));
+  });
+
+  it("sin recuento, en serie", async () => {
+    const f = fuente(2500, { sinCuenta: true });
+    const r = await leerTodasEnParalelo(f.pagina);
+    expect(r.data).toHaveLength(2500);
+    expect(f.pedidas).toEqual([0, 1000, 2000]);
+  });
+
+  it("con recuento, las páginas a la vez y ninguna de más", async () => {
+    const f = fuente(2500);
+    await leerTodasEnParalelo(f.pagina);
+    expect([...f.pedidas].sort((a, b) => a - b)).toEqual([0, 1000, 2000]);
   });
 });
