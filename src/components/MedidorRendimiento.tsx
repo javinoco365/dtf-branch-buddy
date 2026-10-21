@@ -32,7 +32,7 @@ function Recuadro() {
       cancelAnimationFrame(fotograma);
       fotograma = requestAnimationFrame(() => {
         const p = medidor.actual();
-        if (!p || performance.now() - p.inicio > VENTANA_MS) return;
+        if (!p || globalThis.performance.now() - p.inicio > VENTANA_MS) return;
         if (queryClient.isFetching() === 0) medidor.pantallaLista();
       });
     };

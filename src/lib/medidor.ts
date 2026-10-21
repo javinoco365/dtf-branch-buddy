@@ -66,6 +66,12 @@ export function contarFilas(datos: unknown): number {
 
 const redondear = (n: number) => Math.round(n * 10) / 10;
 
+// `globalThis.performance` y no `performance` a secas, aquí y en
+// MedidorRendimiento.tsx: en la compilación del servidor, el `performance`
+// suelto se sustituye por el sustituto de unenv, que acabó en el mismo trozo
+// que canvg y core-js (~330 KB). El panel lo cargaba en cada página pintada en
+// el servidor, aunque el medidor solo funciona en el navegador.
+
 export function crearMedidor(alCambiar: () => void) {
   const historial: MedidaPantalla[] = [];
   let actual: Pantalla | null = null;
@@ -74,7 +80,7 @@ export function crearMedidor(alCambiar: () => void) {
     if (actual) cerrarRed(actual);
     actual = {
       ruta,
-      inicio: performance.now(),
+      inicio: globalThis.performance.now(),
       msResuelta: null,
       msLista: null,
       consultas: {},
@@ -87,7 +93,9 @@ export function crearMedidor(alCambiar: () => void) {
   };
 
   const cerrarRed = (p: Pantalla) => {
-    const entradas = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+    const entradas = globalThis.performance.getEntriesByType(
+      "resource",
+    ) as PerformanceResourceTiming[];
     const red = { peticiones: 0, kb: 0, supabase: 0, serverFn: 0, authUser: 0 };
     for (const e of entradas) {
       if (e.startTime < p.inicio) continue;
@@ -112,19 +120,19 @@ export function crearMedidor(alCambiar: () => void) {
       if (!actual) empezar(ruta);
       const p = actual!;
       p.ruta = ruta;
-      p.msResuelta = redondear(performance.now() - p.inicio);
+      p.msResuelta = redondear(globalThis.performance.now() - p.inicio);
       alCambiar();
     },
     /** Se llama en el primer fotograma sin consultas en marcha. */
     pantallaLista: () => {
       const p = actual;
       if (!p || p.msResuelta == null) return;
-      p.msLista = redondear(performance.now() - p.inicio);
+      p.msLista = redondear(globalThis.performance.now() - p.inicio);
       cerrarRed(p);
       alCambiar();
     },
     consultaEmpieza: (hash: string) => {
-      actual?.iniciosConsulta.set(hash, performance.now());
+      actual?.iniciosConsulta.set(hash, globalThis.performance.now());
     },
     consultaTermina: (hash: string, nombre: string, datos: unknown, error: boolean) => {
       const p = actual;
@@ -134,7 +142,7 @@ export function crearMedidor(alCambiar: () => void) {
       p.iniciosConsulta.delete(hash);
       const m = (p.consultas[nombre] ??= { peticiones: 0, ms: 0, filas: 0, errores: 0 });
       m.peticiones += 1;
-      m.ms = redondear(m.ms + (performance.now() - inicio));
+      m.ms = redondear(m.ms + (globalThis.performance.now() - inicio));
       if (error) m.errores += 1;
       else m.filas += contarFilas(datos);
       cerrarRed(p);
