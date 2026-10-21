@@ -163,6 +163,7 @@ seccion "Escáner textil: compras, catálogo, stock y cuentas" C18_escaner_texti
 seccion "Proformas: casar factura, regularizar el stock y pasar el pago" C19_proformas.sql
 seccion "Imágenes de los presupuestos" C20_presupuesto_imagenes.sql
 seccion "Rendimiento: índices y lectura con mis_tiendas()/mis_empresas()" C21_rendimiento_rls.sql
+seccion "Niveles de usuario: admin, editor y visor" D1_roles_permisos.sql
 
 # ---------------------------------------------------------------------------
 # Veredicto

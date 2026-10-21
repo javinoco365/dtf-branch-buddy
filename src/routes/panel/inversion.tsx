@@ -35,6 +35,7 @@ import {
 import { listarCatalogosCaja } from "@/lib/caja.functions";
 import { InversionFormDialog } from "@/components/InversionFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/inversion")({
   head: () => ({ meta: [{ title: "Inversión · DTF Culture" }] }),
@@ -122,15 +123,17 @@ function InversionPage() {
           <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
-          <Button
-            onClick={() => {
-              setEditando(undefined);
-              setAbierto(true);
-            }}
-            disabled={sinSocios}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
-          </Button>
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditando(undefined);
+                setAbierto(true);
+              }}
+              disabled={sinSocios}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+            </Button>
+          </SiPuede>
         </div>
       </div>
 
@@ -323,19 +326,23 @@ function InversionPage() {
                     {m.observaciones ?? ""}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setEditando(m);
-                        setAbierto(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <SiPuede accion="escribir">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditando(m);
+                          setAbierto(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
+                    <SiPuede accion="borrar">
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

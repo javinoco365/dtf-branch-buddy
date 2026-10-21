@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, tabla } from "./rpc";
 import {
   BUCKET_IMAGENES,
@@ -87,7 +88,7 @@ export const listarImagenesPresupuesto = createServerFn({ method: "GET" })
  * fila no se puede crear, el fichero se borra: nunca un fichero huérfano.
  */
 export const subirImagenPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => {
     if (!(d instanceof FormData)) throw new Error("Falta la imagen");
     return z
@@ -150,7 +151,7 @@ export const subirImagenPresupuesto = createServerFn({ method: "POST" })
 
 /** Quita una imagen de un presupuesto: su fila y su fichero. */
 export const quitarImagenPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const sb = context.supabase;

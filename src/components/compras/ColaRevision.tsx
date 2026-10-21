@@ -19,6 +19,7 @@ import { releerFacturaRecibida, verFicheroCompra } from "@/lib/compras.functions
 import { UMBRAL_CONFIANZA } from "@/dominio/cola-compras";
 import { esProforma } from "@/dominio/proformas";
 import { totalesCola } from "@/dominio/sumatorios-facturas";
+import { SiPuede } from "@/components/SiPuede";
 
 /**
  * Las facturas que ha leído la IA y aún no ha confirmado nadie, y las que no
@@ -159,14 +160,16 @@ export function ColaRevision({
                           <RotateCw className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Descartar"
-                        onClick={() => onBorrar(c)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <SiPuede accion="borrar">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Descartar"
+                          onClick={() => onBorrar(c)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </SiPuede>
                     </div>
                   </TableCell>
                 </TableRow>

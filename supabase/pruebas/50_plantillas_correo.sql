@@ -34,6 +34,14 @@ SELECT CASE WHEN bool_and(asunto = 'Mi asunto propio')
 FROM public.tienda_plantillas_correo;
 
 -- 4. La edición queda auditada y con autor.
+-- Desde 20261031200100 escribir exige nivel: el autor tiene que existir y ser editor, como los
+-- usuarios que ya existían al aplicar esa migración.
+INSERT INTO auth.users (id, email)
+VALUES ('11111111-1111-4111-8111-111111111111', 'autor@plantillas.test')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.user_roles (user_id, role)
+VALUES ('11111111-1111-4111-8111-111111111111', 'editor')
+ON CONFLICT DO NOTHING;
 BEGIN;
   SET LOCAL ROLE service_role;
   SELECT set_config('request.headers',

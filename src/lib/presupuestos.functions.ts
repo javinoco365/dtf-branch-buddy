@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import {
@@ -110,7 +111,7 @@ const lineaSchema = z.object({
 });
 
 export const guardarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -214,7 +215,7 @@ export const guardarPresupuesto = createServerFn({ method: "POST" })
   });
 
 export const cambiarEstadoPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z.object({ id: z.string().uuid(), estado: z.enum(ESTADOS) }).parse(d),
   )
@@ -229,7 +230,7 @@ export const cambiarEstadoPresupuesto = createServerFn({ method: "POST" })
   });
 
 export const borrarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: actual } = await tabla(context.supabase, "presupuestos")
@@ -258,7 +259,7 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
  * transacción y con el presupuesto bloqueado: dos clics no crean dos pedidos.
  */
 export const confirmarPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const pedidoId = await llamarRpc<string>(context.supabase, "confirmar_presupuesto", {

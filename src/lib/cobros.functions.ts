@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
 import { redondear } from "@/dominio/importes";
 import type { MetodoCobro } from "@/dominio/cobros";
@@ -42,7 +42,7 @@ async function comprobarAcceso(supabase: unknown, tablaPedido: string, pedidoId:
  * Caja; con tarjeta o transferencia, cuenta en la Facturación Consolidada.
  */
 export const registrarCobro = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -84,7 +84,7 @@ export const registrarCobro = createServerFn({ method: "POST" })
 
 /** Borra un cobro y, si fue en efectivo, su apunte de caja. El web, no. */
 export const borrarCobro = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: cobro } = await tabla(context.supabase, "cobros")

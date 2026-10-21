@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
+import { puede } from "@/dominio/permisos";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
@@ -192,6 +194,11 @@ type ContextoSync = {
   bloqueo: string | null;
   /** Lo último escrito en woo_sincronizacion, para no reescribir lo mismo. */
   escrito: Record<string, string | number | null>;
+  /**
+   * Si quien sincroniza puede borrar (admin). Un editor sincroniza, pero los
+   * pedidos que ya no están en WooCommerce no los quita: lo dice en avisos.
+   */
+  puedeBorrar: boolean;
 };
 
 /** La sincronización perdió su turno: se para del todo, nada de seguir con otra parte. */
@@ -818,6 +825,12 @@ async function borrarPedidosDesaparecidos(
   const aBorrar = desaparecidos.filter((p) => !idsFacturados.has(p.id));
   r.protegidos_por_factura = desaparecidos.length - aBorrar.length;
 
+  if (aBorrar.length && !ctx.puedeBorrar) {
+    ctx.avisos.push(
+      `${aBorrar.length} pedido(s) ya no están en WooCommerce. Solo un administrador puede quitarlos: que sincronice un administrador.`,
+    );
+    return r;
+  }
   if (aBorrar.length) {
     await tabla(ctx.sb, "pedidos")
       .delete()
@@ -890,7 +903,7 @@ function cursorDePantalla(c: CursorWoo | null): CursorWoo | null {
  * el cliente de servicio.
  */
 export const sincronizarWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -962,6 +975,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
       esquema: bloqueo ? "completo" : "sin_bloqueo",
       bloqueo,
       escrito: {},
+      puedeBorrar: puede(context.nivel, "borrar"),
     };
 
     try {
@@ -1211,7 +1225,7 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
  * No toca pedidos ni productos — de eso ya se encarga `sincronizarWoo`.
  */
 export const sincronizarClientesWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
@@ -1465,7 +1479,7 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
  * solo les pone lo que dice WooCommerce: se puede repetir sin estropear nada.
  */
 export const recuperarEnviosWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -1551,7 +1565,7 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
  * huecos, y la base no deja tocar una corregida a mano.
  */
 export const recuperarRealizadoWoo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({

@@ -24,6 +24,7 @@ import {
   type ConceptoCaja,
   type SocioCaja,
 } from "@/lib/caja.functions";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/configuracion-caja")({
   head: () => ({ meta: [{ title: "Caja · Ajustes · DTF Culture" }] }),
@@ -144,12 +145,14 @@ function Conceptos({ conceptos }: { conceptos: ConceptoCaja[] }) {
             </SelectContent>
           </Select>
         </div>
-        <Button
-          onClick={() => mut.mutate({ nombre, categoria })}
-          disabled={!nombre.trim() || mut.isPending}
-        >
-          <Plus className="h-4 w-4 mr-1" /> Añadir
-        </Button>
+        <SiPuede accion="escribir">
+          <Button
+            onClick={() => mut.mutate({ nombre, categoria })}
+            disabled={!nombre.trim() || mut.isPending}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Añadir
+          </Button>
+        </SiPuede>
       </div>
     </div>
   );
@@ -229,9 +232,11 @@ function Socios({ socios }: { socios: SocioCaja[] }) {
           <Label className="text-xs">Nuevo socio</Label>
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
         </div>
-        <Button onClick={() => mut.mutate({ nombre })} disabled={!nombre.trim() || mut.isPending}>
-          <Plus className="h-4 w-4 mr-1" /> Añadir
-        </Button>
+        <SiPuede accion="escribir">
+          <Button onClick={() => mut.mutate({ nombre })} disabled={!nombre.trim() || mut.isPending}>
+            <Plus className="h-4 w-4 mr-1" /> Añadir
+          </Button>
+        </SiPuede>
       </div>
     </div>
   );

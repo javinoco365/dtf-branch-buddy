@@ -114,6 +114,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SiPuede } from "@/components/SiPuede";
 
 export type { Direccion };
 
@@ -533,9 +534,11 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             <Receipt className="h-4 w-4 mr-2" /> Facturar
           </Button>
           {tiendaId && (
-            <Button size="sm" onClick={() => setNuevoOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-            </Button>
+            <SiPuede accion="escribir">
+              <Button size="sm" onClick={() => setNuevoOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+              </Button>
+            </SiPuede>
           )}
         </div>
       </div>

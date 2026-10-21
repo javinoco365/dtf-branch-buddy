@@ -84,6 +84,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -439,9 +440,11 @@ function PresupuestosPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <SiPuede accion="borrar">
+                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </SiPuede>
                   </TableCell>
                 </TableRow>
               ))}

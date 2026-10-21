@@ -47,6 +47,11 @@ SELECT CASE WHEN fallan IS NULL
 INSERT INTO auth.users (id, email)
 VALUES ('c1200000-0000-4000-8000-000000000001', 'autor@c12.test')
 ON CONFLICT (id) DO NOTHING;
+-- Desde 20261031200100 escribir exige nivel. El autor da accesos a tiendas,
+-- y eso solo lo hace un administrador.
+INSERT INTO public.user_roles (user_id, role)
+VALUES ('c1200000-0000-4000-8000-000000000001', 'admin')
+ON CONFLICT DO NOTHING;
 
 SELECT set_config('c12.autor', 'c1200000-0000-4000-8000-000000000001', false);
 SELECT set_config('c12.desde', (SELECT COALESCE(max(id), 0)::TEXT FROM public.auditoria), false);

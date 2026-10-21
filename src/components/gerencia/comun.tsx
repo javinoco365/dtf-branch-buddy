@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Destino } from "./destinos";
+import { SiPuede } from "@/components/SiPuede";
 
 /** «Ver detalle →», a la pantalla con la lista que hay detrás de una cifra. */
 export function VerDetalle({
@@ -70,26 +71,30 @@ export function Campo({ etiqueta, children }: { etiqueta: string; children: Reac
 export function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorrar: () => void }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        title="Editar"
-        onClick={onEditar}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-destructive"
-        title="Borrar"
-        onClick={onBorrar}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
+      <SiPuede accion="escribir">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          title="Editar"
+          onClick={onEditar}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </SiPuede>
+      <SiPuede accion="borrar">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive"
+          title="Borrar"
+          onClick={onBorrar}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </SiPuede>
     </span>
   );
 }

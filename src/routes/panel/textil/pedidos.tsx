@@ -73,6 +73,7 @@ import {
   QuitarFiltros,
   SelectFiltro,
 } from "@/components/filtros/Filtros";
+import { SiPuede } from "@/components/SiPuede";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -270,15 +271,17 @@ function PedidosPage() {
           <h1 className="text-2xl font-bold">Pedidos textil</h1>
           <p className="text-sm text-muted-foreground">Pedidos manuales del módulo textil.</p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setLineasIniciales(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-        </Button>
+        <SiPuede accion="escribir">
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setLineasIniciales(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+          </Button>
+        </SiPuede>
       </div>
       {!cobrosDisponibles && (
         <Card>
@@ -412,9 +415,11 @@ function PedidosPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <SiPuede accion="borrar">
+                        <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </SiPuede>
                     </TableCell>
                   </TableRow>
                 );

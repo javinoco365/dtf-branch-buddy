@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { tabla } from "./rpc";
 import type { TipoInversion } from "@/dominio/inversion";
 
@@ -52,7 +53,7 @@ export const listarInversion = createServerFn({ method: "GET" })
   });
 
 export const guardarInversion = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeEscribir])
   .inputValidator((d) =>
     z
       .object({
@@ -98,7 +99,7 @@ export const guardarInversion = createServerFn({ method: "POST" })
   });
 
 export const borrarInversion = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");

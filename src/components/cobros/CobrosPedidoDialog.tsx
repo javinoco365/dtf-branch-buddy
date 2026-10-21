@@ -35,6 +35,7 @@ import {
   type EstadoCobro,
   type MetodoCobroManual,
 } from "@/dominio/cobros";
+import { SiPuede } from "@/components/SiPuede";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -287,14 +288,16 @@ export function CobrosPedidoDialog({
                     // El cobro web sigue al pedido de WooCommerce: no se borra a mano.
                     <span className="w-9" />
                   ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Borrar cobro"
-                      onClick={() => setBorrando(c)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <SiPuede accion="borrar">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Borrar cobro"
+                        onClick={() => setBorrando(c)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </SiPuede>
                   )}
                 </li>
               ))}

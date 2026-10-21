@@ -78,6 +78,7 @@ import {
   Mail,
   Undo2,
 } from "lucide-react";
+import { SiPuede } from "@/components/SiPuede";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -305,9 +306,11 @@ function Facturas() {
           <TicketsPendientesDialog tiendaId={tiendaId} />
           <Dialog open={abierto} onOpenChange={setAbierto}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Nueva factura
-              </Button>
+              <SiPuede accion="escribir">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" /> Nueva factura
+                </Button>
+              </SiPuede>
             </DialogTrigger>
             <NuevaFacturaDialog
               tiendaId={tiendaId}
@@ -466,16 +469,18 @@ function Facturas() {
                           </Button>
                         )}
                       {sePuedeBorrar(f) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="Borrar (es la última de su serie)"
-                          aria-label="Borrar"
-                          disabled={borrar.isPending}
-                          onClick={() => setBorrando(f)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <SiPuede accion="borrar">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Borrar (es la última de su serie)"
+                            aria-label="Borrar"
+                            disabled={borrar.isPending}
+                            onClick={() => setBorrando(f)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </SiPuede>
                       )}
                     </div>
                   </TableCell>
