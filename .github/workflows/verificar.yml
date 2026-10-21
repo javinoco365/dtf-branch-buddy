@@ -1,10 +1,12 @@
 # Verificación automática de cada cambio.
 #
 # Ejecuta lo mismo que `npm run verify` en local: lint, comprobación de tipos,
-# pruebas de dominio y compilación. En un segundo job, en paralelo, aplica las
-# migraciones a un PostgreSQL 16 vacío y ejecuta las pruebas SQL
-# (supabase/pruebas/probar-migraciones.sh). Si algo falla aquí, el cambio no
-# entra.
+# pruebas de dominio y compilación, y además audita las dependencias de
+# producción. En otros dos jobs, en paralelo, aplica las migraciones a un
+# PostgreSQL 16 vacío y ejecuta las pruebas SQL
+# (supabase/pruebas/probar-migraciones.sh), y arranca el servidor compilado
+# para comprobar que sirve páginas (scripts/probar-arranque.sh). Si algo falla
+# aquí, el cambio no entra.
 #
 # Sobre el gestor de paquetes: el repositorio arrastra un bun.lock generado
 # dentro del sandbox de Lovable, que fija 62 paquetes al registro privado
@@ -40,6 +42,13 @@ jobs:
 
       - name: Instalar dependencias
         run: npm ci --no-audit --no-fund
+
+      - name: Auditar dependencias de producción
+        # Falla con cualquier aviso alto o crítico de un paquete que llega a
+        # producción (--omit=dev). Los avisos se publican cada día, así que
+        # este paso puede ponerse rojo sin que el cambio toque dependencias:
+        # entonces hay que actualizar el paquete, no quitar el paso.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
         run: npm run lint
@@ -110,3 +119,28 @@ jobs:
         run: bash supabase/pruebas/probar-migraciones.sh
         env:
           PG_DIR: ${{ runner.temp }}/pgcrm
+
+  arranque:
+    # Compila el servidor para node, lo arranca y pide unas páginas. Atrapa lo
+    # que compila pero se cae al arrancar o al servir (un `__exportAll is not
+    # a function`, un fichero que falta en la salida). No necesita secretos:
+    # las páginas que pide se sirven sin hablar con Supabase.
+    name: Arranque del servidor
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Compilar, arrancar y pedir páginas
+        run: bash scripts/probar-arranque.sh

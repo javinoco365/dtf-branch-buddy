@@ -29,7 +29,7 @@ rama `claude/crm-dtf-app-review-ftg3di` (nada desplegado ni aplicado en producci
 | --- | --- |
 | S1 | Arreglado: caja, gerencia e inversión escriben con `context.supabase`; el resto comprueba el acceso (`src/lib/acceso.ts`) antes de usar la clave de servicio |
 | S2 | **Acción de Javier**: apagar «Allow new users to sign up» en el panel de Supabase |
-| S3 | **Abierto**: `nodemailer` sigue en 9.1.1 |
+| S3 | Arreglado en la rama el 21-10: `nodemailer` 10.1.7 y el resto de `npm audit` corregido (0 avisos); la CI audita las dependencias de producción |
 | S4 | **Abierto**: el middleware no mira `aal` |
 | S5 | Arreglado: cabeceras en `src/server.ts`; la CSP va primero en modo «solo informar» |
 | S6 | Arreglado: tipo por bytes y topes de tamaño. **Abierto:** límite de llamadas a la IA por usuario |
@@ -294,7 +294,7 @@ antes a un helper de acceso reconocido (`exigirAdmin`, `exigirMiembro…`, lectu
 | Punto                                         | Estado visto en el código                                                                                  |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | MFA para los tres socios                      | **Pendiente.** El middleware no mira `aal` (S4)                                                            |
-| Actualizar `nodemailer`                       | **Pendiente.** Sigue en 9.1.1 (S3)                                                                         |
+| Actualizar `nodemailer`                       | Hecho en la rama el 21-10: 10.1.7 (S3)                                                                     |
 | Regenerar claves Woo y vaciar columnas en claro | **A comprobar en producción.** `tienda_credenciales_leer()` sigue con lectura de respaldo de las columnas |
 | Cabeceras CSP/HSTS/X-Frame-Options            | Hecho en la rama el 21-10 (S5); CSP aún en «solo informar»                                                 |
 | PITR y límite de intentos de inicio de sesión | **A comprobar** en el panel de Supabase                                                                     |
