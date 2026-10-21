@@ -1,14 +1,18 @@
 -- ============================================================================
 -- Niveles: el editor y el visor lo ven TODO, salvo secretos
 -- ============================================================================
--- Prueba 20261031400000_niveles_lectura_total.sql.
+-- Prueba 20261031400000_niveles_lectura_total.sql y
+-- 20261031400100_niveles_secretos.sql.
 --
 -- Lo que tiene que quedar demostrado:
 --   - un visor (y un editor) SIN ninguna tienda asignada ve, tabla a tabla,
 --     exactamente las mismas filas que un admin, con los datos que han dejado
 --     las pruebas anteriores;
 --   - no ve los secretos (credenciales de WooCommerce, SMTP, intentos de
---     acceso) ni las filas de auditoría de esas tablas;
+--     acceso) ni las filas de auditoría de esas tablas; tampoco el SMTP por
+--     smtp_estado(), ni api_key_ref del transportista;
+--   - los PDF de facturas de proveedores (bucket compras) solo con nivel
+--     activo: ni un desactivado ni un alta a medias;
 --   - el visor no escribe en NINGUNA tabla desde el navegador, con filas de
 --     verdad (las guardias de los otros dos caminos las prueba D1);
 --   - un desactivado sigue sin ver nada, y quien no tiene nivel (alta a
@@ -37,6 +41,17 @@ BEGIN
 END $$;
 
 INSERT INTO storage.objects (bucket_id, name) VALUES ('facturas', 'textil/d2-prueba.pdf');
+INSERT INTO storage.objects (bucket_id, name) VALUES ('compras', 'd2/d2-proveedor.pdf');
+
+-- Un SMTP y una configuración de transportista en la tienda, con sus secretos.
+INSERT INTO public.smtp_config (empresa_id, tienda_id, host, puerto, usuario)
+SELECT t.empresa_id, t.id, 'smtp.d2-secreto.es', 587, 'facturas@d2.test'
+  FROM public.tiendas t
+ WHERE t.id = current_setting('d2.tienda')::UUID
+   AND NOT EXISTS (SELECT 1 FROM public.smtp_config c WHERE c.tienda_id = t.id);
+INSERT INTO public.tienda_seguimiento_config (tienda_id, transportista, codigo_cuenta, api_key_ref)
+VALUES (current_setting('d2.tienda')::UUID, 'D2', 'D2-cuenta', 'd2-clave-secreta')
+ON CONFLICT (tienda_id) DO UPDATE SET api_key_ref = 'd2-clave-secreta';
 
 -- ---------------------------------------------------------------------------
 -- Usuarios. ADM admin, ED editor y VI visor sin ninguna tienda, OFF visor
@@ -75,6 +90,8 @@ SET client_min_messages = warning;
 \ir ../migrations/20261031300400_seguridad_escritura_por_empresa.sql
 \ir ../migrations/20261031400000_niveles_lectura_total.sql
 \ir ../migrations/20261031400000_niveles_lectura_total.sql
+\ir ../migrations/20261031400100_niveles_secretos.sql
+\ir ../migrations/20261031400100_niveles_secretos.sql
 RESET client_min_messages;
 
 CREATE OR REPLACE FUNCTION pg_temp.informar(_etiqueta TEXT, _fallos TEXT[])
@@ -216,6 +233,47 @@ BEGIN
   PERFORM pg_temp.informar('3. el visor no ve credenciales, SMTP ni intentos de acceso; la auditoría, toda salvo la de esos secretos', f);
 END $$;
 
+DO $$
+DECLARE f TEXT[] := '{}'; v TEXT; q TEXT; u TEXT;
+BEGIN
+  -- smtp_estado(): con la tienda y sin ella (la general).
+  FOREACH q IN ARRAY ARRAY[
+    format('SELECT count(*) FROM public.smtp_estado(%L::uuid)', current_setting('d2.tienda')),
+    'SELECT count(*) FROM public.smtp_estado(NULL)'] LOOP
+    FOREACH u IN ARRAY ARRAY['vi', 'ed', 'off', 'sin'] LOOP
+      v := pg_temp.como(u, q);
+      IF v <> '0' AND v NOT LIKE 'error%' THEN f := f || (u || ' recibe ' || v || ' de ' || q); END IF;
+    END LOOP;
+  END LOOP;
+  v := pg_temp.como('adm', format('SELECT count(*) FROM public.smtp_estado(%L::uuid)', current_setting('d2.tienda')));
+  IF v <> '1' THEN f := f || ('el admin no recibe el SMTP de la tienda: ' || v); END IF;
+  PERFORM pg_temp.informar('3b. smtp_estado(): host y usuario del correo, solo para el admin', f);
+END $$;
+
+DO $$
+DECLARE f TEXT[] := '{}'; v TEXT; u TEXT;
+BEGIN
+  FOREACH u IN ARRAY ARRAY['vi', 'ed', 'sin'] LOOP
+    v := pg_temp.como(u, 'SELECT count(api_key_ref) FROM public.tienda_seguimiento_config');
+    IF v NOT LIKE 'error%' THEN f := f || (u || ' lee api_key_ref: ' || v); END IF;
+  END LOOP;
+  v := pg_temp.como('vi', 'SELECT count(codigo_cuenta) FROM public.tienda_seguimiento_config');
+  IF v = '0' OR v LIKE 'error%' THEN f := f || ('el visor no ve el resto de la configuración: ' || v); END IF;
+  PERFORM pg_temp.informar('3c. api_key_ref del transportista no se lee desde el navegador; el resto, sí', f);
+END $$;
+
+DO $$
+DECLARE f TEXT[] := '{}'; v TEXT; u TEXT;
+BEGIN
+  FOREACH u IN ARRAY ARRAY['off', 'sin'] LOOP
+    v := pg_temp.como(u, $q$SELECT count(*) FROM storage.objects WHERE bucket_id = 'compras'$q$);
+    IF v <> '0' AND v NOT LIKE 'error%' THEN f := f || (u || ' ve ' || v || ' PDF de compras'); END IF;
+  END LOOP;
+  v := pg_temp.como('vi', $q$SELECT count(*) FROM storage.objects WHERE bucket_id = 'compras'$q$);
+  IF v = '0' OR v LIKE 'error%' THEN f := f || ('el visor no ve los PDF de compras: ' || v); END IF;
+  PERFORM pg_temp.informar('3d. PDF de facturas de proveedores: el visor sí; el desactivado y el alta a medias, no', f);
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- 4. El visor no escribe en ninguna tabla desde el navegador, con filas
 -- ---------------------------------------------------------------------------
@@ -323,7 +381,10 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- 6. La reversión y otra vez la migración
 -- ---------------------------------------------------------------------------
+-- Primero la de 400100: su política de compras usa rol_puede_ver(), que la
+-- de 400000 borra.
 SET client_min_messages = warning;
+\ir ../reversiones/20261031400100_niveles_secretos.sql
 \ir ../reversiones/20261031400000_niveles_lectura_total.sql
 RESET client_min_messages;
 
@@ -342,11 +403,18 @@ BEGIN
   IF pg_temp.como('adm', 'SELECT count(*) FROM public.auditoria') <> (SELECT count(*) FROM public.auditoria)::TEXT THEN
     f := f || 'el admin ya no ve la auditoría'::TEXT;
   END IF;
+  IF pg_temp.como('adm', 'SELECT count(api_key_ref) FROM public.tienda_seguimiento_config') LIKE 'error%' THEN
+    f := f || 'la reversión no repone el SELECT de api_key_ref'::TEXT;
+  END IF;
+  IF pg_temp.como('sin', $q$SELECT count(*) FROM storage.objects WHERE bucket_id = 'compras'$q$) = '0' THEN
+    f := f || 'la reversión no repone compras_lectura'::TEXT;
+  END IF;
   PERFORM pg_temp.informar('6a. tras la reversión, el visor vuelve a ver solo lo de sus tiendas', f);
 END $$;
 
 SET client_min_messages = warning;
 \ir ../migrations/20261031400000_niveles_lectura_total.sql
+\ir ../migrations/20261031400100_niveles_secretos.sql
 RESET client_min_messages;
 
 DO $$
@@ -355,6 +423,10 @@ BEGIN
   v_adm := pg_temp.como('adm', 'SELECT count(*) FROM public.pedidos');
   v_vi  := pg_temp.como('vi', 'SELECT count(*) FROM public.pedidos');
   IF v_vi <> v_adm THEN f := f || ('pedidos: visor ' || v_vi || ', admin ' || v_adm); END IF;
+  IF pg_temp.como('vi', 'SELECT count(*) FROM public.smtp_estado(NULL)') <> '0'
+     OR pg_temp.como('vi', 'SELECT count(api_key_ref) FROM public.tienda_seguimiento_config') NOT LIKE 'error%' THEN
+    f := f || 'el visor vuelve a ver el SMTP o api_key_ref'::TEXT;
+  END IF;
   PERFORM pg_temp.informar('6b. y se puede volver a aplicar', f);
 END $$;
 

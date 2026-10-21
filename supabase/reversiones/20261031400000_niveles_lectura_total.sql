@@ -1,5 +1,7 @@
 -- ============================================================================
 -- REVERSIÓN de 20261031400000_niveles_lectura_total.sql
+-- (Si está aplicada 20261031400100_niveles_secretos.sql, revierte antes esa:
+-- su política de compras usa rol_puede_ver(), que esta borra.)
 -- ============================================================================
 -- Repone is_tienda_member(), es_miembro_empresa(), mis_tiendas(),
 -- mis_empresas() y las políticas de lectura como las dejó 20261031300200, y

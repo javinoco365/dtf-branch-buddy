@@ -66,6 +66,7 @@ SELECT set_config('d1.adm',  'd1000000-0000-4000-8000-0000000000ad', true),
 \ir ../migrations/20261031300200_roles_desactivado_sin_acceso.sql
 \ir ../migrations/20261031300300_compras_borrado_solo_admin.sql
 \ir ../migrations/20261031400000_niveles_lectura_total.sql
+\ir ../migrations/20261031400100_niveles_secretos.sql
 
 CREATE OR REPLACE FUNCTION pg_temp.informar(_etiqueta TEXT, _fallos TEXT[])
 RETURNS VOID LANGUAGE plpgsql AS $$
@@ -619,10 +620,11 @@ SELECT CASE WHEN count(*) = 0
 -- ---------------------------------------------------------------------------
 -- 8. Las reversiones, en orden, dejan la base como antes de los niveles
 -- ---------------------------------------------------------------------------
--- Primero las posteriores (400000, 300400, 300300 y 300200, que usan las funciones de
+-- Primero las posteriores (400100, 400000, 300400, 300300 y 300200, que usan las funciones de
 -- nivel y la columna activo; y seguridad, 20261031300000 y 300100): seis de sus
 -- funciones llevan la línea de rol_exigir_quien() y hay que devolverlas al
 -- cuerpo de 20261031200300 antes de quitar los niveles.
+\ir ../reversiones/20261031400100_niveles_secretos.sql
 \ir ../reversiones/20261031400000_niveles_lectura_total.sql
 \ir ../reversiones/20261031300400_seguridad_escritura_por_empresa.sql
 \ir ../reversiones/20261031300300_compras_borrado_solo_admin.sql
