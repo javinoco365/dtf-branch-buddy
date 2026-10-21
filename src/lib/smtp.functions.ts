@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
 import { esAdminActivo } from "./acceso";
@@ -36,9 +35,12 @@ export type EstadoSmtp = {
  *
  * Con `tienda_id`, dice cuál se usaría para esa tienda y si es la suya propia
  * o la general. Sin él, solo mira la general.
+ *
+ * Solo admin: host y usuario del correo son de gestión. La base lo exige
+ * igual (smtp_estado() no da filas a quien no es admin, 20261031400100).
  */
 export const estadoSmtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([exigeAdmin])
   .inputValidator((d: unknown) =>
     z.object({ tienda_id: z.string().uuid().nullable().optional() }).parse(d ?? {}),
   )
