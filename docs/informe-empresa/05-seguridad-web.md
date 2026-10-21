@@ -15,12 +15,29 @@ gravedad o cuando un hallazgo nuevo depende de él.
   `auditoria_enmascarar()`.
 - **No revisado (no tengo acceso):** producción, el panel de Supabase (hooks activos, límites de
   intentos, duración de la sesión, región del proyecto, plan contratado), el alojamiento
-  (Cloudflare o Vercel: `docs/rendimiento/plan.md` también lo deja sin confirmar), los contratos
+  (Cloudflare o Vercel: `docs/rendimiento/plan.md` también lo deja sin confirmar; la captura 8
+  apunta a Vercel), los contratos
   con proveedores y la política de privacidad de las tiendas. Lo que depende de eso va marcado
   **«a comprobar»**. Las capturas de `images/` no las he usado: tratan de pantallas y cifras, no de
   seguridad. No he cambiado código ni aplicado nada.
 - **RGPD:** es una revisión técnica, no un dictamen jurídico. Los plazos legales que cito
   (conservación de facturas) hay que confirmarlos con la gestoría.
+
+## Estado a 21-10-2026 (añadido por el director de operaciones)
+
+Describe la aplicación **tal como estaba el 20-10**. Comprobado en el código de la rama
+`claude/crm-dtf-app-review-ftg3di` (nada desplegado):
+
+| Id | Estado |
+| --- | --- |
+| W1 | Arreglado: `src/dominio/csv.ts` neutraliza las celdas que empiezan por `= + - @`, tabulador o retorno |
+| W2 | En parte: ya hay cabeceras y CSP (en modo «solo informar»). Falta MFA y pasar la CSP a obligatoria |
+| W3 | **Abierto**: `bun.lock` sigue con 62 paquetes del registro de Lovable y sin `nodemailer`. Pista nueva: la captura 8 tiene abierta una pestaña «Deployments – Vercel», así que producción probablemente se despliega en Vercel (el `CLAUDE.md` dice que la compilación por defecto apunta a Cloudflare). Hay que mirar en Vercel la orden de instalación |
+| W4 | **Abierto** (igual que S3) |
+| W5, W6, W7, W10, W11 | Abiertos; casi todo son decisiones o ajustes de panel |
+| W8 | Arreglado: la descarga del logo no sigue redirecciones ni pide direcciones internas |
+| W9 | Arreglado: la URL de seguimiento tiene que ser `https` |
+| W12 | **Abierto**: la CI sigue con `npm ci --no-audit` y sin paso de auditoría |
 
 ## Resumen
 

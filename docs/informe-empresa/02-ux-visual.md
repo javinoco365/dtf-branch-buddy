@@ -35,6 +35,19 @@ encargo, no algo que haya medido.
 
 ---
 
+> **Nota de revisión (director de operaciones, 21-10-2026).** He comprobado contra el código
+> `estadoVariant()` (todo en gris salvo cuatro estados), `StatusBadge` usado solo en 2
+> componentes, las fechas sin formato en Compras, los «Cargando…» de texto y el número de
+> ficheros con gráficas: son ciertos (las cifras son de antes de hoy). **Desde que se
+> escribió, ya está arreglado:** la tableta (menú en cajón por debajo de 1280 px, tablas en
+> tarjetas), los diálogos que no cabían, el selector de periodo vacío en el móvil, el menú
+> del móvil que no se cerraba y las zonas táctiles (todo en `07-dispositivos.md`). La
+> propuesta A7 queda sustituida por ese cajón. **Sigue pendiente** todo lo demás: semáforos
+> (A1-A2), comparaciones con base pequeña (A3), formatos (A4), errores para personas (A5),
+> móvil compacto (A6), avisos arriba (A8) y las propuestas B y C. Ojo con B2: «perfil» ya no
+> puede confundirse con permiso ahora que existen niveles; si se hace, que el inicio por
+> perfil no enseñe nada que el nivel del usuario no permita.
+
 ## Resumen para Javier
 
 1. **La base es buena.** Hay cosas que muchos ERP no tienen: el ⓘ que explica cada cifra,
@@ -83,17 +96,18 @@ encargo, no algo que haya medido.
 - **En el móvil no hay título de pantalla** en la cabecera (solo el botón del menú, el tema y
   «Salir») `[M:inicio]`, y el botón del menú es el icono de panel, no las tres rayas que todo el
   mundo reconoce `[X:movil-menu-abierto]`.
-- **La etiqueta «Admin»** en Ajustes generales `[E:configuracion]` no aporta nada: los tres
-  usuarios son administradores y el único rol que existe es `admin`.
+- ~~**La etiqueta «Admin»** en Ajustes generales no aporta nada: el único rol que existe es
+  `admin`.~~ Ya no vale: desde el 21-10 hay tres niveles (admin, editor, visor) y la
+  etiqueta sí informa.
 
 ### Consistencia visual
 
 | Qué                | Lo que se ve                                                                                                                                                                                                                                                                      |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Colores de estado  | `estadoVariant()` en `src/components/PedidosTable.tsx:189` solo distingue cuatro casos: entregado (oscuro), cancelado (rojo), pendiente (borde) y **todo lo demás en gris**. `StatusBadge` (`src/components/StatusBadge.tsx`) tiene otra paleta y casi no se usa (2 componentes). |
+| Colores de estado  | `estadoVariant()` en `src/components/PedidosTable.tsx:194` solo distingue cuatro casos: entregado (oscuro), cancelado (rojo), pendiente (borde) y **todo lo demás en gris**. `StatusBadge` (`src/components/StatusBadge.tsx`) tiene otra paleta y casi no se usa (2 componentes). |
 | Estados en textil  | El desplegable enseña el valor interno: `en_produccion`, `entregado`, `pendiente` `[E:textil-pedidos]`. Y los estados del textil no son los de DTF (`pendiente/en_produccion/listo/enviado/entregado` frente a `pendiente/procesando/imprimiendo/listo/enviado/completado`).      |
 | Mayúsculas         | «pagada», «registrada», «borrador», «pendiente» en minúscula `[E:tienda-facturas]` `[E:compras]`; «Procesando», «Completado» con mayúscula en Pedidos.                                                                                                                            |
-| Fechas             | Facturas de compra pinta `2026-10-04` (`src/components/compras/PaginaCompras.tsx:796`, sin pasar por `src/lib/format.ts`); el resto de la app, `04/10/2026`.                                                                                                                      |
+| Fechas             | Facturas de compra pinta `2026-10-04` (`src/components/compras/PaginaCompras.tsx:821`, sin pasar por `src/lib/format.ts`); el resto de la app, `04/10/2026`.                                                                                                                      |
 | Tarjetas de cifra  | Tres estilos: icono a la derecha (Gerencia, Dashboard), icono a la izquierda (panel de tienda `[E:tienda-inicio]`), icono pequeño junto al título (Cobros `[E:cobros]`). Caja usa otro ancho de página y otro margen superior `[E:caja]`.                                         |
 | Unidades partidas  | En tablas estrechas, «60,00 / m» y «57,5 / %» se parten en dos líneas `[E:gerencia-ventas]`; «Confianza 64 / %» igual `[E:compras]`.                                                                                                                                              |
 | Botones de acción  | Hasta cinco iconos sin texto por fila (Stock `[E:textil-stock]`, Facturas `[E:tienda-facturas]`). El de deshacer es una flecha roja que no dice qué hace.                                                                                                                         |
@@ -138,7 +152,8 @@ encargo, no algo que haya medido.
 
 ### Tableta y ventana a media pantalla (768–1023 px)
 
-Es el caso que nadie ha mirado y el que peor sale: con el menú abierto, la tabla de Pedidos se
+**Arreglado el 21-10 (ver `07-dispositivos.md`).** Lo que sigue describe cómo estaba.
+Era el caso que nadie había mirado y el que peor salía: con el menú abierto, la tabla de Pedidos se
 corta a la altura de «Estado» y hay que desplazar dentro de la tabla para ver importes; en la
 cabecera, «Gestión multi-tienda» y el correo se montan uno encima del otro
 `[X:tableta-pedidos]`. Pasa también con el portátil y el navegador a media pantalla.
@@ -415,9 +430,11 @@ después de todas las pantallas para que Javier lo vea antes de aceptarlo.
 2. **«Días medios de cobro: 0,0 días»** en Tesorería `[E:gerencia-tesoreria]` con pedidos
    cobrados en parte durante días: puede ser correcto con estos datos de prueba, pero merece
    una comprobación con datos reales.
-3. **Error de carga de la página en producción** `[J:8]` («This page didn't load»): no he podido
-   reproducirlo con los datos de prueba. Encaja con el `__exportAll is not a function` que
-   describe el `CLAUDE.md`, pero sin el registro del servidor no puedo confirmarlo.
+3. **Error de carga de la página en producción** `[J:8]` («This page didn't load», 16-10): no
+   he podido reproducirlo con los datos de prueba. `docs/pendiente_auditoria.md` lo atribuye a
+   que la integración continua no compilaba ni arrancaba la versión de producción; el
+   `__exportAll is not a function` del `CLAUDE.md` es una causa posible de ese tipo, pero sin el
+   registro del servidor nadie lo ha confirmado.
 4. El clic para desplegar un pedido en la tabla de ordenador no respondió al botón que probé
    en la captura automática `[X:escritorio-pedido-desplegado]`; puede ser mi selector y no un
    fallo. Lo dejo anotado para comprobarlo a mano.

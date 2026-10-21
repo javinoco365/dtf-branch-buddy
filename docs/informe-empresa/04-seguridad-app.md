@@ -20,6 +20,26 @@ Auditoría de seguridad de la aplicación del CRM de DTI S.L. (RONOCA DESARROLLO
   `X-WC-Webhook-Signature` con comparación de tiempo constante, responder en menos de 2 s y
   procesar en segundo plano, como manda CLAUDE.md.
 
+## Estado a 21-10-2026 (añadido por el director de operaciones)
+
+Este informe describe la aplicación **tal como estaba el 20-10**. Comprobado en el código de la
+rama `claude/crm-dtf-app-review-ftg3di` (nada desplegado ni aplicado en producción):
+
+| Id | Estado |
+| --- | --- |
+| S1 | Arreglado: caja, gerencia e inversión escriben con `context.supabase`; el resto comprueba el acceso (`src/lib/acceso.ts`) antes de usar la clave de servicio |
+| S2 | **Acción de Javier**: apagar «Allow new users to sign up» en el panel de Supabase |
+| S3 | **Abierto**: `nodemailer` sigue en 9.1.1 |
+| S4 | **Abierto**: el middleware no mira `aal` |
+| S5 | Arreglado: cabeceras en `src/server.ts`; la CSP va primero en modo «solo informar» |
+| S6 | Arreglado: tipo por bytes y topes de tamaño. **Abierto:** límite de llamadas a la IA por usuario |
+| S7 | **Abierto**: `empresaActiva()` sigue en 8 ficheros (va con el alcance por empresa) |
+| S8, S9 | Abiertos (bajos) |
+| S10 | Abierto (bajo): `bootstrapPrimerAdmin` sigue público |
+| S11 | Ya no aplica: `crearUsuarioInvitado` se ha quitado; las altas van por Ajustes › Usuarios |
+| S12 | Arreglado: tipo de fichero por sus bytes |
+| S13 | Arreglado: `src/arquitectura/acceso-clave-servicio.test.ts` |
+
 ## Resumen
 
 | Id  | Gravedad                                      | Hallazgo                                                                                                  |
@@ -58,7 +78,8 @@ Auditoría de seguridad de la aplicación del CRM de DTI S.L. (RONOCA DESARROLLO
   del _handler_, y hay prueba de arquitectura contra las importaciones mixtas.
 - **Imágenes de presupuesto:** se comprueban por sus bytes (`revisarImagen`). El logo de las
   plantillas solo se acepta del _bucket_ `logos` del propio proyecto, así que no hay SSRF por esa
-  vía.
+  vía. (Corrección: esto solo vale para el logo **de la plantilla**; los de tiendas, marcas
+  textil y facturas sí se descargaban sin restringir: ver W8 en `05-seguridad-web.md`.)
 - **`woo_url`** solo la cambia un administrador (RLS de `tiendas`). Nadie más puede desviar las
   credenciales de WooCommerce a otro servidor.
 - **La IA no tiene herramientas ni escribe sola.** Devuelve JSON con esquema; las compras quedan
@@ -276,7 +297,7 @@ antes a un helper de acceso reconocido (`exigirAdmin`, `exigirMiembro…`, lectu
 | Regenerar claves Woo y vaciar columnas en claro | **A comprobar en producción.** `tienda_credenciales_leer()` sigue con lectura de respaldo de las columnas |
 | Cabeceras CSP/HSTS/X-Frame-Options            | **Pendiente** (S5)                                                                                         |
 | PITR y límite de intentos de inicio de sesión | **A comprobar** en el panel de Supabase                                                                     |
-| Ninguna política `FOR ALL` ni abierta (Anexo B) | En las migraciones del repositorio está hecho (20261023100000). **Falta ejecutar el Anexo B en producción** |
+| Ninguna política `FOR ALL` ni abierta (Anexo B) | `FOR ALL`: hecho (20261023100000). Políticas abiertas en banco y stock: **no estaba hecho** (SEG-03 de `03-seguridad-bd.md`); lo cierran 20261031300100 y 20261031300400, sin aplicar. **Falta ejecutar el Anexo B en producción** |
 
 ## Rapidez (lo que toca a seguridad)
 

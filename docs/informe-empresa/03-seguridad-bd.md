@@ -9,6 +9,36 @@ las pruebas.** Los únicos ficheros nuevos son este informe y sus dos anexos:
 - `docs/informe-empresa/03-seguridad-bd-consultas-produccion.sql`: diez consultas **de solo
   lectura** para que Javier compruebe en el SQL Editor de Supabase lo que yo no he podido ver.
 
+## Estado a 21-10-2026 (añadido por el director de operaciones)
+
+Este informe describe la base **tal como estaba el 20-10**. El mismo día y el siguiente se
+escribieron migraciones que cierran casi todo, en la rama `claude/crm-dtf-app-review-ftg3di`.
+**Ninguna está aplicada en producción**: hasta que Javier las aplique, producción sigue como
+describe este informe. He comprobado en los ficheros las correcciones de SEG-01, SEG-02,
+SEG-03 y SEG-10.
+
+| Id     | Estado                      | Dónde                                                                                                                                                                                                                                                                                                    |
+| ------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEG-01 | Arreglado en el repositorio | `20261031300000` (vista con `security_invoker`, sin acceso para `anon`)                                                                                                                                                                                                                                  |
+| SEG-02 | Arreglado en el repositorio | `20261031300000` (`_usuario_id` tiene que ser `auth.uid()` si hay sesión)                                                                                                                                                                                                                                |
+| SEG-03 | Arreglado en el repositorio | Lectura: `20261031300100`. Escritura: `20261031300400`                                                                                                                                                                                                                                                   |
+| SEG-04 | Arreglado en lo importante  | `20261031300000` y `20261031200300`. **Sigue abierto:** `has_role`, `is_tienda_member` y `es_miembro_empresa` aceptan cualquier uuid (dicen quién es admin; bajo)                                                                                                                                        |
+| SEG-05 | Arreglado en el código      | `src/lib/acceso.ts` y la prueba `src/arquitectura/acceso-clave-servicio.test.ts`                                                                                                                                                                                                                         |
+| SEG-06 | **Acción de Javier**        | Apagar el registro libre en el panel; MFA sin exigir                                                                                                                                                                                                                                                     |
+| SEG-07 | En parte                    | Hecho: límites de tamaño y tipo de `compras` y `logos`. **Abierto:** `compras_lectura` (cualquier sesión lee las facturas de proveedor) y que un editor pueda sustituir o borrar el PDF de una factura emitida (`facturas_update_miembros` / `facturas_delete_miembros`, ahora con nivel, pero abiertas) |
+| SEG-08 | **Acción de Javier**        | Guardar fuera de Supabase el último hash (P9)                                                                                                                                                                                                                                                            |
+| SEG-09 | Abierto                     | `user_roles` sigue sin `empresa_id`; da igual mientras haya una sola empresa                                                                                                                                                                                                                             |
+| SEG-10 | Arreglado en el repositorio | `20261031300000`                                                                                                                                                                                                                                                                                         |
+| SEG-11 | En parte                    | Pruebas nuevas `C22_seguridad.sql` y `D1_roles_permisos.sql`                                                                                                                                                                                                                                             |
+| SEG-12 | Abierto                     | Rotar claves de WooCommerce y quitar las columnas en claro (P6)                                                                                                                                                                                                                                          |
+| SEG-13 | Abierto (bajo)              | `empresas` sigue legible por cualquier sesión                                                                                                                                                                                                                                                            |
+| R1     | Arreglado en el repositorio | `20261031100100` (`mis_tiendas()` / `mis_empresas()`)                                                                                                                                                                                                                                                    |
+
+**Antes de aplicar las migraciones de niveles**, ejecutad **P4**: `20261031200100` da nivel
+_editor_ a toda cuenta de `auth.users` que no tenga fila en `user_roles`. Si el registro
+libre ha estado abierto y hay cuentas desconocidas, pasarían a editor (sin tiendas no ven ni
+escriben datos de negocio, pero no deben existir).
+
 ## De dónde salen estas conclusiones (y qué no puedo saber)
 
 - **Las 89 migraciones** de `supabase/migrations/` aplicadas sobre PostgreSQL 16 con el

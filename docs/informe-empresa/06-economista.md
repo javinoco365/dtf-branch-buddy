@@ -10,6 +10,15 @@ riesgos tiene y qué más deberíamos hacer?
 Va en la misma carpeta que `01-contable-fiscal.md` (criterios fiscales y cuadres) y
 `consultas-cuadre.sql`. Aquí no repito lo fiscal: lo cito cuando cambia una decisión económica.
 
+> **Nota de revisión (director de operaciones, 21-10-2026).** He recalculado las cifras de la
+> sección 2.1 con las capturas (853 / 24 = 35,54 €; 588,95 / 85,56 = 6,88 €/m; 120,31 / 5,99 ≈ 20
+> envíos; 5,99 / 12,99 = 46 %): son correctas. He corregido tres exageraciones: la capacidad de
+> 70 m/h × 4 h es el **valor por defecto del código**, no un ajuste que haya visto en
+> producción, así que el «5 % de ocupación» es condicional; el lector de facturas «no
+> funcionaba» en las capturas, no sé si sigue igual; y WowInvoice está instalado, pero no hay
+> prueba de que emita. Todo lo demás de este informe son escenarios con supuestos a la vista,
+> no datos de la empresa.
+
 ---
 
 ## 0. Respuesta corta
@@ -20,8 +29,9 @@ cifra, margen por metro, grupos A/B, prorrateo de gastos fijos, Pareto, clientes
 capacidad de máquina. Pero lo que enseñan las capturas es un negocio **muy pequeño y recién
 arrancado**: en los primeros ocho días de octubre, DTF Culture vendió **853 € con IVA en 24
 pedidos y 85,56 m**. A ese ritmo son unos **300 m y unos 2.200-2.700 € de base al mes**. La
-máquina, con la jornada configurada en el CRM, da para unos **5.900 m al mes**: **se usa en
-torno al 5 %**.
+máquina, con los **valores por defecto** de jornada del código (70 m/h, de 9:00 a 13:00; no sé
+si en producción están cambiados), daría para unos **5.900 m al mes**: **se usaría en torno al
+5 %**.
 
 Mis tres conclusiones, sin adornos:
 
@@ -32,7 +42,7 @@ Mis tres conclusiones, sin adornos:
 2. **El margen que enseña la app está inflado, y no sabes cuánto.** El coste por metro es un
    número escrito a mano (consumibles + embalaje + electricidad). No lleva mano de obra, ni
    merma, ni comisiones de cobro, ni amortización de la máquina. El lector de facturas de compra
-   no funciona (capturas 1 y 9), así que las compras reales de tinta y film no llegan a
+   no funcionaba en las dos capturas que lo enseñan (1 y 9), así que las compras reales de tinta y film no llegan a
    contrastarlo. Y en los pedidos cuyo largo no se lee de DTFBuild, los metros se **estiman
    dividiendo el importe entre 7 €**: su «€ por metro» sale 7 por construcción, no por medida.
 3. **El precio está en la franja baja y no hay suelo por pedido.** 7 € el metro sin IVA, sin
@@ -98,7 +108,7 @@ cada uno, en la sección 8.
 | Precio por metro en la web | 7,00 € sin IVA | Capturas 2 y 5 |
 | Envío 24 h (CTT Express) | 5,99 € sin IVA | Capturas 2, 3 y 5 |
 | Coste de envío estimado en el CRM | 5,00 € sin IVA | `AJUSTES_JORNADA_POR_DEFECTO` (`src/dominio/gerencia.ts:587`) |
-| Capacidad configurada | 70 m/h × 4 h/día (9:00-13:00) | Mismo sitio |
+| Capacidad (valor por defecto del código; en producción, a comprobar) | 70 m/h × 4 h/día (9:00-13:00) | Mismo sitio |
 | Numeración de tickets el 24-9 | T2026/0003 | Captura 5 |
 | Numeración de pedidos web el 13-10 | DCUL-77-2026 | Captura 6 |
 | Presupuestos abiertos | 1, en borrador, 60,61 € | Captura 7 |
@@ -114,8 +124,8 @@ cada uno, en la sección 8.
 - **Ritmo: unos 300-325 m y 2.200-2.700 € de base al mes** en DTF Culture (85,56 m en 8 días
   naturales ≈ 325 m/mes; en 6 días laborables ≈ 14 m/día). Al año, unos 27.000-32.000 € de
   base. Es una microempresa en la cifra de negocio, aunque tenga estructura de pyme.
-- **Ocupación de la máquina ≈ 5 %.** 70 m/h × 4 h × ~21 días = 5.880 m/mes de capacidad frente a
-  ~300 m vendidos. La propia definición de la app (`rd_capacidad`) dice que por debajo del 50 %
+- **Ocupación de la máquina ≈ 5 %** (si la capacidad real se parece a la de por defecto).
+  70 m/h × 4 h × ~21 días = 5.880 m/mes de capacidad frente a ~300 m vendidos. La propia definición de la app (`rd_capacidad`) dice que por debajo del 50 %
   «hay sitio para vender más». Aquí hay sitio para vender **veinte veces más** sin comprar otra
   máquina. Con estos números, **cualquier inversión en capacidad sería un error**; la inversión
   que falta es comercial.
@@ -244,8 +254,8 @@ No incluye:
 
 Además, **el contraste con la realidad está roto**: la comparación «compras de consumibles
 frente a lo estimado» (`comparacionCompras`) existe, pero se alimenta de las facturas de
-compra registradas, y el lector de facturas no funciona (capturas 1 y 9: falta
-`ANTHROPIC_API_KEY` y responde 400). Sin compras registradas, la comparación sale a cero y
+compra registradas, y el lector de facturas no funcionaba (captura 1, 7-10: faltaba
+`ANTHROPIC_API_KEY`; captura 9, 16-10: ya respondía, pero con error 400). Sin compras registradas, la comparación sale a cero y
 nadie se entera de que el coste real es otro. **Las compras se pueden dar de alta a mano
 mientras tanto**: es la acción de más valor y menos esfuerzo de todo este informe.
 
@@ -354,8 +364,8 @@ Ordenados por lo que pueden costar, no por lo probables que son.
 | Riesgo | Por qué | Qué cuesta si sale mal |
 | --- | --- | --- |
 | **Verifactu el 1-1-2027 (72 días)** | El CRM ya emite tickets y facturas con NIF y numeración (captura 5). Si emite, es sistema de facturación sujeto (informe 01, H1) | Sanciones por sistema no conforme, y tener que parar de facturar en enero |
-| **Doble factura** | La tienda tiene WowInvoice (captura 2) además del CRM, y la gestoría emite las suyas | Dos facturas por una venta: IVA repercutido de más o inspección |
-| **«Grupo B»** | La app separa lo documentado (A) de pedidos sin documento y gastos sin justificante (B). El IVA se devenga igual (informe 01, H6). Un ticket número 3 el 24-9 con decenas de pedidos ya hechos indica muchos pedidos sin documento | En una inspección, el B se presume venta no declarada. Objetivo: **B = 0** |
+| **Doble factura** | La tienda tiene el plugin WowInvoice instalado (captura 2; en ese pedido dice «Invoice not published», hay que confirmar que no emite) además del CRM, y la gestoría emite las suyas | Dos facturas por una venta: IVA repercutido de más o inspección |
+| **«Grupo B»** | La app separa lo documentado (A) de pedidos sin documento y gastos sin justificante (B). El IVA se devenga igual (informe 01, H6). Un ticket número 3 el 24-9 con decenas de pedidos ya hechos sugiere muchos pedidos sin documento (lo confirma o desmiente la consulta B6 de `consultas-cuadre.sql`) | En una inspección, el B se presume venta no declarada. Objetivo: **B = 0** |
 | **Fecha de los documentos** | Llevan la fecha del pedido, no la de expedición (informe 01, H2) | Antedatar; cambiar trimestres ya presentados |
 
 **Mi recomendación:** que la gestoría o un proveedor certificado sea el único sistema que emite
@@ -380,11 +390,12 @@ de las compras va a cada proveedor. Si uno pasa del 50 %, conviene tener homolog
 ### 7.4 Tecnológicos y de dependencia de la app
 
 - **La app ya se ha caído** (captura 8, 16-10; la auditoría lo atribuye a que la integración
-  continua no prueba la versión que se despliega). El día que se cae, no se puede facturar ni
+  continua no probaba la versión que se despliega; la causa exacta no se ha confirmado con el
+  registro del servidor). El día que se cae, no se puede facturar ni
   ver la cola de producción. **Plan B en papel**: cómo se cobra, se imprime y se envía un día
   sin CRM.
 - **Dependencia de personas:** el CRM lo ha construido un socio con un asistente de IA. Es
-  mucho código (89 migraciones, ~70 módulos de dominio) para el tamaño del negocio. Si esa
+  mucho código (100 migraciones contando las 11 nuevas del 21-10, unos 80 módulos de dominio) para el tamaño del negocio. Si esa
   persona no está, nadie lo mantiene. Hace falta documentación de operación (cómo se despliega,
   cómo se restaura una copia, a quién se llama) y no añadir funciones que no paguen su
   mantenimiento.
@@ -392,7 +403,7 @@ de las compras va a cada proveedor. Si uno pasa del 50 %, conviene tener homolog
   que depende saber los metros. Si DTFBuild cambia su API, los metros pasan a estimados sin que
   nadie lo note (5.2). Recomiendo un aviso cuando el porcentaje de metros estimados de la semana
   pase de, por ejemplo, el 20 %.
-- **El lector de facturas con IA** está parado (capturas 1 y 9). Es un ejemplo de
+- **El lector de facturas con IA** no funcionaba en las capturas 1 y 9 (no sé si ya funciona). Es un ejemplo de
   automatización que, cuando falla, **deja de alimentar el margen sin avisar**.
 - **Rapidez de la app:** importa (tiempo de los socios cada día), y ya hay un plan en
   `docs/rendimiento/plan.md`. Pero económicamente vale más que la app **no se caiga** que que

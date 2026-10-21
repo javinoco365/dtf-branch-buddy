@@ -5,6 +5,17 @@
 **Punto de vista:** contable fiscal senior (IVA, IRPF, Sociedades, Verifactu 2027)
 **Pregunta:** ¿cuadran todos los números y la información es correcta?
 
+> **Nota de revisión (director de operaciones, 21-10-2026).** He comprobado contra el código
+> H2, H4, H5, H8, H13, H16, H19 y H20: son ciertos. He corregido números de línea que se habían
+> movido con las fusiones de hoy. **Ningún hallazgo de este informe se ha arreglado hoy**: el
+> trabajo del 20-21 de octubre fue de rendimiento, permisos, seguridad y pantallas. Lo único
+> que cambia es H3: desde la migración `20261031200300`, `factura_borrar_ultima()` exige nivel
+> administrador (antes bastaba ser de la tienda); eso reduce quién puede borrar, no el
+> problema de fondo. Sobre H1: la captura 2 enseña que la tienda tiene el plugin WowInvoice
+> instalado, aunque para ese pedido dice «Invoice not published»; hay que confirmar que no
+> emite. H2 es una decisión consciente de Javier (CLAUDE.md, 8/9-10-2026); la gravedad
+> «crítica» vale mientras los tickets se sigan mandando al cliente como factura.
+
 Va acompañado de `consultas-cuadre.sql` (en esta misma carpeta): un paquete de consultas de
 solo lectura para ejecutar en producción. Cada hallazgo dice qué consulta lo comprueba.
 
@@ -100,7 +111,7 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 - **Qué pasa.** La decisión del 9-10-2026 (CLAUDE.md) dice que las facturas que se declaran
   las hace la gestoría. Pero el CRM numera en serie legal (T2026/0003), imprime «FACTURA
   SIMPLIFICADA» con razón social y NIF de RONOCA (captura del ticket), desglosa el IVA y
-  **lo manda por correo al cliente** (`src/lib/facturas.functions.ts:311`,
+  **lo manda por correo al cliente** (`src/lib/facturas.functions.ts:303`,
   `enviarDocumentoPorCorreo`). Un documento así, entregado al cliente, es una factura a todos
   los efectos (RD 1619/2012, arts. 2, 6 y 7).
 - **Ejemplo.** El pedido DCUL-64-2026 (22,10 €) recibe el ticket T2026/00xx del CRM. Si la
@@ -128,7 +139,7 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 
 - **Qué pasa.** Desde `20261021100000_fecha_del_pedido.sql:37` la comprobación de orden de
   fechas está vacía, y la aplicación emite siempre con la fecha del pedido
-  (`src/lib/facturas.functions.ts:425-440`; el canje también, `:1381`). La factura no tiene
+  (`src/lib/facturas.functions.ts:424-435`; el canje también, `:1374`). La factura no tiene
   otro campo de fecha: la fecha del pedido se imprime como fecha de expedición.
 - **Ejemplos.**
   1. Pedido del 15-09-2026 (3T), ticket emitido el 10-11-2026 (4T): el ticket dice 15-09 y
@@ -159,7 +170,7 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 - **Qué pasa.** `factura_borrar_ultima()` (`20261019100000_borrar_ultima_factura.sql:170-262`)
   comprueba que es la última, que no la rectifica ni la sustituye nada y que no está conciliada.
   **No comprueba si el PDF se mandó al cliente** (no se registra el envío:
-  `facturas.functions.ts:311` no escribe nada) **ni si salió en un ZIP para la gestoría**
+  `facturas.functions.ts:303` no escribe nada) **ni si salió en un ZIP para la gestoría**
   (Archivo no registra descargas). El número se reutiliza para otro documento.
 - **Ejemplo.** Se emite T2026/0120 (121 €) a las 10:00, se manda al cliente, se descarga el
   ZIP del mes para la gestoría. A las 12:00 se borra porque había un error y el siguiente
@@ -179,7 +190,7 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 #### H4 · Cupones y recargos de WooCommerce: el ticket no suma lo que pagó el cliente
 
 - **Qué pasa.** Las líneas del pedido web se guardan con `li.subtotal`, que en WooCommerce es
-  el importe **antes del cupón** (`src/lib/woocommerce.functions.ts:699`). La cabecera del
+  el importe **antes del cupón** (`src/lib/woocommerce.functions.ts:707`). La cabecera del
   pedido sí va después del descuento: `subtotal = total − total_tax`
   (`src/dominio/pedido-woo.ts:114`). El ticket se hace con las líneas
   (`factura-desde-pedido.ts`), así que sale por más. Los recargos (`fee_lines`) no se
@@ -196,7 +207,7 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 
 #### H5 · IVA del 21 % fijo: pedidos sin IVA se documentan con IVA
 
-- **Qué pasa.** Toda línea de WooCommerce se guarda al 21 % (`woocommerce.functions.ts:711`)
+- **Qué pasa.** Toda línea de WooCommerce se guarda al 21 % (`woocommerce.functions.ts:719`)
   y el envío también (`factura-desde-pedido.ts:38, 151, 160`). Si WooCommerce no cobró IVA
   (Canarias, Ceuta, cliente de la UE con NIF-IVA, exportación), el ticket repercute un 21 %
   que el cliente no pagó.
@@ -443,12 +454,12 @@ Formato de cada uno: qué pasa · dónde (fichero:línea) · ejemplo con número
 
 #### H22 · Factura manual con fecha libre
 
-- `src/lib/facturas.functions.ts:440`. Una factura sin pedido lleva la fecha que se escriba.
+- `src/lib/facturas.functions.ts:432`. Una factura sin pedido lleva la fecha que se escriba.
   Mismo problema que H2.
 
 #### H23 · `anular_factura()` en SQL no impide anular un ticket canjeado
 
-- Lo impide la aplicación (`facturas.functions.ts:1171`), no la base. Una llamada directa
+- Lo impide la aplicación (`facturas.functions.ts:1153-1161`), no la base. Una llamada directa
   rectificaría el ticket y la factura del canje. Hoy solo el servicio puede llamarla.
 
 #### H24 · Cosas que la gestoría echará en falta
