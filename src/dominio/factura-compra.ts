@@ -139,9 +139,65 @@ export function aFecha(valor: unknown): string | null {
 
   // 31/12/2026, 31-12-26, 31.12.2026
   const es = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
-  if (es) {
-    const año = +es[3] < 100 ? 2000 + +es[3] : +es[3];
-    return fechaValida(año, +es[2], +es[1]);
+  if (es) return fechaValida(añoCompleto(+es[3]), +es[2], +es[1]);
+
+  return fechaConMesEnLetra(s);
+}
+
+/** Dos cifras son de este siglo: «26» es 2026. */
+function añoCompleto(año: number): number {
+  return año < 100 ? 2000 + año : año;
+}
+
+const MESES = [
+  ["enero", "january"],
+  ["febrero", "february"],
+  ["marzo", "march"],
+  ["abril", "april"],
+  ["mayo", "may"],
+  ["junio", "june"],
+  ["julio", "july"],
+  ["agosto", "august"],
+  ["septiembre", "setiembre", "september"],
+  ["octubre", "october"],
+  ["noviembre", "november"],
+  ["diciembre", "december"],
+];
+
+/** 1-12 si la palabra es un mes (entero o abreviado: «jul», «sept»), o null. */
+function mesDe(palabra: string): number | null {
+  if (palabra.length < 3) return null;
+  const i = MESES.findIndex((nombres) => nombres.some((n) => n.startsWith(palabra)));
+  return i < 0 ? null : i + 1;
+}
+
+/**
+ * La fecha con el mes en letra, como la copia la IA de la factura:
+ * «13/jul./2026», «13 de Julio de 2026», «20 julio, 2026», «Aug 25, 2026».
+ * Solo día, mes y año, en orden día-mes-año o mes-día-año; nada más.
+ */
+function fechaConMesEnLetra(s: string): string | null {
+  const partes = s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .split(/[\s/\-.,]+/)
+    .filter((p) => p && p !== "de" && p !== "del");
+  if (partes.length !== 3) return null;
+
+  const [a, b, c] = partes;
+  if (!/^\d{2}(\d{2})?$/.test(c)) return null;
+  const año = añoCompleto(+c);
+
+  // 13 julio 2026
+  if (/^\d{1,2}$/.test(a)) {
+    const mes = mesDe(b);
+    return mes ? fechaValida(año, mes, +a) : null;
+  }
+  // Aug 25 2026
+  if (/^\d{1,2}$/.test(b)) {
+    const mes = mesDe(a);
+    return mes ? fechaValida(año, mes, +b) : null;
   }
   return null;
 }

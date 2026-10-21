@@ -41,6 +41,30 @@ describe("aFecha", () => {
     expect(aFecha("03.09.2026")).toBe("2026-09-03");
   });
 
+  it("acepta el mes en letra, en español o en inglés, como lo copia la IA", () => {
+    // Las ocho facturas que se registraron sin fecha en octubre de 2026.
+    expect(aFecha("13/jul./2026")).toBe("2026-07-13");
+    expect(aFecha("13 de Julio de 2026")).toBe("2026-07-13");
+    expect(aFecha("20 julio, 2026")).toBe("2026-07-20");
+    expect(aFecha("Aug 25, 2026")).toBe("2026-08-25");
+    expect(aFecha("6 Septiembre 2026")).toBe("2026-09-06");
+    expect(aFecha("27 Julio 2026")).toBe("2026-07-27");
+    expect(aFecha("9 Julio 2026")).toBe("2026-07-09");
+    expect(aFecha("30 sept 2026")).toBe("2026-09-30");
+    // Y otras formas habituales.
+    expect(aFecha("1 de diciembre del 2026")).toBe("2026-12-01");
+    expect(aFecha("ENE 5, 26")).toBe("2026-01-05");
+    expect(aFecha("15-feb-2026")).toBe("2026-02-15");
+  });
+
+  it("con el mes en letra tampoco se inventa nada", () => {
+    expect(aFecha("31 de febrero de 2026")).toBeNull();
+    expect(aFecha("13 ju 2026")).toBeNull(); // «ju»: junio o julio
+    expect(aFecha("13 lunes 2026")).toBeNull();
+    expect(aFecha("julio de 2026")).toBeNull(); // falta el día
+    expect(aFecha("13 julio")).toBeNull(); // falta el año
+  });
+
   it("rechaza una fecha que no existe en vez de inventarse otra", () => {
     // new Date(2026, 1, 31) daría el 3 de marzo sin avisar.
     expect(aFecha("31/02/2026")).toBeNull();
