@@ -45,7 +45,7 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
   "admin.functions.ts:adminExiste": "Pública: solo devuelve si existe algún administrador.",
   "admin.functions.ts:credencialesWooMascaradas": "esAdminActivo(): solo administradores activos.",
   "archivo.functions.ts:urlsArchivo":
-    "Lee las facturas y compras con context.supabase (RLS) y el textil exige administrador.",
+    "Lee las facturas, las facturas textil y las compras con context.supabase (RLS) antes de firmar.",
   "cobros.functions.ts:registrarCobro": "comprobarAcceso(): el pedido se lee con la sesión.",
   "cobros.functions.ts:borrarCobro": "El cobro se lee con la sesión antes de borrarlo.",
   "compras.functions.ts:guardarYRegistrarCompra":
@@ -57,6 +57,8 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
   "escaner-textil.functions.ts:fusionarVariantes":
     "textil_stock_fusionar() exige es_miembro_empresa(_usuario_id).",
   "facturas.functions.ts:generarYSubirFacturaPDF": "comprobarAccesoTienda().",
+  "facturas.functions.ts:abrirFacturaPDF":
+    "La factura se lee con la sesión (RLS) antes de firmar; generarla exige escribir y comprobarAccesoTienda().",
   "facturas.functions.ts:rellenarPdfsTienda":
     "Las facturas se leen con la sesión; leerDatosPdfFactura() comprueba la tienda.",
   "facturas.functions.ts:enviarDocumentoPorCorreo": "leerDatosPdfFactura() comprueba la tienda.",

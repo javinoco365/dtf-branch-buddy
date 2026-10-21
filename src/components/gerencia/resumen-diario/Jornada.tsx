@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Settings2 } from "lucide-react";
@@ -81,6 +83,8 @@ export function Jornada({
     onError: (e: Error) => toast.error(e.message || "No se pudo guardar"),
   });
 
+  // Quien solo ve, ve la jornada; cambiarla es escribir.
+  const { escribir } = usePermisos();
   return (
     <Popover open={abierto} onOpenChange={abrir}>
       <PopoverTrigger asChild>
@@ -97,49 +101,51 @@ export function Jornada({
             tarde.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Campo etiqueta="Metros por hora">
-            <Input
-              inputMode="decimal"
-              value={f.metros_hora}
-              onChange={(e) => setF({ ...f, metros_hora: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Hora de corte">
-            <Input
-              type="time"
-              value={f.hora_corte}
-              onChange={(e) => setF({ ...f, hora_corte: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Empieza">
-            <Input
-              type="time"
-              value={f.jornada_inicio}
-              onChange={(e) => setF({ ...f, jornada_inicio: e.target.value })}
-            />
-          </Campo>
-          <Campo etiqueta="Acaba">
-            <Input
-              type="time"
-              value={f.jornada_fin}
-              onChange={(e) => setF({ ...f, jornada_fin: e.target.value })}
-            />
-          </Campo>
-          <div className="col-span-2">
-            <Campo etiqueta="Envío sin coste apuntado (€, sin IVA)">
+        <CamposSegunNivel>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo etiqueta="Metros por hora">
               <Input
                 inputMode="decimal"
-                value={f.coste_envio_defecto}
-                onChange={(e) => setF({ ...f, coste_envio_defecto: e.target.value })}
+                value={f.metros_hora}
+                onChange={(e) => setF({ ...f, metros_hora: e.target.value })}
               />
             </Campo>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Lo que se calcula que cobra la agencia cuando el pedido no tiene apuntado el coste
-              real (se apunta en el envío de cada pedido).
-            </p>
+            <Campo etiqueta="Hora de corte">
+              <Input
+                type="time"
+                value={f.hora_corte}
+                onChange={(e) => setF({ ...f, hora_corte: e.target.value })}
+              />
+            </Campo>
+            <Campo etiqueta="Empieza">
+              <Input
+                type="time"
+                value={f.jornada_inicio}
+                onChange={(e) => setF({ ...f, jornada_inicio: e.target.value })}
+              />
+            </Campo>
+            <Campo etiqueta="Acaba">
+              <Input
+                type="time"
+                value={f.jornada_fin}
+                onChange={(e) => setF({ ...f, jornada_fin: e.target.value })}
+              />
+            </Campo>
+            <div className="col-span-2">
+              <Campo etiqueta="Envío sin coste apuntado (€, sin IVA)">
+                <Input
+                  inputMode="decimal"
+                  value={f.coste_envio_defecto}
+                  onChange={(e) => setF({ ...f, coste_envio_defecto: e.target.value })}
+                />
+              </Campo>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Lo que se calcula que cobra la agencia cuando el pedido no tiene apuntado el coste
+                real (se apunta en el envío de cada pedido).
+              </p>
+            </div>
           </div>
-        </div>
+        </CamposSegunNivel>
         {!disponible && (
           <p className="text-xs text-destructive">
             Falta aplicar la migración 20261027100000_pedidos_realizado.sql para poder guardarlo.
@@ -148,16 +154,18 @@ export function Jornada({
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => setAbierto(false)}>
-            Cancelar
+            {escribir ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button
-            size="sm"
-            disabled={!!error || !disponible || guardar.isPending}
-            onClick={() => guardar.mutate()}
-          >
-            {guardar.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Guardar
-          </Button>
+          {escribir && (
+            <Button
+              size="sm"
+              disabled={!!error || !disponible || guardar.isPending}
+              onClick={() => guardar.mutate()}
+            >
+              {guardar.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Guardar
+            </Button>
+          )}
         </div>
       </PopoverContent>
     </Popover>

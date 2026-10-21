@@ -12,7 +12,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, tabla } from "./rpc";
-import { esAdminActivo } from "./acceso";
 import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
 import { rutaPdfTextil, rutaPdfTienda } from "./rutas-pdf";
@@ -147,12 +146,9 @@ export const urlsArchivo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const admin = adminComoUsuario(context.userId);
 
-    // El PDF textil, como hasta ahora, solo para administradores.
-    if (idsTextil.length) {
-      if (!(await esAdminActivo(admin, context.userId)))
-        throw new Error("Solo un administrador puede descargar los PDF del textil");
-    }
-
+    // El PDF textil, como los demás: se firma solo lo que la RLS deja leer
+    // (textil_facturas por empresa). Cualquier nivel lo ve todo
+    // (20261031400000).
     const [ventas, textil, compras] = await Promise.all([
       idsTienda.length
         ? tabla(sb, "facturas").select("id, tienda_id, estado").in("id", idsTienda)

@@ -46,6 +46,7 @@ import { contadoresDeSerie } from "@/lib/facturas.functions";
 import { contadoresPorSerie, impedimentoBorrado } from "@/dominio/borrado-facturas";
 import { totalesDocumentos } from "@/dominio/sumatorios";
 import { SiPuede } from "@/components/SiPuede";
+import { usePermisos } from "@/hooks/use-permisos";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -124,6 +125,8 @@ function FacturasPage() {
   });
 
   const [generando, setGenerando] = useState<string | null>(null);
+  // El visor abre los PDF guardados, pero no genera, canjea ni anula.
+  const { escribir } = usePermisos();
   const generarFn = useServerFn(generarPdfFacturaTextil);
   const urlFn = useServerFn(urlFacturaTextil);
   const rellenarFn = useServerFn(rellenarPdfsTextil);
@@ -170,6 +173,11 @@ function FacturasPage() {
     setGenerando(factura.id);
     try {
       if (!factura.pdf_path) {
+        if (!escribir) {
+          throw new Error(
+            "El PDF de este documento todavía no está guardado. Lo genera un administrador al abrirlo.",
+          );
+        }
         await generarFn({ data: { factura_id: factura.id } });
         qc.invalidateQueries({ queryKey: ["textil-facturas"] });
       }
@@ -221,11 +229,13 @@ function FacturasPage() {
         <SelectorPeriodo periodo={periodo} />
         <QuitarFiltros visible={hay()} alQuitar={() => quitar()} />
       </BarraFiltros>
-      <PdfsPendientes
-        faltan={(data as any[]).filter((f) => f.estado !== "borrador" && !f.pdf_path).length}
-        generar={(excluir) => rellenarFn({ data: { excluir, limite: 3 } })}
-        alTerminar={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
-      />
+      {escribir && (
+        <PdfsPendientes
+          faltan={(data as any[]).filter((f) => f.estado !== "borrador" && !f.pdf_path).length}
+          generar={(excluir) => rellenarFn({ data: { excluir, limite: 3 } })}
+          alTerminar={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
+        />
+      )}
       <Card>
         <CardContent className="p-0">
           <Table movil="tarjetas">
@@ -291,8 +301,16 @@ function FacturasPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      title={f.pdf_path ? "Abrir el PDF" : "Generar el PDF"}
-                      disabled={generando === f.id || f.estado === "borrador"}
+                      title={
+                        f.pdf_path
+                          ? "Abrir el PDF"
+                          : escribir
+                            ? "Generar el PDF"
+                            : "Todavía sin PDF guardado"
+                      }
+                      disabled={
+                        generando === f.id || f.estado === "borrador" || (!escribir && !f.pdf_path)
+                      }
                       onClick={() => abrirPdf(f)}
                     >
                       {generando === f.id ? (
@@ -303,7 +321,7 @@ function FacturasPage() {
                         <FileText className="h-4 w-4" />
                       )}
                     </Button>
-                    {situaciones.get(f.id)?.admite_cambios && (
+                    {escribir && situaciones.get(f.id)?.admite_cambios && (
                       <>
                         <Button
                           variant="ghost"

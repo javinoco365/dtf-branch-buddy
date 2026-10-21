@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -285,6 +287,7 @@ export function PresupuestoFormDialog({
     onError: (e: Error) => toast.error(e.message || "No se ha podido guardar"),
   });
 
+  const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
@@ -293,193 +296,204 @@ export function PresupuestoFormDialog({
             {presupuesto ? `Presupuesto ${presupuesto.numero}` : "Nuevo presupuesto"}
           </DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-4">
-          {!presupuesto && borrador && <AvisosIa avisos={borrador.avisos} />}
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1 md:col-span-1">
-              <Label>Cliente</Label>
-              <SelectorClienteTextil
-                clientes={clientes}
-                valor={clienteId}
-                tiendaId={tiendaId}
-                claveLista={["presupuesto-clientes"]}
-                onElegir={(c) => {
-                  setClienteId(c.id);
-                  setClienteNombre(c.nombre);
-                  setClienteEmail(c.email ?? "");
-                  setClienteTelefono(c.telefono ?? "");
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Teléfono</Label>
-              <Input value={clienteTelefono} onChange={(e) => setClienteTelefono(e.target.value)} />
-            </div>
-            {!clienteId && (
-              <div className="space-y-1 md:col-span-3">
-                <Label>O escribe el nombre, sin ficha</Label>
-                <Input
-                  value={clienteNombre}
-                  onChange={(e) => setClienteNombre(e.target.value)}
-                  placeholder="Nombre del cliente"
+        <CamposSegunNivel>
+          <div className="space-y-4">
+            {!presupuesto && borrador && <AvisosIa avisos={borrador.avisos} />}
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-1 md:col-span-1">
+                <Label>Cliente</Label>
+                <SelectorClienteTextil
+                  clientes={clientes}
+                  valor={clienteId}
+                  tiendaId={tiendaId}
+                  claveLista={["presupuesto-clientes"]}
+                  onElegir={(c) => {
+                    setClienteId(c.id);
+                    setClienteNombre(c.nombre);
+                    setClienteEmail(c.email ?? "");
+                    setClienteTelefono(c.telefono ?? "");
+                  }}
                 />
               </div>
-            )}
-          </div>
-
-          <div className="grid gap-3 grid-cols-3">
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Validez (días)</Label>
-              <Input
-                inputMode="numeric"
-                value={validez}
-                onChange={(e) => setValidez(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Envío sin IVA (€)</Label>
-              <Input inputMode="decimal" value={envio} onChange={(e) => setEnvio(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Líneas
-              </Label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={aplicaIva} onCheckedChange={(v) => setAplicaIva(v === true)} />
-                Con IVA ({IVA_GENERAL} %)
-              </label>
-            </div>
-            <div className="rounded-md border divide-y">
-              {lineas.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 p-2 items-end">
-                  <div className="col-span-12 md:col-span-3 space-y-1">
-                    <Label className="text-xs">Producto</Label>
-                    <Select
-                      value={l.producto_id ?? LIBRE}
-                      onValueChange={(v) => elegirProducto(i, v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={LIBRE}>Línea libre</SelectItem>
-                        {productos.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.nombre}
-                            <span className="text-muted-foreground text-xs ml-2">
-                              {eur(Number(p.precio_unitario))}/{p.unidad}
-                              {p.tienda_id === null ? " · general" : ""}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-12 md:col-span-4 space-y-1">
-                    <Label className="text-xs">Descripción</Label>
-                    <Input
-                      value={l.descripcion}
-                      onChange={(e) => cambiarLinea(i, { descripcion: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-3 md:col-span-1 space-y-1">
-                    <Label className="text-xs">Cant.</Label>
-                    <Input
-                      inputMode="decimal"
-                      value={l.cantidad}
-                      onChange={(e) => cambiarLinea(i, { cantidad: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-3 md:col-span-1 space-y-1">
-                    <Label className="text-xs">Unidad</Label>
-                    <Input
-                      value={l.unidad}
-                      onChange={(e) => cambiarLinea(i, { unidad: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-3 md:col-span-1 space-y-1">
-                    <Label className="text-xs">Precio</Label>
-                    <Input
-                      inputMode="decimal"
-                      value={l.precio_unitario}
-                      onChange={(e) => cambiarLinea(i, { precio_unitario: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-2 md:col-span-1 text-right text-sm tabular-nums pb-2">
-                    {eur(totales.lineas[i]?.subtotal ?? 0)}
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Quitar línea"
-                      disabled={lineas.length === 1}
-                      onClick={() => setLineas((ls) => ls.filter((_, j) => j !== i))}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLineas((ls) => [...ls, LINEA_VACIA])}
-            >
-              <Plus className="h-4 w-4 mr-1" /> Añadir línea
-            </Button>
-          </div>
-
-          <ImagenesPresupuesto estado={imagenes} />
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Notas</Label>
-              <Textarea rows={3} value={notas} onChange={(e) => setNotas(e.target.value)} />
-            </div>
-            <div className="rounded-md border p-3 text-sm space-y-1 self-start">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Base imponible</span>
-                <span className="tabular-nums">{eur(totales.subtotal)}</span>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} />
               </div>
-              {totales.envio > 0 && (
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>de ellos, envío</span>
-                  <span className="tabular-nums">{eur(totales.envio)}</span>
+              <div className="space-y-1">
+                <Label>Teléfono</Label>
+                <Input
+                  value={clienteTelefono}
+                  onChange={(e) => setClienteTelefono(e.target.value)}
+                />
+              </div>
+              {!clienteId && (
+                <div className="space-y-1 md:col-span-3">
+                  <Label>O escribe el nombre, sin ficha</Label>
+                  <Input
+                    value={clienteNombre}
+                    onChange={(e) => setClienteNombre(e.target.value)}
+                    placeholder="Nombre del cliente"
+                  />
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">IVA</span>
-                <span className="tabular-nums">{eur(totales.iva)}</span>
+            </div>
+
+            <div className="grid gap-3 grid-cols-3">
+              <div className="space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </div>
-              <div className="flex justify-between font-semibold border-t pt-1">
-                <span>Total</span>
-                <span className="tabular-nums">{eur(totales.total)}</span>
+              <div className="space-y-1">
+                <Label>Validez (días)</Label>
+                <Input
+                  inputMode="numeric"
+                  value={validez}
+                  onChange={(e) => setValidez(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Envío sin IVA (€)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={envio}
+                  onChange={(e) => setEnvio(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Líneas
+                </Label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={aplicaIva} onCheckedChange={(v) => setAplicaIva(v === true)} />
+                  Con IVA ({IVA_GENERAL} %)
+                </label>
+              </div>
+              <div className="rounded-md border divide-y">
+                {lineas.map((l, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 p-2 items-end">
+                    <div className="col-span-12 md:col-span-3 space-y-1">
+                      <Label className="text-xs">Producto</Label>
+                      <Select
+                        value={l.producto_id ?? LIBRE}
+                        onValueChange={(v) => elegirProducto(i, v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={LIBRE}>Línea libre</SelectItem>
+                          {productos.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.nombre}
+                              <span className="text-muted-foreground text-xs ml-2">
+                                {eur(Number(p.precio_unitario))}/{p.unidad}
+                                {p.tienda_id === null ? " · general" : ""}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-12 md:col-span-4 space-y-1">
+                      <Label className="text-xs">Descripción</Label>
+                      <Input
+                        value={l.descripcion}
+                        onChange={(e) => cambiarLinea(i, { descripcion: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-3 md:col-span-1 space-y-1">
+                      <Label className="text-xs">Cant.</Label>
+                      <Input
+                        inputMode="decimal"
+                        value={l.cantidad}
+                        onChange={(e) => cambiarLinea(i, { cantidad: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-3 md:col-span-1 space-y-1">
+                      <Label className="text-xs">Unidad</Label>
+                      <Input
+                        value={l.unidad}
+                        onChange={(e) => cambiarLinea(i, { unidad: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-3 md:col-span-1 space-y-1">
+                      <Label className="text-xs">Precio</Label>
+                      <Input
+                        inputMode="decimal"
+                        value={l.precio_unitario}
+                        onChange={(e) => cambiarLinea(i, { precio_unitario: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-2 md:col-span-1 text-right text-sm tabular-nums pb-2">
+                      {eur(totales.lineas[i]?.subtotal ?? 0)}
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Quitar línea"
+                        disabled={lineas.length === 1}
+                        onClick={() => setLineas((ls) => ls.filter((_, j) => j !== i))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLineas((ls) => [...ls, LINEA_VACIA])}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Añadir línea
+              </Button>
+            </div>
+
+            <ImagenesPresupuesto estado={imagenes} />
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Notas</Label>
+                <Textarea rows={3} value={notas} onChange={(e) => setNotas(e.target.value)} />
+              </div>
+              <div className="rounded-md border p-3 text-sm space-y-1 self-start">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Base imponible</span>
+                  <span className="tabular-nums">{eur(totales.subtotal)}</span>
+                </div>
+                {totales.envio > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>de ellos, envío</span>
+                    <span className="tabular-nums">{eur(totales.envio)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">IVA</span>
+                  <span className="tabular-nums">{eur(totales.iva)}</span>
+                </div>
+                <div className="flex justify-between font-semibold border-t pt-1">
+                  <span>Total</span>
+                  <span className="tabular-nums">{eur(totales.total)}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
+        </CamposSegunNivel>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {escribir ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button onClick={() => alta.mutate()} disabled={alta.isPending}>
-            {alta.isPending ? "Guardando…" : "Guardar"}
-          </Button>
+          {escribir && (
+            <>
+              <Button onClick={() => alta.mutate()} disabled={alta.isPending}>
+                {alta.isPending ? "Guardando…" : "Guardar"}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

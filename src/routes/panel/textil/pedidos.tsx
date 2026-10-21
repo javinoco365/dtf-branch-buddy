@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Receipt, Trash2, Wallet } from "lucide-react";
+import { Eye, Plus, Pencil, Receipt, Trash2, Wallet } from "lucide-react";
 import {
   listTextilPedidos,
   upsertTextilPedido,
@@ -74,6 +74,8 @@ import {
   SelectFiltro,
 } from "@/components/filtros/Filtros";
 import { SiPuede } from "@/components/SiPuede";
+import { usePermisos } from "@/hooks/use-permisos";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -92,6 +94,9 @@ const ESTADOS_SIN_RESERVA = ["enviado", "entregado", "cancelado"];
 const FILTROS_PEDIDOS_TEXTIL = { q: "", estado: "todos", cobro: "todos" };
 
 function PedidosPage() {
+  // El visor ve los pedidos (y abre cada uno para ver sus líneas), pero no
+  // cambia el estado, ni emite, ni guarda.
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const listFn = useServerFn(listTextilPedidos);
   const upsertFn = useServerFn(upsertTextilPedido);
@@ -364,6 +369,7 @@ function PedidosPage() {
                       <Select
                         value={p.estado}
                         onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
+                        disabled={!escribir}
                       >
                         <SelectTrigger className="h-7 w-36 text-xs">
                           <SelectValue />
@@ -394,26 +400,30 @@ function PedidosPage() {
                       >
                         <Wallet className="h-4 w-4" />
                       </Button>
+                      {escribir && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Ticket o factura"
+                          title="Ticket o factura"
+                          disabled={p.estado === "cancelado"}
+                          onClick={() => setDocumentando(p)}
+                        >
+                          <Receipt className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Ticket o factura"
-                        title="Ticket o factura"
-                        disabled={p.estado === "cancelado"}
-                        onClick={() => setDocumentando(p)}
-                      >
-                        <Receipt className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
+                        aria-label={escribir ? "Editar" : "Ver"}
+                        title={escribir ? "Editar" : "Ver"}
                         onClick={() => {
                           setEditing(p);
                           setLineasIniciales(null);
                           setOpen(true);
                         }}
                       >
-                        <Pencil className="h-4 w-4" />
+                        {escribir ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                       <SiPuede accion="borrar">
                         <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
@@ -583,126 +593,133 @@ function PedidoDialog({
     [pedido],
   );
 
+  const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{pedido ? `Editar ${pedido.numero}` : "Nuevo pedido"}</DialogTitle>
+          <DialogTitle>
+            {pedido ? `${escribir ? "Editar" : "Pedido"} ${pedido.numero}` : "Nuevo pedido"}
+          </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label>Cliente</Label>
-              <SelectorClienteTextil
-                clientes={clientes}
-                valor={f.cliente_id}
-                onElegir={setCliente}
-              />
+        <CamposSegunNivel>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Cliente</Label>
+                <SelectorClienteTextil
+                  clientes={clientes}
+                  valor={f.cliente_id}
+                  onElegir={setCliente}
+                />
+              </div>
+              <div>
+                <Label>Marca</Label>
+                <Select
+                  value={f.marca_id ?? "__none__"}
+                  onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ninguna</SelectItem>
+                    {marcas.map((m: any) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Fecha</Label>
+                <Input
+                  type="date"
+                  value={f.fecha}
+                  onChange={(e) => setF({ ...f, fecha: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Método pago</Label>
+                <Input
+                  value={f.metodo_pago ?? ""}
+                  onChange={(e) => setF({ ...f, metodo_pago: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Envío</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={f.envio}
+                  onChange={(e) => setF({ ...f, envio: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <Select value={f.estado} onValueChange={(v) => setF({ ...f, estado: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ESTADOS.map((e) => (
+                      <SelectItem key={e} value={e}>
+                        {e}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label>Marca</Label>
-              <Select
-                value={f.marca_id ?? "__none__"}
-                onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ninguna</SelectItem>
-                  {marcas.map((m: any) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Fecha</Label>
-              <Input
-                type="date"
-                value={f.fecha}
-                onChange={(e) => setF({ ...f, fecha: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Método pago</Label>
-              <Input
-                value={f.metodo_pago ?? ""}
-                onChange={(e) => setF({ ...f, metodo_pago: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Envío</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={f.envio}
-                onChange={(e) => setF({ ...f, envio: Number(e.target.value) })}
-              />
-            </div>
-            <div>
-              <Label>Estado</Label>
-              <Select value={f.estado} onValueChange={(v) => setF({ ...f, estado: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ESTADOS.map((e) => (
-                    <SelectItem key={e} value={e}>
-                      {e}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <LineasEditor
-            stock={stock}
-            items={f.items}
-            reservadoPropio={reservadoPropio}
-            bloquearFaltante
-            onChange={(items: Linea[]) => setF({ ...f, items })}
-          />
-          <div>
-            <Label>Notas</Label>
-            <Textarea
-              value={f.notas ?? ""}
-              onChange={(e) => setF({ ...f, notas: e.target.value })}
+            <LineasEditor
+              stock={stock}
+              items={f.items}
+              reservadoPropio={reservadoPropio}
+              bloquearFaltante
+              onChange={(items: Linea[]) => setF({ ...f, items })}
             />
+            <div>
+              <Label>Notas</Label>
+              <Textarea
+                value={f.notas ?? ""}
+                onChange={(e) => setF({ ...f, notas: e.target.value })}
+              />
+            </div>
           </div>
-        </div>
+        </CamposSegunNivel>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {escribir ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button
-            disabled={loading || f.items.length === 0}
-            onClick={() =>
-              onSave({
-                id: pedido?.id,
-                cliente_id: f.cliente_id || null,
-                cliente_nombre: f.cliente_nombre || null,
-                cliente_email: f.cliente_email || null,
-                marca_id: f.marca_id || null,
-                fecha: f.fecha,
-                estado: f.estado,
-                metodo_pago: f.metodo_pago || null,
-                envio: Number(f.envio) || 0,
-                notas: f.notas || null,
-                items: (f.items as Linea[]).map((it) => ({
-                  descripcion: it.descripcion,
-                  cantidad: it.cantidad,
-                  precio_unitario: it.precio_unitario,
-                  iva_pct: it.iva_pct,
-                  stock_id: it.stock_id ?? null,
-                })),
-              })
-            }
-          >
-            Guardar
-          </Button>
+          {escribir && (
+            <Button
+              disabled={loading || f.items.length === 0}
+              onClick={() =>
+                onSave({
+                  id: pedido?.id,
+                  cliente_id: f.cliente_id || null,
+                  cliente_nombre: f.cliente_nombre || null,
+                  cliente_email: f.cliente_email || null,
+                  marca_id: f.marca_id || null,
+                  fecha: f.fecha,
+                  estado: f.estado,
+                  metodo_pago: f.metodo_pago || null,
+                  envio: Number(f.envio) || 0,
+                  notas: f.notas || null,
+                  items: (f.items as Linea[]).map((it) => ({
+                    descripcion: it.descripcion,
+                    cantidad: it.cantidad,
+                    precio_unitario: it.precio_unitario,
+                    iva_pct: it.iva_pct,
+                    stock_id: it.stock_id ?? null,
+                  })),
+                })
+              }
+            >
+              Guardar
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

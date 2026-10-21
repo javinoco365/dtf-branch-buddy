@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
@@ -51,17 +52,20 @@ export function Ajustes() {
     );
   }
 
+  // Quien solo ve, ve todos los ajustes con los campos y botones desactivados.
   return (
-    <div className="space-y-4">
-      <AjusteWebSinPagar cuenta={data.ajustes.web_sin_pagar_cuenta} />
-      <Objetivos objetivos={data.objetivos} />
-      <DatosFiscales ajustes={data.ajustes} disponible={data.impuestosDisponibles} />
-      <GastosFijos
-        gastos={data.gastos}
-        conImpuestos={data.impuestosDisponibles}
-        conJustificante={data.justificanteDisponible}
-      />
-    </div>
+    <CamposSegunNivel>
+      <div className="space-y-4">
+        <AjusteWebSinPagar cuenta={data.ajustes.web_sin_pagar_cuenta} />
+        <Objetivos objetivos={data.objetivos} />
+        <DatosFiscales ajustes={data.ajustes} disponible={data.impuestosDisponibles} />
+        <GastosFijos
+          gastos={data.gastos}
+          conImpuestos={data.impuestosDisponibles}
+          conJustificante={data.justificanteDisponible}
+        />
+      </div>
+    </CamposSegunNivel>
   );
 }
 

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
@@ -167,6 +168,7 @@ function Grupo({
   items: ConceptoCaja[];
   mut: { mutate: (v: EntradaConcepto) => void };
 }) {
+  const { escribir } = usePermisos();
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -186,6 +188,7 @@ function Grupo({
             onCheckedChange={(v) =>
               mut.mutate({ id: c.id, nombre: c.nombre, categoria: c.categoria, activo: v })
             }
+            disabled={!escribir}
             aria-label={c.activo ? `Desactivar ${c.nombre}` : `Activar ${c.nombre}`}
           />
         </div>
@@ -195,6 +198,7 @@ function Grupo({
 }
 
 function Socios({ socios }: { socios: SocioCaja[] }) {
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const guardar = useServerFn(guardarSocioCaja);
   const [nombre, setNombre] = useState("");
@@ -222,6 +226,7 @@ function Socios({ socios }: { socios: SocioCaja[] }) {
           <Switch
             checked={s.activo}
             onCheckedChange={(v) => mut.mutate({ id: s.id, nombre: s.nombre, activo: v })}
+            disabled={!escribir}
             aria-label={s.activo ? `Desactivar ${s.nombre}` : `Activar ${s.nombre}`}
           />
         </div>

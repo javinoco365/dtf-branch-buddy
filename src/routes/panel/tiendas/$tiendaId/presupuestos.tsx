@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { PresupuestoFormDialog } from "@/components/presupuestos/PresupuestoFormDialog";
+import { usePermisos } from "@/hooks/use-permisos";
 import {
   NuevoPresupuestoMenu,
   PresupuestoIaDialog,
@@ -93,6 +94,8 @@ const VARIANTE: Record<
 
 function PresupuestosTienda() {
   const { tiendaId } = Route.useParams();
+  // El visor ve y abre cada presupuesto (y su PDF); no cambia nada.
+  const { escribir, borrar: puedeBorrar } = usePermisos();
   const qc = useQueryClient();
   const listar = useServerFn(listPresupuestosTienda);
   const cambiarEstado = useServerFn(cambiarEstadoPresupuesto);
@@ -350,34 +353,39 @@ function PresupuestosTienda() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => setEditando(p)}
-                              disabled={!!p.pedido_id}
+                              disabled={escribir && !!p.pedido_id}
                             >
-                              Editar
+                              {escribir ? "Editar" : "Ver"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setConfirmando(p)}
-                              disabled={!!p.pedido_id || p.estado === "rechazado"}
-                            >
-                              Confirmar: crear el pedido
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {ESTADOS_PRESUPUESTO.filter((e) => e.valor !== p.estado).map((e) => (
+                            {escribir && (
                               <DropdownMenuItem
-                                key={e.valor}
-                                onClick={() => estadoMut.mutate({ id: p.id, estado: e.valor })}
+                                onClick={() => setConfirmando(p)}
+                                disabled={!!p.pedido_id || p.estado === "rechazado"}
+                              >
+                                Confirmar: crear el pedido
+                              </DropdownMenuItem>
+                            )}
+                            {escribir && <DropdownMenuSeparator />}
+                            {escribir &&
+                              ESTADOS_PRESUPUESTO.filter((e) => e.valor !== p.estado).map((e) => (
+                                <DropdownMenuItem
+                                  key={e.valor}
+                                  onClick={() => estadoMut.mutate({ id: p.id, estado: e.valor })}
+                                  disabled={!!p.pedido_id}
+                                >
+                                  Marcar como {e.etiqueta.toLowerCase()}
+                                </DropdownMenuItem>
+                              ))}
+                            {puedeBorrar && <DropdownMenuSeparator />}
+                            {puedeBorrar && (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setBorrando(p)}
                                 disabled={!!p.pedido_id}
                               >
-                                Marcar como {e.etiqueta.toLowerCase()}
+                                Borrar
                               </DropdownMenuItem>
-                            ))}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setBorrando(p)}
-                              disabled={!!p.pedido_id}
-                            >
-                              Borrar
-                            </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

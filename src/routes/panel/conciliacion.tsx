@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useRef, useState } from "react";
@@ -176,198 +177,202 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
     onError: (e: any) => toast.error(e?.message ?? "No se pudo deshacer"),
   });
 
+  // Quien solo ve, ve las propuestas; los botones y desplegables, desactivados.
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
-          <p className="text-sm text-muted-foreground">
-            Sube el extracto del banco y marca de una vez las facturas cobradas.
-          </p>
-          {falta && (
-            <p className="text-xs text-muted-foreground">
-              El motor de conciliación necesita la migración <code>{falta}</code>.
+    <CamposSegunNivel>
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
+            <p className="text-sm text-muted-foreground">
+              Sube el extracto del banco y marca de una vez las facturas cobradas.
             </p>
-          )}
+            {falta && (
+              <p className="text-xs text-muted-foreground">
+                El motor de conciliación necesita la migración <code>{falta}</code>.
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {!conCuentas && (
+              <>
+                <input
+                  ref={ficheroRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) importar.mutate(f);
+                  }}
+                />
+                <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
+                  {importar.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileUp className="h-4 w-4 mr-2" />
+                  )}
+                  Subir extracto
+                </Button>
+              </>
+            )}
+            <Button
+              variant="secondary"
+              disabled={seguras.length === 0 || aplicar.isPending}
+              onClick={() =>
+                aplicar.mutate(
+                  seguras.map((p) => ({
+                    movimiento_id: p.movimiento_id,
+                    factura_id: p.factura_id,
+                    motivo: p.motivo,
+                  })),
+                )
+              }
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Aplicar las {seguras.length} seguras
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          {!conCuentas && (
-            <>
-              <input
-                ref={ficheroRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) importar.mutate(f);
-                }}
-              />
-              <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
-                {importar.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4 mr-2" />
+
+        {conCuentas && <CuentasExtractos alImportar={refrescar} />}
+
+        <Card>
+          <CardContent className="p-0">
+            <Table movil="tarjetas">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-28">Fecha</TableHead>
+                  <TableHead>Concepto</TableHead>
+                  <TableHead className="text-right w-28">Importe</TableHead>
+                  <TableHead className="w-72">Factura</TableHead>
+                  <TableHead className="w-44">Por qué</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={6}>Cargando…</TableCell>
+                  </TableRow>
                 )}
-                Subir extracto
-              </Button>
-            </>
-          )}
-          <Button
-            variant="secondary"
-            disabled={seguras.length === 0 || aplicar.isPending}
-            onClick={() =>
-              aplicar.mutate(
-                seguras.map((p) => ({
-                  movimiento_id: p.movimiento_id,
-                  factura_id: p.factura_id,
-                  motivo: p.motivo,
-                })),
-              )
-            }
-          >
-            <Wand2 className="h-4 w-4 mr-2" />
-            Aplicar las {seguras.length} seguras
-          </Button>
-        </div>
-      </div>
-
-      {conCuentas && <CuentasExtractos alImportar={refrescar} />}
-
-      <Card>
-        <CardContent className="p-0">
-          <Table movil="tarjetas">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28">Fecha</TableHead>
-                <TableHead>Concepto</TableHead>
-                <TableHead className="text-right w-28">Importe</TableHead>
-                <TableHead className="w-72">Factura</TableHead>
-                <TableHead className="w-44">Por qué</TableHead>
-                <TableHead className="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={6}>Cargando…</TableCell>
-                </TableRow>
-              )}
-              {!isLoading && movimientos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No hay ingresos sin conciliar. Sube el extracto del banco para empezar.
-                  </TableCell>
-                </TableRow>
-              )}
-              {movimientos.map((m: any) => {
-                const p = porMovimiento.get(m.id);
-                const elegida = elegidas[m.id] ?? p?.factura_id ?? "";
-                const factura: any = elegida ? facturaPorId.get(elegida) : null;
-                const segura = p ? esSegura(p) : false;
-
-                return (
-                  <TableRow key={m.id}>
-                    <TableCell className="whitespace-nowrap">{fechaCorta(m.fecha)}</TableCell>
-                    <TableCell className="text-sm">{m.concepto || "—"}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {eur(Number(m.importe))}
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={elegida}
-                        onValueChange={(v) => setElegidas({ ...elegidas, [m.id]: v })}
-                      >
-                        <SelectTrigger className={segura ? "" : "border-amber-500/60"}>
-                          <SelectValue placeholder="Sin casar" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {pendientes.map((f: any) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.referencia} · {eur(Number(f.total))} ·{" "}
-                              {f.cliente_nombre ?? "sin cliente"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {p ? (
-                          <>
-                            <Badge variant={segura ? "default" : "outline"}>
-                              {ETIQUETA_MOTIVO[p.motivo] ?? p.motivo}
-                            </Badge>
-                            {p.candidatas > 1 && (
-                              <div className="text-xs text-muted-foreground">
-                                {p.candidatas} facturas encajan
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Ninguna encaja</span>
-                        )}
-                        {/* La diferencia se calcula contra la factura ELEGIDA, no
-                            contra la propuesta: al cambiarla a mano hay que ver
-                            si el importe deja de cuadrar. */}
-                        {factura && Math.abs(Number(m.importe) - Number(factura.total)) > 0 && (
-                          <div className="text-xs text-amber-600">
-                            Difiere {eur(Number(m.importe) - Number(factura.total))}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Marcar como cobrada"
-                        disabled={!elegida || aplicar.isPending}
-                        onClick={() =>
-                          aplicar.mutate([
-                            {
-                              movimiento_id: m.id,
-                              factura_id: elegida,
-                              motivo: elegidas[m.id] ? "manual" : (p?.motivo ?? "manual"),
-                            },
-                          ])
-                        }
-                      >
-                        <Check className="h-4 w-4 text-emerald-600" />
-                      </Button>
+                {!isLoading && movimientos.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No hay ingresos sin conciliar. Sube el extracto del banco para empezar.
                     </TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-            {!isLoading && movimientos.length > 0 && (
-              <TableFooter>
-                <TableRow>
-                  <TableCell colSpan={2} className="font-semibold">
-                    Total · {totalSinCasar.n} {totalSinCasar.n === 1 ? "ingreso" : "ingresos"}
-                  </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {eur(totalSinCasar.neto)}
-                  </TableCell>
-                  {/* Las facturas del desplegable son una elección, no una cifra de la fila. */}
-                  <TableCell colSpan={3} />
-                </TableRow>
-              </TableFooter>
-            )}
-          </Table>
-        </CardContent>
-      </Card>
+                )}
+                {movimientos.map((m: any) => {
+                  const p = porMovimiento.get(m.id);
+                  const elegida = elegidas[m.id] ?? p?.factura_id ?? "";
+                  const factura: any = elegida ? facturaPorId.get(elegida) : null;
+                  const segura = p ? esSegura(p) : false;
 
-      <p className="text-xs text-muted-foreground">
-        «Aplicar las seguras» solo toca las que no admiten duda: las que traen el número de factura
-        en el concepto, o las que coinciden en cliente e importe sin que haya otra factura que
-        encaje igual. Las demás se revisan una a una. Si te equivocas, el botón de deshacer devuelve
-        la factura a pendiente de cobro: el documento fiscal no se toca en ningún momento.
-      </p>
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="whitespace-nowrap">{fechaCorta(m.fecha)}</TableCell>
+                      <TableCell className="text-sm">{m.concepto || "—"}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {eur(Number(m.importe))}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={elegida}
+                          onValueChange={(v) => setElegidas({ ...elegidas, [m.id]: v })}
+                        >
+                          <SelectTrigger className={segura ? "" : "border-amber-500/60"}>
+                            <SelectValue placeholder="Sin casar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pendientes.map((f: any) => (
+                              <SelectItem key={f.id} value={f.id}>
+                                {f.referencia} · {eur(Number(f.total))} ·{" "}
+                                {f.cliente_nombre ?? "sin cliente"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          {p ? (
+                            <>
+                              <Badge variant={segura ? "default" : "outline"}>
+                                {ETIQUETA_MOTIVO[p.motivo] ?? p.motivo}
+                              </Badge>
+                              {p.candidatas > 1 && (
+                                <div className="text-xs text-muted-foreground">
+                                  {p.candidatas} facturas encajan
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Ninguna encaja</span>
+                          )}
+                          {/* La diferencia se calcula contra la factura ELEGIDA, no
+                            contra la propuesta: al cambiarla a mano hay que ver
+                            si el importe deja de cuadrar. */}
+                          {factura && Math.abs(Number(m.importe) - Number(factura.total)) > 0 && (
+                            <div className="text-xs text-amber-600">
+                              Difiere {eur(Number(m.importe) - Number(factura.total))}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Marcar como cobrada"
+                          disabled={!elegida || aplicar.isPending}
+                          onClick={() =>
+                            aplicar.mutate([
+                              {
+                                movimiento_id: m.id,
+                                factura_id: elegida,
+                                motivo: elegidas[m.id] ? "manual" : (p?.motivo ?? "manual"),
+                              },
+                            ])
+                          }
+                        >
+                          <Check className="h-4 w-4 text-emerald-600" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              {!isLoading && movimientos.length > 0 && (
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-semibold">
+                      Total · {totalSinCasar.n} {totalSinCasar.n === 1 ? "ingreso" : "ingresos"}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalSinCasar.neto)}
+                    </TableCell>
+                    {/* Las facturas del desplegable son una elección, no una cifra de la fila. */}
+                    <TableCell colSpan={3} />
+                  </TableRow>
+                </TableFooter>
+              )}
+            </Table>
+          </CardContent>
+        </Card>
 
-      <MovimientosConciliados onDeshacer={(id) => deshacer.mutate(id)} />
-    </div>
+        <p className="text-xs text-muted-foreground">
+          «Aplicar las seguras» solo toca las que no admiten duda: las que traen el número de
+          factura en el concepto, o las que coinciden en cliente e importe sin que haya otra factura
+          que encaje igual. Las demás se revisan una a una. Si te equivocas, el botón de deshacer
+          devuelve la factura a pendiente de cobro: el documento fiscal no se toca en ningún
+          momento.
+        </p>
+
+        <MovimientosConciliados onDeshacer={(id) => deshacer.mutate(id)} />
+      </div>
+    </CamposSegunNivel>
   );
 }
 

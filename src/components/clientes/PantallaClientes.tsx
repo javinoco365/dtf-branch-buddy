@@ -798,7 +798,9 @@ function ClienteDetalle({
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>
-          <Button onClick={() => onEdit(cliente)}>Editar cliente</Button>
+          <SiPuede accion="escribir">
+            <Button onClick={() => onEdit(cliente)}>Editar cliente</Button>
+          </SiPuede>
         </DialogFooter>
       </DialogContent>
     </Dialog>

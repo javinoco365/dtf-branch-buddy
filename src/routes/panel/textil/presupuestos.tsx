@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { CamposSegunNivel } from "@/components/CamposSegunNivel";
+import { usePermisos } from "@/hooks/use-permisos";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
@@ -30,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileDown, Loader2, Pencil, Trash2, PackageCheck } from "lucide-react";
+import { Eye, FileDown, Loader2, Pencil, Trash2, PackageCheck } from "lucide-react";
 import {
   listPresupuestos,
   upsertPresupuesto,
@@ -107,6 +109,8 @@ const ESTADO_COLOR: Record<string, string> = {
 };
 
 function PresupuestosPage() {
+  // El visor ve los presupuestos, su PDF y cada uno abierto; no cambia nada.
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const listFn = useServerFn(listPresupuestos);
   const upsertFn = useServerFn(upsertPresupuesto);
@@ -376,7 +380,7 @@ function PresupuestosPage() {
                     <Select
                       value={p.estado}
                       onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
-                      disabled={p.estado === "facturado" || !!p.pedido_id}
+                      disabled={p.estado === "facturado" || !!p.pedido_id || !escribir}
                     >
                       <SelectTrigger className={`h-7 w-32 text-xs ${ESTADO_COLOR[p.estado] ?? ""}`}>
                         <SelectValue />
@@ -414,22 +418,27 @@ function PresupuestosPage() {
                         <FileDown className="h-4 w-4" />
                       )}
                     </Button>
-                    {!p.pedido_id && p.estado !== "facturado" && p.estado !== "rechazado" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Confirmar: crear el pedido"
-                        onClick={() => setConfirmando(p)}
-                        disabled={confirmar.isPending}
-                      >
-                        <PackageCheck className="h-4 w-4 text-primary" />
-                      </Button>
-                    )}
+                    {escribir &&
+                      !p.pedido_id &&
+                      p.estado !== "facturado" &&
+                      p.estado !== "rechazado" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Confirmar: crear el pedido"
+                          onClick={() => setConfirmando(p)}
+                          disabled={confirmar.isPending}
+                        >
+                          <PackageCheck className="h-4 w-4 text-primary" />
+                        </Button>
+                      )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      title={p.pedido_id ? "Ya es un pedido: no se cambia" : "Editar"}
-                      disabled={!!p.pedido_id}
+                      title={
+                        !escribir ? "Ver" : p.pedido_id ? "Ya es un pedido: no se cambia" : "Editar"
+                      }
+                      disabled={escribir && !!p.pedido_id}
                       onClick={() => {
                         setEditing(p);
                         setLineasIniciales(null);
@@ -438,7 +447,7 @@ function PresupuestosPage() {
                         setOpen(true);
                       }}
                     >
-                      <Pencil className="h-4 w-4" />
+                      {escribir ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                     <SiPuede accion="borrar">
                       <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
@@ -624,6 +633,7 @@ function PresupuestoDialog({
     });
   };
 
+  const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -632,124 +642,130 @@ function PresupuestoDialog({
             {presupuesto ? `Editar ${presupuesto.numero}` : "Nuevo presupuesto"}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          {!presupuesto && b && <AvisosIa avisos={b.avisos} />}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label>Cliente</Label>
-              <SelectorClienteTextil
-                clientes={clientes}
-                valor={f.cliente_id}
-                onElegir={setCliente}
-              />
+        <CamposSegunNivel>
+          <div className="space-y-4">
+            {!presupuesto && b && <AvisosIa avisos={b.avisos} />}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Cliente</Label>
+                <SelectorClienteTextil
+                  clientes={clientes}
+                  valor={f.cliente_id}
+                  onElegir={setCliente}
+                />
+              </div>
+              <div>
+                <Label>Marca comercial</Label>
+                <Select
+                  value={f.marca_id ?? "__none__"}
+                  onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ninguna</SelectItem>
+                    {marcas.map((m: any) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Fecha</Label>
+                <Input
+                  type="date"
+                  value={f.fecha}
+                  onChange={(e) => setF({ ...f, fecha: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Nombre cliente</Label>
+                <Input
+                  value={f.cliente_nombre ?? ""}
+                  onChange={(e) => setF({ ...f, cliente_nombre: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>NIF</Label>
+                <Input
+                  value={f.cliente_nif ?? ""}
+                  onChange={(e) => setF({ ...f, cliente_nif: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Validez (días)</Label>
+                <Input
+                  type="number"
+                  value={f.validez_dias}
+                  onChange={(e) => setF({ ...f, validez_dias: Number(e.target.value) })}
+                />
+              </div>
             </div>
-            <div>
-              <Label>Marca comercial</Label>
-              <Select
-                value={f.marca_id ?? "__none__"}
-                onValueChange={(v) => setF({ ...f, marca_id: v === "__none__" ? null : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ninguna</SelectItem>
-                  {marcas.map((m: any) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Fecha</Label>
-              <Input
-                type="date"
-                value={f.fecha}
-                onChange={(e) => setF({ ...f, fecha: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Nombre cliente</Label>
-              <Input
-                value={f.cliente_nombre ?? ""}
-                onChange={(e) => setF({ ...f, cliente_nombre: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>NIF</Label>
-              <Input
-                value={f.cliente_nif ?? ""}
-                onChange={(e) => setF({ ...f, cliente_nif: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Validez (días)</Label>
-              <Input
-                type="number"
-                value={f.validez_dias}
-                onChange={(e) => setF({ ...f, validez_dias: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-          <LineasEditor
-            stock={stock}
-            items={f.items}
-            onChange={(items: Linea[]) => setF({ ...f, items })}
-          />
-          <ImagenesPresupuesto estado={imagenes} />
-          <div>
-            <Label>Notas</Label>
-            <Textarea
-              value={f.notas ?? ""}
-              onChange={(e) => setF({ ...f, notas: e.target.value })}
+            <LineasEditor
+              stock={stock}
+              items={f.items}
+              onChange={(items: Linea[]) => setF({ ...f, items })}
             />
+            <ImagenesPresupuesto estado={imagenes} />
+            <div>
+              <Label>Notas</Label>
+              <Textarea
+                value={f.notas ?? ""}
+                onChange={(e) => setF({ ...f, notas: e.target.value })}
+              />
+            </div>
           </div>
-        </div>
+        </CamposSegunNivel>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {escribir ? "Cancelar" : "Cerrar"}
           </Button>
-          <Button
-            disabled={loading || f.items.length === 0}
-            onClick={() => {
-              // Lo que la IA no ha sabido (la cantidad) no se guarda a cero sin querer.
-              if (b && (f.items as Linea[]).some((it) => !(Number(it.cantidad) > 0))) {
-                toast.error("La cantidad de cada línea tiene que ser mayor que cero");
-                return;
-              }
-              // Ni el precio: hay que escribirlo (aunque sea 0 a propósito).
-              if ((f.items as Linea[]).some((it) => it.precio_pendiente)) {
-                toast.error("Falta el precio en alguna línea");
-                return;
-              }
-              onSave(
-                {
-                  id: presupuesto?.id,
-                  cliente_id: f.cliente_id || null,
-                  cliente_nombre: f.cliente_nombre || null,
-                  cliente_email: f.cliente_email || null,
-                  cliente_nif: f.cliente_nif || null,
-                  cliente_direccion: f.cliente_direccion || null,
-                  marca_id: f.marca_id || null,
-                  fecha: f.fecha,
-                  validez_dias: Number(f.validez_dias) || 30,
-                  notas: f.notas || null,
-                  items: (f.items as Linea[]).map((it) => ({
-                    descripcion: it.descripcion,
-                    cantidad: it.cantidad,
-                    precio_unitario: it.precio_unitario,
-                    iva_pct: it.iva_pct,
-                    stock_id: it.stock_id ?? null,
-                  })),
-                },
-                imagenes.sincronizar,
-              );
-            }}
-          >
-            Guardar
-          </Button>
+          {escribir && (
+            <>
+              <Button
+                disabled={loading || f.items.length === 0}
+                onClick={() => {
+                  // Lo que la IA no ha sabido (la cantidad) no se guarda a cero sin querer.
+                  if (b && (f.items as Linea[]).some((it) => !(Number(it.cantidad) > 0))) {
+                    toast.error("La cantidad de cada línea tiene que ser mayor que cero");
+                    return;
+                  }
+                  // Ni el precio: hay que escribirlo (aunque sea 0 a propósito).
+                  if ((f.items as Linea[]).some((it) => it.precio_pendiente)) {
+                    toast.error("Falta el precio en alguna línea");
+                    return;
+                  }
+                  onSave(
+                    {
+                      id: presupuesto?.id,
+                      cliente_id: f.cliente_id || null,
+                      cliente_nombre: f.cliente_nombre || null,
+                      cliente_email: f.cliente_email || null,
+                      cliente_nif: f.cliente_nif || null,
+                      cliente_direccion: f.cliente_direccion || null,
+                      marca_id: f.marca_id || null,
+                      fecha: f.fecha,
+                      validez_dias: Number(f.validez_dias) || 30,
+                      notas: f.notas || null,
+                      items: (f.items as Linea[]).map((it) => ({
+                        descripcion: it.descripcion,
+                        cantidad: it.cantidad,
+                        precio_unitario: it.precio_unitario,
+                        iva_pct: it.iva_pct,
+                        stock_id: it.stock_id ?? null,
+                      })),
+                    },
+                    imagenes.sincronizar,
+                  );
+                }}
+              >
+                Guardar
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
