@@ -62,7 +62,7 @@ import {
 import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
-  head: () => ({ meta: [{ title: "Facturación Consolidada · DTF Culture" }] }),
+  head: () => ({ meta: [{ title: "Lo cobrado · DTF Culture" }] }),
   component: FacturacionGlobal,
 });
 
@@ -268,7 +268,7 @@ function FacturacionGlobal() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Facturación Consolidada</h1>
+          <h1 className="text-2xl font-bold">Lo cobrado</h1>
           <p className="text-muted-foreground">
             Todo lo cobrado, de las tiendas y del textil, con su método de cobro
           </p>
@@ -389,7 +389,7 @@ function FacturacionGlobal() {
       {!disponible && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            La Facturación Consolidada se calcula con los cobros, que necesitan la migración{" "}
+            «Lo cobrado» se calcula con los cobros, que necesitan la migración{" "}
             <code>20260929100000_cobros.sql</code>.
           </CardContent>
         </Card>

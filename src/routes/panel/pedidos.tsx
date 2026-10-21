@@ -5,7 +5,7 @@ import { PedidosTable } from "@/components/PedidosTable";
 import { PedidosErrorBoundary } from "@/components/pedidos/PedidosErrorBoundary";
 
 export const Route = createFileRoute("/panel/pedidos")({
-  head: () => ({ meta: [{ title: "Pedidos Consolidados · DTF Culture" }] }),
+  head: () => ({ meta: [{ title: "Pedidos · DTF Culture" }] }),
   component: PedidosGlobal,
 });
 
@@ -13,7 +13,7 @@ function PedidosGlobal() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Pedidos consolidados</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
         <p className="text-sm text-muted-foreground">
           Vista unificada de pedidos de todas las tiendas. Filtra y exporta.
         </p>

@@ -106,7 +106,7 @@ function AjusteWebSinPagar({ cuenta }: { cuenta: boolean }) {
             <span className="block text-muted-foreground">
               En WooCommerce, un pedido «pendiente de pago» o «en espera» puede no pagarse nunca.
               Apagado, Gerencia no los cuenta en lo vendido hasta que se paguen. No cambia el
-              Dashboard ni la Facturación de las tiendas.
+              Inicio ni la Facturación de las tiendas.
             </span>
           </span>
         </label>

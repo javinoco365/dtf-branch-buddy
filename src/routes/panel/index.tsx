@@ -42,7 +42,7 @@ import {
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 
 export const Route = createFileRoute("/panel/")({
-  head: () => ({ meta: [{ title: "Dashboard Global · DTF Culture" }] }),
+  head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
   component: DashboardGlobal,
 });
 
@@ -145,8 +145,8 @@ function DashboardGlobal() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard Global</h1>
-          <p className="text-muted-foreground">Vista consolidada agregando todas las tiendas</p>
+          <h1 className="text-2xl font-bold">Inicio</h1>
+          <p className="text-muted-foreground">Las cifras del periodo, de todas las tiendas</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
