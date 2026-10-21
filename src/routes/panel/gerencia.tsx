@@ -23,28 +23,10 @@ import {
   useVentasGerencia,
 } from "@/lib/gerencia";
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
-import {
-  esGrupo,
-  gastosDelGrupo,
-  GRUPOS,
-  pedidosDocumentados,
-  pendienteDocumentar,
-  ventasDelGrupo,
-  type Grupo,
-} from "@/dominio/grupos";
+import { esGrupo, GRUPOS, type Grupo } from "@/dominio/grupos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { gastosConCompras } from "@/dominio/compras";
-import {
-  AJUSTES_POR_DEFECTO,
-  aplicarAjustesVentas,
-  CANALES,
-  filtrarCobrosGerencia,
-  filtrarPendientesGerencia,
-  filtrarVentas,
-  type Canal,
-  type FiltroGerencia,
-  webSinPagar,
-} from "@/dominio/gerencia";
+import { montarDatosGerencia } from "@/dominio/gerencia-datos";
+import { CANALES, type Canal, type FiltroGerencia } from "@/dominio/gerencia";
 
 // Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
 // las once (y la librería de gráficas) para enseñar solo una. Estos módulos se
@@ -97,8 +79,6 @@ export const Route = createFileRoute("/panel/gerencia")({
 
 const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos", grupo: "total" };
 
-const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
-
 const esCanal = (v: string): v is Canal => CANALES.some((c) => c.valor === v);
 
 function Gerencia() {
@@ -140,76 +120,53 @@ function Gerencia() {
   const { data: tiendas = [] } = useTiendas();
   const hoy = useMemo(() => new Date(), []);
 
-  const datos: DatosGerencia | null = useMemo(() => {
-    // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
-    const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
-    if (!ventas.data || !aj) return null;
-    // Sin las compras, el beneficio saldría mejor de lo que es: se espera.
-    if (!compras.data && !compras.isError) return null;
-    const gastos = gastosConCompras(aj.gastos, compras.data ?? []);
-    // Para separar A y B hacen falta los documentos; sin ellos, todavía no.
-    if (grupo !== "total" && (!docs.data || (periodo.comparacion && !docsPrevios.data))) {
-      return null;
-    }
-    const a = aj.ajustes;
-    const delPeriodo = filtrarVentas(ventas.data, filtro);
-    const todas = aplicarAjustesVentas(delPeriodo, a);
-    const documentados = pedidosDocumentados(docs.data ?? []);
-    const documentadosPrevios = pedidosDocumentados(docsPrevios.data ?? []);
-    return {
+  const datos: DatosGerencia | null = useMemo(
+    () =>
+      montarDatosGerencia({
+        grupo,
+        filtro,
+        seleccion: periodo.seleccion,
+        rango,
+        comparacion: periodo.comparacion,
+        costeMetro,
+        tiendas,
+        hoy,
+        ventas: ventas.data,
+        ventasPrevias: ventasPrevias.data,
+        docs: docs.data,
+        docsPrevios: docsPrevios.data,
+        ajustes: { data: ajustes.data, isError: ajustes.isError },
+        compras: { data: compras.data, isError: compras.isError },
+        cobros: cobros.data,
+        cobrosPrevios: cobrosPrevios.data,
+        pendientes: pendientes.data,
+        caja: caja.data,
+        banco: banco.data,
+      }),
+    [
+      ventas.data,
+      ventasPrevias.data,
+      docs.data,
+      docsPrevios.data,
       grupo,
-      ventasTodas: todas,
-      documentados: docs.data ? documentados : null,
-      pendiente: docs.data ? pendienteDocumentar(todas, documentados) : null,
+      ajustes.data,
+      ajustes.isError,
+      compras.data,
+      compras.isError,
+      cobros.data,
+      cobrosPrevios.data,
+      pendientes.data,
+      caja.data,
+      banco.data,
       filtro,
-      seleccion: periodo.seleccion,
+      periodo.seleccion,
+      periodo.comparacion,
       rango,
-      comparacion: periodo.comparacion,
       costeMetro,
       tiendas,
-      ventas: ventasDelGrupo(todas, documentados, grupo),
-      ventasPrevias: ventasDelGrupo(
-        aplicarAjustesVentas(filtrarVentas(ventasPrevias.data ?? [], filtro), a),
-        documentadosPrevios,
-        grupo,
-      ),
-      webSinPagar: webSinPagar(delPeriodo),
-      ajustes: a,
-      gastos,
-      gastosDelGrupo: gastosDelGrupo(gastos, grupo),
-      objetivos: aj.objetivos,
-      cobros: filtrarCobrosGerencia(cobros.data?.cobros ?? [], filtro),
-      cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios.data?.cobros ?? [], filtro),
-      cobrosDisponibles: cobros.data?.disponible ?? false,
-      pendientes: filtrarPendientesGerencia(pendientes.data?.pedidos ?? [], filtro),
-      pendientesDisponibles: pendientes.data?.disponible ?? false,
-      caja: caja.data?.movimientos,
-      banco: banco.data,
       hoy,
-    };
-  }, [
-    ventas.data,
-    ventasPrevias.data,
-    docs.data,
-    docsPrevios.data,
-    grupo,
-    ajustes.data,
-    ajustes.isError,
-    compras.data,
-    compras.isError,
-    cobros.data,
-    cobrosPrevios.data,
-    pendientes.data,
-    caja.data,
-    banco.data,
-    filtro,
-    periodo.seleccion,
-    periodo.comparacion,
-    rango,
-    costeMetro,
-    tiendas,
-    hoy,
-  ]);
+    ],
+  );
 
   const opcionesTienda = [
     { valor: "todas", etiqueta: "Todas las tiendas" },
