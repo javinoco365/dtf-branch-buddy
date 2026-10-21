@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -41,17 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  AlertTriangle,
-  ArrowLeftRight,
-  ClipboardCheck,
-  GitMerge,
-  History,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import {
   listStock,
   upsertStockItem,
@@ -70,17 +59,20 @@ import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
 import { eur as fmtEUR, eurConSigno, eurUnitario, numero } from "@/lib/format";
 import { comprasParaDevolucion } from "@/dominio/proformas";
-import {
-  EXPLICACION_VALOR_STOCK,
-  totalesMovimientosStock,
-  totalesStock,
-} from "@/dominio/sumatorios-textil";
+import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
+import { curvaDeTallas } from "@/dominio/curva-tallas";
 import { claveTalla, claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado } from "@/dominio/precio-recomendado";
 import type { ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
 import { TextoRecomendado } from "@/components/textil/CrearVarianteDialog";
 import { SiPuede } from "@/components/SiPuede";
+import {
+  TablaStockPorTallas,
+  TarjetasStockPorTallas,
+  type AccionesVariante,
+} from "@/components/textil/StockPorTallas";
+import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/stock")({
@@ -90,15 +82,9 @@ export const Route = createFileRoute("/panel/textil/stock")({
 
 type Item = any;
 
-/** «Gildan · 5000», o «—» sin producto. */
-const textoProducto = (v: VarianteCatalogo) =>
-  [v.producto?.marca, v.producto?.referencia].filter(Boolean).join(" · ") ||
-  v.producto?.nombre ||
-  "—";
-
 function StockPage() {
   // El visor ve el stock y el historial; no marca, mueve, cuenta ni fusiona.
-  const { escribir, borrar: puedeBorrar } = usePermisos();
+  const { escribir } = usePermisos();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const listFn = useServerFn(listStock);
@@ -119,33 +105,58 @@ function StockPage() {
     () => (data as Record<string, unknown>[]).map(aVarianteCatalogo),
     [data],
   );
-  const porId = useMemo(() => new Map(variantes.map((v) => [v.id, v])), [variantes]);
+  // Las filas tal como llegan, para los diálogos (editar, recuento, historial…).
+  const filaPorId = useMemo(
+    () => new Map((data as Item[]).map((it) => [String(it.id), it])),
+    [data],
+  );
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", bajo: false });
-  const filtrados = useMemo(() => {
-    const q = normalizarTexto(filtros.q);
-    return (data as any[]).filter((it) => {
-      // «Poco stock» mira lo disponible, como el aviso de la tabla.
-      const disponible = Number(it.cantidad) - Number(it.cantidad_reservada ?? 0);
-      if (filtros.bajo && disponible > Number(it.cantidad_minima)) return false;
-      const v = porId.get(it.id);
-      return (
-        !q ||
-        [
-          it.sku,
-          it.nombre,
-          it.categoria,
-          it.color,
-          it.talla,
-          it.ean,
-          v?.producto?.marca,
-          v?.producto?.referencia,
-        ].some((x) => normalizarTexto(x).includes(q))
-      );
-    });
-  }, [data, porId, filtros.q, filtros.bajo]);
-  // El pie suma las mismas variantes que se ven, desactivadas incluidas.
-  const totales = useMemo(() => totalesStock(filtrados), [filtrados]);
+  const busqueda = normalizarTexto(filtros.q);
+  const casa = useMemo(
+    () => (v: VarianteCatalogo) =>
+      !busqueda ||
+      [
+        v.sku,
+        v.nombre,
+        v.categoria,
+        v.color,
+        v.talla,
+        v.ean,
+        v.producto?.marca,
+        v.producto?.referencia,
+        v.producto?.nombre,
+      ].some((x) => normalizarTexto(x).includes(busqueda)),
+    [busqueda],
+  );
+  // Una fila (prenda y color) se ve si casa alguna de sus tallas, y entonces se
+  // ve entera: la curva completa. «Poco stock» mira lo disponible de cada talla,
+  // con el mismo corte que el color de la casilla.
+  const curva = useMemo(
+    () =>
+      curvaDeTallas(
+        variantes,
+        (f) => (!filtros.bajo || f.tono !== "neutro") && f.variantes.some(casa),
+      ),
+    [variantes, filtros.bajo, casa],
+  );
+  // El pie suma las variantes de las filas que se ven, desactivadas incluidas.
+  const totales = useMemo(() => totalesStock(curva.filas.flatMap((f) => f.variantes)), [curva]);
+  // En el detalle se señala la talla que se buscaba (un EAN, un SKU, una referencia).
+  const destacada = (v: VarianteCatalogo) =>
+    !!busqueda &&
+    ([v.sku, v.ean, v.producto?.referencia].some((x) => normalizarTexto(x).includes(busqueda)) ||
+      normalizarTexto(v.talla) === busqueda);
+  // Abiertas a mano; si la búsqueda deja una sola fila (se ha escaneado un EAN,
+  // por ejemplo), se abre sola, para ir directo a su talla.
+  const [abiertas, setAbiertas] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const solaPorBusqueda = !!busqueda && curva.filas.length === 1;
+  const abierta = (clave: string) => abiertas.get(clave) ?? solaPorBusqueda;
+  const alternar = (clave: string) => setAbiertas((m) => new Map(m).set(clave, !abierta(clave)));
+  // En el móvil y la tablet en vertical, tarjetas; al imprimir, las dos y que elija el CSS.
+  const vista = useEsMovil(CONSULTA_TABLET);
+  const conTarjetas = vista.movil || vista.imprimiendo;
+  const conTabla = !vista.movil || vista.imprimiendo;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [otro, setOtro] = useState<Item | null>(null);
@@ -154,11 +165,13 @@ function StockPage() {
   const [fusionando, setFusionando] = useState<VarianteCatalogo | null>(null);
   // Variantes marcadas para crear un presupuesto o un pedido con ellas.
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
-  const marcar = (id: string, si: boolean) =>
+  const marcar = (ids: readonly string[], si: boolean) =>
     setMarcadas((m) => {
       const s = new Set(m);
-      if (si) s.add(id);
-      else s.delete(id);
+      for (const id of ids) {
+        if (si) s.add(id);
+        else s.delete(id);
+      }
       return s;
     });
   const crearDesdeStock = (destino: "/panel/textil/presupuestos" | "/panel/textil/pedidos") =>
@@ -240,7 +253,45 @@ function StockPage() {
     onError: (e: any) => avisarError(e),
   });
 
-  const columnas = escaner ? 15 : 13;
+  // Los botones del detalle de cada talla. Los diálogos trabajan con la fila tal
+  // como llega de la base.
+  const acciones: AccionesVariante = {
+    otroMovimiento: (v) => setOtro(filaPorId.get(v.id) ?? null),
+    recuento: (v) => setRecuento(filaPorId.get(v.id) ?? null),
+    historial: (v) => setHistorial(filaPorId.get(v.id) ?? null),
+    editar: (v) => {
+      const it = filaPorId.get(v.id);
+      if (!it) return;
+      setEditing(it);
+      setOpen(true);
+    },
+    borrar: (v) => {
+      if (
+        confirm(
+          `¿Seguro que quieres eliminar "${etiquetaVariante(v)}"?\n\n` +
+            "Si tiene movimientos de stock no se borrará: se desactivará, " +
+            "porque su historia explica el coste de lo que ya vendiste." +
+            // Con la migración del escáner, solo a 0 unidades.
+            (escaner && v.cantidad !== 0
+              ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
+                "merma o un recuento que la deje a 0, o fusiónala con la buena."
+              : ""),
+        )
+      )
+        del.mutate(v.id);
+    },
+    fusionar: (v) => setFusionando(v),
+  };
+  const propsCurva = {
+    curva,
+    totales,
+    abierta,
+    alternar,
+    seleccion: { marcadas, marcar, puede: escribir },
+    acciones,
+    escaner,
+    destacada,
+  };
 
   return (
     <div className="space-y-4">
@@ -248,7 +299,8 @@ function StockPage() {
         <div>
           <h1 className="text-2xl font-bold">Stock textil</h1>
           <p className="text-sm text-muted-foreground">
-            Inventario de camisetas, sudaderas y demás prendas.
+            Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado
+            para pedidos.
           </p>
         </div>
         <SiPuede accion="escribir">
@@ -311,213 +363,30 @@ function StockPage() {
           </CardContent>
         </Card>
       )}
-      <Card>
-        <CardContent className="p-0">
-          <Table movil="tarjetas-tablet">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8" aria-label="Elegir" />
-                <TableHead>SKU</TableHead>
-                {escaner && <TableHead>Producto</TableHead>}
-                <TableHead>Nombre</TableHead>
-                <TableHead>Cat.</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Talla</TableHead>
-                {escaner && <TableHead>EAN</TableHead>}
-                <TableHead className="text-right" title="Lo que hay si vas y lo cuentas">
-                  Físico
-                </TableHead>
-                <TableHead className="text-right" title="Comprometido en pedidos sin entregar">
-                  Reservado
-                </TableHead>
-                <TableHead
-                  className="text-right"
-                  title="Físico menos reservado: lo que puedes prometer"
-                >
-                  Disponible
-                </TableHead>
-                <TableHead className="text-right">Mín.</TableHead>
-                <TableHead className="text-right">Coste</TableHead>
-                <TableHead className="text-right">PVP</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={columnas}>Cargando…</TableCell>
-                </TableRow>
-              )}
-              {!isLoading && data.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={columnas} className="text-center text-muted-foreground py-8">
-                    Sin artículos.
-                  </TableCell>
-                </TableRow>
-              )}
-              {filtrados.map((it: any) => {
-                const v = porId.get(it.id);
-                const reservado = Number(it.cantidad_reservada ?? 0);
-                const disponible = Number(it.cantidad) - reservado;
-                // El aviso mira lo disponible, no lo físico: tener 20 en el
-                // armario con 18 comprometidos no es tener 20 para vender.
-                const bajo = disponible <= Number(it.cantidad_minima);
-                const vendible = !!v && utilizable(v);
-                return (
-                  <TableRow key={it.id}>
-                    <TableCell>
-                      <Checkbox
-                        aria-label="Elegir para un presupuesto o un pedido"
-                        disabled={!vendible || !escribir}
-                        checked={marcadas.has(it.id)}
-                        onCheckedChange={(c) => marcar(it.id, c === true)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{it.sku ?? "—"}</TableCell>
-                    {escaner && <TableCell>{v ? textoProducto(v) : "—"}</TableCell>}
-                    <TableCell className="font-medium">
-                      {it.nombre}
-                      {escaner && v?.repetida && (
-                        <Badge variant="outline" className="ml-2 border-amber-500 text-amber-700">
-                          Repetida
-                        </Badge>
-                      )}
-                      {v && !v.activa && (
-                        <Badge variant="outline" className="ml-2 text-muted-foreground">
-                          Desactivada
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{it.categoria ?? "—"}</TableCell>
-                    <TableCell>{it.color ?? "—"}</TableCell>
-                    <TableCell>{it.talla ?? "—"}</TableCell>
-                    {escaner && (
-                      <TableCell className="font-mono text-xs">{it.ean ?? "—"}</TableCell>
-                    )}
-                    <TableCell className="text-right">{it.cantidad}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {reservado || "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {bajo ? <Badge variant="destructive">{disponible}</Badge> : disponible}
-                    </TableCell>
-                    <TableCell className="text-right">{it.cantidad_minima}</TableCell>
-                    <TableCell className="text-right">
-                      {fmtEUR(Number(it.coste_unitario))}
-                    </TableCell>
-                    <TableCell className="text-right">{fmtEUR(Number(it.precio_venta))}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">
-                      {escaner && v?.repetida && puedeBorrar && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Fusionar con…"
-                          aria-label="Fusionar con…"
-                          onClick={() => setFusionando(v)}
-                        >
-                          <GitMerge className="h-4 w-4 text-amber-600" />
-                        </Button>
-                      )}
-                      <SiPuede accion="escribir">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Otro movimiento: merma, devolución o ajuste"
-                          aria-label="Otro movimiento"
-                          onClick={() => setOtro(it)}
-                        >
-                          <ArrowLeftRight className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Recuento físico"
-                          onClick={() => setRecuento(it)}
-                        >
-                          <ClipboardCheck className="h-4 w-4" />
-                        </Button>
-                      </SiPuede>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Historial de movimientos"
-                        onClick={() => setHistorial(it)}
-                      >
-                        <History className="h-4 w-4" />
-                      </Button>
-                      <SiPuede accion="escribir">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Editar datos"
-                          onClick={() => {
-                            setEditing(it);
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </SiPuede>
-                      <SiPuede accion="borrar">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `¿Seguro que quieres eliminar "${it.nombre}"?\n\n` +
-                                  "Si tiene movimientos de stock no se borrará: se desactivará, " +
-                                  "porque su historia explica el coste de lo que ya vendiste." +
-                                  // Con la migración del escáner, solo a 0 unidades.
-                                  (escaner && Number(it.cantidad) !== 0
-                                    ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
-                                      "merma o un recuento que la deje a 0, o fusiónala con la buena."
-                                    : ""),
-                              )
-                            )
-                              del.mutate(it.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </SiPuede>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-            {!isLoading && filtrados.length > 0 && (
-              <TableFooter>
-                <TableRow>
-                  <TableCell colSpan={escaner ? 8 : 6}>
-                    Total · {totales.variantes} variante{totales.variantes === 1 ? "" : "s"}
-                  </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {numero(totales.fisico, 0)}
-                  </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {numero(totales.reservado, 0)}
-                  </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {numero(totales.disponible, 0)}
-                  </TableCell>
-                  <TableCell />
-                  {/* El coste es por unidad y no se suma: aquí va lo que vale el stock a coste. */}
-                  <TableCell
-                    className="text-right font-bold tabular-nums"
-                    title={EXPLICACION_VALOR_STOCK}
-                    data-etiqueta-fija="Valor del stock"
-                  >
-                    {fmtEUR(totales.valor)}
-                  </TableCell>
-                  <TableCell />
-                  <TableCell />
-                </TableRow>
-              </TableFooter>
-            )}
-          </Table>
-        </CardContent>
-      </Card>
+      {isLoading || data.length === 0 || curva.filas.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            {isLoading
+              ? "Cargando…"
+              : data.length === 0
+                ? "Sin artículos."
+                : "Ninguna prenda coincide con los filtros."}
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {conTarjetas && (
+            <div className="lg:hidden">
+              <TarjetasStockPorTallas {...propsCurva} />
+            </div>
+          )}
+          {conTabla && (
+            <div className="max-lg:hidden">
+              <TablaStockPorTallas {...propsCurva} />
+            </div>
+          )}
+        </>
+      )}
 
       {open && (
         <StockDialog

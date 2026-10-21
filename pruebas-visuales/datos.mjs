@@ -592,6 +592,54 @@ const STOCK = [
   updated_at: "2026-01-01T00:00:00Z",
 }));
 
+// Como llegan hoy las compras de Roly (captura de Stock del 21-10-2026): la
+// referencia lleva la talla y el color, así que cada una es un producto con la
+// misma marca y el mismo nombre. Stock las junta por prenda y color.
+const STOCK_ROLY = [
+  ["SS643201011", "Antartida", "BLANCO PERLA", "S", 5, 5, 12.55],
+  ["SS643202011", "Antartida", "BLANCO PERLA", "M", 1, 1, 12.55],
+  ["SS643203011", "Antartida", "BLANCO PERLA", "L", 1, 1, 12.55],
+  ["SS64320105", "Antartida", "ROYAL", "S", 5, 5, 12.55],
+  ["SS64320205", "Antartida", "ROYAL", "M", 1, 1, 12.55],
+  ["SS64320305", "Antartida", "ROYAL", "L", 3, 3, 12.55],
+  ["SU10700201", "Clasica", "BLANCO", "M", 3, 0, 6.25],
+  ["SU10700601", "Clasica", "BLANCO", "3XL", 1, 0, 6.83],
+  ["CA65020348", "Dogo Premium", "ROSA CLARO", "L", 1, 0, 2.39],
+  ["CA65020201", "Dogo Premium", "BLANCO", "M", 10, 0, 2.39],
+  ["CA65020601", "Dogo Premium", "BLANCO", "3XL", 2, 0, 2.52],
+].map(([referencia, nombre, color, talla, cantidad, reservada, coste], i) => {
+  const producto = {
+    id: id("a1", i + 1),
+    empresa_id: EMPRESA,
+    marca: "Roly",
+    referencia,
+    nombre,
+    categoria: null,
+    activo: true,
+  };
+  return {
+    id: id("a2", i + 1),
+    empresa_id: EMPRESA,
+    producto_id: producto.id,
+    producto,
+    nombre,
+    sku: null,
+    ean: null,
+    categoria: null,
+    talla,
+    color,
+    cantidad,
+    cantidad_reservada: reservada,
+    cantidad_minima: 0,
+    coste_unitario: coste,
+    precio_venta: 0,
+    repetida: false,
+    notas: null,
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+});
+
 const TEXTIL_PEDIDOS = [0, 1, 2].map((i) => {
   const subtotal = [90, 180, 45][i];
   const iva = subtotal * 0.21;
@@ -1031,7 +1079,8 @@ Object.assign(DATOS, {
   banco_cuentas: CUENTAS_BANCO,
   banco_extractos: EXTRACTOS_BANCO,
   textil_marcas: MARCAS,
-  textil_stock: STOCK,
+  textil_stock: [...STOCK, ...STOCK_ROLY],
+  textil_productos: STOCK_ROLY.map((v) => v.producto),
   textil_pedidos: TEXTIL_PEDIDOS,
   textil_presupuestos: TEXTIL_PRESUPUESTOS,
   textil_facturas: TEXTIL_FACTURAS,
