@@ -20,7 +20,17 @@ import {
 } from "./gerencia";
 import type { Comparacion, Seleccion } from "./periodos";
 import { TIENDA_TEXTIL } from "./cobros";
-import { montarDatosGerencia, type DatosGerencia, type EntradasGerencia } from "./gerencia-datos";
+import {
+  FUENTE_DEL_CAMPO,
+  FUENTES_DE_PESTANA,
+  montarDatosGerencia,
+  montarGastosGerencia,
+  montarPendienteDocumentar,
+  type DatosGerencia,
+  type EntradasGerencia,
+  type FuenteGerencia,
+  type PestanaGerencia,
+} from "./gerencia-datos";
 
 // Casos de prueba (cancelados, devoluciones, web sin pagar, canje ticket →
 // factura, rectificativa sin pedido, pedido web de las 23:15 UTC del 31-10,
@@ -34,7 +44,7 @@ const banco = JSON.parse(
  * dominio, copiado sin tocar una coma. Es la referencia: lo de ahora tiene
  * que dar exactamente lo mismo.
  */
-function referencia(e: EntradasGerencia): DatosGerencia | null {
+function referencia(e: EntradasGerencia): DatosAntes | null {
   const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
   const ajustes = e.ajustes;
   const compras = e.compras;
@@ -96,6 +106,16 @@ function referencia(e: EntradasGerencia): DatosGerencia | null {
     banco: banco.data,
     hoy,
   };
+}
+
+/** Lo que daba antes: sin los dos campos que se añadieron al repartir por pestaña. */
+type DatosAntes = Omit<DatosGerencia, "cobrosLeidos" | "pendientesLeidos">;
+function comoAntes(d: DatosGerencia | null): DatosAntes | null {
+  if (!d) return null;
+  const resto: Partial<DatosGerencia> = { ...d };
+  delete resto.cobrosLeidos;
+  delete resto.pendientesLeidos;
+  return resto as DatosAntes;
 }
 
 const fecha = (s: string) => new Date(s);
@@ -177,7 +197,7 @@ describe("montarDatosGerencia", () => {
       for (const filtro of FILTROS) {
         it(`${nombre} · grupo ${g.valor} · ${filtro.tienda}/${filtro.canal}: igual que antes`, () => {
           const e = completas({ ...estado, grupo: g.valor as Grupo, filtro });
-          expect(montarDatosGerencia(e)).toStrictEqual(referencia(e));
+          expect(comoAntes(montarDatosGerencia(e))).toStrictEqual(referencia(e));
         });
       }
     }
@@ -219,4 +239,101 @@ describe("montarDatosGerencia", () => {
       montarDatosGerencia(completas({ grupo: "total", docs: undefined }))?.pendiente,
     ).toBeNull();
   });
+});
+
+/**
+ * Lo que la pantalla deja sin pedir cuando la pestaña no lo usa: en las
+ * entradas llega `undefined` (y el coste por metro, 0).
+ */
+function soloLoDe(e: EntradasGerencia, fuentes: readonly FuenteGerencia[]): EntradasGerencia {
+  const pide = (f: FuenteGerencia) => fuentes.includes(f);
+  return {
+    ...e,
+    ventasPrevias: pide("ventasPrevias") ? e.ventasPrevias : undefined,
+    docsPrevios: pide("ventasPrevias") ? e.docsPrevios : undefined,
+    compras: pide("compras") ? e.compras : { data: undefined, isError: false },
+    cobros: pide("cobros") ? e.cobros : undefined,
+    cobrosPrevios: pide("cobrosPrevios") ? e.cobrosPrevios : undefined,
+    pendientes: pide("pendientes") ? e.pendientes : undefined,
+    caja: pide("caja") ? e.caja : undefined,
+    banco: pide("banco") ? e.banco : undefined,
+    costeMetro: pide("costeMetro") ? e.costeMetro : 0,
+  };
+}
+
+const CAMPOS = Object.keys(FUENTE_DEL_CAMPO) as (keyof DatosGerencia)[];
+
+describe("cada pestaña pide lo suyo", () => {
+  for (const [pestana, fuentes] of Object.entries(FUENTES_DE_PESTANA) as [
+    PestanaGerencia,
+    readonly FuenteGerencia[],
+  ][]) {
+    // Los campos que la pestaña puede leer: los de sus lecturas y los que no dependen de ninguna.
+    const suyos = CAMPOS.filter((c) => {
+      const f = FUENTE_DEL_CAMPO[c];
+      return f === null || fuentes.includes(f);
+    });
+    for (const [nombre, estado] of Object.entries(ESTADOS)) {
+      for (const g of GRUPOS) {
+        for (const filtro of FILTROS) {
+          it(`${pestana} · ${nombre} · grupo ${g.valor} · ${filtro.tienda}/${filtro.canal}`, () => {
+            const e = completas({ ...estado, grupo: g.valor as Grupo, filtro });
+            const todo = montarDatosGerencia(e);
+            const suyo = montarDatosGerencia(soloLoDe(e, fuentes), fuentes);
+            // Nunca espera más que antes…
+            if (todo) expect(suyo).not.toBeNull();
+            // …y lo que enseña es lo mismo, campo a campo.
+            if (todo && suyo) {
+              for (const c of suyos) expect(suyo[c], c).toStrictEqual(todo[c]);
+            }
+          });
+        }
+      }
+    }
+  }
+
+  it("espera a lo suyo y solo a lo suyo", () => {
+    const sinVentas = completas({ ventas: undefined, docs: undefined });
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.ventas)).toBeNull();
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.tesoreria)).not.toBeNull();
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.comercial)).not.toBeNull();
+    // Sin ventas no hay pendiente: nunca un cero que no es.
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.fiscal)?.pendiente).toBeNull();
+    const sinCompras = completas({ compras: { data: undefined, isError: false } });
+    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.margen)).toBeNull();
+    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.textil)).not.toBeNull();
+    const sinAjustes = completas({ ajustes: { data: undefined, isError: false } });
+    expect(montarDatosGerencia(sinAjustes, FUENTES_DE_PESTANA.clientes)).toBeNull();
+    expect(montarDatosGerencia(sinAjustes, FUENTES_DE_PESTANA.tesoreria)).not.toBeNull();
+    const enB = completas({ grupo: "b", docsPrevios: undefined });
+    expect(montarDatosGerencia(enB, FUENTES_DE_PESTANA.textil)).toBeNull();
+    expect(montarDatosGerencia(enB, FUENTES_DE_PESTANA.produccion)).not.toBeNull();
+  });
+
+  it("cobros y pendientes: leídos o todavía no", () => {
+    const d = montarDatosGerencia(completas({ cobros: undefined, pendientes: undefined }))!;
+    expect([d.cobrosLeidos, d.cobrosDisponibles, d.pendientesLeidos]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    const sin = montarDatosGerencia(completas({ cobros: { disponible: false, cobros: [] } }))!;
+    expect([sin.cobrosLeidos, sin.cobrosDisponibles]).toEqual([true, false]);
+  });
+});
+
+describe("la insignia y el Resumen diario, aparte", () => {
+  for (const [nombre, estado] of Object.entries(ESTADOS)) {
+    for (const filtro of FILTROS) {
+      it(`${nombre} · ${filtro.tienda}/${filtro.canal}: lo mismo que con todo`, () => {
+        const e = completas({ ...estado, filtro });
+        const todo = montarDatosGerencia(e);
+        if (todo) {
+          expect(montarPendienteDocumentar(e)).toStrictEqual(todo.pendiente);
+          expect(montarGastosGerencia(e)).toStrictEqual(todo.gastos);
+        }
+        if (!e.ventas || !e.docs) expect(montarPendienteDocumentar(e)).toBeNull();
+      });
+    }
+  }
 });

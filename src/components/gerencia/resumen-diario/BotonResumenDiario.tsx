@@ -24,13 +24,17 @@ export function BotonResumenDiario(props: {
   /** Los gastos fijos con las compras que cuentan como gasto; nulo mientras cargan. */
   gastos: readonly GastoFijo[] | null;
   objetivos: readonly Objetivo[];
+  /** Para pedir lo que la ventana necesita (los gastos) solo mientras está abierta. */
+  alCambiarAbierto?: (abierto: boolean) => void;
 }) {
+  const { alCambiarAbierto, ...datos } = props;
   const [abierto, setAbierto] = useState(false);
   // El generador del PDF de los socios se pide al abrir la ventana, no al
   // pulsar «Descargar»: cuando se pulsa ya está.
   useEffect(() => {
     if (abierto) void import("@/lib/pdf-informe-socios").catch(() => undefined);
-  }, [abierto]);
+    alCambiarAbierto?.(abierto);
+  }, [abierto, alCambiarAbierto]);
   return (
     <>
       <Button size="sm" onClick={() => setAbierto(true)} className="max-md:w-full">
@@ -42,7 +46,7 @@ export function BotonResumenDiario(props: {
           {/* Solo montado mientras está abierto: cerrado no lee nada. */}
           {abierto && (
             <Suspense fallback={<Skeleton className="h-[60vh] w-full" />}>
-              <ContenidoResumenDiario {...props} />
+              <ContenidoResumenDiario {...datos} />
             </Suspense>
           )}
         </DialogContent>

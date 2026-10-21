@@ -38,14 +38,18 @@ type Filtro = RangoFechas & {
   tiendaId?: string;
 };
 
+/** `activo: false`: no se pide (la pestaña abierta no lo usa); la clave no cambia. */
+export type OpcionesLectura = { activo?: boolean };
+
 function claveRango({ desde, hasta, tiendaId }: Filtro) {
   return [desde.toISOString(), hasta.toISOString(), tiendaId ?? "todas"];
 }
 
 /** Pedidos del rango, por su día (ver arriba), con lo justo para agregar. */
-export function usePedidosPeriodo(filtro: Filtro) {
+export function usePedidosPeriodo(filtro: Filtro, { activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["pedidos-periodo", ...claveRango(filtro)],
+    enabled: activo,
     // Al cambiar de periodo, los del anterior hasta que llegue el nuevo (la
     // pantalla avisa con isPlaceholderData); al cambiar de tienda, no.
     placeholderData: delPeriodoAnterior<PedidoResumen[]>(
@@ -145,9 +149,11 @@ export function useCobrosPeriodo(
    * Gerencia) sigan compartiendo la suya.
    */
   tiendaId?: string,
+  { activo = true }: OpcionesLectura = {},
 ) {
   const alcance = tiendaId ?? "todas";
   return useQuery({
+    enabled: activo,
     queryKey: [
       "cobros-periodo",
       criterio,

@@ -118,7 +118,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Cobrado"
           explicacion="g_cobrado"
-          valor={d.cobrosDisponibles ? eur(cobrado) : "—"}
+          valor={d.cobrosDisponibles ? eur(cobrado) : d.cobrosLeidos ? "—" : "…"}
           frente={frente}
           delta={d.cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
           icon={Wallet}
@@ -127,7 +127,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <TarjetaKpi
           titulo="Pendiente de cobro"
           explicacion="g_pendiente"
-          valor={d.pendientesDisponibles ? eur(pendienteHoy) : "—"}
+          valor={d.pendientesDisponibles ? eur(pendienteHoy) : d.pendientesLeidos ? "—" : "…"}
           delta={null}
           icon={Clock}
           pie={

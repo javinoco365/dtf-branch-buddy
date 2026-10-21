@@ -22,7 +22,7 @@ import {
 } from "@/lib/rpc";
 import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
 import { leerPorIds } from "@/lib/leer-por-ids";
-import { usePedidosPeriodo, type RangoFechas } from "@/lib/periodo";
+import { usePedidosPeriodo, type OpcionesLectura, type RangoFechas } from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
 import { listMovimientosBancoRango } from "@/lib/banco.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
@@ -69,9 +69,10 @@ const dia = (d: Date) => format(d, "yyyy-MM-dd");
  * Pedidos textil del rango, con lo justo para agregar y lo que costó la ropa
  * que salió del almacén para cada uno (ver costePorPedido).
  */
-function useTextilPeriodo(rango: RangoFechas) {
+function useTextilPeriodo(rango: RangoFechas, { activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["textil-periodo", dia(rango.desde), dia(rango.hasta)],
+    enabled: activo,
     // Como usePedidosPeriodo: el periodo anterior mientras llega el nuevo,
     // para que las ventas de Gerencia sean todas del mismo periodo.
     placeholderData: delPeriodoAnterior<PedidoTextilResumen[]>(() => true),
@@ -122,9 +123,9 @@ function useTextilPeriodo(rango: RangoFechas) {
 }
 
 /** Todo lo vendido en el rango: pedidos de todas las tiendas y del textil. */
-export function useVentasGerencia(rango: RangoFechas) {
-  const tiendas = usePedidosPeriodo(rango);
-  const textil = useTextilPeriodo(rango);
+export function useVentasGerencia(rango: RangoFechas, opciones: OpcionesLectura = {}) {
+  const tiendas = usePedidosPeriodo(rango, opciones);
+  const textil = useTextilPeriodo(rango, opciones);
   const data = useMemo<Venta[] | undefined>(
     () =>
       tiendas.data && textil.data
@@ -142,9 +143,10 @@ export function useVentasGerencia(rango: RangoFechas) {
 }
 
 /** Lo que se debe hoy: la misma vista y la misma caché que Cobros pendientes. */
-export function usePendientesCobro() {
+export function usePendientesCobro({ activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["cobros-pendientes-pedidos", "todas"],
+    enabled: activo,
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoPendiente[] }> => {
       const { data, error } = await leerTodas<PedidoPendiente>((a, b) =>
         tabla(supabase, "pedidos_pendientes_cobro")
@@ -161,18 +163,19 @@ export function usePendientesCobro() {
 }
 
 /** Los apuntes de caja del rango, como los lee la pantalla de Caja. */
-export function useCajaPeriodo(rango: RangoFechas) {
+export function useCajaPeriodo(rango: RangoFechas, { activo = true }: OpcionesLectura = {}) {
   const listar = useServerFn(listarMovimientosCaja);
   const desde = dia(rango.desde);
   const hasta = dia(rango.hasta);
   return useQuery({
     queryKey: ["caja", desde, hasta],
+    enabled: activo,
     queryFn: () => listar({ data: { desde, hasta } }),
   });
 }
 
 /** Los movimientos del banco del rango, con si están casados o no. */
-export function useBancoPeriodo(rango: RangoFechas) {
+export function useBancoPeriodo(rango: RangoFechas, { activo = true }: OpcionesLectura = {}) {
   const listar = useServerFn(listMovimientosBancoRango);
   const desde = dia(rango.desde);
   const hasta = dia(rango.hasta);
@@ -181,6 +184,7 @@ export function useBancoPeriodo(rango: RangoFechas) {
   // estos días. Clave propia: Conciliación sigue con la suya, completa.
   const consulta = useQuery({
     queryKey: ["gerencia-banco", desde, hasta],
+    enabled: activo,
     // Un rango vacío (desde > hasta) no tiene días: nada que pedir.
     queryFn: () => (desde > hasta ? Promise.resolve([]) : listar({ data: { desde, hasta } })),
   });
@@ -192,9 +196,10 @@ export function useBancoPeriodo(rango: RangoFechas) {
  * El coste por metro de hoy (consumibles + packaging + electricidad). Misma
  * consulta y misma caché que el dashboard.
  */
-export function useCosteMetroActual(): number {
+export function useCosteMetroActual({ activo = true }: OpcionesLectura = {}): number {
   const { data } = useQuery({
     queryKey: ["empresa_costes"],
+    enabled: activo,
     queryFn: async () => {
       const { data } = await tabla(supabase, "empresas")
         .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
@@ -553,9 +558,10 @@ async function leerCompras(
  * recibo de un gasto fijo cuenta en su mes. Sin la migración de compras
  * generales no hay ninguna.
  */
-export function useComprasGerencia() {
+export function useComprasGerencia({ activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["gerencia-compras"],
+    enabled: activo,
     queryFn: async (): Promise<CompraResumen[]> => {
       // Sin la migración de compras generales (sin «categoria»), no hay ninguna.
       const r = await leerCompras((campos) =>
@@ -786,11 +792,15 @@ async function documentosDe(
  * Los documentos fiscales de unos pedidos (tienda y textil), para saber
  * cuáles se han vendido sin factura ni ticket.
  */
-export function useDocumentosDePedidos(ventas: readonly Venta[]) {
+export function useDocumentosDePedidos(
+  ventas: readonly Venta[],
+  { activo = true }: OpcionesLectura = {},
+) {
   const tienda = ventas.filter((v) => v.canal !== "textil" && v.id).map((v) => v.id as string);
   const textil = ventas.filter((v) => v.canal === "textil" && v.id).map((v) => v.id as string);
   return useQuery({
     queryKey: ["gerencia-docs-pedidos", claveIds(tienda), claveIds(textil)],
+    enabled: activo,
     queryFn: async (): Promise<DocumentoDePedido[]> => {
       // Tienda y textil a la vez. Los errores se miran en el mismo orden que
       // en serie: primero el de tienda, luego el del textil.

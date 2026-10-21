@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +25,15 @@ import {
 import { PERIODOS_CUADRO } from "@/dominio/periodos";
 import { esGrupo, GRUPOS, type Grupo } from "@/dominio/grupos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { montarDatosGerencia } from "@/dominio/gerencia-datos";
+import {
+  esPestanaGerencia,
+  FUENTES_DE_PESTANA,
+  FUENTES_GERENCIA,
+  montarDatosGerencia,
+  montarGastosGerencia,
+  montarPendienteDocumentar,
+  type FuenteGerencia,
+} from "@/dominio/gerencia-datos";
 import { CANALES, type Canal, type FiltroGerencia } from "@/dominio/gerencia";
 
 // Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
@@ -79,6 +87,12 @@ export const Route = createFileRoute("/panel/gerencia")({
 
 const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos", grupo: "total" };
 
+const SIN_COBROS = { disponible: false, cobros: [] };
+const SIN_PENDIENTES = { disponible: false, pedidos: [] };
+
+/** Ajustes no lee nada de lo de las pestañas. */
+const SIN_FUENTES: readonly FuenteGerencia[] = [];
+
 const esCanal = (v: string): v is Canal => CANALES.some((c) => c.valor === v);
 
 function Gerencia() {
@@ -103,61 +117,98 @@ function Gerencia() {
   const rango = periodo.rango!;
   const previo = periodo.comparacion?.previo ?? { desde: rango.hasta, hasta: rango.desde };
 
+  // Cada pestaña pide solo lo que enseña (FUENTES_DE_PESTANA), con las mismas
+  // claves de caché: al volver a una pestaña ya leída, sale al momento. Las
+  // ventas, sus documentos y los ajustes se piden siempre: de ellos sale la
+  // insignia de lo pendiente de documentar, que está en todas.
+  const fuentes = esPestanaGerencia(f.pestana)
+    ? FUENTES_DE_PESTANA[f.pestana]
+    : f.pestana === "ajustes"
+      ? SIN_FUENTES
+      : FUENTES_GERENCIA;
+  const pide = (fuente: FuenteGerencia) => fuentes.includes(fuente);
+  // El Resumen diario necesita los gastos con sus compras: se piden al abrirlo.
+  const [resumenAbierto, setResumenAbierto] = useState(false);
+
   const ventas = useVentasGerencia(rango);
-  const ventasPrevias = useVentasGerencia(previo);
-  const cobros = useCobrosPeriodo(rango, "cobro");
-  const cobrosPrevios = useCobrosPeriodo(previo, "cobro");
-  const pendientes = usePendientesCobro();
-  const caja = useCajaPeriodo(rango);
-  const banco = useBancoPeriodo(rango);
-  const costeMetro = useCosteMetroActual();
+  const ventasPrevias = useVentasGerencia(previo, { activo: pide("ventasPrevias") });
+  const cobros = useCobrosPeriodo(rango, "cobro", undefined, { activo: pide("cobros") });
+  const cobrosPrevios = useCobrosPeriodo(previo, "cobro", undefined, {
+    activo: pide("cobrosPrevios"),
+  });
+  const pendientes = usePendientesCobro({ activo: pide("pendientes") });
+  const caja = useCajaPeriodo(rango, { activo: pide("caja") });
+  const banco = useBancoPeriodo(rango, { activo: pide("banco") });
+  const costeMetro = useCosteMetroActual({ activo: pide("costeMetro") });
   const ajustes = useAjustesGerencia();
   // Las facturas de compra que cuestan como un gasto (y los recibos de los gastos fijos).
-  const compras = useComprasGerencia();
+  const compras = useComprasGerencia({ activo: pide("compras") || resumenAbierto });
   // Qué pedidos tienen factura o ticket: de ahí salen los grupos A y B.
   const docs = useDocumentosDePedidos(ventas.data ?? []);
-  const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? []);
+  const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? [], {
+    activo: pide("ventasPrevias"),
+  });
   const { data: tiendas = [] } = useTiendas();
   const hoy = useMemo(() => new Date(), []);
 
+  // Lo que no se pide no entra: una consulta apagada puede traer aún los
+  // datos de otro periodo para enseñar mientras tanto.
+  const previasLeidas = pide("ventasPrevias") ? ventasPrevias.data : undefined;
+  const docsPreviosLeidos = pide("ventasPrevias") ? docsPrevios.data : undefined;
+  // Si no se pueden leer, lo mismo que sin datos (vacío y «—»), pero ya
+  // leídos: así el Resumen distingue «cargando» de «no hay».
+  const cobrosLeidos = pide("cobros")
+    ? (cobros.data ?? (cobros.isError ? SIN_COBROS : undefined))
+    : undefined;
+  const cobrosPreviosLeidos = pide("cobrosPrevios") ? cobrosPrevios.data : undefined;
+  const pendientesLeidos = pide("pendientes")
+    ? (pendientes.data ?? (pendientes.isError ? SIN_PENDIENTES : undefined))
+    : undefined;
+  const cajaLeida = pide("caja") ? caja.data : undefined;
+  const bancoLeido = pide("banco") ? banco.data : undefined;
+
   const datos: DatosGerencia | null = useMemo(
     () =>
-      montarDatosGerencia({
-        grupo,
-        filtro,
-        seleccion: periodo.seleccion,
-        rango,
-        comparacion: periodo.comparacion,
-        costeMetro,
-        tiendas,
-        hoy,
-        ventas: ventas.data,
-        ventasPrevias: ventasPrevias.data,
-        docs: docs.data,
-        docsPrevios: docsPrevios.data,
-        ajustes: { data: ajustes.data, isError: ajustes.isError },
-        compras: { data: compras.data, isError: compras.isError },
-        cobros: cobros.data,
-        cobrosPrevios: cobrosPrevios.data,
-        pendientes: pendientes.data,
-        caja: caja.data,
-        banco: banco.data,
-      }),
+      montarDatosGerencia(
+        {
+          grupo,
+          filtro,
+          seleccion: periodo.seleccion,
+          rango,
+          comparacion: periodo.comparacion,
+          costeMetro,
+          tiendas,
+          hoy,
+          ventas: ventas.data,
+          ventasPrevias: previasLeidas,
+          docs: docs.data,
+          docsPrevios: docsPreviosLeidos,
+          ajustes: { data: ajustes.data, isError: ajustes.isError },
+          compras: { data: compras.data, isError: compras.isError },
+          cobros: cobrosLeidos,
+          cobrosPrevios: cobrosPreviosLeidos,
+          pendientes: pendientesLeidos,
+          caja: cajaLeida,
+          banco: bancoLeido,
+        },
+        fuentes,
+      ),
     [
+      fuentes,
       ventas.data,
-      ventasPrevias.data,
+      previasLeidas,
       docs.data,
-      docsPrevios.data,
+      docsPreviosLeidos,
       grupo,
       ajustes.data,
       ajustes.isError,
       compras.data,
       compras.isError,
-      cobros.data,
-      cobrosPrevios.data,
-      pendientes.data,
-      caja.data,
-      banco.data,
+      cobrosLeidos,
+      cobrosPreviosLeidos,
+      pendientesLeidos,
+      cajaLeida,
+      bancoLeido,
       filtro,
       periodo.seleccion,
       periodo.comparacion,
@@ -166,6 +217,25 @@ function Gerencia() {
       tiendas,
       hoy,
     ],
+  );
+  // La insignia y el Resumen diario, sin esperar a lo que pide la pestaña.
+  const pendiente = useMemo(
+    () =>
+      montarPendienteDocumentar({
+        ventas: ventas.data,
+        docs: docs.data,
+        ajustes: { data: ajustes.data, isError: ajustes.isError },
+        filtro,
+      }),
+    [ventas.data, docs.data, ajustes.data, ajustes.isError, filtro],
+  );
+  const gastos = useMemo(
+    () =>
+      montarGastosGerencia({
+        ajustes: { data: ajustes.data, isError: ajustes.isError },
+        compras: { data: compras.data, isError: compras.isError },
+      }),
+    [ajustes.data, ajustes.isError, compras.data, compras.isError],
   );
 
   const opcionesTienda = [
@@ -183,9 +253,9 @@ function Gerencia() {
   // se atenúan y no se puede actuar sobre ellas.
   const deAntes =
     ventas.isPlaceholderData ||
-    ventasPrevias.isPlaceholderData ||
-    cobros.isPlaceholderData ||
-    cobrosPrevios.isPlaceholderData;
+    (pide("ventasPrevias") && ventasPrevias.isPlaceholderData) ||
+    (pide("cobros") && cobros.isPlaceholderData) ||
+    (pide("cobrosPrevios") && cobrosPrevios.isPlaceholderData);
 
   return (
     <div className="space-y-6">
@@ -194,13 +264,14 @@ function Gerencia() {
           <h1 className="text-2xl font-bold">Gerencia</h1>
           <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
             <PendienteDocumentar
-              pendiente={deAntes ? null : (datos?.pendiente ?? null)}
+              pendiente={ventas.isPlaceholderData ? null : pendiente}
               tiendas={tiendas}
             />
             <BotonResumenDiario
               tiendas={tiendas}
-              gastos={datos?.gastos ?? null}
-              objetivos={datos?.objetivos ?? ajustes.data?.objetivos ?? []}
+              gastos={gastos}
+              objetivos={ajustes.data?.objetivos ?? []}
+              alCambiarAbierto={setResumenAbierto}
             />
           </div>
         </div>

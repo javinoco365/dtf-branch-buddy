@@ -76,8 +76,11 @@ export type DatosGerencia<TCaja = unknown> = {
   objetivos: Objetivo[];
   cobros: CobroConsolidado[];
   cobrosPrevios: CobroConsolidado[];
+  /** Falso mientras se leen: «—» solo si de verdad no los hay (sin migración). */
+  cobrosLeidos: boolean;
   cobrosDisponibles: boolean;
   pendientes: PedidoPendiente[];
+  pendientesLeidos: boolean;
   pendientesDisponibles: boolean;
   caja: TCaja[] | undefined;
   banco: MovimientoBancoResumen[] | undefined;
@@ -116,27 +119,143 @@ export type EntradasGerencia<TCaja = unknown> = {
 
 const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
 
+/** Cada lectura de Gerencia que una pestaña puede pedir o no. */
+export type FuenteGerencia =
+  | "ventas"
+  | "ventasPrevias"
+  | "ajustes"
+  | "compras"
+  | "cobros"
+  | "cobrosPrevios"
+  | "pendientes"
+  | "caja"
+  | "banco"
+  | "costeMetro";
+
+export const FUENTES_GERENCIA: readonly FuenteGerencia[] = [
+  "ventas",
+  "ventasPrevias",
+  "ajustes",
+  "compras",
+  "cobros",
+  "cobrosPrevios",
+  "pendientes",
+  "caja",
+  "banco",
+  "costeMetro",
+];
+
+/**
+ * Qué campo de DatosGerencia sale de qué lectura. Los de `null` no dependen
+ * de ninguna (filtros, periodo, tiendas) o ya dicen ellos que faltan
+ * (`documentados` y `pendiente` son nulos mientras no están).
+ */
+export const FUENTE_DEL_CAMPO: Record<keyof DatosGerencia, FuenteGerencia | null> = {
+  grupo: null,
+  filtro: null,
+  seleccion: null,
+  rango: null,
+  comparacion: null,
+  tiendas: null,
+  hoy: null,
+  documentados: null,
+  pendiente: null,
+  ventasTodas: "ventas",
+  ventas: "ventas",
+  webSinPagar: "ventas",
+  ventasPrevias: "ventasPrevias",
+  ajustes: "ajustes",
+  objetivos: "ajustes",
+  gastos: "compras",
+  gastosDelGrupo: "compras",
+  cobros: "cobros",
+  cobrosLeidos: "cobros",
+  cobrosDisponibles: "cobros",
+  cobrosPrevios: "cobrosPrevios",
+  pendientes: "pendientes",
+  pendientesLeidos: "pendientes",
+  pendientesDisponibles: "pendientes",
+  caja: "caja",
+  banco: "banco",
+  costeMetro: "costeMetro",
+};
+
+export type PestanaGerencia =
+  | "resumen"
+  | "ventas"
+  | "tesoreria"
+  | "clientes"
+  | "comercial"
+  | "produccion"
+  | "margen"
+  | "resultados"
+  | "fiscal"
+  | "textil";
+
+/**
+ * Lo que lee cada pestaña de DatosGerencia (lo comprueba
+ * arquitectura/gerencia-pestanas.test.ts contra el código de cada una). Las
+ * pestañas cerradas no se montan: lo que no está aquí no se pide. Lo que cada
+ * pestaña lee por su cuenta (fiscal, historial de clientes…) va aparte.
+ */
+export const FUENTES_DE_PESTANA: Record<PestanaGerencia, readonly FuenteGerencia[]> = {
+  resumen: [
+    "ventas",
+    "ventasPrevias",
+    "ajustes",
+    "compras",
+    "cobros",
+    "cobrosPrevios",
+    "pendientes",
+    "banco",
+    "costeMetro",
+  ],
+  ventas: ["ventas", "ajustes"],
+  tesoreria: ["cobros", "cobrosPrevios", "pendientes", "caja", "banco"],
+  clientes: ["ajustes"],
+  comercial: [],
+  produccion: ["ventas", "ajustes"],
+  margen: ["ventas", "ventasPrevias", "ajustes", "compras", "costeMetro"],
+  resultados: ["ventas", "ajustes", "compras", "costeMetro"],
+  fiscal: [],
+  textil: ["ventas", "ventasPrevias", "ajustes"],
+};
+
+export const esPestanaGerencia = (v: string): v is PestanaGerencia => v in FUENTES_DE_PESTANA;
+
 /**
  * Los datos de las pestañas, o `null` mientras falte algo sin lo que las
  * cifras saldrían mal.
+ *
+ * Con `fuentes`, solo se espera a esas lecturas: los campos de las demás
+ * salen vacíos y la pestaña no los lee. Sin `fuentes`, todas, como antes de
+ * repartirlas por pestaña. Los campos de una lectura pedida son idénticos en
+ * los dos casos (gerencia-datos.test.ts).
  */
 export function montarDatosGerencia<TCaja>(
   e: EntradasGerencia<TCaja>,
+  fuentes: readonly FuenteGerencia[] = FUENTES_GERENCIA,
 ): DatosGerencia<TCaja> | null {
   const { grupo, filtro, ventas, ventasPrevias, docs, docsPrevios, ajustes, compras } = e;
   const { cobros, cobrosPrevios, pendientes, caja, banco } = e;
+  const pide = (f: FuenteGerencia) => fuentes.includes(f);
   // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
   const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
-  if (!ventas || !aj) return null;
+  if (pide("ventas") && !ventas) return null;
+  // Las ventas, las previas y los gastos se cuentan con los ajustes.
+  const conAjustes = pide("ventas") || pide("ventasPrevias") || pide("ajustes") || pide("compras");
+  if (conAjustes && !aj) return null;
   // Sin las compras, el beneficio saldría mejor de lo que es: se espera.
-  if (!compras.data && !compras.isError) return null;
-  const gastos = gastosConCompras(aj.gastos, compras.data ?? []);
+  if (pide("compras") && !compras.data && !compras.isError) return null;
   // Para separar A y B hacen falta los documentos; sin ellos, todavía no.
-  if (grupo !== "total" && (!docs || (e.comparacion && !docsPrevios))) {
-    return null;
+  if (grupo !== "total") {
+    if (pide("ventas") && !docs) return null;
+    if (pide("ventasPrevias") && e.comparacion && !docsPrevios) return null;
   }
-  const a = aj.ajustes;
-  const delPeriodo = filtrarVentas(ventas, filtro);
+  // Lo que la pestaña no pide y no ha llegado sale vacío: no lo lee.
+  const { ajustes: a, gastos: gastosAjustes, objetivos } = aj ?? SIN_AJUSTES;
+  const gastos = gastosConCompras(gastosAjustes, compras.data ?? []);
+  const delPeriodo = filtrarVentas(ventas ?? [], filtro);
   const todas = aplicarAjustesVentas(delPeriodo, a);
   const documentados = pedidosDocumentados(docs ?? []);
   const documentadosPrevios = pedidosDocumentados(docsPrevios ?? []);
@@ -144,7 +263,7 @@ export function montarDatosGerencia<TCaja>(
     grupo,
     ventasTodas: todas,
     documentados: docs ? documentados : null,
-    pendiente: docs ? pendienteDocumentar(todas, documentados) : null,
+    pendiente: montarPendienteDocumentar(e),
     filtro,
     seleccion: e.seleccion,
     rango: e.rango,
@@ -161,14 +280,42 @@ export function montarDatosGerencia<TCaja>(
     ajustes: a,
     gastos,
     gastosDelGrupo: gastosDelGrupo(gastos, grupo),
-    objetivos: aj.objetivos,
+    objetivos,
     cobros: filtrarCobrosGerencia(cobros?.cobros ?? [], filtro),
     cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios?.cobros ?? [], filtro),
+    cobrosLeidos: cobros !== undefined,
     cobrosDisponibles: cobros?.disponible ?? false,
     pendientes: filtrarPendientesGerencia(pendientes?.pedidos ?? [], filtro),
+    pendientesLeidos: pendientes !== undefined,
     pendientesDisponibles: pendientes?.disponible ?? false,
     caja: caja?.movimientos,
     banco,
     hoy: e.hoy,
   };
+}
+
+/**
+ * Lo que falta por documentar en el periodo (la insignia de la esquina), sin
+ * esperar a nada más que a las ventas, los ajustes y los documentos. Nulo
+ * mientras falte alguno: nunca un cero que no es.
+ */
+export function montarPendienteDocumentar(
+  e: Pick<EntradasGerencia, "ventas" | "docs" | "ajustes" | "filtro">,
+): PendienteDocumentar | null {
+  const aj = e.ajustes.data ?? (e.ajustes.isError ? SIN_AJUSTES : null);
+  if (!e.ventas || !aj || !e.docs) return null;
+  const todas = aplicarAjustesVentas(filtrarVentas(e.ventas, e.filtro), aj.ajustes);
+  return pendienteDocumentar(todas, pedidosDocumentados(e.docs));
+}
+
+/**
+ * Los gastos de Ajustes con las compras que cuestan como un gasto, para el
+ * Resumen diario; nulos mientras se leen.
+ */
+export function montarGastosGerencia(
+  e: Pick<EntradasGerencia, "ajustes" | "compras">,
+): GastoFijo[] | null {
+  const aj = e.ajustes.data ?? (e.ajustes.isError ? SIN_AJUSTES : null);
+  if (!aj || (!e.compras.data && !e.compras.isError)) return null;
+  return gastosConCompras(aj.gastos, e.compras.data ?? []);
 }
