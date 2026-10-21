@@ -49,6 +49,9 @@ a añadir.**
 Hacienda; las facturas que se declaran las hace la gestoría. Los documentos llevan la fecha del
 pedido (20261021100000). Si el CRM pasa a declarar, hay que integrar Verifactu y revisar esa
 fecha y el borrado de la última.
+**Decisión de Javier (21-10-2026):** los documentos del CRM son internos y **no se envían al
+cliente**; la factura que recibe el cliente la emite la gestoría. Por eso se quitó «Enviar por
+correo» de Facturas: no vuelvas a añadir un envío de facturas o tickets al cliente.
 
 DTI S.L. está sujeta a Verifactu desde el **1 de enero de 2027**. No son negociables:
 

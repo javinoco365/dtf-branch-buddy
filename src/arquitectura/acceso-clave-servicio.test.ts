@@ -61,7 +61,6 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
     "La factura se lee con la sesión (RLS) antes de firmar; generarla exige escribir y comprobarAccesoTienda().",
   "facturas.functions.ts:rellenarPdfsTienda":
     "Las facturas se leen con la sesión; leerDatosPdfFactura() comprueba la tienda.",
-  "facturas.functions.ts:enviarDocumentoPorCorreo": "leerDatosPdfFactura() comprueba la tienda.",
   "facturas.functions.ts:emitirFactura":
     "fechaDeEmision() comprueba la tienda y emitir_factura() exige is_tienda_member.",
   "facturas.functions.ts:prepararFacturaPedido": "leerPedidoParaDocumento() comprueba la tienda.",

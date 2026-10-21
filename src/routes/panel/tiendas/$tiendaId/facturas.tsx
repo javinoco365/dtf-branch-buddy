@@ -60,7 +60,6 @@ import {
 } from "@/lib/facturas.functions";
 import { toast } from "sonner";
 import { TicketsPendientesDialog } from "@/components/TicketsPendientesDialog";
-import { EnviarDocumentoDialog } from "@/components/documentos/EnviarDocumentoDialog";
 import { CanjearTicketDialog } from "@/components/documentos/CanjearTicketDialog";
 import { PdfsPendientes } from "@/components/documentos/PdfsPendientes";
 import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
@@ -77,7 +76,6 @@ import {
   CheckCircle2,
   FileCheck2,
   Loader2,
-  Mail,
   Undo2,
 } from "lucide-react";
 import { SiPuede } from "@/components/SiPuede";
@@ -85,11 +83,11 @@ import { usePermisos } from "@/hooks/use-permisos";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
- * desglose de IVA (eran la mayor parte de cada fila). Del receptor, solo el
- * correo, para «Enviar por correo». El PDF los lee en el servidor al abrirlo.
+ * desglose de IVA (eran la mayor parte de cada fila). El PDF los lee en el
+ * servidor al abrirlo.
  */
 const CAMPOS_LISTA_FACTURAS =
-  "id, tienda_id, pedido_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url, sustituye_a_id, rectifica_a_id, receptor_email:receptor_snapshot->>email";
+  "id, tienda_id, pedido_id, serie, ejercicio, numero, tipo, estado, fecha, cliente_nombre, cliente_nif, base_imponible, iva_total, total, pdf_url, sustituye_a_id, rectifica_a_id";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturas")({
   component: Facturas,
@@ -111,11 +109,10 @@ function Facturas() {
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   // Abrir: cualquier nivel. Si no estaba guardado, lo guarda quien escribe.
   const abrirPDFFn = useServerFn(abrirFacturaPDF);
-  // El visor lo ve todo pero no cambia nada: sin enviar, cobrar, canjear,
-  // anular ni generar PDF.
+  // El visor lo ve todo pero no cambia nada: sin cobrar, canjear, anular ni
+  // generar PDF.
   const { escribir } = usePermisos();
   const rellenarFn = useServerFn(rellenarPdfsTienda);
-  const [porCorreo, setPorCorreo] = useState<any>(null);
   const [canjeando, setCanjeando] = useState<any>(null);
   const canjearFn = useServerFn(canjearTicket);
   const cambiarEstadoCobroFn = useServerFn(cambiarEstadoCobro);
@@ -427,17 +424,6 @@ function Facturas() {
                           <Download className="h-4 w-4" />
                         )}
                       </Button>
-                      {escribir && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="Enviar por correo"
-                          aria-label="Enviar por correo"
-                          onClick={() => setPorCorreo(f)}
-                        >
-                          <Mail className="h-4 w-4" />
-                        </Button>
-                      )}
                       {escribir && f.estado !== "pagada" && (
                         <Button
                           size="sm"
@@ -572,17 +558,6 @@ function Facturas() {
           }
           abrirPdf={async (id) => (await generarPDFFn({ data: { factura_id: id } }))?.url ?? null}
           alCanjear={() => qc.invalidateQueries({ queryKey: ["facturas", tiendaId] })}
-        />
-      )}
-
-      {porCorreo && (
-        <EnviarDocumentoDialog
-          open={!!porCorreo}
-          onOpenChange={(o) => !o && setPorCorreo(null)}
-          facturaId={porCorreo.id}
-          referencia={referenciaFactura(porCorreo.serie, porCorreo.ejercicio, porCorreo.numero)}
-          esTicket={porCorreo.tipo === "simplificada"}
-          emailInicial={porCorreo.receptor_email ?? null}
         />
       )}
     </div>
