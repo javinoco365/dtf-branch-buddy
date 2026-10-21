@@ -422,11 +422,72 @@ describe("producto y variante nueva", () => {
       }),
       [gildan],
     );
+    // El producto nuevo nace sin referencia: la de la línea va al SKU de la talla.
     expect(n).toMatchObject({
       producto_id: null,
-      producto: { marca: "B&C", referencia: "E190", nombre: "Camiseta", categoria: null },
+      producto: { marca: "B&C", referencia: null, nombre: "Camiseta", categoria: null },
       ean: null,
+      sku: "E190",
       precio_venta: 0,
+    });
+  });
+
+  // Roly mete la talla y el color en la referencia: SS643201011 es la Antartida
+  // en S y blanco perla; SS643203011, en L.
+  const antartida: ProductoTextil = {
+    id: "p-antartida",
+    marca: "Roly",
+    referencia: null,
+    nombre: "Antartida",
+    categoria: null,
+    activo: true,
+  };
+  const lineaRoly = (referencia: string, talla: string) =>
+    linea({
+      descripcion: `Roly Antartida ${referencia} Blanco perla ${talla}`,
+      marca: "Roly",
+      modelo: "Antartida",
+      referencia,
+      color: "Blanco perla",
+      talla,
+    });
+
+  it("productoParaLinea: por el SKU de una variante que ya lleva esa referencia", () => {
+    const v = variante("v-s", {
+      producto_id: antartida.id,
+      producto: antartida,
+      sku: "SS643201011",
+    });
+    const otraAntartida = { ...antartida, id: "p-otra" };
+    expect(
+      productoParaLinea(lineaRoly("SS643201011", "S"), [antartida, otraAntartida], [v])?.id,
+    ).toBe("p-antartida");
+  });
+
+  it("productoParaLinea: otra talla del mismo modelo, por la marca y el nombre", () => {
+    expect(productoParaLinea(lineaRoly("SS643203011", "L"), [gildan, antartida])?.id).toBe(
+      "p-antartida",
+    );
+    // Si hay dos con esa marca y nombre, no se adivina: producto nuevo.
+    const otra = { ...antartida, id: "p-otra", referencia: "SS643202011" };
+    expect(productoParaLinea(lineaRoly("SS643203011", "L"), [antartida, otra])).toBeNull();
+  });
+
+  it("productoParaLinea no propone un producto desactivado", () => {
+    const apagado = { ...gildan, activo: false };
+    expect(productoParaLinea(linea(), [apagado])).toBeNull();
+    expect(
+      productoParaLinea(lineaRoly("SS643203011", "L"), [{ ...antartida, activo: false }]),
+    ).toBeNull();
+  });
+
+  it("nuevaVarianteDesdeLinea: la talla nueva cuelga del modelo y su referencia va al SKU", () => {
+    expect(nuevaVarianteDesdeLinea(lineaRoly("SS643203011", "L"), [antartida])).toMatchObject({
+      producto_id: "p-antartida",
+      producto: null,
+      color: "Blanco perla",
+      talla: "L",
+      sku: "SS643203011",
     });
   });
 });

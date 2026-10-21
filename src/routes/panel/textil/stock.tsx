@@ -62,6 +62,7 @@ import { comprasParaDevolucion } from "@/dominio/proformas";
 import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
 import { curvaDeTallas } from "@/dominio/curva-tallas";
+import { propuestasDeUnion } from "@/dominio/unir-productos";
 import { claveTalla, claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado } from "@/dominio/precio-recomendado";
 import type { ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
@@ -73,6 +74,7 @@ import {
   type AccionesVariante,
 } from "@/components/textil/StockPorTallas";
 import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
+import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
 
 export const Route = createFileRoute("/panel/textil/stock")({
@@ -139,6 +141,12 @@ function StockPage() {
         (f) => (!filtros.bajo || f.tono !== "neutro") && f.variantes.some(casa),
       ),
     [variantes, filtros.bajo, casa],
+  );
+  // Prendas partidas en varios productos (una referencia por talla): se
+  // proponen unir. Necesita los productos del escáner.
+  const propuestas = useMemo(
+    () => (escaner ? propuestasDeUnion(variantes) : []),
+    [escaner, variantes],
   );
   // El pie suma las variantes de las filas que se ven, desactivadas incluidas.
   const totales = useMemo(() => totalesStock(curva.filas.flatMap((f) => f.variantes)), [curva]);
@@ -322,6 +330,9 @@ function StockPage() {
           </CardContent>
         </Card>
       )}
+      <SiPuede accion="escribir">
+        <AvisoUnirProductos propuestas={propuestas} />
+      </SiPuede>
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}
