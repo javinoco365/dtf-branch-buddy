@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import type { CategoriaCaja } from "@/dominio/caja";
 
 /**
@@ -12,6 +13,12 @@ import type { CategoriaCaja } from "@/dominio/caja";
  * congelados los pone el trigger `caja_movimiento_congelar()` leyendo el
  * concepto, el socio y el cliente; los totales se calculan en
  * `src/dominio/caja.ts`. Esta capa solo lee y escribe.
+ *
+ * Se escribe con la sesión del usuario (`context.supabase`): las tablas de caja
+ * tienen políticas por operación con es_miembro_empresa, así que es la RLS la
+ * que decide quién escribe, y el autor de la auditoría sale del JWT. Antes se
+ * escribía con la clave de servicio sin comprobar nada: cualquier cuenta podía
+ * borrar apuntes de caja (hallazgo S1 de la auditoría de seguridad).
  *
  * Se manda `categoria` y `concepto_nombre` en el alta porque las dos columnas
  * son NOT NULL, pero lo que se guarda es lo que decide la base: si se mandara
@@ -113,9 +120,8 @@ export const guardarMovimientoCaja = createServerFn({ method: "POST" })
   .middleware([exigeEscribir])
   .inputValidator((d) => apunteSchema.extend({ id: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const empresa_id = await empresaActiva(supabaseAdmin);
+    const sb = context.supabase;
+    const empresa_id = await empresaActiva(sb);
 
     const fila = {
       empresa_id,
@@ -133,14 +139,16 @@ export const guardarMovimientoCaja = createServerFn({ method: "POST" })
     };
 
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "caja_movimientos")
+      const { data: tocadas, error } = await tabla(sb, "caja_movimientos")
         .update(fila)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .select("id");
       if (error) throw new Error(error.message);
+      exigirFilas(tocadas, "el apunte");
       return { id: data.id };
     }
 
-    const { data: creado, error } = await tabla(supabaseAdmin, "caja_movimientos")
+    const { data: creado, error } = await tabla(sb, "caja_movimientos")
       .insert(fila)
       .select("id")
       .single();
@@ -152,9 +160,11 @@ export const borrarMovimientoCaja = createServerFn({ method: "POST" })
   .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { error } = await tabla(supabaseAdmin, "caja_movimientos").delete().eq("id", data.id);
+    const sb = context.supabase;
+    const { data: borradas, error } = await tabla(sb, "caja_movimientos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     // El apunte de un cobro en efectivo no se borra desde aquí: el pedido
     // seguiría constando como cobrado sin el dinero en caja.
     if (error?.code === "23503" && error.message.includes("cobros")) {
@@ -163,6 +173,7 @@ export const borrarMovimientoCaja = createServerFn({ method: "POST" })
       );
     }
     if (error) throw new Error(error.message);
+    exigirFilas(borradas, "el apunte");
     return { ok: true };
   });
 
@@ -188,9 +199,8 @@ export const guardarConceptoCaja = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const empresa_id = await empresaActiva(supabaseAdmin);
+    const sb = context.supabase;
+    const empresa_id = await empresaActiva(sb);
 
     const fila: Record<string, unknown> = {
       nombre: data.nombre.trim(),
@@ -200,12 +210,16 @@ export const guardarConceptoCaja = createServerFn({ method: "POST" })
     if (data.orden !== undefined) fila.orden = data.orden;
 
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "caja_conceptos").update(fila).eq("id", data.id);
+      const { data: tocadas, error } = await tabla(sb, "caja_conceptos")
+        .update(fila)
+        .eq("id", data.id)
+        .select("id");
       if (error) throw new Error(mensajeDuplicado(error.message, "concepto"));
+      exigirFilas(tocadas, "el concepto");
       return { id: data.id };
     }
 
-    const { data: creado, error } = await tabla(supabaseAdmin, "caja_conceptos")
+    const { data: creado, error } = await tabla(sb, "caja_conceptos")
       .insert({ ...fila, empresa_id })
       .select("id")
       .single();
@@ -226,21 +240,24 @@ export const guardarSocioCaja = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const empresa_id = await empresaActiva(supabaseAdmin);
+    const sb = context.supabase;
+    const empresa_id = await empresaActiva(sb);
 
     const fila: Record<string, unknown> = { nombre: data.nombre.trim() };
     if (data.activo !== undefined) fila.activo = data.activo;
     if (data.orden !== undefined) fila.orden = data.orden;
 
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "caja_socios").update(fila).eq("id", data.id);
+      const { data: tocadas, error } = await tabla(sb, "caja_socios")
+        .update(fila)
+        .eq("id", data.id)
+        .select("id");
       if (error) throw new Error(mensajeDuplicado(error.message, "socio"));
+      exigirFilas(tocadas, "el socio");
       return { id: data.id };
     }
 
-    const { data: creado, error } = await tabla(supabaseAdmin, "caja_socios")
+    const { data: creado, error } = await tabla(sb, "caja_socios")
       .insert({ ...fila, empresa_id })
       .select("id")
       .single();

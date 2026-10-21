@@ -5,6 +5,7 @@ import { exigeEscribir } from "./permisos-middleware";
 import { puede } from "@/dominio/permisos";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
+import { exigirMiembroTienda } from "./acceso";
 import { leerTodas } from "./paginar";
 import { numero } from "./format";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
@@ -1336,6 +1337,9 @@ export const diagnosticoNumeroWoo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    // De la tienda o administrador, antes de tocar la clave de servicio: con
+    // ella se leen las credenciales de WooCommerce de la tienda (hallazgo S1).
+    await exigirMiembroTienda(context.supabase, context.userId, data.tienda_id);
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { exigirMiembroEmpresa } from "./acceso";
 import { leerTodas, trozos } from "./paginar";
 import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
@@ -1290,9 +1291,10 @@ export const leerEstadoSeries = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const series = await llamarRpc<EstadoSerie[]>(supabaseAdmin, "serie_estado", {
+    // Con la sesión del usuario, no con la clave de servicio: serie_estado()
+    // solo responde de las empresas de quien llama (hallazgo S1).
+    await exigirMiembroEmpresa(context.supabase, context.userId, data.empresa_id);
+    const series = await llamarRpc<EstadoSerie[]>(context.supabase, "serie_estado", {
       _empresa_id: data.empresa_id,
       _ejercicio: data.ejercicio ?? new Date().getFullYear(),
     });

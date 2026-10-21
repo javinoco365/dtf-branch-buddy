@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import { TIPOS_GASTO } from "@/dominio/impuestos";
 import {
   AJUSTES_JORNADA_POR_DEFECTO,
@@ -17,9 +18,10 @@ import {
  * Ajustes de Gerencia: gastos fijos, objetivos y si los pedidos web sin
  * pagar cuentan como vendidos.
  *
- * Se leen con la RLS del usuario. Se escriben con el cliente de servicio
- * diciendo quién es (adminComoUsuario), para que la auditoría tenga autor,
- * igual que la caja. Las reglas (importes positivos, fechas en orden, un
+ * Se leen y se escriben con la sesión del usuario: las tres tablas tienen
+ * políticas por operación con es_miembro_empresa, y el autor de la auditoría
+ * sale del JWT, igual que la caja. (Antes se escribían con la clave de
+ * servicio sin comprobar nada: hallazgo S1 de la auditoría de seguridad.) Las reglas (importes positivos, fechas en orden, un
  * objetivo por mes y el día 1) las impone la base.
  */
 
@@ -181,12 +183,11 @@ export const guardarAjustesGerencia = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const empresa_id = await empresaActiva(supabaseAdmin);
+    const sb = context.supabase;
+    const empresa_id = await empresaActiva(sb);
     // Solo lo que llega: cambiar un ajuste no toca los demás.
     const cambios = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
-    const { error } = await tabla(supabaseAdmin, "gerencia_ajustes").upsert(
+    const { error } = await tabla(sb, "gerencia_ajustes").upsert(
       { empresa_id, ...cambios },
       { onConflict: "empresa_id" },
     );
@@ -219,8 +220,7 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
+    const sb = context.supabase;
     const fila = {
       concepto: data.concepto,
       importe_mensual: data.importe_mensual,
@@ -245,14 +245,16 @@ export const guardarGastoFijo = createServerFn({ method: "POST" })
         : {}),
     };
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "gerencia_gastos_fijos")
+      const { data: tocadas, error } = await tabla(sb, "gerencia_gastos_fijos")
         .update(fila)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .select("id");
       if (error) throw errorLegible(error);
+      exigirFilas(tocadas, "el gasto fijo");
       return { id: data.id };
     }
-    const empresa_id = await empresaActiva(supabaseAdmin);
-    const { data: creado, error } = await tabla(supabaseAdmin, "gerencia_gastos_fijos")
+    const empresa_id = await empresaActiva(sb);
+    const { data: creado, error } = await tabla(sb, "gerencia_gastos_fijos")
       .insert({ ...fila, empresa_id })
       .select("id")
       .single();
@@ -264,12 +266,13 @@ export const borrarGastoFijo = createServerFn({ method: "POST" })
   .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { error } = await tabla(supabaseAdmin, "gerencia_gastos_fijos")
+    const sb = context.supabase;
+    const { data: borradas, error } = await tabla(sb, "gerencia_gastos_fijos")
       .delete()
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .select("id");
     if (error) throw errorLegible(error);
+    exigirFilas(borradas, "el gasto fijo");
     return { ok: true };
   });
 
@@ -290,18 +293,19 @@ export const guardarObjetivo = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
+    const sb = context.supabase;
     const fila = { desde: data.desde, metros: data.metros, vendido: data.vendido };
     if (data.id) {
-      const { error } = await tabla(supabaseAdmin, "gerencia_objetivos")
+      const { data: tocadas, error } = await tabla(sb, "gerencia_objetivos")
         .update(fila)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .select("id");
       if (error) throw errorLegible(error);
+      exigirFilas(tocadas, "el objetivo");
       return { id: data.id };
     }
-    const empresa_id = await empresaActiva(supabaseAdmin);
-    const { data: creado, error } = await tabla(supabaseAdmin, "gerencia_objetivos")
+    const empresa_id = await empresaActiva(sb);
+    const { data: creado, error } = await tabla(sb, "gerencia_objetivos")
       .insert({ ...fila, empresa_id })
       .select("id")
       .single();
@@ -313,9 +317,12 @@ export const borrarObjetivo = createServerFn({ method: "POST" })
   .middleware([exigeBorrar])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-    const { error } = await tabla(supabaseAdmin, "gerencia_objetivos").delete().eq("id", data.id);
+    const sb = context.supabase;
+    const { data: borradas, error } = await tabla(sb, "gerencia_objetivos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     if (error) throw errorLegible(error);
+    exigirFilas(borradas, "el objetivo");
     return { ok: true };
   });

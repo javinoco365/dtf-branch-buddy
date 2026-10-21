@@ -7,10 +7,9 @@
 -- falsificar cuando no lo hay.
 -- ============================================================================
 
--- Permisos que Supabase concede por defecto sobre el esquema public y el shim
--- no. Sin ellos no se puede probar ningún camino que no sea el de superusuario.
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+-- Los privilegios por defecto de Supabase sobre public los pone ya
+-- 00_entorno_supabase.sql (ALTER DEFAULT PRIVILEGES). Aquí no se concede nada
+-- más sobre tablas: un GRANT ALL taparía los REVOKE de las migraciones.
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
 
 INSERT INTO auth.users (id, email) VALUES

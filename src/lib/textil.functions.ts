@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import { escanerAplicado } from "./escaner-textil";
@@ -864,8 +865,14 @@ export const deletePresupuesto = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     // Las imágenes: sus filas se van en cascada; los ficheros, después.
     const rutas = await rutasImagenes(context.supabase, "textil", data.id);
-    const { error } = await context.supabase.from("textil_presupuestos").delete().eq("id", data.id);
+    const { data: borrados, error } = await context.supabase
+      .from("textil_presupuestos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     if (error) throw error;
+    // Si la RLS no ha dejado borrar el presupuesto, sus imágenes tampoco se tocan.
+    exigirFilas(borrados, "el presupuesto");
     if (rutas.length) {
       const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
       const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);
@@ -1473,14 +1480,17 @@ export const urlFacturaTextil = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
-    const supabaseAdmin = adminComoUsuario(context.userId);
-
-    const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
+    // La factura se lee con la sesión del usuario: si la RLS no se la deja
+    // ver, no hay URL. Antes se leía con la clave de servicio y cualquier
+    // cuenta sacaba el PDF de cualquier factura textil (hallazgo S1).
+    const { data: factura } = await tabla(context.supabase, "textil_facturas")
       .select("pdf_path")
       .eq("id", data.factura_id)
       .maybeSingle();
     if (!factura?.pdf_path) return { url: null };
+
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
 
     const { data: firmada } = await supabaseAdmin.storage
       .from("facturas")

@@ -94,7 +94,16 @@ export const DATOS = {
   ],
 };
 
-export const RPC = {};
+export const RPC = {
+  // Niveles (20261031200100): el usuario de prueba es admin activo, como el
+  // de user_roles. Sin esto la app lo vería sin nivel y en solo lectura.
+  mi_nivel: "admin",
+  // Control de acceso de src/lib/acceso.ts (seguridad, S1): el usuario de
+  // prueba es admin, así que es de todas las tiendas y de la empresa.
+  has_role: true,
+  es_miembro_empresa: true,
+  is_tienda_member: true,
+};
 
 // ---------------------------------------------------------------------------
 // Pedidos, cobros y lo que cuelga de ellos

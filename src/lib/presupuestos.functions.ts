@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { exigirFilas } from "./acceso";
 import { leerTodas } from "./paginar";
 import {
   ambitoPresupuesto,
@@ -243,8 +244,13 @@ export const borrarPresupuesto = createServerFn({ method: "POST" })
     }
     // Las imágenes: sus filas se van en cascada; los ficheros, después.
     const rutas = await rutasImagenes(context.supabase, "tienda", data.id);
-    const { error } = await tabla(context.supabase, "presupuestos").delete().eq("id", data.id);
+    const { data: borrados, error } = await tabla(context.supabase, "presupuestos")
+      .delete()
+      .eq("id", data.id)
+      .select("id");
     if (error) throw new Error(error.message);
+    // Si la RLS no ha dejado borrarlo, sus imágenes tampoco se tocan.
+    exigirFilas(borrados, "el presupuesto");
     if (rutas.length) {
       const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
       const r = await adminComoUsuario(context.userId).storage.from(BUCKET_IMAGENES).remove(rutas);

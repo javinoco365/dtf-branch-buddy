@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc } from "./rpc";
+import { exigirMiembroTienda } from "./acceso";
 import { leerCredencialesWoo } from "./woo-credenciales";
 import { leerMiNivel } from "./nivel-sesion";
 
@@ -120,7 +121,9 @@ export const guardarCredencialesWoo = createServerFn({ method: "POST" })
 export const tieneCredencialesWoo = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // De la tienda o administrador, antes de la clave de servicio (hallazgo S1).
+    await exigirMiembroTienda(context.supabase, context.userId, data.tienda_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
       .from("tienda_credenciales")

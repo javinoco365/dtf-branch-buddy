@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
+import { exigirMiembroEmpresa } from "./acceso";
 import { leerTodas } from "./paginar";
 import type { Json } from "@/integrations/supabase/types";
 import {
@@ -28,6 +29,7 @@ import {
   type RegistroCompra,
   type ResultadoRegistro,
 } from "@/dominio/tipos-textil";
+import { errorDeFirma, MAXIMO_BYTES_SUBIDA } from "@/dominio/ficheros";
 
 /** La lectura del modelo, guardada tal cual. Si no se puede leer, no se guarda. */
 function parsearLectura(texto: string | null | undefined): unknown {
@@ -71,11 +73,14 @@ export const leerFacturaCompra = createServerFn({ method: "POST" })
     if (!(d instanceof FormData)) throw new Error("Falta el fichero");
     const fichero = d.get("fichero");
     if (!(fichero instanceof File)) throw new Error("Falta el fichero");
+    if (fichero.size > MAXIMO_BYTES_SUBIDA) throw new Error("El fichero pesa más de 10 MB.");
     return { fichero };
   })
   .handler(async ({ data }) => {
     const { leerYValidar } = await import("./cola-compras.server");
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     // Validada contra el esquema, con un reintento; si no, el error se ve.
     const r = await leerYValidar(bytes, data.fichero.type);
     if (!r.ok) throw new Error(r.error);
@@ -664,7 +669,7 @@ const ficheroDe = (d: unknown) => {
       `Formato no admitido (${fichero.type || "desconocido"}). Sube un PDF, un JPG o un PNG.`,
     );
   }
-  if (fichero.size > 10 * 1024 * 1024) throw new Error("El fichero pesa más de 10 MB.");
+  if (fichero.size > MAXIMO_BYTES_SUBIDA) throw new Error("El fichero pesa más de 10 MB.");
   return { fichero };
 };
 
@@ -694,6 +699,9 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
     const { huellaDe, procesarFactura } = await import("./cola-compras.server");
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    // El tipo lo declara el navegador: se comprueba con los bytes (S12).
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     const huella = await huellaDe(bytes);
 
     const previas = await tabla(context.supabase, "textil_compras")
@@ -714,6 +722,9 @@ export const subirFacturaRecibida = createServerFn({ method: "POST" })
     const borrada = filas.find((p) => p.borrada_en);
 
     const empresa_id = await empresaActiva(context.supabase);
+    // Antes de subir el fichero con la clave de servicio y de pagar la lectura
+    // con IA: quien sube tiene que ser de la empresa (hallazgo S1).
+    await exigirMiembroEmpresa(context.supabase, context.userId, empresa_id);
     const id = crypto.randomUUID();
     const ruta = `ronoca/${new Date().getFullYear()}/${id}.${TIPOS_FICHERO[data.fichero.type]}`;
     const admin = adminComoUsuario(context.userId);
@@ -830,6 +841,9 @@ export const adjuntarFicheroCompra = createServerFn({ method: "POST" })
     if (compra.fichero_ruta) throw new Error("Esta compra ya tiene su fichero.");
 
     const bytes = new Uint8Array(await data.fichero.arrayBuffer());
+    // El tipo lo declara el navegador: se comprueba con los bytes (S12).
+    const malFirmado = errorDeFirma(bytes, data.fichero.type);
+    if (malFirmado) throw new Error(malFirmado);
     const huella = await huellaDe(bytes);
     // El mismo fichero en otra compra viva es, casi seguro, la misma factura dos veces.
     const previas = await tabla(context.supabase, "textil_compras")

@@ -246,10 +246,13 @@ describe("revisarDocumentoIa", () => {
     ]);
 
   it("un PDF hasta 10 MB; una foto hasta 5 MB y 8000 px de lado", () => {
-    expect(revisarDocumentoIa(new Uint8Array(10), "application/pdf")).toEqual({
+    const pdf = new TextEncoder().encode("%PDF-1.7\n%%EOF");
+    expect(revisarDocumentoIa(pdf, "application/pdf")).toEqual({
       ok: true,
       esImagen: false,
     });
+    // Lo que el navegador llama PDF pero no lo es, no va a la IA.
+    expect(revisarDocumentoIa(new Uint8Array(10), "application/pdf").ok).toBe(false);
     const pdfGrande = revisarDocumentoIa(new Uint8Array(10 * 1024 * 1024 + 1), "application/pdf");
     expect(pdfGrande.ok).toBe(false);
     expect(revisarDocumentoIa(jpeg(4000, 3000), "image/jpeg")).toEqual({

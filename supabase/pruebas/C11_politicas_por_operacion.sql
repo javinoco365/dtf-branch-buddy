@@ -9,10 +9,9 @@
 -- aquí se crea inactiva, pero ni así se deja).
 BEGIN;
 
--- Permisos que Supabase concede por defecto sobre public y el shim no (igual
--- que en 20_auditoria_autor.sql). Así lo que decide en cada caso es la RLS.
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+-- Los privilegios por defecto de Supabase sobre public los pone ya
+-- 00_entorno_supabase.sql (ALTER DEFAULT PRIVILEGES). Aquí no se concede nada
+-- más sobre tablas: un GRANT ALL taparía los REVOKE de las migraciones.
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -416,17 +415,17 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- 13. Líneas de factura textil: se leen, no se escriben
 -- ---------------------------------------------------------------------------
--- Aunque authenticated tenga aquí INSERT, UPDATE y DELETE (el GRANT de arriba
--- los devuelve), la RLS ya no deja escribir. En la base real ni siquiera
--- tiene esos permisos desde 20260902130100.
+-- authenticated no tiene INSERT, UPDATE ni DELETE sobre la tabla desde
+-- 20260902130100 (el simulador reproduce ya los privilegios por defecto de
+-- Supabase y ese REVOKE): se niega con 42501 antes de llegar a la RLS.
 DO $$
 DECLARE f TEXT[] := '{}';
 BEGIN
   f := f || pg_temp.caso('lee las de su empresa', 'ua', $q$SELECT count(*) FROM public.textil_factura_items WHERE factura_id = current_setting('c11.tf')::uuid$q$, '1');
   f := f || pg_temp.caso('otra empresa las ve', 'uc', $q$SELECT count(*) FROM public.textil_factura_items WHERE factura_id = current_setting('c11.tf')::uuid$q$, '0');
   f := f || pg_temp.caso('da de alta', 'ua', $q$INSERT INTO public.textil_factura_items (factura_id, descripcion) VALUES (current_setting('c11.tf')::uuid, 'C11 nueva')$q$, 'error 42501');
-  f := f || pg_temp.caso('edita', 'ua', $q$UPDATE public.textil_factura_items SET descripcion = 'C11 editada' WHERE factura_id = current_setting('c11.tf')::uuid$q$, '0');
-  f := f || pg_temp.caso('borra', 'ua', $q$DELETE FROM public.textil_factura_items WHERE factura_id = current_setting('c11.tf')::uuid$q$, '0');
+  f := f || pg_temp.caso('edita', 'ua', $q$UPDATE public.textil_factura_items SET descripcion = 'C11 editada' WHERE factura_id = current_setting('c11.tf')::uuid$q$, 'error 42501');
+  f := f || pg_temp.caso('borra', 'ua', $q$DELETE FROM public.textil_factura_items WHERE factura_id = current_setting('c11.tf')::uuid$q$, 'error 42501');
   f := f || pg_temp.caso('el administrador escribe', 'adm', $q$INSERT INTO public.textil_factura_items (factura_id, descripcion) VALUES (current_setting('c11.tf')::uuid, 'C11 nueva')$q$, 'error 42501');
   PERFORM pg_temp.informar('13. textil_factura_items: su empresa las lee; nadie las escribe desde el navegador', f);
 END $$;

@@ -1,6 +1,7 @@
 import "./lib/error-capture";
 
-import { guionConfigPublica } from "./lib/config-publica.server";
+import { cabecerasSeguridad, conCabecerasSeguridad } from "./dominio/cabeceras-seguridad";
+import { guionConfigPublica, leerConfigPublicaDelEntorno } from "./lib/config-publica.server";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -108,18 +109,34 @@ function inyectarConfigPublica(response: Response): Response {
   });
 }
 
+// Cabeceras de seguridad en todas las respuestas (S5): ver
+// src/dominio/cabeceras-seguridad.ts. Los ficheros estáticos de /assets los
+// sirve el alojamiento sin pasar por aquí; no las necesitan.
+function conSeguridad(response: Response): Response {
+  // Una redirección (Response.redirect) tiene las cabeceras inmutables.
+  if (response.status >= 300 && response.status < 400) return response;
+  const seguridad = cabecerasSeguridad({ supabaseUrl: leerConfigPublicaDelEntorno().supabaseUrl });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: conCabecerasSeguridad(response.headers, seguridad),
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return inyectarConfigPublica(await normalizeCatastrophicSsrResponse(response));
+      return conSeguridad(inyectarConfigPublica(await normalizeCatastrophicSsrResponse(response)));
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return conSeguridad(
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
     }
   },
 };

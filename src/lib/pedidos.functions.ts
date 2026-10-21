@@ -8,6 +8,7 @@ import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { normalizarDireccion } from "@/dominio/direcciones";
+import { urlSeguimientoValida } from "@/dominio/transportistas";
 
 const ESTADO_VALUES = [
   "pendiente",
@@ -400,7 +401,16 @@ export const setPedidoTracking = createServerFn({ method: "POST" })
         pedido_id: z.string().uuid(),
         transportista: z.string().optional().nullable(),
         codigo_seguimiento: z.string().optional().nullable(),
-        url: z.string().optional().nullable(),
+        // Va al correo y a la nota de WooCommerce que recibe el cliente (W9).
+        url: z
+          .string()
+          .trim()
+          .refine((v) => v === "" || urlSeguimientoValida(v), {
+            message: "La URL de seguimiento tiene que empezar por https:// y ser una web.",
+          })
+          .transform((v) => v || null)
+          .optional()
+          .nullable(),
       })
       .parse(d),
   )

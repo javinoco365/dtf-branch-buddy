@@ -185,6 +185,7 @@ dar por hecho que puedes usarlo:
 | Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                                                                                                          |
 | Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                |
 | Niveles admin / editor / visor              | Hecho en la base (20261031200000-200300: políticas de escritura, guardia, funciones) y en Ajustes > Usuarios. Pendiente de aplicar en producción                                                           |
+| Lectura por empresa y seguridad de octubre  | Hecho en la base (20261031100100 `mis_tiendas()`/`mis_empresas()`, 20261031300000-300100), sin aplicar. Toda función que recree una de los niveles conserva `rol_exigir_quien()`                           |
 
 Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
 trabajos: `npm run verify`, y las migraciones y pruebas SQL de

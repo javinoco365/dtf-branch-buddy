@@ -533,6 +533,11 @@ SELECT CASE WHEN count(*) = 0
 -- ---------------------------------------------------------------------------
 -- 8. Las reversiones, en orden, dejan la base como antes de los niveles
 -- ---------------------------------------------------------------------------
+-- Primero las posteriores (seguridad, 20261031300000 y 300100): seis de sus
+-- funciones llevan la línea de rol_exigir_quien() y hay que devolverlas al
+-- cuerpo de 20261031200300 antes de quitar los niveles.
+\ir ../reversiones/20261031300100_seguridad_lectura_por_empresa.sql
+\ir ../reversiones/20261031300000_seguridad_funciones_y_privilegios.sql
 \ir ../reversiones/20261031200300_roles_funciones.sql
 \ir ../reversiones/20261031200200_roles_politicas_escritura.sql
 \ir ../reversiones/20261031200100_roles_permisos.sql

@@ -45,6 +45,29 @@ FROM (VALUES
   ('20261031100100_rendimiento_rls',
    EXISTS (SELECT 1 FROM pg_policies
             WHERE schemaname = 'public' AND tablename = 'pedidos'
-              AND policyname = 'pedidos lectura' AND qual LIKE '%mis_tiendas()%'))
+              AND policyname = 'pedidos lectura' AND qual LIKE '%mis_tiendas()%')),
+  ('20261031200000_roles_niveles',
+   EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+            WHERE t.typname = 'app_role' AND e.enumlabel = 'visor')),
+  ('20261031200100_roles_permisos',
+   EXISTS (SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'user_roles'
+              AND column_name = 'activo')),
+  ('20261031200200_roles_politicas_escritura',
+   EXISTS (SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
+              AND coalesce(qual, '') || coalesce(with_check, '') LIKE '%rol_puede_escribir%')),
+  ('20261031200300_roles_funciones',
+   EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = 'emitir_factura'
+              AND p.prosrc LIKE '%rol_exigir_quien%')),
+  ('20261031300000_seguridad_funciones_y_privilegios',
+   EXISTS (SELECT 1 FROM pg_class
+            WHERE oid = to_regclass('public.clientes_duplicados_por_email')
+              AND reloptions @> ARRAY['security_invoker=true'])),
+  ('20261031300100_seguridad_lectura_por_empresa',
+   EXISTS (SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = 'contadores'
+              AND policyname = 'contadores lectura' AND qual LIKE '%mis_empresas()%'))
 ) AS m(migracion, aplicada)
 ORDER BY migracion;

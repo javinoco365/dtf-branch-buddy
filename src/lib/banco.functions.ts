@@ -7,6 +7,7 @@ import { leerTodas, trozos } from "./paginar";
 import { cuadreExtracto, huellaMovimiento, normalizarIban } from "@/dominio/extractos";
 import { emparejar, type FacturaPendiente, type MovimientoBanco } from "@/dominio/conciliacion";
 import { referenciaFactura } from "./format";
+import { MAXIMO_BYTES_EXTRACTO } from "@/dominio/ficheros";
 
 async function empresaActiva(supabase: any): Promise<string> {
   const { data } = await tabla(supabase, "empresas")
@@ -29,6 +30,9 @@ const formularioExtracto = (d: unknown) => {
   if (!(d instanceof FormData)) throw new Error("Falta el fichero");
   const fichero = d.get("fichero");
   if (!(fichero instanceof File)) throw new Error("Falta el fichero");
+  if (fichero.size > MAXIMO_BYTES_EXTRACTO) {
+    throw new Error("El extracto pesa más de 5 MB: descárgalo por periodos más cortos.");
+  }
   const texto = (k: string) => {
     const v = d.get(k);
     return typeof v === "string" && v.trim() !== "" ? v.trim() : null;

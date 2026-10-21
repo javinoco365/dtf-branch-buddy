@@ -29,6 +29,7 @@ import { normalizarNif, normalizarTexto } from "./clientes";
 import { etiquetaVariante, utilizable } from "./stock-textil";
 import type { VarianteCatalogo } from "./tipos-textil";
 import { medidasImagen } from "./imagenes-presupuesto";
+import { tipoPorFirma } from "./ficheros";
 
 // ---------------------------------------------------------------------------
 // El documento que se le manda a la IA
@@ -52,6 +53,10 @@ export function revisarDocumentoIa(
   if (tipo === "application/pdf") {
     if (bytes.byteLength > MAXIMO_BYTES_DOCUMENTO_IA) {
       return { ok: false, error: "El PDF pesa más de 10 MB. Baja la resolución o divídelo." };
+    }
+    // El tipo lo dice el navegador: que los bytes sean de verdad un PDF (S6).
+    if (tipoPorFirma(bytes) !== "application/pdf") {
+      return { ok: false, error: "El fichero no es el PDF que dice ser." };
     }
     return { ok: true, esImagen: false };
   }
