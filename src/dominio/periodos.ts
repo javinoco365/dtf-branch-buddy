@@ -412,3 +412,14 @@ export function tramosGrafica(r: Rango): { por: "dia" | "mes"; tramos: Tramo[] }
     })),
   };
 }
+
+/**
+ * Los tramos de una gráfica sin los que aún no han empezado: en el mes en
+ * curso, los días que no han llegado dejaban medio gráfico vacío y las barras
+ * de verdad apretadas a la izquierda. Si el periodo entero es futuro, se deja
+ * como está (la gráfica sale vacía, que es lo que hay).
+ */
+export function tramosHastaHoy<T extends Rango>(tramos: readonly T[], hoy: Date): T[] {
+  const pasados = tramos.filter((t) => t.desde <= hoy);
+  return pasados.length > 0 ? pasados : [...tramos];
+}

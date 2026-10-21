@@ -2,25 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { tabla } from "@/lib/rpc";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { useMemo } from "react";
 import { eur, metros, numero } from "@/lib/format";
 import { usePedidosPeriodo } from "@/lib/periodo";
 import { calcularKpis, costeVariable, variacion } from "@/dominio/kpis";
 import { compararCon, rangoDe } from "@/dominio/periodos";
-import { DEFINICIONES, type ClaveDefinicion } from "@/dominio/definiciones";
-import { Explicacion } from "@/components/Explicacion";
-import {
-  ShoppingCart,
-  Euro,
-  Ruler,
-  FileText,
-  TrendingUp,
-  TrendingDown,
-  Receipt,
-  Package,
-  Percent,
-} from "lucide-react";
+import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
+import { ShoppingCart, Euro, Ruler, FileText, Receipt, Package, Percent } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
@@ -28,6 +17,8 @@ export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
 
 function Dashboard() {
   const { tiendaId } = Route.useParams();
+  const { data: tiendas } = useTiendasMenu();
+  const nombreTienda = tiendas?.find((t) => t.id === tiendaId)?.nombre;
   const { data } = useQuery({
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
@@ -83,92 +74,81 @@ function Dashboard() {
   const sinCostes = costeMetro === 0 && costeMes.produccion === 0;
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <KPI
-          t="Vendido este mes"
-          explicacion="vendido"
-          v={eur(k.total)}
-          sub={
-            delta === null
-              ? `Sin datos en ${comparacion.etiqueta}`
-              : `${delta >= 0 ? "+" : "−"}${numero(Math.abs(delta), 1)} % frente a ${comparacion.etiqueta}`
-          }
-          tone={delta === null ? "neutral" : delta >= 0 ? "up" : "down"}
-          Icon={delta !== null && delta < 0 ? TrendingDown : TrendingUp}
-        />
-        <KPI
-          t="Pedidos del mes"
-          explicacion="pedidos"
-          v={String(k.pedidos)}
-          sub={`Ticket medio ${eur(k.ticket)}`}
-          Icon={Receipt}
-        />
-        <KPI
-          t="Metros del mes"
-          explicacion="metros"
-          v={metros(k.metros)}
-          sub="Producción mes en curso"
-          Icon={Package}
-        />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Resumen{nombreTienda ? ` · ${nombreTienda}` : ""}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          El mes en curso, frente al mismo trozo del mes anterior, y los totales de la tienda.
+        </p>
       </div>
-      <div className="grid gap-4 md:grid-cols-1">
-        <KPI
-          t="Margen estimado del mes"
-          explicacion="margen"
-          v={sinCostes ? "—" : eur(margenMes)}
-          sub={
-            sinCostes
-              ? "Configura los costes en Ajustes › Datos de la empresa"
-              : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)} (${metros(k.metros)})${
-                  margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
-                }`
-          }
-          tone={sinCostes ? "neutral" : margenMes >= 0 ? "up" : "down"}
-          Icon={Percent}
-        />
-      </div>
-      <div className="grid gap-4 md:grid-cols-4">
-        <KPI t="Pedidos totales" v={String(pedidos.length)} Icon={ShoppingCart} />
-        <KPI t="Metros totales" v={metros(mts)} Icon={Ruler} />
-        <KPI t="Facturado total" v={eur(fact)} Icon={Euro} />
-        <KPI t="Facturas" v={String(facturas.length)} Icon={FileText} />
-      </div>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">Este mes</h2>
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+          <TarjetaKpi
+            titulo="Vendido"
+            explicacion="vendido"
+            valor={eur(k.total)}
+            frente={comparacion.etiqueta}
+            delta={delta}
+            icon={Euro}
+          />
+          <TarjetaKpi
+            titulo="Pedidos"
+            explicacion="pedidos"
+            valor={String(k.pedidos)}
+            delta={null}
+            icon={Receipt}
+            pie={<span className="text-muted-foreground">Ticket medio {eur(k.ticket)}</span>}
+          />
+          <TarjetaKpi
+            titulo="Metros"
+            explicacion="metros"
+            valor={metros(k.metros)}
+            delta={null}
+            icon={Package}
+          />
+          <TarjetaKpi
+            titulo="Margen estimado"
+            explicacion="margen"
+            valor={sinCostes ? "—" : eur(margenMes)}
+            delta={null}
+            icon={Percent}
+            color={!sinCostes && margenMes < 0 ? "destructive" : "primary"}
+            pie={
+              <span className="text-muted-foreground">
+                {sinCostes
+                  ? "Configura los costes en Ajustes › Datos de la empresa"
+                  : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)}${
+                      margenPct !== null ? ` · ${numero(margenPct, 1)} % de la bruta` : ""
+                    }`}
+              </span>
+            }
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">Desde el principio</h2>
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+          <TarjetaKpi
+            titulo="Pedidos"
+            valor={String(pedidos.length)}
+            delta={null}
+            icon={ShoppingCart}
+          />
+          <TarjetaKpi titulo="Metros" valor={metros(mts)} delta={null} icon={Ruler} />
+          <TarjetaKpi titulo="Facturado" valor={eur(fact)} delta={null} icon={Euro} />
+          <TarjetaKpi
+            titulo="Facturas"
+            valor={String(facturas.length)}
+            delta={null}
+            icon={FileText}
+          />
+        </div>
+      </section>
     </div>
-  );
-}
-function KPI({
-  t,
-  v,
-  sub,
-  Icon,
-  tone = "neutral",
-  explicacion,
-}: {
-  t: string;
-  explicacion?: ClaveDefinicion;
-  v: string;
-  sub?: string;
-  Icon: any;
-  tone?: "up" | "down" | "neutral";
-}) {
-  const toneClass =
-    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-muted-foreground";
-  return (
-    <Card>
-      <CardContent className="p-6 flex items-center gap-4">
-        <div className="h-12 w-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-          <Icon className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <span>{t}</span>
-            {explicacion && <Explicacion titulo={t} definicion={DEFINICIONES[explicacion]} />}
-          </div>
-          <div className="text-2xl font-bold">{v}</div>
-          {sub && <div className={`text-xs mt-0.5 ${toneClass}`}>{sub}</div>}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

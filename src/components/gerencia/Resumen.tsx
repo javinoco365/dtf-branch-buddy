@@ -30,7 +30,7 @@ import { eur, metros } from "@/lib/format";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
-import { tramosGrafica } from "@/dominio/periodos";
+import { tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { proformasSinFactura, resumenProformas } from "@/dominio/proformas";
 import { useProformasPendientes } from "@/lib/gerencia";
 import {
@@ -43,6 +43,7 @@ import {
   objetivoDelRango,
   parteTranscurrida,
   resumenBanco,
+  tonoObjetivo,
   type CifrasGerencia,
 } from "@/dominio/gerencia";
 import {
@@ -88,7 +89,9 @@ export function Resumen({ d }: { d: DatosGerencia }) {
   );
 
   const grafica = useMemo(() => {
-    const { por, tramos } = tramosGrafica(d.rango);
+    const { por, tramos: todos } = tramosGrafica(d.rango);
+    // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
+    const tramos = tramosHastaHoy(todos, d.hoy);
     const vendido = agruparPorRangos(d.ventas, tramos);
     const cobradoT = cobradoPorTramos(d.cobros, tramos);
     return {
@@ -99,13 +102,53 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         Cobrado: cobradoT[i],
       })),
     };
-  }, [d.rango, d.ventas, d.cobros]);
+  }, [d.rango, d.ventas, d.cobros, d.hoy]);
 
   const pedidos = destinoPedidos(d.filtro, d.seleccion);
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Lo que pide hacer algo, lo primero: antes iba debajo de once
+          tarjetas (y en el móvil, al final de todo). */}
+      <section aria-label="Avisos" className="space-y-2">
+        {/* Un fallo no es «ninguna proforma pendiente». */}
+        {errorProformas && (
+          <p className="flex items-start gap-2 rounded-lg border border-status-cancelado/30 bg-status-cancelado/5 px-3 py-2 text-sm text-status-cancelado">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            No se han podido leer las proformas sin factura. Prueba a recargar la página.
+          </p>
+        )}
+        {avisos.length === 0 ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CheckCircle2 className="h-4 w-4 text-status-completado" />
+            Nada fuera de lo normal con estos filtros.
+          </p>
+        ) : (
+          <ul className="grid gap-2 lg:grid-cols-2">
+            {avisos.map((a) => (
+              <li
+                key={a.tipo}
+                className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                  a.nivel === "alto"
+                    ? "border-status-cancelado/30 bg-status-cancelado/5"
+                    : "border-status-pendiente/30 bg-status-pendiente/5"
+                }`}
+              >
+                <AlertTriangle
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${
+                    a.nivel === "alto" ? "text-status-cancelado" : "text-status-pendiente"
+                  }`}
+                />
+                <span className="flex-1">
+                  {textoAviso(a, frente)} <VerDetalle destino={destinoAviso(a, d)} texto="Ver" />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
           titulo="Vendido"
           explicacion="g_vendido"
@@ -183,42 +226,6 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       </div>
 
       <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Avisos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {/* Un fallo no es «ninguna proforma pendiente». */}
-          {errorProformas && (
-            <p className="flex items-start gap-2 text-sm text-destructive">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              No se han podido leer las proformas sin factura: {errorProformas.message}
-            </p>
-          )}
-          {avisos.length === 0 ? (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-status-completado" />
-              Nada fuera de lo normal con estos filtros.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {avisos.map((a) => (
-                <li key={a.tipo} className="flex items-start gap-2 text-sm">
-                  <AlertTriangle
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      a.nivel === "alto" ? "text-status-cancelado" : "text-status-pendiente"
-                    }`}
-                  />
-                  <span className="flex-1">
-                    {textoAviso(a, frente)} <VerDetalle destino={destinoAviso(a, d)} texto="Ver" />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -306,7 +313,7 @@ function BeneficioYObjetivos({
     : null;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
       {hayGastos && (
         <TarjetaKpi
           titulo="Beneficio estimado"
@@ -370,6 +377,7 @@ function TarjetaObjetivo({
 }) {
   const a = avanceObjetivo(conseguido, objetivo, transcurrido);
   if (!a) return null;
+  const tono = tonoObjetivo(a);
   const terminado = transcurrido >= 1;
   const delante = a.diferencia >= 0;
   const ritmo = terminado
@@ -382,26 +390,38 @@ function TarjetaObjetivo({
 
   return (
     <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      {/* Las mismas medidas que TarjetaKpi, también en el móvil. */}
+      <CardContent className="p-3.5 md:p-5">
+        <div className="flex items-start gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground md:text-xs">
           <span>{titulo}</span>
           <Explicacion titulo={titulo} definicion={DEFINICIONES[clave]} />
         </div>
-        <div className="mt-3 text-3xl font-bold tracking-tight">
+        <div className="mt-2 text-xl font-bold tracking-tight tabular-nums md:mt-3 md:text-3xl">
           {a.porcentaje.toLocaleString("es-ES")} %
         </div>
-        <Progress value={Math.min(100, a.porcentaje)} className="mt-3" />
+        <Progress
+          value={Math.min(100, a.porcentaje)}
+          className="mt-3"
+          indicadorClassName={COLOR_BARRA[tono]}
+          aria-label={`${titulo}: ${a.porcentaje.toLocaleString("es-ES")} %`}
+        />
         <p className="mt-2 text-xs text-muted-foreground">
           {formato(conseguido)} de {formato(objetivo)}
         </p>
-        <p
-          className={`mt-1 text-xs font-medium ${
-            delante ? "text-status-completado" : "text-status-pendiente"
-          }`}
-        >
-          {ritmo}
-        </p>
+        <p className={`mt-1 text-xs font-medium ${COLOR_TEXTO[tono]}`}>{ritmo}</p>
       </CardContent>
     </Card>
   );
 }
+
+/** Verde si se va al ritmo, ámbar si falta poco, rojo si falta mucho (tonoObjetivo). */
+const COLOR_BARRA = {
+  bien: "bg-status-completado",
+  atencion: "bg-status-pendiente",
+  mal: "bg-status-cancelado",
+} as const;
+const COLOR_TEXTO = {
+  bien: "text-status-completado",
+  atencion: "text-status-pendiente",
+  mal: "text-status-cancelado",
+} as const;

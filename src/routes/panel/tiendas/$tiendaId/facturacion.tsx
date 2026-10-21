@@ -17,7 +17,7 @@ import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/per
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
-import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
+import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import type { LucideIcon } from "lucide-react";
@@ -83,7 +83,9 @@ function FacturacionTienda() {
   ).cobrado;
 
   const grafica = useMemo(() => {
-    const { por, tramos } = tramosGrafica({ desde, hasta });
+    const { por, tramos: todos } = tramosGrafica({ desde, hasta });
+    // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
+    const tramos = tramosHastaHoy(todos, new Date());
     const totales = agruparPorRangos(pedidos, tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
   }, [pedidos, desde, hasta]);

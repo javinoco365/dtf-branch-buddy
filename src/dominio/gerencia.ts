@@ -853,6 +853,16 @@ export function avanceObjetivo(
 }
 
 /**
+ * El color de la barra de un objetivo: verde si se va al ritmo (o por
+ * delante), ámbar si falta menos de un 10 % de lo que tocaba llevar a estas
+ * alturas, rojo si falta más.
+ */
+export function tonoObjetivo(a: AvanceObjetivo): "bien" | "atencion" | "mal" {
+  if (a.diferencia >= 0 || a.esperado <= 0) return "bien";
+  return -a.diferencia <= a.esperado * 0.1 ? "atencion" : "mal";
+}
+
+/**
  * Beneficio estimado de un rango: el margen menos los gastos fijos que le
  * tocan, ambos sin IVA. Con `hoy`, los gastos se cuentan solo hasta hoy: a
  * mitad de mes se compara lo vendido hasta hoy con lo gastado hasta hoy, no

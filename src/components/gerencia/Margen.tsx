@@ -16,7 +16,7 @@ import { eur, numero } from "@/lib/format";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import { tramosGrafica } from "@/dominio/periodos";
+import { tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { CANALES, cifrasGerencia } from "@/dominio/gerencia";
 import {
   margenPor,
@@ -57,7 +57,9 @@ export function Margen({ d }: { d: DatosGerencia }) {
     [d.ventas, d.costeMetro],
   );
   const tramos = useMemo(() => {
-    const { por, tramos } = tramosGrafica(d.rango);
+    const { por, tramos: todos } = tramosGrafica(d.rango);
+    // Sin los días que aún no han llegado: filas a cero que no dicen nada.
+    const tramos = tramosHastaHoy(todos, d.hoy);
     return { por, filas: margenPorTramos(d.ventas, tramos, d.costeMetro, d.gastosDelGrupo, d.hoy) };
   }, [d.rango, d.ventas, d.costeMetro, d.gastosDelGrupo, d.hoy]);
   const metro = useMemo(() => margenPorMetro(d.ventas, d.costeMetro), [d.ventas, d.costeMetro]);

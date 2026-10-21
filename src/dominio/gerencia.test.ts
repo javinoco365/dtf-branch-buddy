@@ -3,6 +3,7 @@ import {
   AJUSTES_POR_DEFECTO,
   aplicarAjustesVentas,
   avanceObjetivo,
+  tonoObjetivo,
   beneficioEstimado,
   gastosFijosDelRango,
   objetivoDelRango,
@@ -553,5 +554,24 @@ describe("aviso de proformas sin factura", () => {
         },
       }),
     ).toEqual([]);
+  });
+});
+
+describe("tonoObjetivo", () => {
+  it("verde si se va al ritmo o por delante", () => {
+    expect(tonoObjetivo(avanceObjetivo(5000, 15000, 1 / 3)!)).toBe("bien");
+  });
+
+  it("ámbar si falta menos de un 10 % de lo que tocaba llevar", () => {
+    // Tocaba llevar 5000; se llevan 4600 (faltan 400, un 8 %).
+    expect(tonoObjetivo(avanceObjetivo(4600, 15000, 1 / 3)!)).toBe("atencion");
+  });
+
+  it("rojo si falta más", () => {
+    expect(tonoObjetivo(avanceObjetivo(4000, 15000, 1 / 3)!)).toBe("mal");
+  });
+
+  it("el primer día, sin nada esperado aún, no se pinta en rojo", () => {
+    expect(tonoObjetivo(avanceObjetivo(0, 15000, 0)!)).toBe("bien");
   });
 });

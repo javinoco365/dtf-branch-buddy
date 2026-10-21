@@ -24,7 +24,7 @@ import {
   variacion,
 } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
-import { PERIODOS_CUADRO, tramosGrafica } from "@/dominio/periodos";
+import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import {
@@ -100,7 +100,9 @@ function DashboardGlobal() {
   const sinCostes = costeMetro === 0 && costePer.produccion === 0;
 
   const grafica = useMemo(() => {
-    const { por, tramos } = tramosGrafica({ desde, hasta });
+    const { por, tramos: todos } = tramosGrafica({ desde, hasta });
+    // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
+    const tramos = tramosHastaHoy(todos, new Date());
     const totales = agruparPorRangos(pedidos, tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
   }, [pedidos, desde, hasta]);

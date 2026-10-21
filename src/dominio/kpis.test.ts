@@ -10,6 +10,7 @@ import {
   parteVendida,
   topPorMetros,
   variacion,
+  formaVariacion,
   type PedidoResumen,
 } from "./kpis";
 
@@ -377,5 +378,25 @@ describe("coste variable: producción y envío", () => {
       envios: 5,
       total: 45,
     });
+  });
+});
+
+describe("formaVariacion", () => {
+  it("lo normal, en porcentaje sin signo (la flecha dice si sube o baja)", () => {
+    expect(formaVariacion(12.4)).toEqual({ tipo: "porcentaje", valor: 12.4 });
+    expect(formaVariacion(-35)).toEqual({ tipo: "porcentaje", valor: 35 });
+  });
+
+  it("con base pequeña, en veces: «×61» en vez de «5992,9 %»", () => {
+    expect(formaVariacion(5992.9)).toEqual({ tipo: "veces", valor: 61 });
+  });
+
+  it("de diez a veinte veces, con un decimal", () => {
+    expect(formaVariacion(900)).toEqual({ tipo: "veces", valor: 10 });
+    expect(formaVariacion(1150)).toEqual({ tipo: "veces", valor: 12.5 });
+  });
+
+  it("justo por debajo de diez veces sigue en porcentaje", () => {
+    expect(formaVariacion(899.9)).toEqual({ tipo: "porcentaje", valor: 899.9 });
   });
 });

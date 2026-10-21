@@ -1,27 +1,34 @@
-// Gráfica en fichero propio: solo se carga con import() (React.lazy), para
-// que la librería de gráficas no retrase las cifras de la pantalla. No
-// importar de forma normal (ver src/arquitectura/importaciones-mixtas.test.ts).
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { metros } from "@/lib/format";
 
-/** Los productos con más metros, en barras horizontales. */
+/**
+ * Los productos que más metros llevan, como lista con su barra.
+ *
+ * Antes era una gráfica de barras horizontales: con uno o dos productos (lo
+ * normal en una imprenta de DTF) salía una barra gigante que no decía nada, y
+ * el nombre del producto se cortaba en el eje. Una lista se lee igual con uno
+ * que con seis, y la cifra va escrita.
+ */
 export function TopProductosMetros({ datos }: { datos: { producto: string; metros: number }[] }) {
+  const maximo = Math.max(...datos.map((d) => d.metros), 0);
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={datos} layout="vertical" margin={{ left: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} m`} />
-        <YAxis type="category" dataKey="producto" width={140} tick={{ fontSize: 11 }} />
-        <Tooltip
-          formatter={(v: number) => metros(v)}
-          contentStyle={{
-            background: "var(--color-card)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-          }}
-        />
-        <Bar dataKey="metros" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <ol className="space-y-3">
+      {datos.map((d, i) => (
+        <li key={d.producto} className="space-y-1">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate" title={d.producto}>
+              <span className="mr-2 text-xs text-muted-foreground tabular-nums">{i + 1}.</span>
+              {d.producto}
+            </span>
+            <span className="shrink-0 font-semibold tabular-nums">{metros(d.metros)}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-primary/10" aria-hidden>
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${maximo > 0 ? (d.metros / maximo) * 100 : 0}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
