@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { StatusBadge } from "@/components/StatusBadge";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { eur, fechaCorta, numero } from "@/lib/format";
 import { proformasSinFactura, resumenProformas, type ProformaFila } from "@/dominio/proformas";
 
@@ -72,7 +72,7 @@ export function ProformasPendientes({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{eur(importe)}</TableCell>
                 <TableCell>
-                  <StatusBadge estado={pagada ? "pagada" : "pendiente"} />
+                  <EtiquetaEstado tipo="pago_compra" valor={pagada ? "pagada" : "pendiente"} />
                   {pagada && p.fecha_pago && (
                     <span className="block text-xs text-muted-foreground">
                       El {fechaCorta(p.fecha_pago)}

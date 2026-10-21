@@ -1,4 +1,6 @@
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { infoEstado } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { usePermisos } from "@/hooks/use-permisos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { enRango } from "@/dominio/periodos";
@@ -315,6 +317,21 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
   // Las proformas que ya tienen su factura (las facturas de la lista que apuntan a ellas).
   const facturaDe = useMemo(() => facturasPorProforma(compras as ProformaFila[]), [compras]);
   const casadas = useMemo(() => new Set(facturaDe.keys()), [facturaDe]);
+  /**
+   * Si se debe o no, para las que lo llevan: las registradas de Facturas de
+   * compra, y en Textil las proformas y las facturas casadas. Una proforma
+   * casada paga con su factura. `null` donde el pago no aplica.
+   */
+  const pagoVisible = (c: any): "pagada" | "pendiente" | null => {
+    if (!recibidas || c.borrada_en || c.estado !== "registrada") return null;
+    if (esProforma(c) && casadas.has(c.id)) {
+      return facturaDe.get(c.id)?.estado_pago === "pagada" ? "pagada" : "pendiente";
+    }
+    if (general || esProforma(c) || !!c.proforma_id) {
+      return c.estado_pago === "pagada" ? "pagada" : "pendiente";
+    }
+    return null;
+  };
   const porId = useMemo(
     () => new Map((compras as any[]).map((c) => [c.id as string, c])),
     [compras],
@@ -704,7 +721,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
             { valor: "todos", etiqueta: "Todos los estados" },
             ...[...new Set((compras as any[]).map(estadoDe))]
               .sort()
-              .map((e) => ({ valor: e, etiqueta: e })),
+              .map((e) => ({ valor: e, etiqueta: infoEstado("compra", e).etiqueta })),
           ]}
         />
         {general && (
@@ -824,7 +841,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
               )}
               {filtrados.map((c: any) => (
                 <TableRow key={c.id}>
-                  <TableCell className="whitespace-nowrap">{c.fecha ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{fechaCorta(c.fecha)}</TableCell>
                   <TableCell className="font-medium">{c.proveedor ?? "—"}</TableCell>
                   {general && (
                     <TableCell>
@@ -870,9 +887,13 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     {eur(Number(c.liquido ?? c.total))}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={estadoDe(c) === "registrada" ? "default" : "outline"}>
-                      {estadoDe(c)}
-                    </Badge>
+                    {/* De una registrada importa si se debe; de las demás, en qué
+                        punto está (borrador, borrada). */}
+                    {pagoVisible(c) ? (
+                      <EtiquetaEstado tipo="pago_compra" valor={pagoVisible(c)} />
+                    ) : (
+                      <EtiquetaEstado tipo="compra" valor={estadoDe(c)} />
+                    )}
                     {esProforma(c) && casadas.has(c.id)
                       ? // El pago de la proforma casada vive en su factura.
                         facturaDe.get(c.id)?.estado_pago === "pagada" && (
@@ -940,9 +961,10 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                             size="sm"
                             className="h-8 px-2"
                             disabled={pagar.isPending}
+                            title="Deshacer el pago: vuelve a «Por pagar»"
                             onClick={() => pagar.mutate({ id: c.id, fecha_pago: null })}
                           >
-                            Pendiente
+                            Marcar por pagar
                           </Button>
                         ) : (
                           <Button
@@ -956,7 +978,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                               })
                             }
                           >
-                            Pagada
+                            Marcar pagada
                           </Button>
                         ))}
                       {(c.estado === "borrador" ||

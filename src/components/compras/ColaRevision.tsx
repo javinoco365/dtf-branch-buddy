@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Eye, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -106,17 +107,15 @@ export function ColaRevision({
                   </TableCell>
                   <TableCell>
                     {error ? (
-                      <Badge variant="destructive">Error</Badge>
+                      <EtiquetaTono tono="mal">No se ha leído</EtiquetaTono>
+                    ) : c.confianza == null ? (
+                      <EtiquetaTono tono="neutro">Leyendo…</EtiquetaTono>
                     ) : (
-                      <Badge
-                        variant={
-                          Number(c.confianza ?? 0) < UMBRAL_CONFIANZA ? "outline" : "secondary"
-                        }
+                      <EtiquetaTono
+                        tono={Number(c.confianza) < UMBRAL_CONFIANZA ? "atencion" : "bien"}
                       >
-                        {c.confianza == null
-                          ? "Leyendo…"
-                          : `Confianza ${Math.round(Number(c.confianza) * 100)} %`}
-                      </Badge>
+                        Confianza {Math.round(Number(c.confianza) * 100)} %
+                      </EtiquetaTono>
                     )}
                   </TableCell>
                   <TableCell className="max-w-md text-sm">

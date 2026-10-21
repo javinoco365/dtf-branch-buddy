@@ -40,6 +40,8 @@ import {
   Download,
   FileJson,
   FileText,
+  Globe,
+  Hand,
   Loader2,
   MoreVertical,
   Plus,
@@ -62,6 +64,8 @@ import {
   mismaDireccion as sonLaMismaDireccion,
   type Direccion,
 } from "@/dominio/direcciones";
+import { estadosDe, infoEstado } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import {
   deletePedido,
   listPedidos,
@@ -172,17 +176,8 @@ export type PedidoFila = {
   documento?: DocumentoDeLista | null;
 };
 
-const ESTADO_LABEL: Record<string, string> = {
-  pendiente: "Pendiente",
-  en_produccion: "Procesando",
-  imprimiendo: "Imprimiendo",
-  listo: "Listo",
-  enviado: "Enviado",
-  entregado: "Completado",
-  cancelado: "Cancelado",
-};
-
-const ESTADOS = Object.keys(ESTADO_LABEL);
+// Nombre y color de cada estado: src/dominio/estados.ts, el mismo en toda la app.
+const ESTADOS = estadosDe("pedido");
 
 const FILTROS_PEDIDOS = {
   q: "",
@@ -191,13 +186,6 @@ const FILTROS_PEDIDOS = {
   origen: "todos",
   tienda: "todas",
 };
-
-function estadoVariant(estado: string): "default" | "secondary" | "destructive" | "outline" {
-  if (estado === "entregado") return "default";
-  if (estado === "cancelado") return "destructive";
-  if (estado === "pendiente") return "outline";
-  return "secondary";
-}
 
 /**
  * El resumen de cobros de cada pedido, calculado una vez por pedido. La clave
@@ -449,7 +437,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           p.tienda_nombre ?? "",
           p.cliente_nombre ?? "",
           p.cliente_email ?? "",
-          ESTADO_LABEL[p.estado] ?? p.estado,
+          infoEstado("pedido", p.estado).etiqueta,
           p.origen ?? "",
           p.metodo_pago ?? "",
           p.total,
@@ -575,8 +563,8 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
             <SelectContent>
               <SelectItem value="todos">Todos los estados</SelectItem>
               {ESTADOS.map((e) => (
-                <SelectItem key={e} value={e}>
-                  {ESTADO_LABEL[e]}
+                <SelectItem key={e.valor} value={e.valor}>
+                  {e.etiqueta}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1132,7 +1120,6 @@ const FilaPedido = memo(function FilaPedido({
 }: PropsPedido) {
   const { onToggle, onEstadoChange, onEditar, onTracking, onBorrar, onFacturar, onCobros } =
     accionesDeFila(pedido, conCobros, acciones);
-  const origenLabel = pedido.origen === "woocommerce" ? "WooCommerce" : "Manual";
   const numeroLabel = numeroVisible(pedido);
   const cancelado = pedido.estado === "cancelado";
   const cobro = cobroDe(pedido);
@@ -1173,9 +1160,7 @@ const FilaPedido = memo(function FilaPedido({
           )}
         </TableCell>
         <TableCell>
-          <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
-            {origenLabel}
-          </Badge>
+          <EtiquetaOrigen web={pedido.origen === "woocommerce"} />
         </TableCell>
         <TableCell>
           {/* Se ve como el Origen, una etiqueta y ya. Sigue cambiándose: la
@@ -1310,9 +1295,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
         <div className="flex flex-wrap items-center gap-1.5">
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
           <RealizadoEn tabla="pedidos" pedido={pedido} />
-          <Badge variant={pedido.origen === "woocommerce" ? "default" : "outline"}>
-            {pedido.origen === "woocommerce" ? "WooCommerce" : "Manual"}
-          </Badge>
+          <EtiquetaOrigen web={pedido.origen === "woocommerce"} />
           {pedido.documento && <BotonDocumento documento={pedido.documento} />}
           {onCobros && !cancelado && (
             <button
@@ -1376,27 +1359,50 @@ function SelectorEstado({
   // Quien solo ve, ve la etiqueta; cambiar el estado es escribir.
   const { escribir } = usePermisos();
   if (!escribir) {
-    return <Badge variant={estadoVariant(estado)}>{ESTADO_LABEL[estado] ?? estado}</Badge>;
+    return <EtiquetaEstado tipo="pedido" valor={estado} />;
   }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" title="Cambiar el estado">
-          <Badge variant={estadoVariant(estado)} className="cursor-pointer hover:opacity-80">
-            {ESTADO_LABEL[estado] ?? estado}
-          </Badge>
+        <button
+          type="button"
+          title="Cambiar el estado"
+          className="group inline-flex items-center gap-0.5 rounded-full"
+        >
+          <EtiquetaEstado
+            tipo="pedido"
+            valor={estado}
+            className="cursor-pointer group-hover:opacity-80"
+          />
+          <ChevronDown aria-hidden className="h-3 w-3 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {ESTADOS.map((e) => (
-          <DropdownMenuItem key={e} onClick={() => onEstadoChange(e)}>
-            <Badge variant={estadoVariant(e)} className="mr-2">
-              {ESTADO_LABEL[e]}
-            </Badge>
+          <DropdownMenuItem key={e.valor} onClick={() => onEstadoChange(e.valor)}>
+            <EtiquetaEstado tipo="pedido" valor={e.valor} />
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * De dónde viene el pedido. Es un dato de consulta, no algo que pida hacer
+ * nada: va en texto discreto, para no pesar más que el estado (antes era una
+ * etiqueta azul oscura, la misma que «Completado»).
+ */
+function EtiquetaOrigen({ web }: { web: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
+      {web ? (
+        <Globe aria-hidden className="h-3.5 w-3.5" />
+      ) : (
+        <Hand aria-hidden className="h-3.5 w-3.5" />
+      )}
+      {web ? "WooCommerce" : "Manual"}
+    </span>
   );
 }
 

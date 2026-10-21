@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { infoEstado } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { enRango } from "@/dominio/periodos";
@@ -223,7 +225,7 @@ function FacturasPage() {
             { valor: "todos", etiqueta: "Todos los estados" },
             ...[...new Set((data as any[]).map((f) => String(f.estado)))]
               .sort()
-              .map((e) => ({ valor: e, etiqueta: e })),
+              .map((e) => ({ valor: e, etiqueta: infoEstado("factura", e).etiqueta })),
           ]}
         />
         <SelectorPeriodo periodo={periodo} />
@@ -294,7 +296,7 @@ function FacturasPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{f.estado}</Badge>
+                    <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
                   <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
                   <TableCell className="text-right">

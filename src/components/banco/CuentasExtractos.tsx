@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
+import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, CheckCircle2, FileUp, Loader2, Plus, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -303,14 +303,14 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
                       {x.saldo_final === null ? "—" : eur(Number(x.saldo_final))}
                     </TableCell>
                     <TableCell>
+                      {/* Verde lo que cuadra; rojo lo que no; sin saldos falta
+                          un dato, no hay un error: gris. */}
                       {x.cuadra ? (
-                        <Badge variant="secondary">Cuadra</Badge>
+                        <EtiquetaTono tono="bien">Cuadra</EtiquetaTono>
+                      ) : x.saldo_inicial === null || x.saldo_final === null ? (
+                        <EtiquetaTono tono="neutro">Sin saldos</EtiquetaTono>
                       ) : (
-                        <Badge variant="destructive">
-                          {x.saldo_inicial === null || x.saldo_final === null
-                            ? "Sin saldos"
-                            : "No cuadra"}
-                        </Badge>
+                        <EtiquetaTono tono="mal">No cuadra</EtiquetaTono>
                       )}
                     </TableCell>
                   </TableRow>

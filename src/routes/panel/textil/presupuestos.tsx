@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { infoEstado } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { usePermisos } from "@/hooks/use-permisos";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -100,13 +102,6 @@ export const Route = createFileRoute("/panel/textil/presupuestos")({
 // «facturado» ya no se elige: el textil no va por factura. Solo lo llevan los
 // presupuestos que se facturaron antes, y se siguen enseñando tal cual.
 const ESTADOS = ["borrador", "enviado", "aceptado", "rechazado"] as const;
-const ESTADO_COLOR: Record<string, string> = {
-  borrador: "bg-muted text-muted-foreground",
-  enviado: "bg-blue-500/10 text-blue-700",
-  aceptado: "bg-green-500/10 text-green-700",
-  rechazado: "bg-red-500/10 text-red-700",
-  facturado: "bg-primary/10 text-primary",
-};
 
 function PresupuestosPage() {
   // El visor ve los presupuestos, su PDF y cada uno abierto; no cambia nada.
@@ -325,7 +320,10 @@ function PresupuestosPage() {
           alCambiar={(estado) => cambiar({ estado })}
           opciones={[
             { valor: "todos", etiqueta: "Todos los estados" },
-            ...[...ESTADOS, "facturado"].map((e) => ({ valor: e, etiqueta: e })),
+            ...[...ESTADOS, "facturado"].map((e) => ({
+              valor: e,
+              etiqueta: infoEstado("presupuesto", e).etiqueta,
+            })),
           ]}
         />
         <SelectorPeriodo periodo={periodo} />
@@ -377,25 +375,29 @@ function PresupuestosPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value={p.estado}
-                      onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
-                      disabled={p.estado === "facturado" || !!p.pedido_id || !escribir}
-                    >
-                      <SelectTrigger className={`h-7 w-32 text-xs ${ESTADO_COLOR[p.estado] ?? ""}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ESTADOS.map((e) => (
-                          <SelectItem key={e} value={e}>
-                            {e}
-                          </SelectItem>
-                        ))}
-                        {p.estado === "facturado" && (
-                          <SelectItem value="facturado">facturado</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    {p.estado === "facturado" || !!p.pedido_id || !escribir ? (
+                      <EtiquetaEstado tipo="presupuesto" valor={p.estado} />
+                    ) : (
+                      <Select
+                        value={p.estado}
+                        onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
+                      >
+                        <SelectTrigger
+                          aria-label="Cambiar el estado"
+                          title="Cambiar el estado"
+                          className="h-7 w-auto gap-1 border-none bg-transparent px-0 shadow-none focus:ring-0"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ESTADOS.map((e) => (
+                            <SelectItem key={e} value={e}>
+                              <EtiquetaEstado tipo="presupuesto" valor={e} />
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {p.pedido?.numero && (
                       <div className="text-xs text-muted-foreground mt-1">
                         Pedido <span className="font-mono">{p.pedido.numero}</span>

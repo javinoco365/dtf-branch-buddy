@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { estadosDe } from "@/dominio/estados";
+import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
@@ -86,7 +88,8 @@ export const Route = createFileRoute("/panel/textil/pedidos")({
   component: PedidosPage,
 });
 
-const ESTADOS = ["pendiente", "en_produccion", "listo", "enviado", "entregado", "cancelado"];
+// Nombre y color de cada estado: src/dominio/estados.ts, el mismo en toda la app.
+const ESTADOS = estadosDe("pedido_textil");
 
 /** Un pedido en estos estados ya no reserva: o salió el género o se anuló. */
 const ESTADOS_SIN_RESERVA = ["enviado", "entregado", "cancelado"];
@@ -306,10 +309,7 @@ function PedidosPage() {
           etiqueta="Estado"
           valor={filtros.estado}
           alCambiar={(estado) => cambiar({ estado })}
-          opciones={[
-            { valor: "todos", etiqueta: "Todos los estados" },
-            ...ESTADOS.map((e) => ({ valor: e, etiqueta: e.replace("_", " ") })),
-          ]}
+          opciones={[{ valor: "todos", etiqueta: "Todos los estados" }, ...ESTADOS]}
         />
         {cobrosDisponibles && (
           <SelectFiltro
@@ -366,22 +366,29 @@ function PedidosPage() {
                     <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
                     <TableCell>{p.marca?.nombre ?? "—"}</TableCell>
                     <TableCell>
-                      <Select
-                        value={p.estado}
-                        onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
-                        disabled={!escribir}
-                      >
-                        <SelectTrigger className="h-7 w-36 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ESTADOS.map((e) => (
-                            <SelectItem key={e} value={e}>
-                              {e}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {escribir ? (
+                        <Select
+                          value={p.estado}
+                          onValueChange={(v) => setEst.mutate({ id: p.id, estado: v })}
+                        >
+                          <SelectTrigger
+                            aria-label="Cambiar el estado"
+                            title="Cambiar el estado"
+                            className="h-7 w-auto gap-1 border-none bg-transparent px-0 shadow-none focus:ring-0"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ESTADOS.map((e) => (
+                              <SelectItem key={e.valor} value={e.valor}>
+                                <EtiquetaEstado tipo="pedido_textil" valor={e.valor} />
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <EtiquetaEstado tipo="pedido_textil" valor={p.estado} />
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
                     <TableCell className="text-right tabular-nums">{eur(cobro.cobrado)}</TableCell>
@@ -664,8 +671,8 @@ function PedidoDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {ESTADOS.map((e) => (
-                      <SelectItem key={e} value={e}>
-                        {e}
+                      <SelectItem key={e.valor} value={e.valor}>
+                        {e.etiqueta}
                       </SelectItem>
                     ))}
                   </SelectContent>
