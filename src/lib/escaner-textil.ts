@@ -26,6 +26,11 @@ export const AVISO_MIGRACION_ESCANER =
   "(escáner textil: esquema, datos y reglas), en ese orden. Hasta entonces, Textil › Compras " +
   "funciona como antes: casado a mano y sin repartir portes.";
 
+/** Unir los productos que son el mismo modelo (textil_productos_unir). */
+export const AVISO_MIGRACION_UNIR_PRODUCTOS =
+  "Falta aplicar la migración 20261101100000 (unir productos textiles). Hasta entonces, " +
+  "las prendas partidas en varios productos se ven juntas en Stock, pero no se pueden unir.";
+
 /**
  * true si existe `escaner_textil_version()` (la última sentencia de la última
  * de las tres migraciones: si está, están las tres); false si falta la

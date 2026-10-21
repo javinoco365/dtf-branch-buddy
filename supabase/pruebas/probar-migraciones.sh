@@ -166,6 +166,7 @@ seccion "Rendimiento: índices y lectura con mis_tiendas()/mis_empresas()" C21_r
 seccion "Niveles de usuario: admin, editor y visor" D1_roles_permisos.sql
 seccion "Niveles: editor y visor lo ven todo, salvo secretos" D2_niveles_lectura_total.sql
 seccion "Compras registradas sin fecha: se completa una vez" D3_compras_fecha_si_falta.sql
+seccion "Stock textil: unir los productos que son el mismo modelo" D4_textil_productos_unir.sql
 seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
   'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 

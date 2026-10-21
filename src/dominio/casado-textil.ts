@@ -251,17 +251,46 @@ export function casarLineas(lineas: readonly LineaParaCasar[], ctx: ContextoCasa
   return lineas.map((l) => casarLinea(l, ctx));
 }
 
-/** Producto existente con la misma marca y referencia (claves); si no, null. */
+/**
+ * El producto (el modelo) de una línea que no casa con ninguna variante, para
+ * colgar de él la variante nueva. Por orden:
+ *
+ *   1. el activo con la misma marca y referencia (la referencia del modelo:
+ *      Gildan 5000 es la misma para todas las tallas);
+ *   2. el de la variante que ya lleva esa referencia como SKU: hay
+ *      proveedores que meten la talla y el color en la referencia (Roly), y
+ *      entonces la referencia es de una talla, no del modelo;
+ *   3. el único activo con la misma marca y el mismo nombre de modelo (otra
+ *      talla de una prenda que ya está en el catálogo).
+ *
+ * Si no hay ninguno, null: se propone un producto nuevo. Antes se miraba solo
+ * la referencia, y con Roly cada talla acababa siendo un producto distinto.
+ */
 export function productoParaLinea(
   linea: LineaParaCasar,
   productos: readonly ProductoTextil[],
+  variantes: readonly VarianteCatalogo[] = [],
 ): ProductoTextil | null {
-  const ref = claveTexto(linea.referencia);
-  if (ref === "") return null;
+  const activos = productos.filter((p) => p.activo);
   const marca = claveTexto(linea.marca);
-  return (
-    productos.find((p) => claveTexto(p.referencia) === ref && claveTexto(p.marca) === marca) ?? null
+  const ref = claveTexto(linea.referencia);
+  if (ref !== "") {
+    const porReferencia = activos.find(
+      (p) => claveTexto(p.referencia) === ref && claveTexto(p.marca) === marca,
+    );
+    if (porReferencia) return porReferencia;
+    const conSku = variantes.find(
+      (v) => utilizable(v) && claveTexto(v.sku) === ref && claveTexto(v.producto?.marca) === marca,
+    );
+    const suyo = conSku ? activos.find((p) => p.id === conSku.producto_id) : undefined;
+    if (suyo) return suyo;
+  }
+  const nombre = claveTexto(nombreProductoDesdeLinea(linea));
+  if (marca === "" || nombre === "") return null;
+  const porNombre = activos.filter(
+    (p) => claveTexto(p.marca) === marca && claveTexto(p.nombre) === nombre,
   );
+  return porNombre.length === 1 ? porNombre[0] : null;
 }
 
 /** Nombre de producto propuesto: el modelo; si no hay, la descripción sin color, talla, marca ni referencia. */
@@ -292,30 +321,44 @@ export function nombreProductoDesdeLinea(linea: LineaParaCasar): string {
   return resto !== "" ? resto : descripcion;
 }
 
-/** Propuesta de variante nueva prerrellenada desde la línea (precio_venta 0, cantidad_minima 0). */
+/**
+ * Propuesta de variante nueva prerrellenada desde la línea (precio_venta 0,
+ * cantidad_minima 0).
+ *
+ * La referencia de la línea va al SKU de la variante, salvo que sea la del
+ * producto (la del modelo, que ya está en él). Un producto nuevo nace sin
+ * referencia: no se sabe si la del proveedor es del modelo o de una talla, y
+ * en el SKU sirve en los dos casos (el casado la encuentra ahí, y la siguiente
+ * talla llega al modelo por ella). Así las tallas de un modelo quedan en un
+ * solo producto, que se identifica por la marca y el nombre.
+ */
 export function nuevaVarianteDesdeLinea(
   linea: LineaParaCasar,
   productos: readonly ProductoTextil[],
+  variantes: readonly VarianteCatalogo[] = [],
 ): NuevaVariante {
-  const producto = productoParaLinea(linea, productos);
+  const producto = productoParaLinea(linea, productos, variantes);
   const limpio = (t: string | null) => {
     const s = (t ?? "").trim();
     return s === "" ? null : s;
   };
+  const referencia = limpio(linea.referencia);
+  const delProducto =
+    !!producto && referencia !== null && claveTexto(producto.referencia) === claveTexto(referencia);
   return {
     producto_id: producto?.id ?? null,
     producto: producto
       ? null
       : {
           marca: limpio(linea.marca),
-          referencia: limpio(linea.referencia),
+          referencia: null,
           nombre: nombreProductoDesdeLinea(linea),
           categoria: null,
         },
     color: limpio(linea.color),
     talla: limpio(linea.talla),
     ean: normalizarEan(linea.ean),
-    sku: null,
+    sku: delProducto ? null : referencia,
     precio_venta: 0,
     cantidad_minima: 0,
   };

@@ -56,6 +56,8 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
   "correos.functions.ts:enviarAvisoPedidoEnviado": "El pedido se lee con la sesión (RLS).",
   "escaner-textil.functions.ts:fusionarVariantes":
     "textil_stock_fusionar() exige es_miembro_empresa(_usuario_id).",
+  "escaner-textil.functions.ts:unirProductosTextil":
+    "textil_productos_unir() exige es_miembro_empresa(_usuario_id) y nivel de escritura.",
   "facturas.functions.ts:generarYSubirFacturaPDF": "comprobarAccesoTienda().",
   "facturas.functions.ts:abrirFacturaPDF":
     "La factura se lee con la sesión (RLS) antes de firmar; generarla exige escribir y comprobarAccesoTienda().",

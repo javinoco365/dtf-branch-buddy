@@ -13,7 +13,12 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
-import { AVISO_MIGRACION_ESCANER, escanerAplicado, textoONulo } from "./escaner-textil";
+import {
+  AVISO_MIGRACION_ESCANER,
+  AVISO_MIGRACION_UNIR_PRODUCTOS,
+  escanerAplicado,
+  textoONulo,
+} from "./escaner-textil";
 import { claveNif, claveTexto } from "@/dominio/normalizar-textil";
 import type { EntradaMemoria, ProductoTextil, Proveedor } from "@/dominio/tipos-textil";
 
@@ -307,4 +312,34 @@ export const fusionarVariantes = createServerFn({ method: "POST" })
       reservas: Number(r?.reservas ?? 0),
       lineas: Number(r?.lineas ?? 0),
     };
+  });
+
+export type ResultadoUnion = { variantes: number; productos: number };
+
+/**
+ * Une en un producto (el modelo) los productos con la misma marca y nombre: sus
+ * variantes pasan al que se queda, la referencia de cada uno va al SKU de sus
+ * variantes y los demás se desactivan. No borra nada. Todo en una transacción
+ * de la base (`textil_productos_unir`), con autor.
+ */
+export const unirProductosTextil = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        destino: z.string().uuid(),
+        origenes: z.array(z.string().uuid()).min(1).max(200),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }): Promise<ResultadoUnion> => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const { data: r, error } = await llamarRpcConError<ResultadoUnion>(
+      adminComoUsuario(context.userId),
+      "textil_productos_unir",
+      { _usuario_id: context.userId, _destino: data.destino, _origenes: data.origenes },
+    );
+    if (faltaLaFuncion(error)) throw new Error(AVISO_MIGRACION_UNIR_PRODUCTOS);
+    if (error) throw new Error(error.message);
+    return { variantes: Number(r?.variantes ?? 0), productos: Number(r?.productos ?? 0) };
   });

@@ -58,12 +58,21 @@ type VarianteForm = {
   cantidad_minima: string;
 };
 
-/** Las líneas con la misma marca y referencia van al mismo producto. */
+/**
+ * Las líneas que van al mismo producto: el mismo producto existente; o, si es
+ * nuevo, la misma marca y referencia del producto, o (sin referencia, que es
+ * como se proponen ahora: la de la línea va al SKU de cada talla) la misma
+ * marca y nombre. Así las tallas de un modelo que llega por primera vez, cada
+ * una con su referencia, son un solo producto y no uno por talla.
+ */
 const claveGrupo = (l: LineaParaCrear) => {
-  const marca = claveTexto(l.propuesta.producto?.marca ?? l.marca);
-  const ref = claveTexto(l.propuesta.producto?.referencia ?? l.referencia);
   if (l.propuesta.producto_id) return `p:${l.propuesta.producto_id}`;
-  return ref ? `r:${marca}|${ref}` : `l:${l.indice}`;
+  const p = l.propuesta.producto;
+  const marca = claveTexto(p?.marca ?? l.marca);
+  const ref = claveTexto(p ? p.referencia : l.referencia);
+  if (ref) return `r:${marca}|${ref}`;
+  const nombre = claveTexto(p?.nombre);
+  return nombre ? `n:${marca}|${nombre}` : `l:${l.indice}`;
 };
 
 const deProducto = (p: NuevaVariante): ProductoForm => ({

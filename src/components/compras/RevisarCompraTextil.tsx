@@ -501,7 +501,10 @@ export function RevisarCompraTextil({
         descripcion: l.descripcion,
         marca: texto(l.marca),
         referencia: texto(l.referencia),
-        propuesta: e.tipo === "nueva" ? e.nueva : nuevaVarianteDesdeLinea(paraCasar(l), productos),
+        propuesta:
+          e.tipo === "nueva"
+            ? e.nueva
+            : nuevaVarianteDesdeLinea(paraCasar(l), productos, variantes),
         coste_entrada: costePorLinea.get(i)?.coste_unitario ?? null,
       };
     });
@@ -514,7 +517,7 @@ export function RevisarCompraTextil({
     const e = efectivas[i];
     if (e.estado === "nueva") return e.nueva;
     if (e.estado === "sin_casar" || e.estado === "sugerida")
-      return nuevaVarianteDesdeLinea(paraCasar(lineas[i]), productos);
+      return nuevaVarianteDesdeLinea(paraCasar(lineas[i]), productos, variantes);
     return null;
   };
 
