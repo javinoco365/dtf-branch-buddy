@@ -14,6 +14,18 @@ BEGIN;
 -- más sobre tablas: un GRANT ALL taparía los REVOKE de las migraciones.
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
 
+-- Desde 20261031400000 un usuario con nivel activo ve todas las empresas, y
+-- por tanto todas las tiendas: hoy no hay relación usuario-empresa. Lo que se
+-- prueba aquí es el cableado de cada política con la tienda o la empresa
+-- (lo que hará falta cuando haya varias empresas), así que rol_ve_empresa(),
+-- el único sitio donde vive esa regla, se pone como si el nivel no diera
+-- ninguna empresa: cada usuario ve solo lo de sus tiendas asignadas. Se
+-- deshace con el ROLLBACK del final.
+CREATE OR REPLACE FUNCTION public.rol_ve_empresa(_user_id UUID, _empresa_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT false
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 0. La base como estaba: los doce FOR ALL, con su nombre y su condición
 --    originales (copiados de las migraciones que los crearon). Después se

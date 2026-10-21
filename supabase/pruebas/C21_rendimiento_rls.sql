@@ -115,9 +115,13 @@ SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'publi
                  || (SELECT string_agg(tablename || ' «' || policyname || '»', ', ')
                        FROM pg_policies WHERE schemaname = 'public' AND cmd = 'ALL') END;
 
+-- 20261031400000 sí la cambia (la lectura pasa a todos los niveles, por
+-- empresa), y lo prueba D2. Aquí se mira que 20261031100100 no la toque: su
+-- forma sería la de las trece tablas, sin has_role ni rol_puede_ver.
 SELECT CASE WHEN (SELECT count(*) FROM pg_policies
                    WHERE schemaname = 'public' AND tablename = 'auditoria'
-                     AND (qual LIKE '%mis_tiendas%' OR qual LIKE '%mis_empresas%')) = 0
+                     AND (qual LIKE '%mis_tiendas%' OR qual LIKE '%mis_empresas%')
+                     AND qual NOT LIKE '%has_role%') = 0
             THEN 'BIEN  6. la política de lectura de auditoria no se ha tocado'
             ELSE 'MAL   6. la migración ha tocado la lectura de auditoria' END;
 
@@ -361,10 +365,11 @@ DROP POLICY "C21 lectura a mano" ON public.pedidos;
 -- 13-14. La reversión vuelve a las políticas de antes con el mismo acceso, y
 --        la migración se puede volver a aplicar después.
 -- ---------------------------------------------------------------------------
--- Las reversiones van de la más nueva a la más vieja: 20261031300400 y
--- 20261031300100 (seguridad, escritura y lectura por empresa) usan
--- mis_empresas() y se revierten antes.
+-- Las reversiones van de la más nueva a la más vieja: 20261031400000 (niveles,
+-- lectura total), 20261031300400 y 20261031300100 (seguridad, escritura y
+-- lectura por empresa) usan mis_empresas() y se revierten antes.
 SET client_min_messages = warning;
+\ir ../reversiones/20261031400000_niveles_lectura_total.sql
 \ir ../reversiones/20261031300400_seguridad_escritura_por_empresa.sql
 \ir ../reversiones/20261031300100_seguridad_lectura_por_empresa.sql
 \ir ../reversiones/20261031100100_rendimiento_rls.sql
@@ -388,6 +393,7 @@ SET client_min_messages = warning;
 \ir ../migrations/20261031300100_seguridad_lectura_por_empresa.sql
 \ir ../migrations/20261031300200_roles_desactivado_sin_acceso.sql
 \ir ../migrations/20261031300400_seguridad_escritura_por_empresa.sql
+\ir ../migrations/20261031400000_niveles_lectura_total.sql
 RESET client_min_messages;
 
 SELECT CASE WHEN pg_temp.forma_nueva() IS NULL AND pg_temp.diferencias() IS NULL
