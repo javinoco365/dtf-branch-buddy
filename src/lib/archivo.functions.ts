@@ -12,6 +12,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, tabla } from "./rpc";
+import { esAdminActivo } from "./acceso";
 import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
 import { rutaPdfTextil, rutaPdfTienda } from "./rutas-pdf";
@@ -148,13 +149,8 @@ export const urlsArchivo = createServerFn({ method: "POST" })
 
     // El PDF textil, como hasta ahora, solo para administradores.
     if (idsTextil.length) {
-      const { data: rol } = await admin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", context.userId)
-        .eq("role", "admin")
-        .maybeSingle();
-      if (!rol) throw new Error("Solo un administrador puede descargar los PDF del textil");
+      if (!(await esAdminActivo(admin, context.userId)))
+        throw new Error("Solo un administrador puede descargar los PDF del textil");
     }
 
     const [ventas, textil, compras] = await Promise.all([

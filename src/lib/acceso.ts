@@ -1,4 +1,4 @@
-import { llamarRpc } from "./rpc";
+import { faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { leerMiNivel } from "./nivel-sesion";
 
 /**
@@ -68,6 +68,44 @@ export async function exigirMiembroTienda(
     _tienda_id: tiendaId,
   });
   if (!ok) throw new Error("Sin acceso a esta tienda");
+}
+
+/**
+ * ¿Es administrador ACTIVO? Con cualquier cliente, también el de servicio
+ * (adminComoUsuario), para las comprobaciones que se hacen con él. Va por
+ * rol_es_admin() (20261031200100), que mira la columna activo: leer
+ * user_roles con role = 'admin' dejaba pasar a un admin desactivado. Sin esa
+ * migración aplicada, mira la fila de admin, como antes.
+ */
+export async function esAdminActivo(cliente: ClienteUsuario, usuarioId: string): Promise<boolean> {
+  const { data, error } = await llamarRpcConError<boolean>(cliente, "rol_es_admin", {
+    _user_id: usuarioId,
+  });
+  if (!error) return data === true;
+  if (!faltaLaFuncion(error)) {
+    throw new Error(`No se ha podido comprobar tu nivel: ${error.message}`);
+  }
+  const { data: fila, error: e } = await tabla(cliente, "user_roles")
+    .select("role")
+    .eq("user_id", usuarioId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (e) throw new Error(`No se ha podido comprobar tu nivel: ${e.message}`);
+  return !!fila;
+}
+
+/**
+ * ¿Es de la tienda, o administrador? Con cualquier cliente, también el de
+ * servicio. Va por is_tienda_member(), la misma que usa la RLS: desde
+ * 20261031300200 no cuenta a los usuarios desactivados. Mirar tienda_usuarios
+ * y user_roles a mano sí los contaba.
+ */
+export async function esMiembroTienda(
+  cliente: ClienteUsuario,
+  usuarioId: string,
+  tiendaId: string,
+): Promise<boolean> {
+  return pregunta(cliente, "is_tienda_member", { _user_id: usuarioId, _tienda_id: tiendaId });
 }
 
 /**

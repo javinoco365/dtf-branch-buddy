@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Building2, Save, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { CLAVE_EMPRESA, leerEmpresa, guardarEmpresa } from "@/lib/empresa";
+import { invalidarTrasGuardar } from "@/lib/cache";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
 import { leerEstadoSeries, fijarInicioSerie, type EstadoSerie } from "@/lib/facturas.functions";
@@ -112,7 +113,9 @@ function EmpresaPage() {
           : resto,
       );
       toast.success("Datos de la empresa guardados");
-      qc.invalidateQueries({ queryKey: CLAVE_EMPRESA });
+      // Los costes por metro se leen también con la clave empresa_costes
+      // (Dashboard, Gerencia, Resumen diario), que vale 10 min: todo a viejo.
+      void invalidarTrasGuardar(qc);
     } catch (e: any) {
       toast.error(e?.message ?? "Error al guardar");
     } finally {

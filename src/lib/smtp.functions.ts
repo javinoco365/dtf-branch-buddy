@@ -3,16 +3,13 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc, tabla } from "./rpc";
+import { esAdminActivo } from "./acceso";
 
 /** Solo un administrador toca el servidor de correo. */
 async function exigirAdmin(supabaseAdmin: any, userId: string) {
-  const { data } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!data) throw new Error("Solo un administrador puede configurar el correo");
+  if (!(await esAdminActivo(supabaseAdmin, userId))) {
+    throw new Error("Solo un administrador puede configurar el correo");
+  }
 }
 
 async function empresaActiva(cliente: any): Promise<string> {

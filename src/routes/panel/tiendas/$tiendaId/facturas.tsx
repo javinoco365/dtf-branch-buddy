@@ -44,6 +44,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
+import { invalidarTrasGuardar } from "@/lib/cache";
 import { calcularTotales } from "@/dominio/importes";
 import { totalesDocumentos } from "@/dominio/sumatorios";
 import {
@@ -577,6 +578,7 @@ function Facturas() {
 }
 
 function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: () => void }) {
+  const qc = useQueryClient();
   const generarPDFFn = useServerFn(generarYSubirFacturaPDF);
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
@@ -665,6 +667,9 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
       // aquí como `serie-numero`, que con la serie ordinaria vacía anunciaba
       // "Factura -00001 emitida".
       const referencia = factura.referencia;
+      // Emitida: todo lo leído pasa a viejo (Gerencia › Fiscal, cifras del
+      // periodo...), también si luego falla el PDF. No va por useMutation.
+      void invalidarTrasGuardar(qc);
 
       try {
         const res = await generarPDFFn({ data: { factura_id: factura.id } });

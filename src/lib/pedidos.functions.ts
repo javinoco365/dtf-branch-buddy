@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
+import { esAdminActivo, esMiembroTienda } from "./acceso";
 import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
@@ -32,19 +33,9 @@ const ESTADO_TO_WC: Record<Estado, string> = {
 };
 
 async function ensureAccess(supabaseAdmin: any, userId: string, tiendaId: string) {
-  const { data: miembro } = await supabaseAdmin
-    .from("tienda_usuarios")
-    .select("tienda_id")
-    .eq("tienda_id", tiendaId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  const { data: rol } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+  if (!(await esMiembroTienda(supabaseAdmin, userId, tiendaId))) {
+    throw new Error("Sin acceso a esta tienda");
+  }
 }
 
 async function getWooCreds(supabaseAdmin: any, tiendaId: string) {
@@ -98,13 +89,9 @@ export const fijarRealizadoPedido = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rol) throw new Error("Solo un administrador puede corregir la fecha de realizado");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo un administrador puede corregir la fecha de realizado");
+    }
     const realizado = await llamarRpc<string>(supabaseAdmin, "pedido_fijar_realizado", {
       _tabla: data.tabla,
       _id: data.id,
@@ -132,13 +119,9 @@ export const fijarCosteEnvioPedido = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rol) throw new Error("Solo un administrador puede cambiar el coste del envío");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo un administrador puede cambiar el coste del envío");
+    }
     const { error } = await tabla(supabaseAdmin, data.tabla)
       .update({ coste_envio_real: data.coste == null ? null : Math.round(data.coste * 100) / 100 })
       .eq("id", data.id);

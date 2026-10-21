@@ -34,6 +34,14 @@
 --   optimiza la pertenencia a tiendas). Si una política de la lista no
 --   existe, avisa y sigue; si ya lleva la condición, no la añade dos veces.
 --
+--   Al final comprueba que NINGUNA política INSERT, UPDATE, DELETE o ALL de
+--   public y storage se ha quedado sin nivel (rol_puede_* o has_role admin),
+--   salvo profiles (cada uno su perfil). Si queda alguna (por ejemplo, una
+--   creada a mano o desde Lovable con otro nombre), se para con un error y no
+--   cambia nada: un aviso en el SQL Editor no se ve, y esa política dejaría
+--   escribir a un visor desde el navegador. La guardia no lo frena: con la RLS
+--   activa deja decidir a las políticas.
+--
 -- REVERSIBLE: sí, con supabase/reversiones/20261031200200_roles_politicas_escritura.sql,
 -- que quita exactamente lo añadido.
 -- ============================================================================
@@ -182,4 +190,23 @@ BEGIN
   END LOOP;
 
   PERFORM set_config('search_path', v_search_path, true);
+END $$;
+
+-- Ninguna política de escritura se queda sin nivel (hallazgo SEG-REV-4).
+DO $$
+DECLARE
+  v_sin_nivel TEXT;
+BEGIN
+  SELECT string_agg(format('%s.%s «%s» (%s)', schemaname, tablename, policyname, cmd), ', ')
+    INTO v_sin_nivel
+    FROM pg_catalog.pg_policies
+   WHERE schemaname IN ('public', 'storage')
+     AND cmd IN ('INSERT', 'UPDATE', 'DELETE', 'ALL')
+     AND NOT (schemaname = 'public' AND tablename = 'profiles')
+     AND coalesce(qual, '') || coalesce(with_check, '') NOT LIKE '%rol_puede_%'
+     AND coalesce(qual, '') || coalesce(with_check, '') NOT LIKE '%has_role(auth.uid(), ''admin''%'
+     AND NOT (coalesce(qual, 'false') = 'false' AND coalesce(with_check, 'false') = 'false');
+  IF v_sin_nivel IS NOT NULL THEN
+    RAISE EXCEPTION 'roles_politicas_escritura: estas políticas de escritura no exigen nivel: %. No se ha cambiado nada; añadirlas a la lista de esta migración (o quitarlas) antes de aplicarla.', v_sin_nivel;
+  END IF;
 END $$;

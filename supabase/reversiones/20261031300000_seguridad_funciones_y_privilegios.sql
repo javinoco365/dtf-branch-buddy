@@ -2,7 +2,10 @@
 -- REVERSIÓN de 20261031300000_seguridad_funciones_y_privilegios.sql
 -- ============================================================================
 -- Repone las definiciones de antes de las funciones recreadas, la vista sin
--- security_invoker y los permisos que Supabase da por defecto. No toca datos.
+-- security_invoker y los permisos que había antes (los de Supabase por
+-- defecto, menos los que migraciones anteriores ya habían quitado). No toca
+-- datos. Única diferencia a propósito: los privilegios por defecto no
+-- devuelven TRUNCATE a anon ni authenticated.
 --
 -- OJO: deshacer esto vuelve a abrir los fallos SEG-01, SEG-02, SEG-04 y SEG-10
 -- (la vista legible con la clave pública, conciliar firmando como otro socio,
@@ -11,17 +14,53 @@
 -- ============================================================================
 
 ALTER VIEW public.clientes_duplicados_por_email RESET (security_invoker);
-GRANT ALL ON public.clientes_duplicados_por_email, public.clientes_posibles_duplicados,
-  public.pedidos_pendientes_cobro TO anon;
+-- pedidos_pendientes_cobro ya no era de anon antes de 20261031300000
+-- (20260930100000 le quitó todo): no se le devuelve.
+GRANT ALL ON public.clientes_duplicados_por_email, public.clientes_posibles_duplicados TO anon;
 GRANT ALL ON public.clientes_duplicados_por_email, public.clientes_posibles_duplicados,
   public.pedidos_pendientes_cobro TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.auditoria_verificar() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.serie_mayor_numero(UUID, TEXT, INTEGER) TO authenticated;
 
-GRANT TRUNCATE, TRIGGER, REFERENCES ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+-- TRUNCATE, TRIGGER y REFERENCES: solo donde estaban. Un GRANT sobre todas
+-- las tablas daría también los que migraciones anteriores quitaron a
+-- propósito (hallazgo SEG-REV-1): TRUNCATE se salta la RLS y los triggers de
+-- fila, también el de auditoria_inmutable. Sacado de comparar, en el banco de
+-- pruebas con los privilegios por defecto de Supabase, los permisos de antes
+-- de 20261031300000 con los de después de esta reversión:
+--   - sin ninguno de los tres, para anon ni authenticated: auditoria,
+--     auth_intentos_fallidos_login, smtp_config, woo_sincronizacion,
+--     plantillas_presupuesto, presupuesto_imagenes (REVOKE ALL en su
+--     migración);
+--   - contadores: TRIGGER y REFERENCES sí, TRUNCATE no (20260903300000);
+--   - solo authenticated, no anon: presupuestos, presupuesto_items y
+--     pedidos_pendientes_cobro (REVOKE ALL FROM anon en su migración).
+DO $$
+DECLARE
+  r RECORD;
+  v_privs TEXT;
+BEGIN
+  FOR r IN
+    SELECT c.relname, rol.nombre AS rol
+      FROM pg_class c
+     CROSS JOIN (VALUES ('anon'), ('authenticated')) AS rol(nombre)
+     WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm')
+       AND c.relname NOT IN ('auditoria', 'auth_intentos_fallidos_login', 'smtp_config',
+                             'woo_sincronizacion', 'plantillas_presupuesto',
+                             'presupuesto_imagenes')
+       AND NOT (rol.nombre = 'anon'
+                AND c.relname IN ('presupuestos', 'presupuesto_items', 'pedidos_pendientes_cobro'))
+  LOOP
+    v_privs := CASE WHEN r.relname = 'contadores' THEN 'TRIGGER, REFERENCES'
+                    ELSE 'TRUNCATE, TRIGGER, REFERENCES' END;
+    EXECUTE format('GRANT %s ON public.%I TO %I', v_privs, r.relname, r.rol);
+  END LOOP;
+END $$;
+-- En los privilegios por defecto (tablas que se creen después) no se devuelve
+-- TRUNCATE: ninguna tabla nueva lo necesita y es lo que abre SEG-10.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT TRUNCATE, TRIGGER, REFERENCES ON TABLES TO anon, authenticated;
+  GRANT TRIGGER, REFERENCES ON TABLES TO anon, authenticated;
 
 UPDATE storage.buckets SET file_size_limit = NULL, allowed_mime_types = NULL
  WHERE id IN ('compras', 'logos');

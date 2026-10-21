@@ -211,8 +211,9 @@ function ListaUsuarios({
 
   const nivel = useMutation({
     mutationFn: (v: { user_id: string; nivel: Nivel }) => cambiarNivel({ data: v }),
-    onSuccess: () => {
-      toast.success("Nivel cambiado");
+    onSuccess: (r) => {
+      if (r.aviso) toast.warning(`Nivel cambiado. ${r.aviso}`, { duration: 10000 });
+      else toast.success("Nivel cambiado");
       qc.invalidateQueries({ queryKey: ["usuarios"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -628,7 +629,7 @@ function ConfirmarDesactivar({
         <AlertDialogHeader>
           <AlertDialogTitle>¿Desactivar a {usuario?.nombre}?</AlertDialogTitle>
           <AlertDialogDescription>
-            Deja de poder entrar y de cambiar nada desde ya. No se borra: lo que hizo sigue en la
+            Deja de poder entrar, ver y cambiar nada desde ya. No se borra: lo que hizo sigue en la
             auditoría con su nombre, y se puede reactivar cuando quieras.
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -9,10 +9,13 @@
 --     comprobar que _usuario_id es auth.uid();
 --   - una función SECURITY DEFINER que anon pueda ejecutar (salvo triggers);
 --   - TRUNCATE, TRIGGER o REFERENCES para anon o authenticated.
--- Las políticas USING(true) en tablas con empresa_id (SEG-03) se listan como
--- PENDIENTE (las cierra la rama de políticas); una que no esté en la lista de
--- conocidas sale MAL. Las cuatro de lectura que quedaban las cierra
--- 20261031300100 (casos 37 a 40) y ya no están entre las conocidas.
+-- Toda política de una tabla con empresa_id (y las de banco_conciliaciones,
+-- que no lo tiene) tiene que limitar por empresa o tienda; una que no, MAL
+-- (caso 36). Antes se buscaba «true» exacto y no veía «true AND nivel»
+-- (hallazgo SEG-REV-2). Las cuatro de lectura las cierra 20261031300100
+-- (casos 37 a 40) y las de escritura, 20261031300400 (casos 41 a 43). El
+-- caso 44 prueba que la reversión de 20261031300000 no da más permisos de los
+-- que había (SEG-REV-1).
 --
 -- Todo va dentro de una transacción que se deshace al final.
 -- ============================================================================
@@ -25,18 +28,22 @@
 SET client_min_messages = warning;
 \ir ../migrations/20261031300000_seguridad_funciones_y_privilegios.sql
 \ir ../migrations/20261031300100_seguridad_lectura_por_empresa.sql
+\ir ../migrations/20261031300400_seguridad_escritura_por_empresa.sql
 RESET client_min_messages;
 
 BEGIN;
 
 INSERT INTO auth.users (id, email) VALUES
   ('c2100000-0000-0000-0000-00000000000a', 'c21-admin@ejemplo.es'),
-  ('c2100000-0000-0000-0000-00000000000b', 'c21-ajeno@ejemplo.es');
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('c2100000-0000-0000-0000-00000000000a', 'admin');
+  ('c2100000-0000-0000-0000-00000000000b', 'c21-ajeno@ejemplo.es'),
+  ('c2100000-0000-0000-0000-00000000000e', 'c21-editor-sin-tienda@ejemplo.es');
+INSERT INTO public.user_roles (user_id, role) VALUES
+  ('c2100000-0000-0000-0000-00000000000a', 'admin'),
+  ('c2100000-0000-0000-0000-00000000000e', 'editor');
 
 SELECT set_config('c21.adm',   'c2100000-0000-0000-0000-00000000000a', true),
        set_config('c21.ajeno', 'c2100000-0000-0000-0000-00000000000b', true),
+       set_config('c21.edsin', 'c2100000-0000-0000-0000-00000000000e', true),
        set_config('c21.empresa', (SELECT id::TEXT FROM public.empresas WHERE activa
                                    ORDER BY created_at LIMIT 1), true),
        set_config('c21.tienda', (SELECT id::TEXT FROM public.tiendas ORDER BY created_at LIMIT 1), true);
@@ -258,36 +265,60 @@ SELECT CASE WHEN count(*) = 0
  WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm')
    AND has_table_privilege(r.rol, c.oid, p.priv);
 
--- Políticas abiertas en tablas con empresa_id. Las conocidas (SEG-03) salen
--- como PENDIENTE hasta que la rama de políticas las cierre; una nueva, MAL.
-WITH abiertas AS (
-  SELECT p.tablename || ' ' || p.cmd AS cual
+-- Toda política de una tabla con empresa_id, y las de banco_conciliaciones,
+-- limita por empresa o por tienda (mis_empresas, mis_tiendas,
+-- es_miembro_empresa, is_tienda_member o una *_visible() que las usa) o es
+-- solo de admin. Se comprueba en positivo: «true AND nivel» también sale.
+WITH sin_alcance AS (
+  SELECT p.tablename || ' «' || p.policyname || '» ' || p.cmd AS cual
     FROM pg_policies p
-    JOIN information_schema.columns col
-      ON col.table_schema = 'public' AND col.table_name = p.tablename
-     AND col.column_name = 'empresa_id'
    WHERE p.schemaname = 'public'
-     AND (btrim(coalesce(p.qual, '')) = 'true' OR btrim(coalesce(p.with_check, '')) = 'true')
-), conocidas(cual) AS (VALUES
-  ('banco_conciliaciones SELECT'), ('banco_movimientos INSERT'),
-  ('textil_stock_movimientos INSERT'), ('textil_stock_reservas INSERT'),
-  ('textil_stock_reservas UPDATE'), ('textil_stock_reservas DELETE'))
-SELECT CASE WHEN a.cual IN (SELECT cual FROM conocidas)
-            THEN 'PENDIENTE (SEG-03) política abierta: ' || a.cual
-            ELSE 'MAL   36. política USING/WITH CHECK (true) nueva en una tabla con empresa_id: ' || a.cual END
-  FROM abiertas a ORDER BY 1;
-SELECT 'BIEN  36. ninguna política abierta nueva en tablas con empresa_id'
- WHERE NOT EXISTS (
-   SELECT 1 FROM pg_policies p
-     JOIN information_schema.columns col
-       ON col.table_schema = 'public' AND col.table_name = p.tablename AND col.column_name = 'empresa_id'
-    WHERE p.schemaname = 'public'
-      AND (btrim(coalesce(p.qual, '')) = 'true' OR btrim(coalesce(p.with_check, '')) = 'true')
-      AND p.tablename || ' ' || p.cmd NOT IN (
-        'banco_conciliaciones SELECT', 'banco_movimientos INSERT',
-        'textil_stock_movimientos INSERT', 'textil_stock_reservas INSERT',
-        'textil_stock_reservas UPDATE', 'textil_stock_reservas DELETE'));
+     AND (p.tablename = 'banco_conciliaciones'
+          OR EXISTS (SELECT 1 FROM information_schema.columns col
+                      WHERE col.table_schema = 'public' AND col.table_name = p.tablename
+                        AND col.column_name = 'empresa_id'))
+     AND coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')
+         !~ '(mis_empresas|mis_tiendas|es_miembro_empresa|is_tienda_member|_visible\(|has_role\(auth\.uid\(\), ''admin'')'
+)
+SELECT 'MAL   36. política sin alcance por empresa o tienda: ' || cual FROM sin_alcance
+UNION ALL
+SELECT 'BIEN  36. todas las políticas de tablas por empresa limitan por empresa o tienda'
+ WHERE NOT EXISTS (SELECT 1 FROM sin_alcance)
+ORDER BY 1;
 
+-- ---------------------------------------------------------------------------
+-- SEG-03 (escritura): 20261031300400. Un editor sin ninguna tienda no escribe
+-- en banco ni en stock de la empresa, ni lee sus conciliaciones.
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE v_mov UUID; v_compra UUID;
+BEGIN
+  INSERT INTO public.banco_movimientos (empresa_id, fecha, importe, huella)
+  VALUES (current_setting('c21.empresa')::uuid, DATE '2026-10-01', -12.10, 'c22-mov')
+  RETURNING id INTO v_mov;
+  INSERT INTO public.textil_compras (empresa_id, categoria, proveedor, numero)
+  VALUES (current_setting('c21.empresa')::uuid, 'servicios', 'C22 proveedor', 'C22-1')
+  RETURNING id INTO v_compra;
+  INSERT INTO public.banco_conciliaciones (movimiento_id, compra_id, motivo)
+  VALUES (v_mov, v_compra, 'importe');
+END $$;
+
+SELECT pg_temp.caso('41a', 'un editor sin tienda no da de alta un movimiento de banco en la empresa', 'edsin',
+  $q$INSERT INTO public.banco_movimientos (empresa_id, fecha, importe, huella) VALUES (current_setting('c21.empresa')::uuid, DATE '2026-10-02', 1, 'c22-edsin')$q$,
+  'error 42501');
+SELECT pg_temp.caso('41b', 'ni un movimiento de stock', 'edsin',
+  $q$INSERT INTO public.textil_stock_movimientos (empresa_id, stock_id, cantidad, motivo) VALUES (current_setting('c21.empresa')::uuid, current_setting('c21.stock')::uuid, 1, 'ajuste_inventario')$q$,
+  'error 42501');
+SELECT pg_temp.caso('41c', 'ni una reserva de stock', 'edsin',
+  $q$INSERT INTO public.textil_stock_reservas (empresa_id, stock_id, textil_pedido_id, cantidad) VALUES (current_setting('c21.empresa')::uuid, current_setting('c21.stock')::uuid, current_setting('c21.pedido')::uuid, 1)$q$,
+  'error 42501');
+SELECT pg_temp.caso('42a', 'una cuenta sin tiendas no lee las conciliaciones de la empresa', 'edsin',
+  $q$SELECT count(*)::text FROM public.banco_conciliaciones$q$, '0');
+SELECT pg_temp.caso('42b', 'el admin sí', 'adm',
+  $q$SELECT (count(*) >= 1)::text FROM public.banco_conciliaciones$q$, 'true');
+SELECT pg_temp.caso('43', 'el admin sigue dando de alta movimientos de banco', 'adm',
+  $q$INSERT INTO public.banco_movimientos (empresa_id, fecha, importe, huella) VALUES (current_setting('c21.empresa')::uuid, DATE '2026-10-03', 1, 'c22-adm')$q$,
+  'hecho');
 
 -- ---------------------------------------------------------------------------
 -- SEG-03 (lectura): 20261031300100 cierra las cuatro políticas de SELECT
@@ -321,5 +352,29 @@ SET client_min_messages = warning;
 RESET client_min_messages;
 SELECT pg_temp.caso('40b', 'y se puede volver a aplicar', 'ajeno',
   $q$SELECT count(*)::text FROM public.contadores WHERE ambito = 'c22_prueba'$q$, '0');
+
+-- ---------------------------------------------------------------------------
+-- SEG-REV-1: la reversión de 20261031300000 repone los permisos que había, no
+-- más. auditoria, contadores, smtp_config... ya no tenían TRUNCATE antes.
+-- ---------------------------------------------------------------------------
+SET client_min_messages = warning;
+\ir ../reversiones/20261031300400_seguridad_escritura_por_empresa.sql
+\ir ../reversiones/20261031300100_seguridad_lectura_por_empresa.sql
+\ir ../reversiones/20261031300000_seguridad_funciones_y_privilegios.sql
+RESET client_min_messages;
+SELECT CASE WHEN count(*) = 0
+            THEN 'BIEN  44a. tras revertir, ni anon ni authenticated tienen TRUNCATE en auditoria, contadores, smtp_config, auth_intentos_fallidos_login ni woo_sincronizacion'
+            ELSE 'MAL   44a. tras revertir, TRUNCATE de más en: ' || string_agg(t || ' (' || r || ')', ', ') END
+  FROM (VALUES ('auditoria'), ('contadores'), ('smtp_config'), ('auth_intentos_fallidos_login'),
+               ('woo_sincronizacion')) AS x(t)
+ CROSS JOIN (VALUES ('anon'), ('authenticated')) AS y(r)
+ WHERE has_table_privilege(r, 'public.' || t, 'TRUNCATE');
+SELECT CASE WHEN NOT has_table_privilege('anon', 'public.pedidos_pendientes_cobro', 'SELECT')
+             AND has_table_privilege('authenticated', 'public.pedidos_pendientes_cobro', 'SELECT')
+            THEN 'BIEN  44b. tras revertir, anon sigue sin leer pedidos_pendientes_cobro; authenticated sí'
+            ELSE 'MAL   44b. tras revertir, los permisos de pedidos_pendientes_cobro no son los de antes' END;
+SELECT CASE WHEN has_table_privilege('anon', 'public.pedidos', 'TRUNCATE')
+            THEN 'BIEN  44c. y donde los había (pedidos), vuelven'
+            ELSE 'MAL   44c. tras revertir, pedidos no ha recuperado sus permisos' END;
 
 ROLLBACK;

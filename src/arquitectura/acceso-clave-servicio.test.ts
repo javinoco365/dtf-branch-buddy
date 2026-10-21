@@ -43,7 +43,7 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
   "admin.functions.ts:bootstrapPrimerAdmin":
     "Pública a propósito: solo actúa si no hay ningún administrador (ver S10).",
   "admin.functions.ts:adminExiste": "Pública: solo devuelve si existe algún administrador.",
-  "admin.functions.ts:credencialesWooMascaradas": "Mira user_roles: solo administradores.",
+  "admin.functions.ts:credencialesWooMascaradas": "esAdminActivo(): solo administradores activos.",
   "archivo.functions.ts:urlsArchivo":
     "Lee las facturas y compras con context.supabase (RLS) y el textil exige administrador.",
   "cobros.functions.ts:registrarCobro": "comprobarAcceso(): el pedido se lee con la sesión.",
@@ -77,8 +77,8 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
   "facturas.functions.ts:fijarInicioSerie":
     "serie_fijar_inicio() exige es_miembro_empresa(_usuario_id).",
   "facturas.functions.ts:canjearTicket": "comprobarAccesoTienda().",
-  "pedidos.functions.ts:fijarRealizadoPedido": "Mira user_roles: solo administradores.",
-  "pedidos.functions.ts:fijarCosteEnvioPedido": "Mira user_roles: solo administradores.",
+  "pedidos.functions.ts:fijarRealizadoPedido": "esAdminActivo(): solo administradores activos.",
+  "pedidos.functions.ts:fijarCosteEnvioPedido": "esAdminActivo(): solo administradores activos.",
   "pedidos.functions.ts:createPedidoManual": "ensureAccess(): de la tienda o administrador.",
   "pedidos.functions.ts:updatePedidoEstado": "ensureAccess(): de la tienda o administrador.",
   "pedidos.functions.ts:updatePedido": "ensureAccess(): de la tienda o administrador.",
@@ -102,11 +102,16 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
     "El ticket se lee con la sesión y emitir_factura_textil() exige es_miembro_empresa.",
   "textil.functions.ts:anularTicketTextil":
     "El ticket se lee con la sesión y emitir_factura_textil() exige es_miembro_empresa.",
-  "woocommerce.functions.ts:sincronizarWoo": "Mira tienda_usuarios y user_roles.",
-  "woocommerce.functions.ts:sincronizarClientesWoo": "Mira tienda_usuarios y user_roles.",
-  "woocommerce.functions.ts:diagnosticoLineasWoo": "Mira tienda_usuarios y user_roles.",
-  "woocommerce.functions.ts:recuperarEnviosWoo": "Mira tienda_usuarios y user_roles.",
-  "woocommerce.functions.ts:recuperarRealizadoWoo": "Mira user_roles: solo administradores.",
+  "woocommerce.functions.ts:sincronizarWoo":
+    "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
+  "woocommerce.functions.ts:sincronizarClientesWoo":
+    "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
+  "woocommerce.functions.ts:diagnosticoLineasWoo":
+    "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
+  "woocommerce.functions.ts:recuperarEnviosWoo":
+    "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
+  "woocommerce.functions.ts:recuperarRealizadoWoo":
+    "esAdminActivo(): solo administradores activos.",
 };
 
 export type Handler = { clave: string; cuerpo: string };

@@ -5,7 +5,7 @@ import { exigeEscribir } from "./permisos-middleware";
 import { puede } from "@/dominio/permisos";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { faltaLaColumna, faltaLaFuncion, faltaLaTabla, llamarRpcConError, tabla } from "./rpc";
-import { exigirMiembroTienda } from "./acceso";
+import { esAdminActivo, esMiembroTienda, exigirMiembroTienda } from "./acceso";
 import { leerTodas } from "./paginar";
 import { numero } from "./format";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
@@ -921,21 +921,9 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
 
     // Verificar pertenencia a la tienda. Las dos comprobaciones van a la vez;
     // nada más se lee con el cliente de servicio hasta que una de las dos pase.
-    const [{ data: miembro }, { data: rol }] = await Promise.all([
-      supabaseAdmin
-        .from("tienda_usuarios")
-        .select("tienda_id")
-        .eq("tienda_id", data.tienda_id)
-        .eq("user_id", context.userId)
-        .maybeSingle(),
-      supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", context.userId)
-        .eq("role", "admin")
-        .maybeSingle(),
-    ]);
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     // Ya con acceso: tienda, credenciales y empresa a la vez. Los errores se
     // miran en el mismo orden que en serie (tienda, credenciales, empresa).
@@ -1232,19 +1220,9 @@ export const sincronizarClientesWoo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1410,19 +1388,9 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     // La misma comprobación que la sincronización: de la tienda o administrador.
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1498,19 +1466,9 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
     const supabaseAdmin = adminComoUsuario(context.userId);
 
     // La misma comprobación que la sincronización: de la tienda o administrador.
-    const { data: miembro } = await supabaseAdmin
-      .from("tienda_usuarios")
-      .select("tienda_id")
-      .eq("tienda_id", data.tienda_id)
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!miembro && !rol) throw new Error("Sin acceso a esta tienda");
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")
@@ -1582,13 +1540,9 @@ export const recuperarRealizadoWoo = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { data: rol } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rol) throw new Error("Solo un administrador puede recuperar las fechas");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo un administrador puede recuperar las fechas");
+    }
 
     const { data: tienda } = await supabaseAdmin
       .from("tiendas")

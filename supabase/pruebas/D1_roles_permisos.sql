@@ -1,7 +1,9 @@
 -- ============================================================================
 -- Niveles de usuario: admin, editor y visor
 -- ============================================================================
--- Prueba 20261031200000 a 20261031200300.
+-- Prueba 20261031200000 a 20261031200300, 20261031300200 (un desactivado no
+-- ve ni escribe, tampoco si era admin) y 20261031300300 (marcar una compra
+-- como borrada es borrar).
 --
 -- Lo que tiene que quedar demostrado: un visor no escribe por NINGÚN camino.
 -- Los caminos son tres, y se prueban todos:
@@ -18,10 +20,13 @@ BEGIN;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
+-- En Supabase authenticated tiene permisos sobre storage.objects y deciden las
+-- políticas; el entorno de pruebas no se los da.
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Usuarios. ADM y ADM2 administradores, ED editor, VI visor, OFF editor
--- desactivado. INFO y VIEJO existen pero aún sin nivel: los coloca la
+-- desactivado, ADMOFF administrador desactivado. INFO y VIEJO existen pero aún sin nivel: los coloca la
 -- migración al volver a aplicarse.
 -- ---------------------------------------------------------------------------
 INSERT INTO auth.users (id, email) VALUES
@@ -30,6 +35,7 @@ INSERT INTO auth.users (id, email) VALUES
   ('d1000000-0000-4000-8000-0000000000ed', 'ed@d1.test'),
   ('d1000000-0000-4000-8000-0000000000f1', 'vi@d1.test'),
   ('d1000000-0000-4000-8000-0000000000ff', 'off@d1.test'),
+  ('d1000000-0000-4000-8000-0000000000a0', 'admoff@d1.test'),
   ('d1000000-0000-4000-8000-00000000001f', 'Info@RonocaDesarrollos.com'),
   ('d1000000-0000-4000-8000-0000000000e1', 'viejo@d1.test');
 INSERT INTO public.user_roles (user_id, role) VALUES
@@ -37,13 +43,15 @@ INSERT INTO public.user_roles (user_id, role) VALUES
   ('d1000000-0000-4000-8000-0000000000ed', 'editor'),
   ('d1000000-0000-4000-8000-0000000000f1', 'visor');
 INSERT INTO public.user_roles (user_id, role, activo) VALUES
-  ('d1000000-0000-4000-8000-0000000000ff', 'editor', false);
+  ('d1000000-0000-4000-8000-0000000000ff', 'editor', false),
+  ('d1000000-0000-4000-8000-0000000000a0', 'admin', false);
 
 SELECT set_config('d1.adm',  'd1000000-0000-4000-8000-0000000000ad', true),
        set_config('d1.adm2', 'd1000000-0000-4000-8000-0000000000a2', true),
        set_config('d1.ed',   'd1000000-0000-4000-8000-0000000000ed', true),
        set_config('d1.vi',   'd1000000-0000-4000-8000-0000000000f1', true),
        set_config('d1.off',  'd1000000-0000-4000-8000-0000000000ff', true),
+       set_config('d1.admoff','d1000000-0000-4000-8000-0000000000a0', true),
        set_config('d1.info', 'd1000000-0000-4000-8000-00000000001f', true),
        set_config('d1.viejo','d1000000-0000-4000-8000-0000000000e1', true);
 
@@ -55,6 +63,8 @@ SELECT set_config('d1.adm',  'd1000000-0000-4000-8000-0000000000ad', true),
 \ir ../migrations/20261031200100_roles_permisos.sql
 \ir ../migrations/20261031200200_roles_politicas_escritura.sql
 \ir ../migrations/20261031200300_roles_funciones.sql
+\ir ../migrations/20261031300200_roles_desactivado_sin_acceso.sql
+\ir ../migrations/20261031300300_compras_borrado_solo_admin.sql
 
 CREATE OR REPLACE FUNCTION pg_temp.informar(_etiqueta TEXT, _fallos TEXT[])
 RETURNS VOID LANGUAGE plpgsql AS $$
@@ -214,6 +224,32 @@ BEGIN
   PERFORM pg_temp.informar('2b. toda política de escritura exige nivel (o admin); el borrado de entidades, admin', f);
 END $$;
 
+-- 2c. Una política de escritura sin nivel con otro nombre (creada a mano o
+-- desde Lovable): 20261031200200 se para y dice cuál, en vez de avisar y
+-- seguir (hallazgo SEG-REV-4). Se ejecuta el fichero tal como lo copia
+-- probar-migraciones.sh (al lado del directorio de datos).
+CREATE POLICY "D1 alta a mano" ON public.clientes FOR INSERT TO authenticated WITH CHECK (true);
+DO $$
+DECLARE
+  v_sql TEXT;
+  v_msg TEXT;
+BEGIN
+  v_sql := pg_read_file(regexp_replace(current_setting('data_directory'), '/data/?$', '')
+                        || '/sql/20261031200200_roles_politicas_escritura.sql');
+  BEGIN
+    EXECUTE v_sql;
+    RAISE WARNING 'MAL   2c. la migración se ha aplicado con una política de escritura sin nivel';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg LIKE 'roles_politicas_escritura: estas políticas de escritura no exigen nivel:%D1 alta a mano%' THEN
+      RAISE NOTICE 'BIEN  2c. con una política de escritura sin nivel y otro nombre, se para y dice cuál';
+    ELSE
+      RAISE WARNING 'MAL   2c. se ha parado, pero con otro error: %', v_msg;
+    END IF;
+  END;
+END $$;
+DROP POLICY "D1 alta a mano" ON public.clientes;
+
 -- ---------------------------------------------------------------------------
 -- 3. Tabla a tabla, por los caminos que se saltan la RLS (srv y def).
 --    Una sentencia que no toca ninguna fila basta: la guardia es por
@@ -312,9 +348,11 @@ DO $$
 DECLARE f TEXT[] := '{}'; q TEXT;
 BEGIN
   FOREACH q IN ARRAY ARRAY['vi', 'off'] LOOP
-    f := f || pg_temp.caso('ve el pedido', q, 'nav', $s$SELECT count(*) FROM public.pedidos WHERE id = current_setting('d1.p')::uuid$s$, '1');
-    f := f || pg_temp.caso('ve la línea', q, 'nav', $s$SELECT count(*) FROM public.pedido_items WHERE pedido_id = current_setting('d1.p')::uuid$s$, '1');
-    f := f || pg_temp.caso('ve el cliente', q, 'nav', $s$SELECT count(*) FROM public.clientes WHERE id = current_setting('d1.k')::uuid$s$, '1');
+    -- El visor ve lo de su tienda; el desactivado, aunque siga en
+    -- tienda_usuarios, ya no (20261031300200).
+    f := f || pg_temp.caso('ve el pedido', q, 'nav', $s$SELECT count(*) FROM public.pedidos WHERE id = current_setting('d1.p')::uuid$s$, CASE q WHEN 'vi' THEN '1' ELSE '0' END);
+    f := f || pg_temp.caso('ve la línea', q, 'nav', $s$SELECT count(*) FROM public.pedido_items WHERE pedido_id = current_setting('d1.p')::uuid$s$, CASE q WHEN 'vi' THEN '1' ELSE '0' END);
+    f := f || pg_temp.caso('ve el cliente', q, 'nav', $s$SELECT count(*) FROM public.clientes WHERE id = current_setting('d1.k')::uuid$s$, CASE q WHEN 'vi' THEN '1' ELSE '0' END);
     f := f || pg_temp.caso('alta de pedido', q, 'nav', $s$INSERT INTO public.pedidos (tienda_id, numero) VALUES (current_setting('d1.t')::uuid, 'D1-V')$s$, 'error 42501');
     f := f || pg_temp.caso('edita el pedido', q, 'nav', $s$UPDATE public.pedidos SET notas = 'x' WHERE id = current_setting('d1.p')::uuid$s$, '0');
     f := f || pg_temp.caso('borra el pedido', q, 'nav', $s$DELETE FROM public.pedidos WHERE id = current_setting('d1.p')::uuid$s$, '0');
@@ -329,7 +367,7 @@ BEGIN
     -- Políticas que eran «true» para cualquiera con sesión.
     f := f || pg_temp.caso('alta de movimiento de banco', q, 'nav', $s$INSERT INTO public.banco_movimientos (empresa_id, fecha, importe, huella) VALUES (public.empresa_por_defecto(), DATE '2026-10-01', 1, 'd1-vi')$s$, 'error 42501');
   END LOOP;
-  PERFORM pg_temp.informar('4a. visor y desactivado, desde el navegador: ven lo de su tienda y no crean, cambian ni borran nada', f);
+  PERFORM pg_temp.informar('4a. visor y desactivado, desde el navegador: el visor ve lo de su tienda, el desactivado nada; ninguno crea, cambia ni borra', f);
 END $$;
 
 DO $$
@@ -356,6 +394,53 @@ BEGIN
   f := f || pg_temp.caso('borra la marca', 'adm', 'nav', $s$DELETE FROM public.textil_marcas WHERE id = current_setting('d1.m')::uuid$s$, '1');
   f := f || pg_temp.caso('borra el pedido (y sus líneas en cascada)', 'adm', 'nav', $s$DELETE FROM public.pedidos WHERE id = current_setting('d1.p')::uuid$s$, '1');
   PERFORM pg_temp.informar('4c. admin, desde el navegador: borra', f);
+END $$;
+
+-- Un admin desactivado conserva role = 'admin' en user_roles. has_role() no
+-- miraba activo, y las políticas que exigen has_role(auth.uid(), 'admin') le
+-- seguían dejando escribir (hallazgo R1); mis_empresas() le daba todas
+-- (SEG-REV-3). Mientras le dure el token no tiene que poder nada.
+DO $$
+DECLARE f TEXT[] := '{}';
+BEGIN
+  IF public.has_role(current_setting('d1.admoff')::UUID, 'admin') THEN
+    f := f || 'has_role() del admin desactivado sigue siendo true'::TEXT;
+  END IF;
+  f := f || pg_temp.caso('mis_empresas() vacío', 'admoff', 'nav', $s$SELECT cardinality(public.mis_empresas())$s$, '0');
+  f := f || pg_temp.caso('mis_tiendas() vacío', 'admoff', 'nav', $s$SELECT cardinality(public.mis_tiendas())$s$, '0');
+  f := f || pg_temp.caso('ve la tienda', 'admoff', 'nav', $s$SELECT count(*) FROM public.tiendas WHERE id = current_setting('d1.t')::uuid$s$, '0');
+  f := f || pg_temp.caso('lee la auditoría', 'admoff', 'nav', $s$SELECT count(*) FROM public.auditoria$s$, '0');
+  f := f || pg_temp.caso('se da acceso a una tienda', 'admoff', 'nav', $s$INSERT INTO public.tienda_usuarios (tienda_id, user_id) VALUES (current_setting('d1.t')::uuid, current_setting('d1.admoff')::uuid)$s$, 'error 42501');
+  f := f || pg_temp.caso('renombra la tienda', 'admoff', 'nav', $s$UPDATE public.tiendas SET nombre = 'hackeada' WHERE id = current_setting('d1.t')::uuid$s$, '0');
+  f := f || pg_temp.caso('borra la tienda', 'admoff', 'nav', $s$DELETE FROM public.tiendas WHERE id = current_setting('d1.t')::uuid$s$, '0');
+  f := f || pg_temp.caso('sube al bucket compras', 'admoff', 'nav', $s$INSERT INTO storage.objects (bucket_id, name) VALUES ('compras', 'd1/admoff.pdf')$s$, 'error 42501');
+  f := f || pg_temp.caso('sube un PDF de factura textil', 'admoff', 'nav', $s$INSERT INTO storage.objects (bucket_id, name) VALUES ('facturas', 'textil/d1-admoff.pdf')$s$, 'error 42501');
+  -- Y el admin activo, igual que antes.
+  f := f || pg_temp.caso('el admin activo ve la tienda', 'adm', 'nav', $s$SELECT count(*) FROM public.tiendas WHERE id = current_setting('d1.t')::uuid$s$, '1');
+  f := f || pg_temp.caso('el admin activo sube al bucket compras', 'adm', 'nav', $s$INSERT INTO storage.objects (bucket_id, name) VALUES ('compras', 'd1/adm.pdf')$s$, '1');
+  IF (SELECT nombre FROM public.tiendas WHERE id = current_setting('d1.t')::uuid) IS DISTINCT FROM 'Tienda D1' THEN
+    f := f || 'la tienda ha cambiado'::TEXT;
+  END IF;
+  PERFORM pg_temp.informar('4d. admin desactivado, desde el navegador: no ve nada ni escribe en tiendas, tienda_usuarios ni storage; el activo sí', f);
+END $$;
+
+-- Marcar una compra como borrada (borrada_en) es un UPDATE para la base, pero
+-- es borrar: solo admin (hallazgo R2).
+DO $$
+DECLARE f TEXT[] := '{}'; v_c UUID;
+BEGIN
+  INSERT INTO public.textil_compras (empresa_id, categoria, proveedor, numero)
+  VALUES (public.empresa_por_defecto(), 'servicios', 'Proveedor D1', 'D1-C1') RETURNING id INTO v_c;
+  PERFORM set_config('d1.c', v_c::TEXT, true);
+  f := f || pg_temp.caso('el editor ve la compra', 'ed', 'nav', $s$SELECT count(*) FROM public.textil_compras WHERE id = current_setting('d1.c')::uuid$s$, '1');
+  f := f || pg_temp.caso('el editor la edita', 'ed', 'nav', $s$UPDATE public.textil_compras SET proveedor = 'Proveedor D1 bis' WHERE id = current_setting('d1.c')::uuid$s$, '1');
+  f := f || pg_temp.caso('el editor la marca como borrada', 'ed', 'nav', $s$UPDATE public.textil_compras SET borrada_en = now() WHERE id = current_setting('d1.c')::uuid$s$, 'error 42501');
+  f := f || pg_temp.caso('el editor la marca como borrada por el servidor', 'ed', 'srv', $s$UPDATE public.textil_compras SET borrada_en = now() WHERE id = current_setting('d1.c')::uuid$s$, 'error 42501');
+  IF (SELECT borrada_en FROM public.textil_compras WHERE id = v_c) IS NOT NULL THEN
+    f := f || 'la compra ha quedado borrada'::TEXT;
+  END IF;
+  f := f || pg_temp.caso('el admin la marca como borrada', 'adm', 'nav', $s$UPDATE public.textil_compras SET borrada_en = now() WHERE id = current_setting('d1.c')::uuid$s$, '1');
+  PERFORM pg_temp.informar('4e. marcar una compra como borrada es borrar: el editor no puede (ni por el navegador ni por el servidor); el admin sí', f);
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -533,9 +618,13 @@ SELECT CASE WHEN count(*) = 0
 -- ---------------------------------------------------------------------------
 -- 8. Las reversiones, en orden, dejan la base como antes de los niveles
 -- ---------------------------------------------------------------------------
--- Primero las posteriores (seguridad, 20261031300000 y 300100): seis de sus
+-- Primero las posteriores (300400, 300300 y 300200, que usan las funciones de
+-- nivel y la columna activo; y seguridad, 20261031300000 y 300100): seis de sus
 -- funciones llevan la línea de rol_exigir_quien() y hay que devolverlas al
 -- cuerpo de 20261031200300 antes de quitar los niveles.
+\ir ../reversiones/20261031300400_seguridad_escritura_por_empresa.sql
+\ir ../reversiones/20261031300300_compras_borrado_solo_admin.sql
+\ir ../reversiones/20261031300200_roles_desactivado_sin_acceso.sql
 \ir ../reversiones/20261031300100_seguridad_lectura_por_empresa.sql
 \ir ../reversiones/20261031300000_seguridad_funciones_y_privilegios.sql
 \ir ../reversiones/20261031200300_roles_funciones.sql

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  avisoSinTiendas,
   esNivel,
   impedimentoAlta,
   impedimentoCambioUsuario,
@@ -167,5 +168,17 @@ describe("ordenarUsuarios", () => {
       "Carla",
       "Bea",
     ]);
+  });
+});
+
+describe("avisoSinTiendas", () => {
+  it("avisa a un editor o visor sin ninguna tienda", () => {
+    expect(avisoSinTiendas("editor", 0)).toMatch(/no tiene ninguna/);
+    expect(avisoSinTiendas("visor", 0)).toMatch(/Solo lectura/);
+  });
+  it("no avisa a un admin, a quien tiene tiendas ni a quien no tiene nivel", () => {
+    expect(avisoSinTiendas("admin", 0)).toBeNull();
+    expect(avisoSinTiendas("editor", 2)).toBeNull();
+    expect(avisoSinTiendas(null, 0)).toBeNull();
   });
 });

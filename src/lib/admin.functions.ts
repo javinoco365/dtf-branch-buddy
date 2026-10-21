@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin } from "./permisos-middleware";
 import { llamarRpc } from "./rpc";
-import { exigirMiembroTienda } from "./acceso";
+import { esAdminActivo, exigirMiembroTienda } from "./acceso";
 import { leerCredencialesWoo } from "./woo-credenciales";
 import { leerMiNivel } from "./nivel-sesion";
 
@@ -101,13 +101,9 @@ export const guardarCredencialesWoo = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
-    const { data: rolCheck } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rolCheck) throw new Error("Solo administradores");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo administradores");
+    }
     // A Vault, nunca a las columnas en claro. tienda_credenciales_guardar()
     // crea o actualiza los dos secretos y deja en la tabla solo la referencia.
     await llamarRpc<null>(supabaseAdmin, "tienda_credenciales_guardar", {
@@ -145,13 +141,9 @@ export const credencialesWooMascaradas = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ tienda_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rolCheck } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!rolCheck) throw new Error("Solo administradores");
+    if (!(await esAdminActivo(supabaseAdmin, context.userId))) {
+      throw new Error("Solo administradores");
+    }
     const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
     if (!creds) return { tiene: false, ck_mask: null, cs_mask: null, updated_at: null };
     // updated_at no es un secreto y sigue en la tabla.

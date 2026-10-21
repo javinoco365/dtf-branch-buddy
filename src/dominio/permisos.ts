@@ -157,3 +157,18 @@ export function ordenarUsuarios<T extends UsuarioConNivel & { nombre: string }>(
   const peso = (u: T) => (u.activo ? 0 : 10) + (u.nivel ? NIVELES.indexOf(u.nivel) : 3);
   return [...usuarios].sort((a, b) => peso(a) - peso(b) || a.nombre.localeCompare(b.nombre, "es"));
 }
+
+/**
+ * Aviso al dejar a alguien sin acceso a ninguna tienda. Un admin lo ve todo;
+ * un editor o un visor solo lo de sus tiendas (tienda_usuarios), así que sin
+ * ninguna ve las pantallas vacías y sin error. Pasa al bajar de admin a quien
+ * se dio de alta como admin, que se crea sin tiendas. null si no hay nada que
+ * avisar.
+ */
+export function avisoSinTiendas(nivel: Nivel | null, tiendas: number): string | null {
+  if (nivel === null || nivel === "admin" || tiendas > 0) return null;
+  return (
+    `Con el nivel «${ETIQUETA_NIVEL[nivel]}» solo ve lo de sus tiendas, y no tiene ninguna: ` +
+    "verá las pantallas vacías. Dale acceso en «Acceso a tiendas»."
+  );
+}

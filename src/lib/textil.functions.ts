@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
-import { exigirFilas } from "./acceso";
+import { esAdminActivo, exigirFilas } from "./acceso";
 import { rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import { escanerAplicado } from "./escaner-textil";
@@ -1281,13 +1281,8 @@ export const getEmpresaGlobal = createServerFn({ method: "GET" })
  * que se congeló al emitir. Solo administradores, como hasta ahora.
  */
 async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId: string) {
-  const { data: esAdmin } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!esAdmin) throw new Error("Solo un administrador puede generar esta factura");
+  if (!(await esAdminActivo(supabaseAdmin, userId)))
+    throw new Error("Solo un administrador puede generar esta factura");
 
   const { data: factura } = await tabla(supabaseAdmin, "textil_facturas")
     .select("*")

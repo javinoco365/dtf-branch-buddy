@@ -78,6 +78,11 @@ Cada usuario tiene **un** nivel en `user_roles` (desde 20261031200000-200300):
 - **visor**: solo ve; no crea, no cambia, no borra.
 
 Sin fila en `user_roles`, o con `activo = false`, no se escribe nada (se deniega por defecto).
+Con `activo = false` tampoco se lee: `has_role()`, `mis_tiendas()`, `mis_empresas()`,
+`is_tienda_member()` y `es_miembro_empresa()` no cuentan a los desactivados (20261031300200).
+En el servidor, comprobar admin con `exigirAdmin`/`esAdminActivo` y pertenencia con
+`exigirMiembroTienda`/`esMiembroTienda` (`src/lib/acceso.ts`), nunca leyendo `user_roles` o
+`tienda_usuarios` a mano.
 Los usuarios no se borran: se desactivan (`activo = false` y ban en Supabase Auth) para conservar
 su rastro en la auditoría. Siempre queda al menos un admin activo (lo impone un trigger).
 
@@ -172,20 +177,20 @@ Las reglas de arriba son el objetivo, no una descripción del repositorio. Esta 
 cómo está cada una. Lo que no pone «Hecho» **no existe todavía**, o solo a medias, y no debes
 dar por hecho que puedes usarlo:
 
-| Regla                                       | Estado                                                                                                                                                                                                     |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `empresa_id` en las tablas                  | Hecho en las tablas raíz (33, `NOT NULL` y con FK a `empresas`). Las de línea y las de tienda lo heredan del padre                                                                                         |
-| Tabla `auditoria`, `auditoria_enmascarar()` | Hecho. Las cinco tablas que faltaban, desde 20261023110000. Sin trigger: `profiles`, `empresa_global`, `auth_intentos_fallidos_login` y `woo_sincronizacion` (el cursor de la sincronización: a propósito) |
-| Autor de cada cambio (`app.usuario_id`)     | Hecho, sin middleware en `src/start.ts`: `adminComoUsuario()` o funciones SQL que reciben `_usuario_id`                                                                                                    |
-| `rls_auto_enable()`                         | Hecho (20260902120200)                                                                                                                                                                                     |
-| Sin `FOR ALL` en tablas de negocio          | Hecho: los doce últimos pasan a políticas por operación, con el mismo acceso, en 20261023100000                                                                                                            |
-| Tres estados de pedido                      | A medias: columnas y trigger que las sincroniza con el enum viejo; la app aún usa el `estado` único                                                                                                        |
-| `coste_unit_snapshot`                       | Hecho: lo congela un trigger al insertar en `pedido_items`                                                                                                                                                 |
-| Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                                                                                                               |
-| Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                                                                                                          |
-| Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                |
-| Niveles admin / editor / visor              | Hecho en la base (20261031200000-200300: políticas de escritura, guardia, funciones) y en Ajustes > Usuarios. Pendiente de aplicar en producción                                                           |
-| Lectura por empresa y seguridad de octubre  | Hecho en la base (20261031100100 `mis_tiendas()`/`mis_empresas()`, 20261031300000-300100), sin aplicar. Toda función que recree una de los niveles conserva `rol_exigir_quien()`                           |
+| Regla                                       | Estado                                                                                                                                                                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `empresa_id` en las tablas                  | Hecho en las tablas raíz (33, `NOT NULL` y con FK a `empresas`). Las de línea y las de tienda lo heredan del padre                                                                                                                                           |
+| Tabla `auditoria`, `auditoria_enmascarar()` | Hecho. Las cinco tablas que faltaban, desde 20261023110000. Sin trigger: `profiles`, `empresa_global`, `auth_intentos_fallidos_login` y `woo_sincronizacion` (el cursor de la sincronización: a propósito)                                                   |
+| Autor de cada cambio (`app.usuario_id`)     | Hecho, sin middleware en `src/start.ts`: `adminComoUsuario()` o funciones SQL que reciben `_usuario_id`                                                                                                                                                      |
+| `rls_auto_enable()`                         | Hecho (20260902120200)                                                                                                                                                                                                                                       |
+| Sin `FOR ALL` en tablas de negocio          | Hecho: los doce últimos pasan a políticas por operación, con el mismo acceso, en 20261023100000                                                                                                                                                              |
+| Tres estados de pedido                      | A medias: columnas y trigger que las sincroniza con el enum viejo; la app aún usa el `estado` único                                                                                                                                                          |
+| `coste_unit_snapshot`                       | Hecho: lo congela un trigger al insertar en `pedido_items`                                                                                                                                                                                                   |
+| Credenciales en Vault                       | Hecho para guardar y leer. Quedan columnas en claro con lectura de respaldo: rotar y retirar                                                                                                                                                                 |
+| Clientes globales                           | A medias: faltan `UNIQUE (empresa_id, email)`, la fusión y `cliente_tiendas` en la sincronización                                                                                                                                                            |
+| Numeración de factura con bloqueo           | Hecho: la asigna `emitir_factura()`, con bloqueo sobre `series_facturacion`                                                                                                                                                                                  |
+| Niveles admin / editor / visor              | Hecho en la base (20261031200000-200300: políticas de escritura, guardia, funciones; 300200: un desactivado no ve ni escribe; 300300: marcar una compra como borrada es de admin) y en Ajustes > Usuarios. Pendiente de aplicar en producción                |
+| Lectura por empresa y seguridad de octubre  | Hecho en la base (20261031100100 `mis_tiendas()`/`mis_empresas()`, 20261031300000-300100; 300400: escritura de banco y stock y lectura de conciliaciones por empresa), sin aplicar. Toda función que recree una de los niveles conserva `rol_exigir_quien()` |
 
 Sí existen ya: `src/dominio/` con la lógica pura y sus pruebas, la integración continua (dos
 trabajos: `npm run verify`, y las migraciones y pruebas SQL de
