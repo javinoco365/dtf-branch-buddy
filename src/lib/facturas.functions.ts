@@ -11,7 +11,7 @@ import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 import { estiloFactura } from "@/lib/pdf-factura-estilo";
 import { referenciaFactura } from "@/lib/format";
-import { rutaPdfTienda } from "@/lib/rutas-pdf";
+import { CACHE_PDF, rutaPdfTienda } from "@/lib/rutas-pdf";
 // El dominio se importa aquí arriba y no con await import() dentro de cada
 // función: un módulo que se carga de las dos formas obliga al empaquetador a
 // generar un auxiliar que acabó en el arranque del servidor, en una
@@ -182,6 +182,7 @@ async function guardarPdfTienda(
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
+      cacheControl: CACHE_PDF,
       upsert: reemplazar,
     });
   if (error && !yaExiste(error)) throw new Error(`No se pudo guardar el PDF: ${error.message}`);
@@ -227,6 +228,7 @@ async function pdfFacturaTienda(
       .from("facturas")
       .upload(rutaBorrador, new Uint8Array(await blob.arrayBuffer()), {
         contentType: "application/pdf",
+        cacheControl: CACHE_PDF,
         upsert: true,
       });
     if (error) throw new Error(`No se pudo generar el PDF: ${error.message}`);
