@@ -313,13 +313,15 @@ function Facturas() {
           />
           {escribir && <TicketsPendientesDialog tiendaId={tiendaId} />}
           <Dialog open={abierto} onOpenChange={setAbierto}>
-            <DialogTrigger asChild>
-              <SiPuede accion="escribir">
+            {/* El permiso, por fuera del disparador: dentro, <SiPuede> se
+                tragaba el clic y el diálogo no se abría. */}
+            {escribir && (
+              <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" /> Nueva factura
                 </Button>
-              </SiPuede>
-            </DialogTrigger>
+              </DialogTrigger>
+            )}
             <NuevaFacturaDialog
               tiendaId={tiendaId}
               onDone={() => {
