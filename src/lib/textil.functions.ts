@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esAdminActivo, exigirFilas } from "./acceso";
-import { rutaPdfTextil } from "./rutas-pdf";
+import { CACHE_PDF, rutaPdfTextil } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import { escanerAplicado } from "./escaner-textil";
 import type { Cobro } from "./cobros.functions";
@@ -1394,6 +1394,7 @@ async function guardarPdfTextil(
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
+      cacheControl: CACHE_PDF,
       upsert: reemplazar,
     });
   if (subErr && !yaExiste(subErr)) throw new Error(`No se pudo guardar el PDF: ${subErr.message}`);
