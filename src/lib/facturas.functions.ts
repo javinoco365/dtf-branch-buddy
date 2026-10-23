@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
+import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { leerMiNivel } from "./nivel-sesion";
 import { puede } from "@/dominio/permisos";
 import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
@@ -9,7 +9,7 @@ import { esMiembroTienda, exigirMiembroEmpresa } from "./acceso";
 import { leerTodas, trozos } from "./paginar";
 import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
-import { descargarLogo } from "@/lib/logo-descarga";
+import { estiloFactura } from "@/lib/pdf-factura-estilo";
 import { referenciaFactura } from "@/lib/format";
 import { rutaPdfTienda } from "@/lib/rutas-pdf";
 // El dominio se importa aquí arriba y no con await import() dentro de cada
@@ -92,10 +92,16 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   const emisorDireccion =
     (factura.emisor_direccion && factura.emisor_direccion.trim()) || empresaDireccion;
 
-  // El logo va congelado en el snapshot del emisor, junto al resto de la
-  // identidad: una factura tiene que imprimirse siempre como se emitió,
-  // aunque la tienda cambie de logo después.
+  // La imagen (colores, logo, método de pago) es la de hoy, de la plantilla de
+  // la tienda y de Ajustes > Empresa: así se pueden rehacer los PDF con el
+  // diseño nuevo. Lo fiscal sigue saliendo de lo congelado. El logo congelado
+  // en el emisor queda de respaldo si la plantilla no tiene.
   const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
+  const estilo = await estiloFactura(
+    supabaseAdmin,
+    { ambito: "tienda", tiendaId: factura.tienda_id },
+    logoUrl,
+  );
 
   const pdfData: FacturaPDFData = {
     desglose: Array.isArray(factura.desglose_iva)
@@ -110,7 +116,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
     // Y lleva las líneas sin IVA y la suma Base / IVA / TOTAL.
     simplificada: factura.tipo === "simplificada",
-    logo: await descargarLogo(logoUrl),
+    ...estilo,
     fecha: factura.fecha ?? new Date().toISOString(),
     fecha_vencimiento: factura.fecha_vencimiento,
     emisor: {
@@ -153,14 +159,20 @@ const yaExiste = (e: { message?: string; statusCode?: string | number } | null) 
 /**
  * Guarda el PDF A4 de una factura o ticket de tienda, si todavía no lo tiene.
  *
- * El primero que se guarda es el definitivo: no se sobrescribe nunca (una
- * factura emitida no cambia, y su PDF tampoco). En `pdf_url` queda la RUTA del
+ * El primero que se guarda es el que vale y no se sobrescribe, salvo con
+ * `reemplazar` (rehacerPdfsTienda: el mismo documento, con el diseño de hoy;
+ * las cifras y los datos fiscales salen igual de lo congelado). En `pdf_url` queda la RUTA del
  * fichero, no una URL firmada: la URL caducaba al año y el botón dejaba de
  * abrir el PDF. Para abrirlo se firma la ruta en el momento.
  *
  * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
  */
-async function guardarPdfTienda(sb: Sb, facturaId: string, userId: string): Promise<string> {
+async function guardarPdfTienda(
+  sb: Sb,
+  facturaId: string,
+  userId: string,
+  reemplazar = false,
+): Promise<string> {
   const { factura, pdfData } = await leerDatosPdfFactura(sb, facturaId, userId);
   // Un borrador todavía cambia: su PDF no se guarda como el definitivo.
   if (factura.estado === "borrador") throw new Error("Es un borrador: emítelo antes");
@@ -170,7 +182,7 @@ async function guardarPdfTienda(sb: Sb, facturaId: string, userId: string): Prom
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
-      upsert: false,
+      upsert: reemplazar,
     });
   if (error && !yaExiste(error)) throw new Error(`No se pudo guardar el PDF: ${error.message}`);
   await tabla(sb, "facturas").update({ pdf_url: ruta }).eq("id", factura.id);
@@ -1364,4 +1376,53 @@ export const canjearTicket = createServerFn({ method: "POST" })
       _sustituye_a_id: ticket.id,
     });
     return { ...r, pdf_guardado: await guardarPdfTrasEmitir(context.userId, r.id) };
+  });
+
+/**
+ * Rehace el PDF de las facturas y tickets de tienda ya emitidos con el diseño
+ * de hoy y reemplaza el guardado. Los importes, la numeración y los datos
+ * fiscales salen de lo congelado al emitir: solo cambia cómo se ve. De pocos
+ * en pocos (`desde` es la posición en la lista, por fecha); la pantalla la
+ * llama hasta el final. Con `limite` 0 solo cuenta. Solo administradores.
+ */
+export const rehacerPdfsTienda = createServerFn({ method: "POST" })
+  .middleware([exigeAdmin])
+  .inputValidator((d) =>
+    z
+      .object({
+        desde: z.number().int().min(0).default(0),
+        limite: z.number().int().min(0).max(10).default(5),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    const {
+      data: filas,
+      count,
+      error,
+    } = await tabla(sb, "facturas")
+      .select("id, serie, ejercicio, numero", { count: "exact" })
+      .neq("estado", "borrador")
+      .order("fecha")
+      .order("id")
+      .range(data.desde, data.desde + Math.max(data.limite, 1) - 1);
+    if (error) throw new Error(error.message);
+    const lista = data.limite === 0 ? [] : ((filas ?? []) as any[]);
+    let hechos = 0;
+    const fallidos: { id: string; referencia: string; motivo: string }[] = [];
+    for (const f of lista) {
+      try {
+        await guardarPdfTienda(sb, f.id, context.userId, true);
+        hechos++;
+      } catch (e) {
+        fallidos.push({
+          id: f.id,
+          referencia: referenciaFactura(f.serie, f.ejercicio, f.numero),
+          motivo: (e as Error).message,
+        });
+      }
+    }
+    return { total: count ?? 0, hechos, fallidos, siguiente: data.desde + lista.length };
   });
