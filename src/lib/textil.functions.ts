@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esAdminActivo, exigirFilas } from "./acceso";
-import { CACHE_PDF, rutaPdfTextil } from "./rutas-pdf";
+import { CACHE_PDF, rutaPdfGuardada, rutaPdfTextil, rutaPdfVersion } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
 import { escanerAplicado } from "./escaner-textil";
 import type { Cobro } from "./cobros.functions";
@@ -1027,6 +1027,12 @@ export const deleteTextilFactura = createServerFn({ method: "POST" })
   .middleware([exigeBorrar])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
+    // Dónde está su PDF, antes de que la fila desaparezca: si se rehízo, tiene
+    // otro nombre (rutaPdfVersion).
+    const { data: fila } = await tabla(context.supabase, "textil_facturas")
+      .select("pdf_path")
+      .eq("id", data.id)
+      .maybeSingle();
     const r = await llamarRpc<{ referencia: string | null }>(
       context.supabase,
       "factura_borrar_ultima",
@@ -1036,7 +1042,11 @@ export const deleteTextilFactura = createServerFn({ method: "POST" })
     await adminComoUsuario(context.userId)
       .storage.from("facturas")
       // También el de 80 mm que se generaba antes, si lo hay.
-      .remove([`textil/${data.id}.pdf`, `textil/${data.id}-80mm.pdf`]);
+      .remove([
+        rutaPdfGuardada(fila?.pdf_path, rutaPdfTextil(data.id)),
+        rutaPdfTextil(data.id),
+        `textil/${data.id}-80mm.pdf`,
+      ]);
     return { ok: true, referencia: r.referencia };
   });
 
@@ -1389,13 +1399,14 @@ async function guardarPdfTextil(
   const { factura, pdfData } = await leerDatosPdfTextil(sb, facturaId, userId);
 
   const blob = await generarFacturaPDF(pdfData);
-  const ruta = rutaPdfTextil(factura.id);
+  const fija = rutaPdfTextil(factura.id);
+  // Rehecho: con otro nombre, para que ninguna caché siga dando el anterior.
+  const ruta = reemplazar ? rutaPdfVersion(fija, Date.now().toString(36)) : fija;
   const { error: subErr } = await sb.storage
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
       cacheControl: CACHE_PDF,
-      upsert: reemplazar,
     });
   if (subErr && !yaExiste(subErr)) throw new Error(`No se pudo guardar el PDF: ${subErr.message}`);
 
@@ -1403,6 +1414,11 @@ async function guardarPdfTextil(
     .update({ pdf_path: ruta })
     .eq("id", factura.id);
   if (updErr) throw new Error(updErr.message);
+  // El que había, fuera: ya nadie lo apunta. Si falla, queda huérfano y no se ve.
+  if (reemplazar) {
+    const anterior = rutaPdfGuardada(factura.pdf_path, fija);
+    if (anterior !== ruta) await sb.storage.from("facturas").remove([anterior]);
+  }
   return ruta;
 }
 
