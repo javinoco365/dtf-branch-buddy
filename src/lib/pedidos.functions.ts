@@ -38,6 +38,24 @@ async function ensureAccess(supabaseAdmin: any, userId: string, tiendaId: string
   }
 }
 
+/**
+ * Un cliente elegido de la ficha tiene que ser de la misma empresa que la
+ * tienda: los clientes son globales por empresa, no por tienda.
+ */
+async function exigirClienteDeLaTienda(supabaseAdmin: any, tiendaId: string, clienteId: string) {
+  const { data: tienda } = await supabaseAdmin
+    .from("tiendas")
+    .select("empresa_id")
+    .eq("id", tiendaId)
+    .maybeSingle();
+  const { data: cliente } = await tabla(supabaseAdmin, "clientes")
+    .select("id")
+    .eq("id", clienteId)
+    .eq("empresa_id", tienda?.empresa_id ?? "")
+    .maybeSingle();
+  if (!cliente) throw new Error("Ese cliente no existe o es de otra empresa");
+}
+
 async function getWooCreds(supabaseAdmin: any, tiendaId: string) {
   const { data: tienda } = await supabaseAdmin
     .from("tiendas")
@@ -168,6 +186,8 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     z
       .object({
         tiendaId: z.string().uuid(),
+        /** El de la ficha, si se ha elegido uno; si no, solo el nombre escrito. */
+        cliente_id: z.string().uuid().optional().nullable(),
         cliente_nombre: z.string().min(1),
         cliente_email: z.string().optional().nullable(),
         cliente_telefono: z.string().optional().nullable(),
@@ -184,6 +204,8 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
     await ensureAccess(supabaseAdmin, context.userId, data.tiendaId);
+    if (data.cliente_id)
+      await exigirClienteDeLaTienda(supabaseAdmin, data.tiendaId, data.cliente_id);
 
     // Mismo módulo que la pantalla, para que lo que se ve y lo que se guarda
     // coincidan. El envío va dentro, en la base imponible: artículo 78 LIVA.
@@ -205,6 +227,7 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         origen: "manual",
         metodo_pago: data.metodo_pago ?? null,
         envio: data.envio ?? 0,
+        cliente_id: data.cliente_id ?? null,
         cliente_nombre: data.cliente_nombre,
         cliente_email: data.cliente_email ?? null,
         cliente_telefono: data.cliente_telefono?.trim() || null,
@@ -301,6 +324,7 @@ export const updatePedido = createServerFn({ method: "POST" })
     z
       .object({
         id: z.string().uuid(),
+        cliente_id: z.string().uuid().optional().nullable(),
         cliente_nombre: z.string().optional().nullable(),
         cliente_email: z.string().optional().nullable(),
         cliente_telefono: z.string().optional().nullable(),
@@ -325,6 +349,12 @@ export const updatePedido = createServerFn({ method: "POST" })
     await ensureAccess(supabaseAdmin, context.userId, pedido.tienda_id);
 
     const patch: Record<string, unknown> = {};
+    if (data.cliente_id !== undefined) {
+      if (data.cliente_id) {
+        await exigirClienteDeLaTienda(supabaseAdmin, pedido.tienda_id, data.cliente_id);
+      }
+      patch.cliente_id = data.cliente_id;
+    }
     if (data.cliente_nombre !== undefined) patch.cliente_nombre = data.cliente_nombre;
     if (data.cliente_email !== undefined) patch.cliente_email = data.cliente_email;
     if (data.cliente_telefono !== undefined)

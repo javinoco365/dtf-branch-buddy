@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -34,6 +34,12 @@ import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import { mismaDireccion, normalizarDireccion, type Direccion } from "@/dominio/direcciones";
 import { avisarError } from "@/lib/errores";
+import { supabase } from "@/integrations/supabase/client";
+import { tabla } from "@/lib/rpc";
+import {
+  SelectorClienteTextil,
+  type ClienteTextil,
+} from "@/components/textil/SelectorClienteTextil";
 
 type Linea = {
   descripcion: string;
@@ -106,6 +112,8 @@ export function PedidoFormDialog({
   onSaved: () => void;
 }) {
   const esEdicion = !!pedido;
+  /** El de la ficha, si se ha elegido; si no, el pedido lleva solo el nombre escrito. */
+  const [clienteId, setClienteId] = useState<string | null>(null);
   const [cliente, setCliente] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -127,6 +135,7 @@ export function PedidoFormDialog({
   useEffect(() => {
     if (!open) return;
     if (pedido) {
+      setClienteId(pedido.cliente_id ?? null);
       setCliente(pedido.cliente_nombre ?? "");
       setEmail(pedido.cliente_email ?? "");
       setTelefono(pedido.cliente_telefono ?? "");
@@ -158,6 +167,7 @@ export function PedidoFormDialog({
       // si no, reabrirlo y guardarlo sin tocar nada le habría puesto el 21 %.
       setAplicaIva(lineasIniciales.some((l) => l.iva_rate > 0));
     } else {
+      setClienteId(null);
       setCliente("");
       setEmail("");
       setTelefono("");
@@ -171,6 +181,26 @@ export function PedidoFormDialog({
       setAplicaIva(true);
     }
   }, [open, pedido]);
+
+  // Los mismos que en el presupuesto: la ficha única de clientes de la empresa.
+  const { data: clientes = [] } = useQuery({
+    queryKey: ["presupuesto-clientes"],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await tabla(supabase, "clientes")
+        .select("id, nombre, email, telefono, direccion, nif")
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as ClienteTextil[];
+    },
+  });
+
+  function elegirCliente(c: ClienteTextil) {
+    setClienteId(c.id);
+    setCliente(c.nombre);
+    setEmail(c.email ?? "");
+    setTelefono(c.telefono ?? "");
+  }
 
   const createFn = useServerFn(createPedidoManual);
   const updateFn = useServerFn(updatePedido);
@@ -207,6 +237,7 @@ export function PedidoFormDialog({
       const itemsValidos = lineas.filter((l) => l.descripcion.trim() && l.cantidad > 0);
       if (itemsValidos.length === 0) throw new Error("Añade al menos una línea");
       const comunes = {
+        cliente_id: clienteId,
         cliente_nombre: cliente,
         cliente_email: email || null,
         cliente_telefono: telefono || null,
@@ -272,7 +303,29 @@ export function PedidoFormDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Cliente</Label>
-              <Input value={cliente} onChange={(e) => setCliente(e.target.value)} />
+              <SelectorClienteTextil
+                clientes={clientes}
+                valor={clienteId}
+                tiendaId={tiendaId}
+                claveLista={["presupuesto-clientes"]}
+                onElegir={elegirCliente}
+              />
+              {clienteId ? (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => setClienteId(null)}
+                >
+                  Quitar la ficha y escribir el nombre
+                </button>
+              ) : (
+                <Input
+                  aria-label="Nombre del cliente, sin ficha"
+                  placeholder="O escribe el nombre, sin ficha"
+                  value={cliente}
+                  onChange={(e) => setCliente(e.target.value)}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label>Email</Label>
