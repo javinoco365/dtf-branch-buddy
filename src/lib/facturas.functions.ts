@@ -95,12 +95,20 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   // La imagen (colores, logo, método de pago) es la de hoy, de la plantilla de
   // la tienda y de Ajustes > Empresa: así se pueden rehacer los PDF con el
   // diseño nuevo. Lo fiscal sigue saliendo de lo congelado. El logo congelado
-  // en el emisor queda de respaldo si la plantilla no tiene.
-  const logoUrl = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
+  // en el emisor queda de respaldo si ni la plantilla ni la tienda tienen.
+  const logoEmitido = (factura.emisor_snapshot as { logo_url?: string } | null)?.logo_url ?? null;
+  const { data: tienda } = await tabla(supabaseAdmin, "tiendas")
+    .select("nombre, logo_url, color")
+    .eq("id", factura.tienda_id)
+    .maybeSingle();
   const estilo = await estiloFactura(
     supabaseAdmin,
     { ambito: "tienda", tiendaId: factura.tienda_id },
-    logoUrl,
+    {
+      nombre: tienda?.nombre ?? null,
+      logo_url: tienda?.logo_url || logoEmitido,
+      color: tienda?.color ?? null,
+    },
   );
 
   const pdfData: FacturaPDFData = {

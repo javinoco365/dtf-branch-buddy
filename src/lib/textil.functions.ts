@@ -12,7 +12,7 @@ import type { Cobro } from "./cobros.functions";
 // forma normal, y cargarlo de las dos formas tira el arranque del servidor
 // (como logo-descarga, más abajo). jspdf sigue cargándose bajo demanda dentro.
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
-import { estiloFactura } from "@/lib/pdf-factura-estilo";
+import { estiloFactura, type IdentidadFactura } from "@/lib/pdf-factura-estilo";
 import {
   generarPresupuestoPDF,
   type PresupuestoPDFData,
@@ -1288,6 +1288,28 @@ export const getEmpresaGlobal = createServerFn({ method: "GET" })
   });
 
 /**
+ * El nombre, el logo y el color de una factura textil: los de su marca, como
+ * en el presupuesto; sin marca, los de la predeterminada de la empresa
+ * (identidadTextil). El logo congelado en el emisor, de respaldo.
+ */
+async function identidadFacturaTextil(
+  sb: unknown,
+  marcaId: string | null | undefined,
+  logoEmitido: string | null | undefined,
+): Promise<IdentidadFactura> {
+  let base: IdentidadFactura | null = null;
+  if (marcaId) {
+    const marca = await leerMarcaTextil(sb, marcaId);
+    if (marca) base = identidadBaseTextil(marca);
+  }
+  if (!base) {
+    const activa = await leerEmpresaActiva(sb);
+    base = await identidadTextil(sb, activa?.marcaPredeterminada ?? null);
+  }
+  return { ...base, logo_url: base.logo_url || texto(logoEmitido) };
+}
+
+/**
  * Lo que hace falta para imprimir una factura o un ticket textil, sacado de lo
  * que se congeló al emitir. Solo administradores, como hasta ahora.
  */
@@ -1336,7 +1358,7 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
     ...(await estiloFactura(
       supabaseAdmin,
       { ambito: "textil" },
-      emisor.logo_url,
+      await identidadFacturaTextil(supabaseAdmin, factura.marca_id, emisor.logo_url),
       factura.empresa_id,
     )),
     fecha: factura.fecha ?? new Date().toISOString(),
