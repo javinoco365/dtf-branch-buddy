@@ -76,49 +76,52 @@ export function NuevoPresupuestoMenu({
   });
   const iaLista = data?.disponible === true;
 
+  // El permiso va por fuera del menú: el disparador (asChild) le pasa el clic
+  // y la referencia a su hijo, y <SiPuede> no los reenvía al botón, así que
+  // con él dentro el menú no se abría.
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SiPuede accion="escribir">
+    <SiPuede accion="escribir">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button disabled={disabled}>
             <Plus className="h-4 w-4 mr-2" /> Nuevo presupuesto
             <ChevronDown className="h-4 w-4 ml-2" />
           </Button>
-        </SiPuede>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuItem onClick={onManual}>
-          <PencilLine className="h-4 w-4 mr-2" />
-          <div>
-            <div>Rellenarlo a mano</div>
-            <div className="text-xs text-muted-foreground">Como siempre.</div>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5" /> Con IA: propone y tú revisas antes de guardar
-        </DropdownMenuLabel>
-        <DropdownMenuItem disabled={!iaLista} onClick={() => onIa("documento")}>
-          <FileUp className="h-4 w-4 mr-2" />
-          <div>
-            <div>Desde un documento</div>
-            <div className="text-xs text-muted-foreground">PDF o imagen, con sus fotos.</div>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!iaLista} onClick={() => onIa("texto")}>
-          <MessageSquareText className="h-4 w-4 mr-2" />
-          <div>
-            <div>Escribiéndolo</div>
-            <div className="text-xs text-muted-foreground">Como en un chat.</div>
-          </div>
-        </DropdownMenuItem>
-        {data && !iaLista && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            Falta la clave de la IA (la del lector de facturas).
-          </div>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuItem onClick={onManual}>
+            <PencilLine className="h-4 w-4 mr-2" />
+            <div>
+              <div>Rellenarlo a mano</div>
+              <div className="text-xs text-muted-foreground">Como siempre.</div>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5" /> Con IA: propone y tú revisas antes de guardar
+          </DropdownMenuLabel>
+          <DropdownMenuItem disabled={!iaLista} onClick={() => onIa("documento")}>
+            <FileUp className="h-4 w-4 mr-2" />
+            <div>
+              <div>Desde un documento</div>
+              <div className="text-xs text-muted-foreground">PDF o imagen, con sus fotos.</div>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!iaLista} onClick={() => onIa("texto")}>
+            <MessageSquareText className="h-4 w-4 mr-2" />
+            <div>
+              <div>Escribiéndolo</div>
+              <div className="text-xs text-muted-foreground">Como en un chat.</div>
+            </div>
+          </DropdownMenuItem>
+          {data && !iaLista && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              Falta la clave de la IA (la del lector de facturas).
+            </div>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SiPuede>
   );
 }
 
