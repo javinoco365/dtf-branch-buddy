@@ -24,6 +24,7 @@ import {
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
 import { RehacerPdfsFacturas } from "@/components/archivo/RehacerPdfsFacturas";
+import { AbrirDocumento } from "@/components/archivo/AbrirDocumento";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { listarArchivo } from "@/lib/archivo.functions";
 import { eur, fechaCorta } from "@/lib/format";
@@ -225,12 +226,10 @@ function ArchivoPage() {
                   <TableCell>
                     {/* Un documento emitido se genera al descargarlo: es lo
                         normal. Una compra sin fichero sí es un hueco. */}
-                    {d.tieneFichero ? (
-                      <span className="text-xs text-muted-foreground">{d.ext.toUpperCase()}</span>
-                    ) : d.origen === "compra" ? (
+                    {d.origen === "compra" && !d.tieneFichero ? (
                       <EtiquetaTono tono="atencion">Sin fichero</EtiquetaTono>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Se genera al descargar</span>
+                      <AbrirDocumento doc={d} />
                     )}
                   </TableCell>
                 </TableRow>

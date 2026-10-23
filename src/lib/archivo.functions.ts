@@ -14,7 +14,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { faltaLaColumna, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import { referenciaFactura } from "./format";
-import { rutaPdfTextil, rutaPdfTienda } from "./rutas-pdf";
+import { rutaPdfGuardada, rutaPdfTextil, rutaPdfTienda } from "./rutas-pdf";
 import {
   deCompra,
   deFacturaTextil,
@@ -151,10 +151,10 @@ export const urlsArchivo = createServerFn({ method: "POST" })
     // (20261031400000).
     const [ventas, textil, compras] = await Promise.all([
       idsTienda.length
-        ? tabla(sb, "facturas").select("id, tienda_id, estado").in("id", idsTienda)
+        ? tabla(sb, "facturas").select("id, tienda_id, estado, pdf_url").in("id", idsTienda)
         : { data: [], error: null },
       idsTextil.length
-        ? tabla(sb, "textil_facturas").select("id, estado").in("id", idsTextil)
+        ? tabla(sb, "textil_facturas").select("id, estado, pdf_path").in("id", idsTextil)
         : { data: [], error: null },
       idsCompra.length
         ? tabla(sb, "textil_compras").select("id, fichero_ruta").in("id", idsCompra)
@@ -166,17 +166,29 @@ export const urlsArchivo = createServerFn({ method: "POST" })
 
     // Cada documento, con su bucket y su ruta.
     const rutas = new Map<string, { bucket: "facturas" | "compras"; ruta: string }>();
-    for (const f of (ventas.data ?? []) as { id: string; tienda_id: string; estado: string }[]) {
+    // La ruta apuntada en la fila (la de su versión, si se rehízo); si no
+    // tiene, la fija. Si el fichero no está, la firma falla y vuelve sin URL.
+    for (const f of (ventas.data ?? []) as {
+      id: string;
+      tienda_id: string;
+      estado: string;
+      pdf_url: string | null;
+    }[]) {
       if (f.estado !== "borrador") {
-        rutas.set(f.id, { bucket: "facturas", ruta: rutaPdfTienda(f.tienda_id, f.id) });
+        const ruta = rutaPdfGuardada(f.pdf_url, rutaPdfTienda(f.tienda_id, f.id));
+        rutas.set(f.id, { bucket: "facturas", ruta });
       }
     }
-    for (const f of (textil.data ?? []) as { id: string; estado: string | null }[]) {
-      // La ruta fija y no pdf_path: es la misma, y así vale aunque la fila no
-      // la tenga apuntada todavía. Si el fichero no está, la firma falla y
-      // vuelve sin URL.
+    for (const f of (textil.data ?? []) as {
+      id: string;
+      estado: string | null;
+      pdf_path: string | null;
+    }[]) {
       if (f.estado !== "borrador") {
-        rutas.set(f.id, { bucket: "facturas", ruta: rutaPdfTextil(f.id) });
+        rutas.set(f.id, {
+          bucket: "facturas",
+          ruta: rutaPdfGuardada(f.pdf_path, rutaPdfTextil(f.id)),
+        });
       }
     }
     for (const c of (compras.data ?? []) as { id: string; fichero_ruta: string | null }[]) {

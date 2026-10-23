@@ -11,7 +11,7 @@ import { leerPorIds } from "./leer-por-ids";
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
 import { estiloFactura } from "@/lib/pdf-factura-estilo";
 import { referenciaFactura } from "@/lib/format";
-import { CACHE_PDF, rutaPdfTienda } from "@/lib/rutas-pdf";
+import { CACHE_PDF, rutaPdfGuardada, rutaPdfTienda, rutaPdfVersion } from "@/lib/rutas-pdf";
 // El dominio se importa aquí arriba y no con await import() dentro de cada
 // función: un módulo que se carga de las dos formas obliga al empaquetador a
 // generar un auxiliar que acabó en el arranque del servidor, en una
@@ -50,7 +50,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
   const data = { factura_id: facturaId };
   const { data: factura, error: fErr } = await tabla(supabaseAdmin, "facturas")
     .select(
-      "id, tienda_id, estado, serie, numero, tipo, fecha, desglose_iva, receptor_snapshot, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot",
+      "id, tienda_id, estado, serie, numero, tipo, fecha, desglose_iva, receptor_snapshot, fecha_vencimiento, base_imponible, iva_total, total, notas, cliente_nombre, cliente_nif, cliente_direccion, emisor_nombre, emisor_cif, emisor_direccion, ejercicio, emisor_snapshot, pdf_url",
     )
     .eq("id", data.factura_id)
     .maybeSingle();
@@ -176,17 +176,26 @@ async function guardarPdfTienda(
   const { factura, pdfData } = await leerDatosPdfFactura(sb, facturaId, userId);
   // Un borrador todavía cambia: su PDF no se guarda como el definitivo.
   if (factura.estado === "borrador") throw new Error("Es un borrador: emítelo antes");
-  const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+  const fija = rutaPdfTienda(factura.tienda_id, factura.id);
+  // Rehecho: con otro nombre, para que ninguna caché siga dando el anterior.
+  const ruta = reemplazar ? rutaPdfVersion(fija, Date.now().toString(36)) : fija;
   const blob = await generarFacturaPDF(pdfData);
   const { error } = await sb.storage
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
       cacheControl: CACHE_PDF,
-      upsert: reemplazar,
     });
   if (error && !yaExiste(error)) throw new Error(`No se pudo guardar el PDF: ${error.message}`);
-  await tabla(sb, "facturas").update({ pdf_url: ruta }).eq("id", factura.id);
+  const { error: updErr } = await tabla(sb, "facturas")
+    .update({ pdf_url: ruta })
+    .eq("id", factura.id);
+  if (updErr) throw new Error(updErr.message);
+  // El que había, fuera: ya nadie lo apunta. Si falla, queda huérfano y no se ve.
+  if (reemplazar) {
+    const anterior = rutaPdfGuardada(factura.pdf_url, fija);
+    if (anterior !== ruta) await sb.storage.from("facturas").remove([anterior]);
+  }
   return ruta;
 }
 
@@ -216,7 +225,7 @@ async function guardarPdfTrasEmitir(userId: string, facturaId: string): Promise<
  */
 async function pdfFacturaTienda(
   sb: any,
-  factura: { id: string; tienda_id: string; estado: string },
+  factura: { id: string; tienda_id: string; estado: string; pdf_url: string | null },
   userId: string,
 ): Promise<{ ok: true; path: string; url: string }> {
   // Un borrador se imprime tal como está ahora, aparte, y no cuenta como su PDF.
@@ -237,10 +246,10 @@ async function pdfFacturaTienda(
     return { ok: true, path: rutaBorrador, url: f.data.signedUrl as string };
   }
 
-  const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+  let ruta = rutaPdfGuardada(factura.pdf_url, rutaPdfTienda(factura.tienda_id, factura.id));
   let firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
   if (firmada.error || !firmada.data?.signedUrl) {
-    await guardarPdfTienda(sb, factura.id, userId);
+    ruta = await guardarPdfTienda(sb, factura.id, userId);
     firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
   }
   if (firmada.error || !firmada.data?.signedUrl) throw new Error("No se pudo abrir el PDF");
@@ -259,7 +268,7 @@ export const generarYSubirFacturaPDF = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const sb = adminComoUsuario(context.userId);
     const { data: factura } = await tabla(sb, "facturas")
-      .select("id, tienda_id, estado")
+      .select("id, tienda_id, estado, pdf_url")
       .eq("id", data.factura_id)
       .maybeSingle();
     if (!factura) throw new Error("Factura no encontrada");
@@ -281,7 +290,7 @@ export const abrirFacturaPDF = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ factura_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: factura } = await tabla(context.supabase, "facturas")
-      .select("id, tienda_id, estado")
+      .select("id, tienda_id, estado, pdf_url")
       .eq("id", data.factura_id)
       .maybeSingle();
     if (!factura) throw new Error("Factura no encontrada");
@@ -290,7 +299,7 @@ export const abrirFacturaPDF = createServerFn({ method: "POST" })
     const sb = adminComoUsuario(context.userId);
 
     if (factura.estado !== "borrador") {
-      const ruta = rutaPdfTienda(factura.tienda_id, factura.id);
+      const ruta = rutaPdfGuardada(factura.pdf_url, rutaPdfTienda(factura.tienda_id, factura.id));
       const firmada = await sb.storage.from("facturas").createSignedUrl(ruta, 60 * 10);
       if (!firmada.error && firmada.data?.signedUrl) {
         return { ok: true as const, path: ruta, url: firmada.data.signedUrl as string };
@@ -1197,6 +1206,16 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
     z.object({ tipo: z.enum(["tienda", "textil"]), factura_id: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    // Dónde está su PDF, antes de que la fila desaparezca: si se rehízo, tiene
+    // otro nombre (rutaPdfVersion).
+    const { data: fila } = await tabla(
+      context.supabase,
+      data.tipo === "tienda" ? "facturas" : "textil_facturas",
+    )
+      .select(data.tipo === "tienda" ? "pdf_url" : "pdf_path")
+      .eq("id", data.factura_id)
+      .maybeSingle();
+    const guardada: string | null = fila?.pdf_url ?? fila?.pdf_path ?? null;
     const r = await llamarRpc<{
       referencia: string | null;
       tienda_id: string | null;
@@ -1211,6 +1230,7 @@ export const borrarUltimaFactura = createServerFn({ method: "POST" })
       await adminComoUsuario(context.userId)
         .storage.from("facturas")
         .remove([
+          rutaPdfGuardada(guardada, `${carpeta}/${data.factura_id}.pdf`),
           `${carpeta}/${data.factura_id}.pdf`,
           // El de 80 mm que se generaba antes, si lo hay.
           `${carpeta}/${data.factura_id}-80mm.pdf`,
