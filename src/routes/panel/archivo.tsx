@@ -23,6 +23,7 @@ import {
 } from "@/components/filtros/Filtros";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { DescargarPdfs } from "@/components/archivo/DescargarPdfs";
+import { RehacerPdfsFacturas } from "@/components/archivo/RehacerPdfsFacturas";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { listarArchivo } from "@/lib/archivo.functions";
 import { eur, fechaCorta } from "@/lib/format";
@@ -106,7 +107,10 @@ function ArchivoPage() {
             del textil. Elige el periodo, filtra y descárgalos en un ZIP.
           </p>
         </div>
-        <DescargarPdfs docs={filtrados} nombreZip={nombreZip(periodo.seleccion, periodo.rango)} />
+        <div className="flex flex-wrap gap-2">
+          <RehacerPdfsFacturas />
+          <DescargarPdfs docs={filtrados} nombreZip={nombreZip(periodo.seleccion, periodo.rango)} />
+        </div>
       </div>
 
       <BarraFiltros>

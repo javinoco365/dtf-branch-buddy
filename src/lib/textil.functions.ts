@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
+import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esAdminActivo, exigirFilas } from "./acceso";
 import { rutaPdfTextil } from "./rutas-pdf";
@@ -12,6 +12,7 @@ import type { Cobro } from "./cobros.functions";
 // forma normal, y cargarlo de las dos formas tira el arranque del servidor
 // (como logo-descarga, más abajo). jspdf sigue cargándose bajo demanda dentro.
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
+import { estiloFactura } from "@/lib/pdf-factura-estilo";
 import {
   generarPresupuestoPDF,
   type PresupuestoPDFData,
@@ -1321,7 +1322,13 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
     titulo: factura.tipo === "simplificada" ? "FACTURA SIMPLIFICADA" : undefined,
     // Y lleva las líneas sin IVA y la suma Base / IVA / TOTAL.
     simplificada: factura.tipo === "simplificada",
-    logo: await descargarLogo(emisor.logo_url),
+    // La imagen, de la plantilla de textil y de Ajustes > Empresa (ver estiloFactura).
+    ...(await estiloFactura(
+      supabaseAdmin,
+      { ambito: "textil" },
+      emisor.logo_url,
+      factura.empresa_id,
+    )),
     fecha: factura.fecha ?? new Date().toISOString(),
     fecha_vencimiento: factura.vencimiento,
     emisor: {
@@ -1365,14 +1372,20 @@ const yaExiste = (e: { message?: string; statusCode?: string | number } | null) 
  * factura tiene que imprimirse como se emitió aunque la marca cambie de logo
  * después.
  *
- * El primero que se guarda es el definitivo: no se sobrescribe nunca. Se
+ * El primero que se guarda es el que vale y no se sobrescribe, salvo con
+ * `reemplazar` (rehacerPdfsTextil: el mismo documento con el diseño de hoy). Se
  * guarda la ruta, no una URL firmada: las URL caducan, y guardar una de un
  * año en la base es guardar un enlace que un día deja de funcionar sin que
  * nadie se entere. La URL se pide al abrir.
  *
  * `sb` es el cliente de servicio con el autor puesto (adminComoUsuario).
  */
-async function guardarPdfTextil(sb: any, facturaId: string, userId: string): Promise<string> {
+async function guardarPdfTextil(
+  sb: any,
+  facturaId: string,
+  userId: string,
+  reemplazar = false,
+): Promise<string> {
   const { factura, pdfData } = await leerDatosPdfTextil(sb, facturaId, userId);
 
   const blob = await generarFacturaPDF(pdfData);
@@ -1381,7 +1394,7 @@ async function guardarPdfTextil(sb: any, facturaId: string, userId: string): Pro
     .from("facturas")
     .upload(ruta, new Uint8Array(await blob.arrayBuffer()), {
       contentType: "application/pdf",
-      upsert: false,
+      upsert: reemplazar,
     });
   if (subErr && !yaExiste(subErr)) throw new Error(`No se pudo guardar el PDF: ${subErr.message}`);
 
@@ -1968,4 +1981,47 @@ export const vistaPreviaPresupuestoTextil = createServerFn({ method: "GET" })
     const presupuesto = (p as Record<string, any> | null) ?? null;
     const { datos, base } = await datosPdfTextil(sb, presupuesto, empresa);
     return { datos, base, numero: texto(presupuesto?.numero) };
+  });
+
+/**
+ * Rehace el PDF de las facturas y tickets textil ya emitidos con el diseño de
+ * hoy y reemplaza el guardado (ver rehacerPdfsTienda). Solo administradores.
+ */
+export const rehacerPdfsTextil = createServerFn({ method: "POST" })
+  .middleware([exigeAdmin])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        desde: z.number().int().min(0).default(0),
+        limite: z.number().int().min(0).max(10).default(5),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const sb = adminComoUsuario(context.userId);
+    const {
+      data: filas,
+      count,
+      error,
+    } = await tabla(sb, "textil_facturas")
+      .select("id, numero", { count: "exact" })
+      .neq("estado", "borrador")
+      .order("fecha")
+      .order("id")
+      .range(data.desde, data.desde + Math.max(data.limite, 1) - 1);
+    if (error) throw new Error(error.message);
+    const lista =
+      data.limite === 0 ? [] : ((filas ?? []) as { id: string; numero: string | null }[]);
+    let hechos = 0;
+    const fallidos: { id: string; referencia: string; motivo: string }[] = [];
+    for (const f of lista) {
+      try {
+        await guardarPdfTextil(sb, f.id, context.userId, true);
+        hechos++;
+      } catch (e) {
+        fallidos.push({ id: f.id, referencia: f.numero ?? f.id, motivo: (e as Error).message });
+      }
+    }
+    return { total: count ?? 0, hechos, fallidos, siguiente: data.desde + lista.length };
   });

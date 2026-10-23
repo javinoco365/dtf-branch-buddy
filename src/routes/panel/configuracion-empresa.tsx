@@ -30,6 +30,7 @@ type EmpresaForm = {
   pais: string;
   email_fiscal: string;
   telefono: string;
+  factura_metodo_pago: string;
   coste_consumibles_metro: number;
   coste_packaging_metro: number;
   coste_electricidad_metro: number;
@@ -50,6 +51,7 @@ const EMPTY: EmpresaForm = {
   pais: "España",
   email_fiscal: "",
   telefono: "",
+  factura_metodo_pago: "",
   coste_consumibles_metro: 0,
   coste_packaging_metro: 0,
   coste_electricidad_metro: 0,
@@ -83,6 +85,7 @@ function EmpresaPage() {
         pais: data.pais ?? "España",
         email_fiscal: data.email_fiscal ?? "",
         telefono: data.telefono ?? "",
+        factura_metodo_pago: data.factura_metodo_pago ?? "",
         coste_consumibles_metro: Number(data.coste_consumibles_metro ?? 0),
         coste_packaging_metro: Number(data.coste_packaging_metro ?? 0),
         coste_electricidad_metro: Number(data.coste_electricidad_metro ?? 0),
@@ -105,8 +108,18 @@ function EmpresaPage() {
       // Sin la migración de tickets aplicada, esas columnas no existen: no se
       // mandan, o el guardado entero fallaría.
       const conTickets = "serie_simplificada" in data;
-      const { serie_simplificada, limite_simplificada, limite_simplificada_particular, ...resto } =
-        f;
+      // Igual con el método de pago, sin la migración 20261102100000.
+      const conPago = "factura_metodo_pago" in data;
+      const {
+        serie_simplificada,
+        limite_simplificada,
+        limite_simplificada_particular,
+        factura_metodo_pago,
+        ...base
+      } = f;
+      const resto = conPago
+        ? { ...base, factura_metodo_pago: factura_metodo_pago.trim() || null }
+        : base;
       await guardarEmpresa(
         data.id,
         conTickets
@@ -187,6 +200,13 @@ function EmpresaPage() {
                   disabled={!isAdmin}
                 />
               </div>
+              <Field
+                label="Método de pago en las facturas"
+                v={f.factura_metodo_pago}
+                on={(v) => set("factura_metodo_pago", v)}
+                placeholder="Transferencia bancaria ES00 0000 0000 0000 0000 0000"
+                disabled={!isAdmin || (!!data && !("factura_metodo_pago" in data))}
+              />
               <Field
                 label="Dirección"
                 v={f.direccion}
