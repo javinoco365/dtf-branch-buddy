@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,13 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { tabla } from "@/lib/rpc";
 import { upsertTextilCliente } from "@/lib/textil.functions";
 import { avisarError } from "@/lib/errores";
+import { cn } from "@/lib/utils";
 
 export type ClienteTextil = {
   id: string;
@@ -34,10 +37,10 @@ export type ClienteTextil = {
   nif?: string | null;
 };
 
-const NUEVO_CLIENTE = "__nuevo_cliente__";
-
 /**
- * El desplegable de cliente de pedidos y presupuestos textil, con alta rápida.
+ * El desplegable de cliente de pedidos y presupuestos (textil y tiendas) y del
+ * pedido manual de tienda: con buscador (nombre, email, teléfono o NIF) y alta
+ * rápida.
  *
  * «+ Nuevo cliente…» abre un diálogo encima del formulario, sin cerrarlo ni
  * perder lo que ya se ha rellenado. Al crearlo queda elegido y entra en la
@@ -65,36 +68,72 @@ export function SelectorClienteTextil({
   claveLista?: readonly unknown[];
 }) {
   const [altaAbierta, setAltaAbierta] = useState(false);
+  const [abierto, setAbierto] = useState(false);
+  const elegido = clientes.find((c) => c.id === valor);
 
   return (
     <>
-      <Select
-        value={valor ?? ""}
-        onValueChange={(v) => {
-          if (v === NUEVO_CLIENTE) {
-            setAltaAbierta(true);
-            return;
-          }
-          const c = clientes.find((x) => x.id === v);
-          if (c) onElegir(c);
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Selecciona…" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={NUEVO_CLIENTE}>
-            <span className="flex items-center gap-1.5">
-              <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
+      {/* modal: dentro de un diálogo, si no, la lista no se deja desplazar. */}
+      <Popover open={abierto} onOpenChange={setAbierto} modal>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={abierto}
+            className="w-full justify-between font-normal"
+          >
+            <span className={cn("truncate", !elegido && "text-muted-foreground")}>
+              {elegido?.nombre ?? "Buscar o crear cliente…"}
             </span>
-          </SelectItem>
-          {clientes.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] min-w-72 p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Nombre, email, teléfono o NIF…" />
+            <CommandList>
+              <CommandEmpty>Ningún cliente coincide.</CommandEmpty>
+              <CommandGroup>
+                {clientes.map((c) => (
+                  <CommandItem
+                    key={c.id}
+                    // Por lo que se busca: el id al final para que dos con el
+                    // mismo nombre no se confundan.
+                    value={[c.nombre, c.email, c.telefono, c.nif, c.id].filter(Boolean).join(" ")}
+                    onSelect={() => {
+                      onElegir(c);
+                      setAbierto(false);
+                    }}
+                  >
+                    <Check
+                      className={cn("mr-2 h-4 w-4", c.id === valor ? "opacity-100" : "opacity-0")}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{c.nombre}</span>
+                    {c.email && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">{c.email}</span>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            {/* Fuera de la lista: siempre a la vista, y con algo escrito Intro
+                elige el primer cliente que coincide, no el alta. */}
+            <div className="border-t p-1">
+              <button
+                type="button"
+                className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  setAbierto(false);
+                  setAltaAbierta(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Nuevo cliente…
+              </button>
+            </div>
+          </Command>
+        </PopoverContent>
+      </Popover>
 
       <NuevoClienteTextilDialog
         open={altaAbierta}
