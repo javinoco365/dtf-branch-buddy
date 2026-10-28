@@ -12,6 +12,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { EtiquetaPrimerPedido } from "@/components/pedidos/PrimerPedido";
+import { usePrimerPedido } from "@/hooks/use-primer-pedido";
+import type { ResumenPrimerPedido } from "@/dominio/primer-pedido";
 import {
   Select,
   SelectContent,
@@ -382,6 +385,11 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
   // más antiguo al más nuevo. Como mucho 500 de una vez.
+  // ¿Es el primer pedido de su cliente? Lo dice la base mirando todos los
+  // pedidos de la empresa, no solo estos (usePrimerPedido).
+  const idsVisibles = useMemo(() => filtrados.map((p) => p.id), [filtrados]);
+  const primerPedido = usePrimerPedido("tienda", idsVisibles);
+
   const sinDocumento = useMemo(
     () =>
       ordenarPedidos(
@@ -685,6 +693,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   <TarjetaPedido
                     key={p.id}
                     pedido={p}
+                    primerPedido={primerPedido.get(p.id)}
                     abierta={expandida === p.id}
                     mostrarTienda={!tiendaId}
                     conCobros={cobrosDisponibles}
@@ -756,6 +765,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                         <FilaPedido
                           key={p.id}
                           pedido={p}
+                          primerPedido={primerPedido.get(p.id)}
                           abierta={expandida === p.id}
                           mostrarTienda={!tiendaId}
                           conCobros={cobrosDisponibles}
@@ -1023,6 +1033,8 @@ type PropsPedido = {
   acciones: AccionesPedido;
   /** Lo que entra a esta hora o después se hace al día siguiente ('hh:mm'). */
   horaCorte: string;
+  /** Si es el primer pedido de su cliente (primer_pedido_resumen). */
+  primerPedido?: ResumenPrimerPedido;
 };
 
 /**
@@ -1118,6 +1130,7 @@ const FilaPedido = memo(function FilaPedido({
   conCobros,
   acciones,
   horaCorte,
+  primerPedido,
 }: PropsPedido) {
   const { onToggle, onEstadoChange, onEditar, onTracking, onBorrar, onFacturar, onCobros } =
     accionesDeFila(pedido, conCobros, acciones);
@@ -1151,8 +1164,16 @@ const FilaPedido = memo(function FilaPedido({
           {/* Con table-fixed la celda ya no se estira: un correo largo se
               recorta con puntos suspensivos en vez de descuadrar la fila.
               El title deja verlo entero al pasar el ratón. */}
-          <div className="font-medium truncate" title={pedido.cliente_nombre ?? undefined}>
-            {pedido.cliente_nombre ?? "—"}
+          {/* La etiqueta baja a la línea siguiente si no cabe: antes que
+              recortar el nombre. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <div
+              className="max-w-full shrink-0 truncate font-medium"
+              title={pedido.cliente_nombre ?? undefined}
+            >
+              {pedido.cliente_nombre ?? "—"}
+            </div>
+            <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
           </div>
           {pedido.cliente_email && (
             <div className="text-xs text-muted-foreground truncate" title={pedido.cliente_email}>
@@ -1253,6 +1274,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
   conCobros,
   acciones,
   horaCorte,
+  primerPedido,
 }: PropsPedido) {
   const { onToggle, onEstadoChange, onEditar, onTracking, onBorrar, onFacturar, onCobros } =
     accionesDeFila(pedido, conCobros, acciones);
@@ -1294,6 +1316,9 @@ const TarjetaPedido = memo(function TarjetaPedido({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Aquí y no junto al nombre: el nombre va dentro del botón de la
+              tarjeta, y un botón no puede ir dentro de otro. */}
+          <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
           <RealizadoEn tabla="pedidos" pedido={pedido} />
           <EtiquetaOrigen web={pedido.origen === "woocommerce"} />

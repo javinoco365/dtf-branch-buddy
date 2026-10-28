@@ -95,6 +95,54 @@ export const DATOS = {
 };
 
 export const RPC = {
+  // Primer pedido (20261103100000): uno de cada tres es el primero de su
+  // cliente, otro repite y el tercero es dudoso (solo coincide el nombre).
+  primer_pedido_resumen: () => [
+    ...PEDIDOS.map((p, i) => ({
+      origen: "tienda",
+      id: p.id,
+      tiene_datos: true,
+      cancelado: p.estado === "cancelado",
+      fuertes: i % 3 === 1 ? 1 : 0,
+      solo_nombre: i % 3 === 2 ? 2 : 0,
+      decision: null,
+    })),
+    ...TEXTIL_PEDIDOS.map((p, i) => ({
+      origen: "textil",
+      id: p.id,
+      tiene_datos: true,
+      cancelado: false,
+      fuertes: 0,
+      solo_nombre: i === 1 ? 1 : 0,
+      decision: null,
+    })),
+  ],
+  primer_pedido_parecidos: () => [
+    {
+      origen: "tienda",
+      id: PEDIDOS[0].id,
+      procedencia: "Tienda Uno",
+      numero: PEDIDOS[0].numero,
+      fecha: PEDIDOS[0].fecha_pedido,
+      nombre: PEDIDOS[0].cliente_nombre,
+      email: "otro@ejemplo.com",
+      telefono: null,
+      motivos: ["nombre"],
+      fuerte: false,
+    },
+    {
+      origen: "textil",
+      id: TEXTIL_PEDIDOS[0].id,
+      procedencia: "Textil personalizado",
+      numero: TEXTIL_PEDIDOS[0].numero,
+      fecha: TEXTIL_PEDIDOS[0].fecha,
+      nombre: PEDIDOS[0].cliente_nombre,
+      email: null,
+      telefono: "600000009",
+      motivos: ["nombre"],
+      fuerte: false,
+    },
+  ],
   // Niveles (20261031200100): el usuario de prueba es admin activo, como el
   // de user_roles. Sin esto la app lo vería sin nivel y en solo lectura.
   mi_nivel: "admin",

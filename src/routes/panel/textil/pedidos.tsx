@@ -55,6 +55,8 @@ import {
   utilizable,
 } from "@/dominio/stock-textil";
 import type { VarianteCatalogo } from "@/dominio/tipos-textil";
+import { EtiquetaPrimerPedido } from "@/components/pedidos/PrimerPedido";
+import { usePrimerPedido } from "@/hooks/use-primer-pedido";
 import {
   SelectorClienteTextil,
   type ClienteTextil,
@@ -180,6 +182,11 @@ function PedidosPage() {
     });
   }, [data, filtros.q, filtros.estado, filtros.cobro, cobrosPorPedido, periodo.rango]);
   // El pie suma lo filtrado, sin los cancelados (se cuentan aparte).
+  // ¿Es el primer pedido de su cliente? Mirando todos los pedidos de la
+  // empresa, también los de las tiendas (usePrimerPedido).
+  const idsVisibles = useMemo(() => (filtrados as any[]).map((p) => p.id as string), [filtrados]);
+  const primerPedido = usePrimerPedido("textil", idsVisibles);
+
   const totales = useMemo(
     () =>
       totalesPedidos(
@@ -364,7 +371,16 @@ function PedidosPage() {
                   >
                     <TableCell className="font-mono text-xs">{p.numero}</TableCell>
                     <TableCell>{fechaCorta(p.fecha)}</TableCell>
-                    <TableCell>{p.cliente_nombre ?? "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span>{p.cliente_nombre ?? "—"}</span>
+                        <EtiquetaPrimerPedido
+                          origen="textil"
+                          id={p.id}
+                          resumen={primerPedido.get(p.id)}
+                        />
+                      </div>
+                    </TableCell>
                     <TableCell>{p.marca?.nombre ?? "—"}</TableCell>
                     <TableCell>
                       {escribir ? (
