@@ -189,6 +189,16 @@ const esquemaLectura = z.object({
 export type LecturaPresupuesto = z.infer<typeof esquemaLectura>;
 export type LineaLeidaPresupuesto = z.infer<typeof lineaLeida>;
 
+/** El valor de `bruto` en la ruta de un error de zod: undefined si falta. */
+function valorEn(bruto: unknown, ruta: readonly PropertyKey[]): unknown {
+  let v: unknown = bruto;
+  for (const k of ruta) {
+    if (v == null || typeof v !== "object") return undefined;
+    v = (v as Record<PropertyKey, unknown>)[k];
+  }
+  return v;
+}
+
 /** Valida la salida de la IA. Si no vale, dice por qué, en castellano. */
 export function validarLecturaPresupuesto(
   bruto: unknown,
@@ -199,12 +209,12 @@ export function validarLecturaPresupuesto(
   const donde = primero?.path.join(".") || "la respuesta";
   const que =
     primero?.code === "invalid_type"
-      ? primero.received === "undefined"
+      ? valorEn(bruto, primero.path) === undefined
         ? "falta"
         : "no es del tipo esperado"
       : primero?.code === "too_big"
         ? "es demasiado larga"
-        : primero?.code === "invalid_enum_value"
+        : primero?.code === "invalid_value"
           ? "no es un valor permitido"
           : "no es válido";
   return {
