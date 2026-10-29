@@ -28,7 +28,7 @@ import {
   pendienteDeEnlace,
   type Parcial,
 } from "@/dominio/conciliar-a-mano";
-import { desgloseDeRecibo } from "@/dominio/recibos-tarjeta";
+import { desgloseDeRecibo, desgloseRecibos } from "@/dominio/recibos-tarjeta";
 
 /**
  * Conciliación con el motor: movimientos de todas las cuentas contra facturas
@@ -1135,4 +1135,81 @@ export const verDesgloseRecibo = createServerFn({ method: "GET" })
     );
     if (!d) throw new Error("Ese movimiento no es el recibo de una tarjeta");
     return d;
+  });
+
+/**
+ * Lo que la pestaña «Para resolver» necesita y la pantalla no tiene ya: los
+ * enlaces con diferencia de importe (cobrados en parte, comisiones o enlaces
+ * equivocados) y los recibos de tarjeta que no cuadran con sus compras. Lo
+ * demás (movimientos y facturas pendientes, extractos) ya está cargado.
+ */
+export const verIncidencias = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = context.supabase;
+
+    // Enlaces con diferencia: de la función si está, si no de las tablas.
+    let diferencias: EnlaceGuardado[];
+    const r = await filasDeFuncion(sb, "banco_enlaces")
+      .select("grupo, estado, motivo, diferencia, movimientos, documentos")
+      .neq("diferencia", 0)
+      .limit(300);
+    if (!r.error) {
+      diferencias = ((r.data ?? []) as FilaEnlace[]).map(enlaceDe);
+    } else {
+      diferencias = (await enlacesDeTablas(sb))
+        .filter((e) => Number(e.diferencia) !== 0)
+        .map(enlaceDe);
+    }
+
+    // Recibos de las tarjetas (cuentas sin IBAN) que no cuadran.
+    const cuentas = await tabla(sb, "banco_cuentas").select("id, alias, iban");
+    if (cuentas.error) throw new Error(cuentas.error.message);
+    const tarjetas = (
+      (cuentas.data ?? []) as { id: string; alias: string; iban: string | null }[]
+    ).filter((c) => !c.iban);
+    const recibos: {
+      id: string;
+      fecha: string;
+      importe: number;
+      diferencia: number;
+      cuenta: string;
+    }[] = [];
+    for (const t of tarjetas) {
+      const movs = await leerTodas<{
+        id: string;
+        fecha: string;
+        concepto: string | null;
+        importe: number | string;
+        traspaso_con: string | null;
+      }>((a, b) =>
+        tabla(sb, "banco_movimientos")
+          .select("id, fecha, concepto, importe, traspaso_con")
+          .eq("cuenta_id", t.id)
+          .order("fecha")
+          .order("id")
+          .range(a, b),
+      );
+      if (movs.error) throw new Error(movs.error.message);
+      const desglose = desgloseRecibos(
+        movs.data.map((m) => ({
+          id: m.id,
+          fecha: m.fecha,
+          concepto: m.concepto ?? "",
+          importe: Number(m.importe),
+          es_recibo: !!m.traspaso_con && Number(m.importe) > 0,
+        })),
+      );
+      for (const d of desglose) {
+        if (d.cuadra) continue;
+        recibos.push({
+          id: d.recibo.id,
+          fecha: d.recibo.fecha,
+          importe: d.recibo.importe,
+          diferencia: d.diferencia,
+          cuenta: t.alias,
+        });
+      }
+    }
+    return { diferencias, recibos };
   });
