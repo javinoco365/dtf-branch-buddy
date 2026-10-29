@@ -560,16 +560,31 @@ export const verEnlaces = createServerFn({ method: "GET" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const p = await leerPagina<FilaEnlace>(
-      (a, b) =>
-        filasDeFuncion(context.supabase, "banco_enlaces", { count: "exact" })
+    // El recuento va en otra llamada, sin orden: en la función, contar y
+    // ordenar en la misma petición le hace a la API escribir «record.fecha»
+    // («column record.fecha does not exist»).
+    const consulta = async (a: number, b: number): Promise<PaginaContada<FilaEnlace>> => {
+      const [filas, total] = await Promise.all([
+        filasDeFuncion(context.supabase, "banco_enlaces")
           .select("grupo, estado, motivo, diferencia, movimientos, documentos")
           .eq("estado", data.estado)
           .order("fecha", { ascending: false })
           .order("grupo")
           .range(a, b),
-      data.pagina,
-    );
+        filasDeFuncion(context.supabase, "banco_enlaces", { count: "exact", head: true }).eq(
+          "estado",
+          data.estado,
+        ),
+      ]);
+      return { data: filas.data, error: filas.error ?? total.error, count: total.count };
+    };
+    let p: Awaited<ReturnType<typeof leerPagina<FilaEnlace>>> = null;
+    try {
+      p = await leerPagina<FilaEnlace>(consulta, data.pagina);
+    } catch (e) {
+      // Si la API sigue sin poder leer la función, de las tablas (abajo).
+      if (!/does not exist/.test(String((e as Error)?.message))) throw e;
+    }
     if (p) {
       return {
         enlaces: p.filas.map(enlaceDe),
