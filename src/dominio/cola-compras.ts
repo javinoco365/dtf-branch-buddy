@@ -369,6 +369,16 @@ export const ESQUEMA_LECTURA_JSON = {
   },
 } as const;
 
+/** El valor de `bruto` en la ruta de un error de zod: undefined si falta. */
+function valorEn(bruto: unknown, ruta: readonly PropertyKey[]): unknown {
+  let v: unknown = bruto;
+  for (const k of ruta) {
+    if (v == null || typeof v !== "object") return undefined;
+    v = (v as Record<PropertyKey, unknown>)[k];
+  }
+  return v;
+}
+
 /** Valida la salida de la IA. Si no vale, dice por qué, en castellano. */
 export function validarLectura(
   bruto: unknown,
@@ -380,12 +390,12 @@ export function validarLectura(
   // Los mensajes de zod vienen en inglés: aquí, en castellano.
   const que =
     primero?.code === "invalid_type"
-      ? primero.received === "undefined"
+      ? valorEn(bruto, primero.path) === undefined
         ? "falta"
         : "no es del tipo esperado"
       : primero?.code === "too_big" || primero?.code === "too_small"
         ? "está fuera de rango"
-        : primero?.code === "invalid_enum_value"
+        : primero?.code === "invalid_value"
           ? "no es un valor permitido"
           : "no es válido";
   return { ok: false, error: `La lectura no tiene la forma esperada: ${donde} ${que}.` };
