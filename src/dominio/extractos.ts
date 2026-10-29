@@ -236,7 +236,17 @@ export function partirCsv(texto: string, sep: string): string[][] {
 
 // Cómo llama cada banco a cada cosa. Se compara sin acentos y en minúsculas.
 const CABECERAS = {
-  fecha: ["fecha", "fecha operacion", "fecha valor", "f operacion", "fecha contable", "date"],
+  fecha: [
+    "fecha",
+    "fecha operacion",
+    "fecha valor",
+    "f operacion",
+    "fecha contable",
+    // BBVA: «F. CONTABLE» y «F. VALOR».
+    "f contable",
+    "f valor",
+    "date",
+  ],
   concepto: ["concepto", "descripcion", "detalle", "observaciones", "referencia", "description"],
   importe: ["importe", "importe eur", "cantidad", "amount"],
   haber: ["haber", "ingreso", "abono", "credito"],
@@ -254,7 +264,8 @@ function limpiar(v: unknown): string {
     .trim();
 }
 
-function buscarColumna(cabecera: unknown[], nombres: string[]): number {
+function buscarColumna(cabecera: unknown, nombres: string[]): number {
+  if (!Array.isArray(cabecera)) return -1;
   const limpias = cabecera.map(limpiar);
   const exacta = limpias.findIndex((c) => nombres.includes(c));
   if (exacta !== -1) return exacta;
@@ -271,6 +282,24 @@ function localizarCabecera(filas: unknown[][]): number {
     if (buscarColumna(f, CABECERAS.fecha) !== -1 && importe) return i;
   }
   return -1;
+}
+
+/**
+ * Las filas de un Excel, tal como las da el lector. read-excel-file 9 devuelve
+ * una lista de hojas (`{ sheet, data }`); las versiones de antes, las filas de
+ * la primera hoja. De un libro con varias hojas se toma la primera que tiene
+ * cabecera de extracto (fecha e importe); si ninguna, la primera.
+ */
+export function filasDeLibro(libro: unknown): unknown[][] {
+  if (!Array.isArray(libro) || libro.length === 0) return [];
+  const esHoja = (h: unknown): h is { data: unknown[][] } =>
+    !!h &&
+    typeof h === "object" &&
+    !Array.isArray(h) &&
+    Array.isArray((h as { data?: unknown }).data);
+  if (!libro.some(esHoja)) return libro as unknown[][];
+  const hojas = libro.filter(esHoja).map((h) => h.data);
+  return hojas.find((filas) => localizarCabecera(filas) !== -1) ?? hojas[0] ?? [];
 }
 
 // ---------------------------------------------------------------------------

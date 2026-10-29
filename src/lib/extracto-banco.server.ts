@@ -11,6 +11,7 @@
 
 import {
   extractoDeFilas,
+  filasDeLibro,
   leerExtractoTexto,
   type Extracto,
   type Opciones,
@@ -44,5 +45,5 @@ export async function leerExtracto(
 async function leerXlsx(bytes: Uint8Array): Promise<unknown[][]> {
   const { default: readXlsxFile } = await import("read-excel-file/node");
   // Sin esquema: se lee tal cual y las columnas se buscan por su cabecera.
-  return (await readXlsxFile(Buffer.from(bytes))) as unknown as unknown[][];
+  return filasDeLibro(await readXlsxFile(Buffer.from(bytes)));
 }
