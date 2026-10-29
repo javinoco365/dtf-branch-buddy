@@ -10,12 +10,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Lightbulb,
+  Receipt,
+  Search,
   Undo2,
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -37,10 +41,12 @@ import {
 import { eur, fechaCorta, numeroJusto } from "@/lib/format";
 import {
   aplicarPlan,
+  buscarConciliables,
   confirmarEnlace,
   deshacerEnlace,
   desmarcarTraspaso,
   enlazarManual,
+  verDesgloseRecibo,
   verEnlaces,
   verTraspasos,
   type Cuantos,
@@ -192,11 +198,11 @@ export function MotorConciliacion({
   });
   const enlazarFn = useServerFn(enlazarManual);
   const enlazar = useMutation({
-    mutationFn: (v: { movimiento: string; documento: DocumentoConciliable }) =>
+    mutationFn: (v: { movimiento: string; documentos: DocumentoConciliable[] }) =>
       enlazarFn({
         data: {
           movimientos: [v.movimiento],
-          documentos: [{ tipo: v.documento.tipo, id: v.documento.id }],
+          documentos: v.documentos.map((d) => ({ tipo: d.tipo, id: d.id })),
         },
       }),
     onSuccess: () => {
@@ -206,6 +212,10 @@ export function MotorConciliacion({
     },
     onError: (e) => aviso(e, "No se pudo enlazar"),
   });
+
+  // Las tarjetas se dan de alta sin IBAN: sus recibos se pueden desglosar.
+  const esTarjeta = (cuentaId: string | null) =>
+    !!cuentaId && (banco?.cuentas ?? []).some((c: any) => String(c.id) === cuentaId && !c.iban);
 
   const cuentaDe = (m: Movimiento) =>
     m.cuenta_id ? (alias.get(m.cuenta_id) ?? "—") : "Sin cuenta";
@@ -225,10 +235,17 @@ export function MotorConciliacion({
             </span>
           </div>
           {escribir && (
-            <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
-              <Wand2 className="h-4 w-4 mr-2" />
-              Aplicar la propuesta
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
+                <Wand2 className="h-4 w-4 mr-2" />
+                Aplicar la propuesta
+              </Button>
+              {!hayPlan && sinConciliar.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  No hay nada que aplicar: concilia cada movimiento con «Conciliar».
+                </span>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -311,7 +328,7 @@ export function MotorConciliacion({
                           {escribir && (
                             <Button variant="outline" size="sm" onClick={() => setSugerir(m)}>
                               <Lightbulb className="h-4 w-4 mr-1" />
-                              Sugerencias
+                              Conciliar
                             </Button>
                           )}
                         </TableCell>
@@ -413,6 +430,7 @@ export function MotorConciliacion({
         <TabsContent value="traspasos">
           <HistorialTraspasos
             cuentaDe={cuentaDe}
+            esTarjeta={esTarjeta}
             ocupado={desmarcar.isPending}
             alDesmarcar={(id) => desmarcar.mutate(id)}
           />
@@ -428,22 +446,35 @@ export function MotorConciliacion({
       </p>
 
       <Dialog open={!!sugerir} onOpenChange={(o) => !o && setSugerir(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Facturas con el mismo importe</DialogTitle>
+            <DialogTitle>Conciliar el movimiento</DialogTitle>
             <DialogDescription>
               {sugerir &&
                 `${fechaCorta(sugerir.fecha)} · ${sugerir.concepto || "sin concepto"} · ${eur(sugerir.importe)}. `}
-              Las más probables primero. No se guarda nada hasta que enlazas una.
+              No se guarda nada hasta que enlazas.
             </DialogDescription>
           </DialogHeader>
           {sugerir && (
-            <ListaSugerencias
-              movimiento={sugerir}
-              libres={libres}
-              ocupado={enlazar.isPending}
-              alEnlazar={(documento) => enlazar.mutate({ movimiento: sugerir.id, documento })}
-            />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Con el mismo importe</h3>
+                <ListaSugerencias
+                  movimiento={sugerir}
+                  libres={libres}
+                  ocupado={enlazar.isPending}
+                  alEnlazar={(documento) =>
+                    enlazar.mutate({ movimiento: sugerir.id, documentos: [documento] })
+                  }
+                />
+              </div>
+              <BuscarDocumentos
+                key={sugerir.id}
+                movimiento={sugerir}
+                ocupado={enlazar.isPending}
+                alEnlazar={(documentos) => enlazar.mutate({ movimiento: sugerir.id, documentos })}
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -711,10 +742,12 @@ function TablaEnlaces({
 
 function HistorialTraspasos({
   cuentaDe,
+  esTarjeta,
   ocupado,
   alDesmarcar,
 }: {
   cuentaDe: (m: Movimiento) => string;
+  esTarjeta: (cuentaId: string | null) => boolean;
   ocupado: boolean;
   alDesmarcar: (movimientoId: string) => void;
 }) {
@@ -726,6 +759,7 @@ function HistorialTraspasos({
   );
   const traspasos = data?.traspasos ?? [];
   const parcial = !!data && data.total > data.porPagina;
+  const [desglose, setDesglose] = useState<Movimiento | null>(null);
   // Cada traspaso se lista desde el lado que sale, así que cada pareja cuenta
   // una vez: lo movido entre cuentas propias son las salidas.
   const total = totalesConSigno(
@@ -741,7 +775,7 @@ function HistorialTraspasos({
               <TableHead>Sale de</TableHead>
               <TableHead>Entra en</TableHead>
               <TableHead className="text-right w-28">Importe</TableHead>
-              <TableHead aria-label="Acciones" className="w-16" />
+              <TableHead aria-label="Acciones" className="w-40" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -767,7 +801,13 @@ function HistorialTraspasos({
                 <TableCell className="text-right tabular-nums">
                   {eur(Math.abs(sale.importe))}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="whitespace-nowrap text-right">
+                  {entra && esTarjeta(entra.cuenta_id) && (
+                    <Button variant="ghost" size="sm" onClick={() => setDesglose(entra)}>
+                      <Receipt className="h-4 w-4 mr-1" />
+                      Ver compras
+                    </Button>
+                  )}
                   {escribir && (
                     <Button
                       variant="ghost"
@@ -807,6 +847,7 @@ function HistorialTraspasos({
             alCambiar={setPedida}
           />
         )}
+        <DesgloseRecibo recibo={desglose} alCerrar={() => setDesglose(null)} />
       </CardContent>
     </Card>
   );
@@ -925,5 +966,172 @@ function ListaSugerencias({
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Buscar a mano en todos los documentos sin conciliar (no solo los cargados):
+ * por nombre, número o importe. Se pueden marcar varios, para una remesa de
+ * TPV que junta varias ventas o un pago de varias facturas; abajo dice cuánto
+ * suman y cuánto falta para el movimiento.
+ */
+function BuscarDocumentos({
+  movimiento,
+  ocupado,
+  alEnlazar,
+}: {
+  movimiento: Movimiento;
+  ocupado: boolean;
+  alEnlazar: (documentos: DocumentoConciliable[]) => void;
+}) {
+  const buscarFn = useServerFn(buscarConciliables);
+  const [texto, setTexto] = useState("");
+  const [buscado, setBuscado] = useState("");
+  const [elegidos, setElegidos] = useState<Map<string, DocumentoConciliable>>(new Map());
+
+  // Espera a que se deje de escribir para no buscar con cada letra.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscado(texto.trim()), 350);
+    return () => clearTimeout(t);
+  }, [texto]);
+
+  const signo = movimiento.importe < 0 ? "cargo" : "abono";
+  const {
+    data: encontrados = [],
+    isFetching,
+    error,
+  } = useQuery({
+    queryKey: ["conciliar-buscar", signo, buscado],
+    enabled: buscado.length > 0,
+    placeholderData: keepPreviousData,
+    queryFn: () => buscarFn({ data: { texto: buscado, signo } }),
+  });
+
+  const lista = buscado ? encontrados : [];
+  const suma = [...elegidos.values()].reduce((s, d) => s + d.esperado, 0);
+  const falta = Math.round((movimiento.importe - suma) * 100) / 100;
+
+  const alternar = (d: DocumentoConciliable, marcado: boolean) =>
+    setElegidos((m) => {
+      const n = new Map(m);
+      if (marcado) n.set(claveDoc(d), d);
+      else n.delete(claveDoc(d));
+      return n;
+    });
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">
+        Buscar {signo === "cargo" ? "facturas recibidas" : "facturas y tickets emitidos"}
+      </h3>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="pl-8"
+          placeholder="Nombre, número (T2026/0057) o importe (15,72)"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+        />
+      </div>
+      {error && <p className="text-sm text-destructive">{mensajeDeError(error)}</p>}
+      {buscado && !isFetching && lista.length === 0 && !error && (
+        <p className="text-sm text-muted-foreground">Nada sin conciliar coincide.</p>
+      )}
+      {lista.length > 0 && (
+        <ul className="max-h-[40vh] divide-y overflow-y-auto rounded-md border text-sm">
+          {lista.map((d) => {
+            const clave = claveDoc(d);
+            return (
+              <li key={clave}>
+                <label className="flex cursor-pointer items-center gap-3 p-2.5">
+                  <Checkbox
+                    checked={elegidos.has(clave)}
+                    onCheckedChange={(v) => alternar(d, v === true)}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{etiquetaDoc(d)}</span>
+                    <span className="text-xs text-muted-foreground">{fechaCorta(d.fecha)}</span>
+                  </span>
+                  <span className="tabular-nums">{eur(Math.abs(d.esperado))}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {elegidos.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 p-2.5 text-sm">
+          <span>
+            {elegidos.size} {elegidos.size === 1 ? "documento" : "documentos"} ·{" "}
+            {eur(Math.abs(suma))}
+            {falta === 0 ? (
+              <span className="ml-2 text-status-completado">cuadra con el movimiento</span>
+            ) : (
+              <span className="ml-2 text-status-pendiente">
+                diferencia {eur(falta)} (comisión, redondeo o falta algo)
+              </span>
+            )}
+          </span>
+          <Button size="sm" disabled={ocupado} onClick={() => alEnlazar([...elegidos.values()])}>
+            <ArrowLeftRight className="h-4 w-4 mr-1" />
+            Enlazar {elegidos.size > 1 ? `los ${elegidos.size}` : ""}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Qué compras de la tarjeta paga un recibo (src/dominio/recibos-tarjeta.ts). */
+function DesgloseRecibo({ recibo, alCerrar }: { recibo: Movimiento | null; alCerrar: () => void }) {
+  const verFn = useServerFn(verDesgloseRecibo);
+  const { data, error, isPending } = useQuery({
+    queryKey: ["recibo-tarjeta", recibo?.id],
+    enabled: !!recibo,
+    queryFn: () => verFn({ data: { movimiento_id: recibo!.id } }),
+  });
+  return (
+    <Dialog open={!!recibo} onOpenChange={(o) => !o && alCerrar()}>
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Compras de este recibo</DialogTitle>
+          <DialogDescription>
+            {recibo && `${fechaCorta(recibo.fecha)} · ${eur(recibo.importe)}. `}
+            Las compras pendientes más antiguas de la tarjeta, por orden, hasta llegar al importe
+            del recibo.
+          </DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <p className="text-sm text-destructive">{mensajeDeError(error)}</p>
+        ) : isPending || !data ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            {!data.cuadra && (
+              <p className="flex gap-2 text-status-pendiente">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                No cuadra: las compras pendientes de antes del recibo se quedan a{" "}
+                {eur(data.diferencia)} de su importe. ¿Falta subir parte del extracto de la tarjeta?
+              </p>
+            )}
+            <ul className="divide-y rounded-md border">
+              {data.compras.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 p-2.5">
+                  <span className="min-w-0">
+                    <span className="block truncate">{c.concepto || "—"}</span>
+                    <span className="text-xs text-muted-foreground">{fechaCorta(c.fecha)}</span>
+                  </span>
+                  <span className="tabular-nums">{eur(c.importe)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-right font-semibold tabular-nums">
+              {data.compras.length} {data.compras.length === 1 ? "compra" : "compras"} ·{" "}
+              {eur(data.compras.reduce((s, c) => s + c.importe, 0))}
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

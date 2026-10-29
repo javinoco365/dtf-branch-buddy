@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contieneReferencia,
+  criterioBusqueda,
   emparejar,
   esSegura,
   mencionaCliente,
@@ -146,5 +147,28 @@ describe("emparejar", () => {
     const propuestas = emparejar(movimientos, [factura()]);
     expect(propuestas).toHaveLength(1);
     expect(propuestas[0].movimiento_id).toBe("m2");
+  });
+});
+
+describe("criterioBusqueda", () => {
+  it("un importe con coma, punto o miles", () => {
+    expect(criterioBusqueda("15,72")).toEqual({ texto: null, importe: 15.72, numero: null });
+    expect(criterioBusqueda("206.84 €")).toEqual({ texto: null, importe: 206.84, numero: null });
+    expect(criterioBusqueda("1.234,50")).toEqual({ texto: null, importe: 1234.5, numero: null });
+    expect(criterioBusqueda("-40,48")).toMatchObject({ importe: 40.48 });
+  });
+
+  it("un entero: importe o número de factura", () => {
+    expect(criterioBusqueda("57")).toEqual({ texto: null, importe: 57, numero: 57 });
+  });
+
+  it("una referencia de factura: su número", () => {
+    expect(criterioBusqueda("T2026/0057")).toEqual({ texto: null, importe: null, numero: 57 });
+    expect(criterioBusqueda("2026/0012")).toMatchObject({ numero: 12 });
+  });
+
+  it("lo demás es un nombre; vacío, nada", () => {
+    expect(criterioBusqueda("  Makito ")).toEqual({ texto: "Makito", importe: null, numero: null });
+    expect(criterioBusqueda("")).toEqual({ texto: null, importe: null, numero: null });
   });
 });
