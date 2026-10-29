@@ -19,6 +19,8 @@ import {
   type FilaConciliacion,
 } from "@/dominio/enlaces-conciliacion";
 import { filasDePagina, paginaDeLista, ultimaPagina } from "@/dominio/paginacion";
+import { criterioBusqueda } from "@/dominio/conciliacion";
+import { desgloseDeRecibo } from "@/dominio/recibos-tarjeta";
 
 /**
  * Conciliación con el motor: movimientos de todas las cuentas contra facturas
@@ -718,3 +720,146 @@ export const desmarcarTraspaso = createServerFn({ method: "POST" })
       _movimiento_id: data.movimiento_id,
     }),
   }));
+
+/** Lo que admite el filtro .or() de PostgREST dentro de un ilike: sin comas ni paréntesis. */
+const paraIlike = (t: string) => t.replace(/[,()*%\\]/g, " ").trim();
+
+/**
+ * «Conciliar a mano»: busca en TODOS los documentos todavía sin conciliar,
+ * no solo en los que tiene cargados la pantalla, por nombre, número o
+ * importe. Los cargos buscan facturas recibidas; los abonos, facturas y
+ * tickets emitidos (de tienda y de textil), también los ya marcados como
+ * cobrados: una venta cobrada con Bizum o tarjeta llega al banco igual y hay
+ * que poder enlazarla. Con la sesión del usuario: solo lo que su RLS le deja ver.
+ */
+export const buscarConciliables = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ texto: z.string().trim().max(80), signo: z.enum(["cargo", "abono"]) }).parse(d),
+  )
+  .handler(async ({ data, context }): Promise<DocumentoConciliable[]> => {
+    const c = criterioBusqueda(data.texto);
+    if (c.texto === null && c.importe === null && c.numero === null) return [];
+    const sb = context.supabase;
+    const LIMITE = 25;
+    const rango = (col: string) =>
+      c.importe === null
+        ? []
+        : [`and(${col}.gte.${c.importe - 0.01},${col}.lte.${c.importe + 0.01})`];
+    const texto = c.texto ? paraIlike(c.texto) : "";
+
+    let filas: FilaDocumento[] = [];
+    if (data.signo === "cargo") {
+      const conds = [
+        ...rango("liquido"),
+        ...(texto ? [`proveedor.ilike.*${texto}*`, `numero.ilike.*${texto}*`] : []),
+        ...(c.numero !== null ? [`numero.ilike.*${c.numero}*`] : []),
+      ];
+      const r = await tabla(sb, "textil_compras")
+        .select(COLUMNAS_COMPRA)
+        .eq("estado", "registrada")
+        .is("borrada_en", null)
+        .or(conds.join(","))
+        .order("fecha", { ascending: false })
+        .limit(LIMITE);
+      if (r.error) throw new Error(r.error.message);
+      filas = ((r.data ?? []) as FilaCompra[]).map(deCompra);
+    } else {
+      const condsTienda = [
+        ...rango("total"),
+        ...(texto ? [`cliente_nombre.ilike.*${texto}*`] : []),
+        ...(c.numero !== null ? [`numero.eq.${c.numero}`] : []),
+      ];
+      const condsTextil = [
+        ...rango("total"),
+        ...(texto ? [`cliente_nombre.ilike.*${texto}*`, `numero.ilike.*${texto}*`] : []),
+        ...(c.numero !== null ? [`numero.ilike.*${c.numero}*`] : []),
+      ];
+      const [tienda, textil] = await Promise.all([
+        tabla(sb, "facturas")
+          .select(COLUMNAS_FACTURA)
+          .in("estado", ["emitida", "vencida", "pagada"])
+          .or(condsTienda.join(","))
+          .order("fecha", { ascending: false })
+          .limit(LIMITE),
+        tabla(sb, "textil_facturas")
+          .select(COLUMNAS_TEXTIL)
+          .not("estado", "in", "(borrador,anulada)")
+          .or(condsTextil.join(","))
+          .order("fecha", { ascending: false })
+          .limit(LIMITE),
+      ]);
+      if (tienda.error) throw new Error(tienda.error.message);
+      if (textil.error) throw new Error(textil.error.message);
+      filas = [
+        ...((tienda.data ?? []) as FilaFactura[]).map(deFactura),
+        ...((textil.data ?? []) as FilaTextil[]).map(deTextil),
+      ];
+    }
+    if (filas.length === 0) return [];
+
+    // Fuera lo que ya está conciliado.
+    const columna = { compra: "compra_id", factura: "factura_id", textil: "textil_factura_id" };
+    const enlazados = new Set<string>();
+    for (const tipo of ["compra", "factura", "textil"] as const) {
+      const ids = filas.filter((f) => f.tipo === tipo).map((f) => f.id);
+      if (ids.length === 0) continue;
+      const r = await tabla(sb, "banco_conciliaciones")
+        .select(columna[tipo])
+        .in(columna[tipo], ids);
+      if (r.error) throw new Error(r.error.message);
+      for (const e of (r.data ?? []) as Record<string, string>[]) enlazados.add(e[columna[tipo]]);
+    }
+    return filas
+      .filter((f) => !enlazados.has(f.id))
+      .map(documentoDe)
+      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+  });
+
+/**
+ * El desglose de un recibo de tarjeta: qué compras de la tarjeta paga
+ * (src/dominio/recibos-tarjeta.ts). `movimiento_id` es el abono del recibo en
+ * la cuenta de la tarjeta (el lado que entra del traspaso).
+ */
+export const verDesgloseRecibo = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ movimiento_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const sb = context.supabase;
+    const { data: recibo, error } = await tabla(sb, "banco_movimientos")
+      .select("id, fecha, cuenta_id")
+      .eq("id", data.movimiento_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!recibo?.cuenta_id) throw new Error("No se encuentra el recibo");
+    type Fila = {
+      id: string;
+      fecha: string;
+      concepto: string | null;
+      importe: number | string;
+      traspaso_con: string | null;
+    };
+    const movs = await leerTodas<Fila>((a, b) =>
+      tabla(sb, "banco_movimientos")
+        .select("id, fecha, concepto, importe, traspaso_con")
+        .eq("cuenta_id", recibo.cuenta_id)
+        .lte("fecha", recibo.fecha)
+        .order("fecha")
+        .order("id")
+        .range(a, b),
+    );
+    if (movs.error) throw new Error(movs.error.message);
+    const d = desgloseDeRecibo(
+      movs.data.map((m) => ({
+        id: m.id,
+        fecha: m.fecha,
+        concepto: m.concepto ?? "",
+        importe: Number(m.importe),
+        // El recibo es el abono que llega de otra cuenta propia.
+        es_recibo: !!m.traspaso_con && Number(m.importe) > 0,
+      })),
+      data.movimiento_id,
+    );
+    if (!d) throw new Error("Ese movimiento no es el recibo de una tarjeta");
+    return d;
+  });

@@ -196,3 +196,30 @@ export function emparejar(
 
   return propuestas;
 }
+
+/**
+ * Qué busca una persona en «Conciliar a mano»: un importe («15,72», «1.234,50»
+ * o «206.84»), un número de factura («57», «T2026/0057») o un nombre. Un
+ * número entero puede ser cualquiera de las dos cosas: se buscan las dos.
+ */
+export type CriterioBusqueda = {
+  texto: string | null;
+  importe: number | null;
+  numero: number | null;
+};
+
+export function criterioBusqueda(entrada: string): CriterioBusqueda {
+  const t = entrada.trim().replace(/€/g, "").trim();
+  if (!t) return { texto: null, importe: null, numero: null };
+  // Una referencia de factura: lo que va tras la última barra.
+  const ref = t.match(/^[A-Za-z-]*\d{4}\/0*(\d+)$/);
+  if (ref) return { texto: null, importe: null, numero: Number(ref[1]) };
+  // Importe con decimales, con coma o punto, y miles con punto.
+  const sinMiles = /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(t) ? t.replace(/\./g, "") : t;
+  const imp = sinMiles.match(/^-?(\d+)([.,](\d{1,2}))?$/);
+  if (imp) {
+    const valor = Math.abs(Number(`${imp[1]}.${imp[3] ?? "0"}`));
+    return { texto: null, importe: valor, numero: imp[2] ? null : Number(imp[1]) };
+  }
+  return { texto: t, importe: null, numero: null };
+}
