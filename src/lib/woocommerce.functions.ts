@@ -664,6 +664,9 @@ async function guardarPedidosWoo(
       // vacío borre la fecha de un pedido que sigue realizado.
       realizado_en: fechaGmtWoo(o.date_completed_gmt),
       notas: o.customer_note || null,
+      // Cómo pagó («Pago con tarjeta (Redsys)», «Bizum»…): la conciliación lo
+      // usa para saber qué ventas puede traer una remesa de TPV o un Bizum.
+      metodo_pago: o.payment_method_title || o.payment_method || null,
     };
   });
 

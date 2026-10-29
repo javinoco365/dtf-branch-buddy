@@ -588,6 +588,8 @@ BANCO.push(
   movBanco(7, 1, "2026-10-12", "TRANSF CLIENTE TEXTIL A CUENTA", 50),
   movBanco(8, 1, "2026-10-20", "TRANSF CLIENTE TEXTIL RESTO", 58.9),
   movBanco(9, 1, "2026-10-21", "ABONO TPV REMESA 20/10", 212.4),
+  // El mismo cargo dos veces (un extracto subido en dos formatos).
+  movBanco(10, 1, "2026-10-08", "Adeudo SEUR envíos", -30.25),
 );
 const CONCILIACIONES = [
   {

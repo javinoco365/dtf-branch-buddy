@@ -28,7 +28,8 @@ import {
   pendienteDeEnlace,
   type Parcial,
 } from "@/dominio/conciliar-a-mano";
-import { desgloseDeRecibo } from "@/dominio/recibos-tarjeta";
+import { desgloseDeRecibo, desgloseRecibos } from "@/dominio/recibos-tarjeta";
+import { ampliarPlan, aprenderConceptos, type VentaCobrada } from "@/dominio/propuestas-extra";
 
 /**
  * Conciliación con el motor: movimientos de todas las cuentas contra facturas
@@ -60,6 +61,11 @@ const MIGRACION_MOTOR = "20261017100000_conciliacion_motor.sql";
 export type DocumentoConciliable = Documento & {
   /** Para pintar: «Recibida», «Factura» o «Textil». */
   clase: string;
+  /**
+   * Una venta ya cobrada (un ticket nace pagado) sin movimiento enlazado: se
+   * propone para remesas de TPV y Bizum, pero no es un cobro pendiente.
+   */
+  cobrada?: boolean;
 };
 
 /** Lo que devuelve el buscador: puede ser una factura ya cobrada en parte. */
@@ -536,6 +542,87 @@ async function leerPagina<T>(
   return { filas: r.data ?? [], total: r.count ?? 0, pagina, porPagina: POR_PAGINA_HISTORIAL };
 }
 
+/** Ventas ya cobradas que se miran para remesas de TPV y Bizum: las de los últimos días. */
+const DIAS_VENTAS_COBRADAS = 60;
+
+/**
+ * Las ventas de tienda ya cobradas (estado «pagada») de los últimos
+ * DIAS_VENTAS_COBRADAS días que no están enlazadas a ningún movimiento, con
+ * el método de pago de su pedido. Son las que puede traer una remesa de TPV
+ * o un Bizum. Si algo falla al leerlas, sin ellas: el plan de siempre.
+ */
+async function leerVentasCobradas(sb: unknown): Promise<VentaCobrada[]> {
+  const desde = new Date(Date.now() - DIAS_VENTAS_COBRADAS * 86_400_000).toISOString().slice(0, 10);
+  const r = await recientes<FilaFactura & { pedido: { metodo_pago: string | null } | null }>(
+    (a, b) =>
+      tabla(sb, "facturas")
+        .select(`${COLUMNAS_FACTURA}, pedido:pedido_id(metodo_pago)`)
+        .eq("estado", "pagada")
+        .gte("fecha", desde)
+        .order("fecha", { ascending: false })
+        .order("id")
+        .range(a, b),
+  );
+  if (r.error) return [];
+  const enlazadas = new Set<string>();
+  const ids = r.data.map((f) => f.id);
+  for (let i = 0; i < ids.length; i += 150) {
+    const e = await tabla(sb, "banco_conciliaciones")
+      .select("factura_id")
+      .in("factura_id", ids.slice(i, i + 150));
+    if (e.error) return [];
+    for (const x of (e.data ?? []) as { factura_id: string }[]) enlazadas.add(x.factura_id);
+  }
+  return r.data
+    .filter((f) => !enlazadas.has(f.id))
+    .map((f) => ({
+      ...documentoDe(deFactura(f)),
+      metodo: f.pedido?.metodo_pago ?? null,
+    }));
+}
+
+/**
+ * Lo conciliado de antes, para aprender qué proveedor o cliente hay detrás
+ * de cada concepto (src/dominio/propuestas-extra.ts). Los 1000 enlaces que
+ * dé la base; si no se pueden leer, sin memoria.
+ */
+async function leerMemoria(sb: unknown) {
+  const r = await filasDeFuncion(sb, "banco_enlaces")
+    .select("movimientos, documentos")
+    .eq("estado", "conciliada")
+    .limit(1000);
+  const enlaces = r.error
+    ? []
+    : ((r.data ?? []) as Pick<FilaEnlace, "movimientos" | "documentos">[]).map((e) => ({
+        movimientos: (e.movimientos ?? []).map(movimientoDe),
+        documentos: (e.documentos ?? []).map(documentoDe),
+      }));
+  return aprenderConceptos(enlaces);
+}
+
+/**
+ * El plan completo: el del motor y, para lo que deja sin propuesta, remesas
+ * de TPV, Bizum y lo aprendido. Devuelve también las ventas cobradas que se
+ * han mirado, para que la pantalla pueda nombrarlas.
+ */
+async function planCompleto(sb: unknown, datos: Ventana) {
+  const [ventas, memoria] = await Promise.all([leerVentasCobradas(sb), leerMemoria(sb)]);
+  const base = planConciliacion(datos.movimientos, datos.documentos);
+  const plan = ampliarPlan(base, datos.movimientos, datos.documentos, ventas, memoria);
+  const cobradas: DocumentoConciliable[] = ventas.map((v) => ({
+    tipo: v.tipo,
+    id: v.id,
+    fecha: v.fecha,
+    esperado: v.esperado,
+    contraparte: v.contraparte,
+    nif: v.nif,
+    referencia: v.referencia,
+    clase: "Venta cobrada",
+    cobrada: true,
+  }));
+  return { plan, cobradas };
+}
+
 /** Movimientos y documentos por conciliar y el plan del motor. No escribe nada. */
 export const verConciliacion = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -547,11 +634,12 @@ export const verConciliacion = createServerFn({ method: "GET" })
     recuento.catch(() => {});
     const datos = await leer(context.supabase);
     if (!datos) return { disponible: false as const, falta: MIGRACION_MOTOR };
+    const { plan, cobradas } = await planCompleto(context.supabase, datos);
     return {
       disponible: true as const,
       movimientos: datos.movimientos,
-      documentos: datos.documentos,
-      plan: planConciliacion(datos.movimientos, datos.documentos),
+      documentos: [...datos.documentos, ...cobradas],
+      plan,
       recortado: datos.recortado,
       limite: LIMITE_CONCILIACION,
       cuantos: datos.cuantos ?? (await recuento),
@@ -675,7 +763,7 @@ const mensaje = (err: unknown) => (err instanceof Error ? err.message : String(e
 async function aplicarAhora(supabase: unknown, hechos: Hechos): Promise<Hechos> {
   const datos = await leer(supabase);
   if (!datos) throw new Error(`Falta aplicar la migración ${MIGRACION_MOTOR}.`);
-  const plan = planConciliacion(datos.movimientos, datos.documentos);
+  const { plan } = await planCompleto(supabase, datos);
   for (const e of [...plan.verdes, ...plan.ambares]) {
     try {
       await llamarRpc(supabase, "banco_enlazar", {
@@ -1135,4 +1223,81 @@ export const verDesgloseRecibo = createServerFn({ method: "GET" })
     );
     if (!d) throw new Error("Ese movimiento no es el recibo de una tarjeta");
     return d;
+  });
+
+/**
+ * Lo que la pestaña «Para resolver» necesita y la pantalla no tiene ya: los
+ * enlaces con diferencia de importe (cobrados en parte, comisiones o enlaces
+ * equivocados) y los recibos de tarjeta que no cuadran con sus compras. Lo
+ * demás (movimientos y facturas pendientes, extractos) ya está cargado.
+ */
+export const verIncidencias = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const sb = context.supabase;
+
+    // Enlaces con diferencia: de la función si está, si no de las tablas.
+    let diferencias: EnlaceGuardado[];
+    const r = await filasDeFuncion(sb, "banco_enlaces")
+      .select("grupo, estado, motivo, diferencia, movimientos, documentos")
+      .neq("diferencia", 0)
+      .limit(300);
+    if (!r.error) {
+      diferencias = ((r.data ?? []) as FilaEnlace[]).map(enlaceDe);
+    } else {
+      diferencias = (await enlacesDeTablas(sb))
+        .filter((e) => Number(e.diferencia) !== 0)
+        .map(enlaceDe);
+    }
+
+    // Recibos de las tarjetas (cuentas sin IBAN) que no cuadran.
+    const cuentas = await tabla(sb, "banco_cuentas").select("id, alias, iban");
+    if (cuentas.error) throw new Error(cuentas.error.message);
+    const tarjetas = (
+      (cuentas.data ?? []) as { id: string; alias: string; iban: string | null }[]
+    ).filter((c) => !c.iban);
+    const recibos: {
+      id: string;
+      fecha: string;
+      importe: number;
+      diferencia: number;
+      cuenta: string;
+    }[] = [];
+    for (const t of tarjetas) {
+      const movs = await leerTodas<{
+        id: string;
+        fecha: string;
+        concepto: string | null;
+        importe: number | string;
+        traspaso_con: string | null;
+      }>((a, b) =>
+        tabla(sb, "banco_movimientos")
+          .select("id, fecha, concepto, importe, traspaso_con")
+          .eq("cuenta_id", t.id)
+          .order("fecha")
+          .order("id")
+          .range(a, b),
+      );
+      if (movs.error) throw new Error(movs.error.message);
+      const desglose = desgloseRecibos(
+        movs.data.map((m) => ({
+          id: m.id,
+          fecha: m.fecha,
+          concepto: m.concepto ?? "",
+          importe: Number(m.importe),
+          es_recibo: !!m.traspaso_con && Number(m.importe) > 0,
+        })),
+      );
+      for (const d of desglose) {
+        if (d.cuadra) continue;
+        recibos.push({
+          id: d.recibo.id,
+          fecha: d.recibo.fecha,
+          importe: d.recibo.importe,
+          diferencia: d.diferencia,
+          cuenta: t.alias,
+        });
+      }
+    }
+    return { diferencias, recibos };
   });

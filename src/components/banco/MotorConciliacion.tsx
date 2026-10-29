@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePermisos } from "@/hooks/use-permisos";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -9,6 +10,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ListChecks,
   Lightbulb,
   Receipt,
   RefreshCw,
@@ -60,6 +62,7 @@ import {
   enlazarManual,
   reconciliar,
   verDesgloseRecibo,
+  verIncidencias,
   verEnlaces,
   verTraspasos,
   type Cuantos,
@@ -93,6 +96,8 @@ import {
 import { tramoDePagina } from "@/dominio/paginacion";
 import { totalesConSigno } from "@/dominio/sumatorios";
 import { totalesEnlaces } from "@/dominio/sumatorios-banco";
+import { incidenciasConciliacion, type Incidencia } from "@/dominio/incidencias-conciliacion";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useCuentasBanco } from "./useCuentasBanco";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 
@@ -160,6 +165,9 @@ export function MotorConciliacion({
   const [reconciliarAbierto, setReconciliarAbierto] = useState(false);
   const [rehacerRevisar, setRehacerRevisar] = useState(true);
   const [pestana, setPestana] = useState("pendientes");
+  // Desde «Para resolver»: ver en la lista solo unos movimientos concretos.
+  const [soloIds, setSoloIds] = useState<Set<string> | null>(null);
+  const [reciboVer, setReciboVer] = useState<Movimiento | null>(null);
 
   const cuentas = useMemo(
     () =>
@@ -194,7 +202,10 @@ export function MotorConciliacion({
   const sinConciliar = datos.movimientos;
   const libres = datos.documentos;
   const porSentido = useMemo(() => totalesPorSentido(sinConciliar), [sinConciliar]);
-  const visibles = useMemo(() => filtrarMovimientos(sinConciliar, filtro), [sinConciliar, filtro]);
+  const visibles = useMemo(
+    () => filtrarMovimientos(sinConciliar, filtro).filter((m) => !soloIds || soloIds.has(m.id)),
+    [sinConciliar, filtro, soloIds],
+  );
   const cuantos = datos.cuantos ?? { revisar: 0, conciliados: 0, traspasos: 0 };
   // Abonos y cargos por separado: un neto solo esconde cuánto entra y cuánto sale.
   const totalVisibles = totalesConSigno(visibles, (m) => m.importe);
@@ -202,7 +213,42 @@ export function MotorConciliacion({
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
   const recorte = avisoRecorte(datos.recortado, datos.limite, !datos.falta);
   const filtrado =
-    filtro.sentido !== "todo" || filtro.cuenta !== null || filtro.texto.trim() !== "";
+    filtro.sentido !== "todo" ||
+    filtro.cuenta !== null ||
+    filtro.texto.trim() !== "" ||
+    soloIds !== null;
+
+  // Lo que hay que resolver: lo que ya está cargado más lo que pide el servidor.
+  const incidenciasFn = useServerFn(verIncidencias);
+  const { data: extra } = useQuery({
+    queryKey: [CLAVE_HISTORIAL, "incidencias"],
+    queryFn: () => incidenciasFn(),
+  });
+  const incidencias = useMemo(
+    () =>
+      incidenciasConciliacion({
+        hoy: diaEnEspana(new Date()),
+        movimientos: sinConciliar,
+        plan: datos.plan,
+        // Las ventas ya cobradas no son cobros pendientes: solo se proponen.
+        documentos: datos.documentos.filter((d) => !d.cobrada),
+        porRevisar: cuantos.revisar,
+        diferencias: extra?.diferencias ?? [],
+        recibos: extra?.recibos ?? [],
+        extractos: ((banco?.extractos ?? []) as any[]).map((e) => ({
+          id: String(e.id),
+          fichero: String(e.fichero),
+          desde: e.desde ?? null,
+          hasta: e.hasta ?? null,
+          saldo_inicial: e.saldo_inicial === null ? null : Number(e.saldo_inicial),
+          saldo_final: e.saldo_final === null ? null : Number(e.saldo_final),
+          suma_movimientos: Number(e.suma_movimientos ?? 0),
+          cuadra: !!e.cuadra,
+        })),
+      }),
+    [sinConciliar, datos, cuantos.revisar, extra, banco],
+  );
+  const errores = incidencias.filter((i) => i.gravedad === "error").length;
 
   // Lo marcado que sigue pendiente (lo enlazado desaparece de la lista).
   const elegidos = useMemo(
@@ -341,6 +387,35 @@ export function MotorConciliacion({
   const cuentaDe = (m: Movimiento) =>
     m.cuenta_id ? (alias.get(m.cuenta_id) ?? "—") : "Sin cuenta";
 
+  // Lo que hace cada botón de «Para resolver».
+  const resolver = {
+    verMovimientos: (ids: string[]) => {
+      setFiltro(SIN_FILTRO);
+      setSoloIds(new Set(ids));
+      setPestana("pendientes");
+    },
+    buscarImporte: (importe: number) => {
+      setSoloIds(null);
+      setFiltro({ ...SIN_FILTRO, texto: numero(Math.abs(importe), 2) });
+      setPestana("pendientes");
+    },
+    conciliar: (ids: string[]) => {
+      const lista = ids.map((id) => movs.get(id)).filter((m): m is Movimiento => !!m);
+      if (lista.length > 0) abrirConciliar(lista);
+    },
+    deshacer: (grupo: string) => deshacer.mutate(grupo),
+    verRecibo: (i: Incidencia) =>
+      setReciboVer({
+        id: i.ref.movimientos![0],
+        fecha: i.fecha ?? "",
+        concepto: "",
+        importe: i.importe ?? 0,
+        cuenta_id: null,
+      }),
+    verExtractos: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+    verPorRevisar: () => setPestana("revisar"),
+  };
+
   const verSentido = (sentido: FiltroMovimientos["sentido"]) => {
     setFiltro((f) => ({ ...f, sentido: f.sentido === sentido ? "todo" : sentido }));
     setPestana("pendientes");
@@ -424,16 +499,51 @@ export function MotorConciliacion({
         </p>
       )}
 
+      {incidencias.length > 0 && pestana !== "resolver" && (
+        <button
+          type="button"
+          onClick={() => setPestana("resolver")}
+          className={`flex w-full items-center gap-2 rounded-md border p-3 text-left text-sm hover:bg-muted/50 ${errores > 0 ? "border-destructive/50 bg-destructive/5" : "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20"}`}
+        >
+          {errores > 0 ? (
+            <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          )}
+          <span className="flex-1">
+            {incidencias.length} {incidencias.length === 1 ? "cosa" : "cosas"} para resolver
+            {errores > 0 && ` (${errores} ${errores === 1 ? "error" : "errores"})`}
+          </span>
+          <span className="font-medium underline">Ver</span>
+        </button>
+      )}
+
       <Tabs value={pestana} onValueChange={setPestana}>
         <TabsList className="flex h-auto flex-wrap justify-start">
+          <TabsTrigger value="resolver">Para resolver ({incidencias.length})</TabsTrigger>
           <TabsTrigger value="pendientes">Sin conciliar ({sinConciliar.length})</TabsTrigger>
           <TabsTrigger value="revisar">Por revisar ({cuantos.revisar})</TabsTrigger>
           <TabsTrigger value="conciliados">Conciliados ({cuantos.conciliados})</TabsTrigger>
           <TabsTrigger value="traspasos">Traspasos ({cuantos.traspasos})</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="resolver">
+          <ListaIncidencias incidencias={incidencias} escribir={escribir} resolver={resolver} />
+        </TabsContent>
+
         <TabsContent value="pendientes" className="space-y-3">
           <FiltrosMovimientos filtro={filtro} cuentas={cuentas} alCambiar={setFiltro} />
+          {soloIds && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/50 p-2.5 text-sm">
+              <span>
+                Mostrando {visibles.length} {visibles.length === 1 ? "movimiento" : "movimientos"}{" "}
+                de «Para resolver».
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => setSoloIds(null)}>
+                Ver todos
+              </Button>
+            </div>
+          )}
 
           {escribir && marcados.size > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/50 p-3 text-sm">
@@ -718,6 +828,8 @@ export function MotorConciliacion({
         </DialogContent>
       </Dialog>
 
+      <DesgloseRecibo recibo={reciboVer} alCerrar={() => setReciboVer(null)} />
+
       <Dialog open={reconciliarAbierto} onOpenChange={setReconciliarAbierto}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -865,6 +977,189 @@ function FiltrosMovimientos({
         </Button>
       )}
     </div>
+  );
+}
+
+type Resolver = {
+  verMovimientos: (ids: string[]) => void;
+  buscarImporte: (importe: number) => void;
+  conciliar: (ids: string[]) => void;
+  deshacer: (grupo: string) => void;
+  verRecibo: (i: Incidencia) => void;
+  verExtractos: () => void;
+  verPorRevisar: () => void;
+};
+
+/** Qué pasa y qué hacer, para cada clase de incidencia (src/dominio/incidencias-conciliacion.ts). */
+function textoIncidencia(i: Incidencia): { titulo: string; detalle: string } {
+  const dif = eur(Math.abs(i.diferencia ?? 0));
+  const cobro = (i.importe ?? 0) >= 0;
+  switch (i.tipo) {
+    case "extracto":
+      return {
+        titulo: `El extracto ${i.nombre} no cuadra`,
+        detalle: `Saldo inicial + movimientos se queda a ${eur(i.diferencia)} del saldo final. Falta algún movimiento en el fichero o un saldo está mal escrito: vuelve a descargarlo del banco y súbelo otra vez (lo repetido no se duplica).`,
+      };
+    case "recibo_tarjeta":
+      return {
+        titulo: `Un recibo de la tarjeta ${i.nombre} no cuadra con sus compras`,
+        detalle: `Las compras pendientes de antes del recibo se quedan a ${eur(i.diferencia)} de su importe (${eur(i.importe)}). Suele faltar parte del extracto de la tarjeta: súbelo entero.`,
+      };
+    case "repetido":
+      return {
+        titulo: `${i.n} movimientos iguales: ${i.nombre || "sin concepto"}`,
+        detalle:
+          "Misma cuenta, fecha, importe y concepto. Si es el mismo extracto subido dos veces, sobra uno; si de verdad son dos cobros o pagos, concílialos por separado.",
+      };
+    case "parcial":
+      return {
+        titulo: `${i.nombre}: ${cobro ? "cobrada" : "pagada"} en parte`,
+        detalle: `Falta ${cobro ? "cobrar" : "pagar"} ${dif}. Cuando llegue al banco, concilia ese movimiento y elige esta factura: se añade a lo ya ${cobro ? "cobrado" : "pagado"}.`,
+      };
+    case "diferencia":
+      return {
+        titulo: `Enlace con diferencia de ${eur(i.diferencia)}`,
+        detalle: `${i.nombre}. El banco trajo ${(i.diferencia ?? 0) > 0 ? "más" : "menos"} que la factura: comisión, redondeo o un enlace equivocado. Si no es correcto, deshazlo y vuelve a conciliar.`,
+      };
+    case "cobros_sin_factura":
+      return {
+        titulo: `${i.n} ${i.n === 1 ? "cobro" : "cobros"} sin factura que encaje · ${eur(i.importe)}`,
+        detalle:
+          "Entraron hace más de 3 días y ninguna factura o ticket pendiente encaja. Concílialos a mano buscando por nombre o importe; si es una remesa de TPV, marca los tickets que suma.",
+      };
+    case "pagos_sin_factura":
+      return {
+        titulo: `${i.n} ${i.n === 1 ? "pago" : "pagos"} sin factura de compra que encaje · ${eur(i.importe)}`,
+        detalle:
+          "Salieron hace más de 3 días y no hay factura recibida que encaje. Registra la factura en Facturas de compra y pulsa «Re-conciliar», o concílialos a mano.",
+      };
+    case "documento_sin_banco":
+      return {
+        titulo: `${i.nombre}: sin ${cobro ? "cobro" : "pago"} en el banco`,
+        detalle: `Hace ${i.dias} días y no hay movimiento enlazado. Si se ${cobro ? "cobró" : "pagó"} por banco, búscalo por su importe; si fue en efectivo o por otra cuenta, no hace falta conciliarla.`,
+      };
+    case "documentos_sin_banco_mas":
+      return {
+        titulo: `Y ${i.n} facturas más sin movimiento en el banco`,
+        detalle: "Arriba salen las más antiguas: resuelve esas primero.",
+      };
+    case "por_revisar":
+      return {
+        titulo:
+          i.n === 1
+            ? "1 propuesta espera que la confirmes"
+            : `${i.n} propuestas esperan que las confirmes`,
+        detalle:
+          i.n === 1
+            ? "No marca nada como pagado hasta que la confirmas: confírmala o deshazla."
+            : "No marcan nada como pagado hasta que las confirmas: confírmalas o deshazlas.",
+      };
+  }
+}
+
+/** La pestaña «Para resolver»: cada cosa con su porqué y su botón. */
+function ListaIncidencias({
+  incidencias,
+  escribir,
+  resolver,
+}: {
+  incidencias: Incidencia[];
+  escribir: boolean;
+  resolver: Resolver;
+}) {
+  if (incidencias.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-status-completado" />
+          No hay nada que resolver.
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <ul className="space-y-2">
+      {incidencias.map((i) => {
+        const { titulo, detalle } = textoIncidencia(i);
+        const ids = i.ref.movimientos ?? [];
+        return (
+          <li
+            key={i.clave}
+            className={`flex items-start gap-3 rounded-md border bg-card p-3 text-sm ${i.gravedad === "error" ? "border-destructive/50" : ""}`}
+          >
+            {i.gravedad === "error" ? (
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            )}
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="font-medium">{titulo}</div>
+                <div className="text-muted-foreground">{detalle}</div>
+                {i.fecha && (
+                  <div className="text-xs text-muted-foreground">{fechaCorta(i.fecha)}</div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2 sm:max-w-[45%] sm:justify-end">
+                {(i.tipo === "cobros_sin_factura" ||
+                  i.tipo === "pagos_sin_factura" ||
+                  i.tipo === "repetido") && (
+                  <Button variant="outline" size="sm" onClick={() => resolver.verMovimientos(ids)}>
+                    <ListChecks className="h-4 w-4 mr-1" />
+                    Ver {i.n === 1 ? "el movimiento" : `los ${i.n}`}
+                  </Button>
+                )}
+                {i.tipo === "repetido" && escribir && (
+                  <Button variant="outline" size="sm" onClick={() => resolver.conciliar([ids[0]])}>
+                    <Lightbulb className="h-4 w-4 mr-1" />
+                    Conciliar uno
+                  </Button>
+                )}
+                {(i.tipo === "documento_sin_banco" || i.tipo === "parcial") &&
+                  i.ref.importe !== undefined && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resolver.buscarImporte(i.ref.importe!)}
+                    >
+                      <Search className="h-4 w-4 mr-1" />
+                      Buscar {eur(Math.abs(i.ref.importe))} en el banco
+                    </Button>
+                  )}
+                {(i.tipo === "diferencia" || i.tipo === "parcial") && escribir && i.ref.grupo && (
+                  <Button variant="ghost" size="sm" onClick={() => resolver.deshacer(i.ref.grupo!)}>
+                    <Undo2 className="h-4 w-4 mr-1" />
+                    Deshacer el enlace
+                  </Button>
+                )}
+                {i.tipo === "recibo_tarjeta" && (
+                  <Button variant="outline" size="sm" onClick={() => resolver.verRecibo(i)}>
+                    <Receipt className="h-4 w-4 mr-1" />
+                    Ver compras
+                  </Button>
+                )}
+                {i.tipo === "extracto" && (
+                  <Button variant="outline" size="sm" onClick={resolver.verExtractos}>
+                    Ver extractos
+                  </Button>
+                )}
+                {i.tipo === "pagos_sin_factura" && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/panel/compras">Facturas de compra</Link>
+                  </Button>
+                )}
+                {i.tipo === "por_revisar" && (
+                  <Button variant="outline" size="sm" onClick={resolver.verPorRevisar}>
+                    <Check className="h-4 w-4 mr-1" />
+                    Revisar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
