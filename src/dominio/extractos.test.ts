@@ -9,6 +9,7 @@ import {
   detectarSeparador,
   esNorma43,
   extractoDeFilas,
+  filasDeLibro,
   huellaMovimiento,
   leerExtractoTexto,
   leerNorma43,
@@ -277,5 +278,84 @@ describe("cuadre, huella e IBAN", () => {
     // Un dígito de control cambiado: no vale.
     expect(normalizarIban(["ES92", ...IBAN.slice(1)].join(""))).toBeNull();
     expect(normalizarIban("hola")).toBeNull();
+  });
+});
+
+describe("filasDeLibro (Excel)", () => {
+  // Como el «Histórico de movimientos» de BBVA: membrete arriba, columnas
+  // desplazadas y «F. CONTABLE» / «F. VALOR». Datos inventados.
+  const bbva: unknown[][] = [
+    [null, null, null],
+    [null, null, "Movimientos"],
+    [null, null, "Titular", null, null, "EMPRESA DE PRUEBA S.L."],
+    [null, null, "Fecha", null, null, "01/10/2026 Hora 09:36"],
+    [null, null, "Importe", null, null, "Todos"],
+    [
+      null,
+      null,
+      "F. CONTABLE",
+      "F. VALOR",
+      "CÓDIGO",
+      "CONCEPTO",
+      "BENEFICIARIO/ORDENANTE",
+      "OBSERVACIONES",
+      "IMPORTE",
+      "SALDO",
+      "DIVISA",
+    ],
+    [
+      null,
+      null,
+      "29/10/2026",
+      "29/10/2026",
+      "001",
+      "Liquidación TPV",
+      "",
+      "",
+      206.84,
+      2083.87,
+      "EUR",
+    ],
+    [
+      null,
+      null,
+      "28/10/2026",
+      "27/10/2026",
+      "009",
+      "Pago con tarjeta",
+      "",
+      "",
+      -40.48,
+      1877.03,
+      "EUR",
+    ],
+  ];
+
+  it("read-excel-file 9 da una lista de hojas: toma la que tiene el extracto", () => {
+    const libro = [
+      { sheet: "Portada", data: [["Informe"]] },
+      { sheet: "Historico", data: bbva },
+    ];
+    expect(filasDeLibro(libro)).toBe(bbva);
+  });
+
+  it("las versiones de antes daban las filas: se usan tal cual", () => {
+    expect(filasDeLibro(bbva)).toBe(bbva);
+    expect(filasDeLibro([])).toEqual([]);
+    expect(filasDeLibro(null)).toEqual([]);
+  });
+
+  it("el extracto de BBVA se lee: fecha contable, concepto, importe y saldo", () => {
+    const e = extractoDeFilas(filasDeLibro([{ sheet: "Historico", data: bbva }]), {
+      tipo: "excel",
+    });
+    expect(e.movimientos).toHaveLength(2);
+    expect(e.movimientos[0]).toMatchObject({
+      fecha: "2026-10-29",
+      concepto: "Liquidación TPV",
+      importe: 206.84,
+      saldo: 2083.87,
+    });
+    expect(e.movimientos[1]).toMatchObject({ fecha: "2026-10-28", importe: -40.48 });
   });
 });
