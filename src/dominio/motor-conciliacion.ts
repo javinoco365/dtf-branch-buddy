@@ -65,7 +65,15 @@ export type Documento = {
 export type ComoSeReconoce = "nif" | "referencia" | "nombre";
 
 export type MotivoEnlace =
-  "contraparte" | "importe_fecha" | "varias_candidatas" | "suma_documentos" | "suma_movimientos";
+  | "contraparte"
+  | "importe_fecha"
+  | "varias_candidatas"
+  | "suma_documentos"
+  | "suma_movimientos"
+  // De src/dominio/propuestas-extra.ts:
+  | "remesa_tpv"
+  | "bizum"
+  | "historial";
 
 export type Enlace = {
   movimientos: string[];
@@ -94,6 +102,9 @@ export const ETIQUETA_MOTIVO: Record<MotivoEnlace | "manual", string> = {
   varias_candidatas: "Varias facturas encajan igual",
   suma_documentos: "Paga varias facturas que suman",
   suma_movimientos: "Pagada en varios movimientos",
+  remesa_tpv: "Remesa de TPV: ventas con tarjeta que suman",
+  bizum: "Bizum de una venta ya cobrada",
+  historial: "Mismo proveedor o cliente que otras veces",
   manual: "Enlazada a mano",
 };
 

@@ -230,7 +230,8 @@ export function MotorConciliacion({
         hoy: diaEnEspana(new Date()),
         movimientos: sinConciliar,
         plan: datos.plan,
-        documentos: datos.documentos,
+        // Las ventas ya cobradas no son cobros pendientes: solo se proponen.
+        documentos: datos.documentos.filter((d) => !d.cobrada),
         porRevisar: cuantos.revisar,
         diferencias: extra?.diferencias ?? [],
         recibos: extra?.recibos ?? [],
