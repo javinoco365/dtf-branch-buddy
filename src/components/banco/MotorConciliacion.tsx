@@ -11,9 +11,12 @@ import {
   ChevronRight,
   Lightbulb,
   Receipt,
+  RefreshCw,
   Search,
   Undo2,
   Wand2,
+  X,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -38,31 +49,47 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { eur, fechaCorta, numeroJusto } from "@/lib/format";
+import { eur, fechaCorta, numero, numeroJusto } from "@/lib/format";
 import {
+  anadirAlEnlace,
   aplicarPlan,
   buscarConciliables,
   confirmarEnlace,
   deshacerEnlace,
   desmarcarTraspaso,
   enlazarManual,
+  reconciliar,
   verDesgloseRecibo,
   verEnlaces,
   verTraspasos,
   type Cuantos,
   type DocumentoConciliable,
+  type DocumentoEncontrado,
   type EnlaceGuardado,
   type Recortado,
 } from "@/lib/conciliacion.functions";
 import {
+  coincideImporte,
   DIAS_ANTES,
   DIAS_DESPUES,
+  diasEntre,
   ETIQUETA_MOTIVO,
   sugerencias,
   type Enlace,
   type Movimiento,
   type Plan,
 } from "@/dominio/motor-conciliacion";
+import {
+  filtrarMovimientos,
+  pendienteDeEnlace,
+  queda,
+  resumenSeleccion,
+  sentidoDe,
+  SIN_FILTRO,
+  totalesPorSentido,
+  type FiltroMovimientos,
+  type TotalSentido,
+} from "@/dominio/conciliar-a-mano";
 import { tramoDePagina } from "@/dominio/paginacion";
 import { totalesConSigno } from "@/dominio/sumatorios";
 import { totalesEnlaces } from "@/dominio/sumatorios-banco";
@@ -93,10 +120,26 @@ const claveDoc = (d: { tipo: string; id: string }) => `${d.tipo}:${d.id}`;
 /** La clave de las páginas del historial: se refrescan juntas tras cada cambio. */
 const CLAVE_HISTORIAL = "conciliacion-historial";
 
+/** Lo que devolvió el último «Aplicar» o «Re-conciliar», para enseñarlo hasta cerrarlo. */
+type Resultado = {
+  titulo: string;
+  verdes: number;
+  ambares: number;
+  traspasos: number;
+  rehechos: number;
+  errores: string[];
+};
+
 /**
  * Conciliación con el motor. Verde: importe, fecha y contraparte, sin duda de
  * qué va con qué. Ámbar: casa el importe y la fecha, o varias cantidades
  * suman; se guarda como «revisar» y no cambia nada hasta que se confirma.
+ *
+ * Cobros (lo que entra, contra facturas y tickets emitidos) y pagos (lo que
+ * sale, contra facturas recibidas) se cuentan y se filtran por separado. A
+ * mano se pueden marcar varios movimientos para una factura, o varias
+ * facturas para un movimiento, y añadir un pago a una factura cobrada en
+ * parte (src/dominio/conciliar-a-mano.ts).
  */
 export function MotorConciliacion({
   datos,
@@ -110,14 +153,22 @@ export function MotorConciliacion({
   // no aplica, confirma, enlaza ni deshace nada.
   const { escribir } = usePermisos();
   const { data: banco } = useCuentasBanco();
-  const [sugerir, setSugerir] = useState<Movimiento | null>(null);
+  const [conciliar, setConciliar] = useState<Movimiento[] | null>(null);
+  const [filtro, setFiltro] = useState<FiltroMovimientos>(SIN_FILTRO);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [reconciliarAbierto, setReconciliarAbierto] = useState(false);
+  const [rehacerRevisar, setRehacerRevisar] = useState(true);
+  const [pestana, setPestana] = useState("pendientes");
 
-  const alias = useMemo(
+  const cuentas = useMemo(
     () =>
-      new Map<string, string>(
-        (banco?.cuentas ?? []).map((c: any) => [String(c.id), String(c.alias)]),
-      ),
+      ((banco?.cuentas ?? []) as any[]).map((c) => ({ id: String(c.id), alias: String(c.alias) })),
     [banco],
+  );
+  const alias = useMemo(
+    () => new Map<string, string>(cuentas.map((c) => [c.id, c.alias])),
+    [cuentas],
   );
   const docs = useMemo(() => new Map(datos.documentos.map((d) => [claveDoc(d), d])), [datos]);
   const movs = useMemo(() => new Map(datos.movimientos.map((m) => [m.id, m])), [datos]);
@@ -142,32 +193,78 @@ export function MotorConciliacion({
   // conciliar» y los documentos, todos libres.
   const sinConciliar = datos.movimientos;
   const libres = datos.documentos;
+  const porSentido = useMemo(() => totalesPorSentido(sinConciliar), [sinConciliar]);
+  const visibles = useMemo(() => filtrarMovimientos(sinConciliar, filtro), [sinConciliar, filtro]);
   const cuantos = datos.cuantos ?? { revisar: 0, conciliados: 0, traspasos: 0 };
   // Abonos y cargos por separado: un neto solo esconde cuánto entra y cuánto sale.
-  const totalSinConciliar = totalesConSigno(sinConciliar, (m) => m.importe);
+  const totalVisibles = totalesConSigno(visibles, (m) => m.importe);
   const { verdes, ambares, traspasos: tp } = datos.plan;
   const hayPlan = verdes.length + ambares.length + tp.length > 0;
   const recorte = avisoRecorte(datos.recortado, datos.limite, !datos.falta);
+  const filtrado =
+    filtro.sentido !== "todo" || filtro.cuenta !== null || filtro.texto.trim() !== "";
+
+  // Lo marcado que sigue pendiente (lo enlazado desaparece de la lista).
+  const elegidos = useMemo(
+    () => [...marcados].map((id) => movs.get(id)).filter((m): m is Movimiento => !!m),
+    [marcados, movs],
+  );
+  const seleccion = resumenSeleccion(elegidos, []);
+  const errorMarcados =
+    seleccion.error && !seleccion.error.startsWith("Marca la factura") ? seleccion.error : null;
+  const todosVisiblesMarcados = visibles.length > 0 && visibles.every((m) => marcados.has(m.id));
+
+  const alternarMarcado = (id: string, marcado: boolean) =>
+    setMarcados((s) => {
+      const n = new Set(s);
+      if (marcado) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  const alternarVisibles = (marcado: boolean) =>
+    setMarcados((s) => {
+      const n = new Set(s);
+      for (const m of visibles) {
+        if (marcado) n.add(m.id);
+        else n.delete(m.id);
+      }
+      return n;
+    });
 
   const refrescar = () => {
     alCambiar();
     qc.invalidateQueries({ queryKey: [CLAVE_HISTORIAL] });
     qc.invalidateQueries({ queryKey: ["compras"] });
     qc.invalidateQueries({ queryKey: ["facturas"] });
+    qc.invalidateQueries({ queryKey: ["conciliar-buscar"] });
   };
   const aviso = (e: any, porDefecto: string) => avisarError(e, porDefecto);
+
+  const alTerminar = (titulo: string) => (r: Omit<Resultado, "titulo">) => {
+    const hecho = r.verdes + r.ambares + r.traspasos;
+    if (hecho === 0 && r.errores.length === 0) {
+      toast.info("No se ha encontrado nada nuevo que conciliar.");
+      setResultado(null);
+    } else {
+      setResultado({ titulo, ...r });
+    }
+    refrescar();
+  };
 
   const aplicarFn = useServerFn(aplicarPlan);
   const aplicar = useMutation({
     mutationFn: () => aplicarFn(),
-    onSuccess: (r) => {
-      toast.success(
-        `${r.verdes} conciliados, ${r.ambares} a revisar, ${r.traspasos} traspasos` +
-          (r.errores.length ? `. ${r.errores.length} no se pudieron: ${r.errores[0]}` : ""),
-      );
-      refrescar();
-    },
+    onSuccess: alTerminar("Propuesta aplicada"),
     onError: (e) => aviso(e, "No se pudo aplicar la propuesta"),
+  });
+  const reconciliarFn = useServerFn(reconciliar);
+  const reconciliarM = useMutation({
+    mutationFn: () => reconciliarFn({ data: { rehacer_revisar: rehacerRevisar } }),
+    onSuccess: (r) => {
+      setReconciliarAbierto(false);
+      alTerminar("Re-conciliación hecha")(r);
+    },
+    onError: (e) => aviso(e, "No se pudo re-conciliar"),
   });
   const confirmarFn = useServerFn(confirmarEnlace);
   const confirmar = useMutation({
@@ -197,21 +294,45 @@ export function MotorConciliacion({
     onError: (e) => aviso(e, "No se pudo desmarcar"),
   });
   const enlazarFn = useServerFn(enlazarManual);
+  const anadirFn = useServerFn(anadirAlEnlace);
+  // El error se queda en el diálogo, junto a lo marcado, además del aviso.
   const enlazar = useMutation({
-    mutationFn: (v: { movimiento: string; documentos: DocumentoConciliable[] }) =>
-      enlazarFn({
-        data: {
-          movimientos: [v.movimiento],
-          documentos: v.documentos.map((d) => ({ tipo: d.tipo, id: d.id })),
-        },
-      }),
-    onSuccess: () => {
-      toast.success("Enlazado y conciliado");
-      setSugerir(null);
+    mutationFn: (v: { movimientos: string[]; documentos: DocumentoEncontrado[] }) => {
+      const r = resumenSeleccion(
+        v.movimientos.map((id) => movs.get(id)!).filter(Boolean),
+        v.documentos,
+      );
+      if (r.error) throw new Error(r.error);
+      return r.ampliaGrupo
+        ? anadirFn({ data: { grupo: r.ampliaGrupo, movimientos: v.movimientos } })
+        : enlazarFn({
+            data: {
+              movimientos: v.movimientos,
+              documentos: v.documentos.map((d) => ({ tipo: d.tipo, id: d.id })),
+            },
+          });
+    },
+    onSuccess: (_r, v) => {
+      toast.success(
+        v.movimientos.length > 1
+          ? `Enlazados los ${v.movimientos.length} movimientos`
+          : "Enlazado y conciliado",
+      );
+      setConciliar(null);
+      setMarcados((s) => {
+        const n = new Set(s);
+        for (const id of v.movimientos) n.delete(id);
+        return n;
+      });
       refrescar();
     },
     onError: (e) => aviso(e, "No se pudo enlazar"),
   });
+
+  const abrirConciliar = (lista: Movimiento[]) => {
+    enlazar.reset();
+    setConciliar(lista);
+  };
 
   // Las tarjetas se dan de alta sin IBAN: sus recibos se pueden desglosar.
   const esTarjeta = (cuentaId: string | null) =>
@@ -220,35 +341,70 @@ export function MotorConciliacion({
   const cuentaDe = (m: Movimiento) =>
     m.cuenta_id ? (alias.get(m.cuenta_id) ?? "—") : "Sin cuenta";
 
+  const verSentido = (sentido: FiltroMovimientos["sentido"]) => {
+    setFiltro((f) => ({ ...f, sentido: f.sentido === sentido ? "todo" : sentido }));
+    setPestana("pendientes");
+  };
+
   return (
     <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <CifraSentido
+          titulo="Cobros por conciliar"
+          detalle="Lo que entra, contra facturas y tickets emitidos"
+          total={porSentido.cobro}
+          activo={filtro.sentido === "cobro"}
+          alPulsar={() => verSentido("cobro")}
+        />
+        <CifraSentido
+          titulo="Pagos por conciliar"
+          detalle="Lo que sale, contra facturas recibidas"
+          total={porSentido.pago}
+          activo={filtro.sentido === "pago"}
+          alPulsar={() => verSentido("pago")}
+        />
+      </div>
+
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div className="flex flex-wrap gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Propuesta del motor:</span>
             <Badge className="bg-emerald-600 hover:bg-emerald-600">{verdes.length} verdes</Badge>
             <Badge variant="outline" className="border-amber-500 text-amber-700">
               {ambares.length} a revisar
             </Badge>
             <Badge variant="secondary">{tp.length} traspasos</Badge>
-            <span className="text-muted-foreground">
-              propuestos de {sinConciliar.length} movimientos sin conciliar
-            </span>
           </div>
           {escribir && (
             <div className="flex flex-col items-end gap-1">
-              <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
-                <Wand2 className="h-4 w-4 mr-2" />
-                Aplicar la propuesta
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="outline"
+                  disabled={reconciliarM.isPending}
+                  onClick={() => setReconciliarAbierto(true)}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${reconciliarM.isPending ? "animate-spin" : ""}`}
+                  />
+                  Re-conciliar
+                </Button>
+                <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
+                  <Wand2 className="h-4 w-4 mr-2" />
+                  Aplicar la propuesta
+                </Button>
+              </div>
               {!hayPlan && sinConciliar.length > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  No hay nada que aplicar: concilia cada movimiento con «Conciliar».
+                  Nada que aplicar: concilia a mano con «Conciliar», o pulsa «Re-conciliar» tras
+                  registrar facturas nuevas.
                 </span>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {resultado && <TarjetaResultado resultado={resultado} alCerrar={() => setResultado(null)} />}
 
       {datos.falta && (
         <p className="flex gap-2 text-sm text-muted-foreground">
@@ -268,7 +424,7 @@ export function MotorConciliacion({
         </p>
       )}
 
-      <Tabs defaultValue="pendientes">
+      <Tabs value={pestana} onValueChange={setPestana}>
         <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="pendientes">Sin conciliar ({sinConciliar.length})</TabsTrigger>
           <TabsTrigger value="revisar">Por revisar ({cuantos.revisar})</TabsTrigger>
@@ -276,12 +432,46 @@ export function MotorConciliacion({
           <TabsTrigger value="traspasos">Traspasos ({cuantos.traspasos})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pendientes">
+        <TabsContent value="pendientes" className="space-y-3">
+          <FiltrosMovimientos filtro={filtro} cuentas={cuentas} alCambiar={setFiltro} />
+
+          {escribir && marcados.size > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/50 p-3 text-sm">
+              <span>
+                {elegidos.length} {elegidos.length === 1 ? "movimiento" : "movimientos"} marcados ·{" "}
+                <span className="font-semibold tabular-nums">{eur(seleccion.sumaMovimientos)}</span>
+                {errorMarcados && <span className="ml-2 text-destructive">{errorMarcados}</span>}
+              </span>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setMarcados(new Set())}>
+                  Quitar marcas
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!!errorMarcados || elegidos.length === 0}
+                  onClick={() => abrirConciliar(elegidos)}
+                >
+                  <Lightbulb className="h-4 w-4 mr-1" />
+                  Conciliar {elegidos.length > 1 ? "juntos" : ""}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Card>
             <CardContent className="p-0">
               <Table movil="tarjetas">
                 <TableHeader>
                   <TableRow>
+                    {escribir && (
+                      <TableHead className="w-10">
+                        <Checkbox
+                          aria-label="Marcar todos los que se ven"
+                          checked={todosVisiblesMarcados}
+                          onCheckedChange={(v) => alternarVisibles(v === true)}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead className="w-28">Fecha</TableHead>
                     <TableHead className="w-32">Cuenta</TableHead>
                     <TableHead>Concepto</TableHead>
@@ -291,21 +481,38 @@ export function MotorConciliacion({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sinConciliar.length === 0 && (
+                  {visibles.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                        No hay movimientos sin conciliar.
+                      <TableCell
+                        colSpan={escribir ? 7 : 6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        {sinConciliar.length === 0
+                          ? "No hay movimientos sin conciliar."
+                          : "Ningún movimiento sin conciliar cumple el filtro."}
                       </TableCell>
                     </TableRow>
                   )}
-                  {sinConciliar.map((m) => {
+                  {visibles.map((m) => {
                     const p = propuestaDe.get(m.id);
                     const espejo = traspasoPropuesto.get(m.id);
                     return (
-                      <TableRow key={m.id}>
+                      <TableRow key={m.id} data-state={marcados.has(m.id) ? "selected" : undefined}>
+                        {escribir && (
+                          <TableCell>
+                            <Checkbox
+                              aria-label={`Marcar ${m.concepto || "movimiento"}`}
+                              checked={marcados.has(m.id)}
+                              onCheckedChange={(v) => alternarMarcado(m.id, v === true)}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="whitespace-nowrap">{fechaCorta(m.fecha)}</TableCell>
                         <TableCell className="text-sm">{cuentaDe(m)}</TableCell>
-                        <TableCell className="text-sm">{m.concepto || "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{m.concepto || "—"}</div>
+                          <EtiquetaSentido importe={m.importe} />
+                        </TableCell>
                         <TableCell
                           className={`text-right font-medium tabular-nums ${m.importe < 0 ? "text-destructive" : ""}`}
                         >
@@ -326,7 +533,7 @@ export function MotorConciliacion({
                         </TableCell>
                         <TableCell className="text-right">
                           {escribir && (
-                            <Button variant="outline" size="sm" onClick={() => setSugerir(m)}>
+                            <Button variant="outline" size="sm" onClick={() => abrirConciliar([m])}>
                               <Lightbulb className="h-4 w-4 mr-1" />
                               Conciliar
                             </Button>
@@ -336,35 +543,35 @@ export function MotorConciliacion({
                     );
                   })}
                 </TableBody>
-                {sinConciliar.length > 0 && (
+                {visibles.length > 0 && (
                   <TableFooter>
-                    {totalSinConciliar.entradas > 0 && totalSinConciliar.salidas > 0 && (
+                    {totalVisibles.entradas > 0 && totalVisibles.salidas > 0 && (
                       <>
                         <TableRow>
-                          <TableCell colSpan={3}>Abonos</TableCell>
+                          <TableCell colSpan={escribir ? 4 : 3}>Cobros</TableCell>
                           <TableCell className="text-right font-bold tabular-nums">
-                            {eur(totalSinConciliar.entradas)}
+                            {eur(totalVisibles.entradas)}
                           </TableCell>
                           <TableCell colSpan={2} />
                         </TableRow>
                         <TableRow>
-                          <TableCell colSpan={3}>Cargos</TableCell>
+                          <TableCell colSpan={escribir ? 4 : 3}>Pagos</TableCell>
                           <TableCell className="text-right font-bold tabular-nums text-destructive">
-                            {eur(-totalSinConciliar.salidas)}
+                            {eur(-totalVisibles.salidas)}
                           </TableCell>
                           <TableCell colSpan={2} />
                         </TableRow>
                       </>
                     )}
                     <TableRow>
-                      <TableCell colSpan={3} className="font-semibold">
-                        Total · {totalSinConciliar.n}{" "}
-                        {totalSinConciliar.n === 1 ? "movimiento" : "movimientos"}
+                      <TableCell colSpan={escribir ? 4 : 3} className="font-semibold">
+                        {filtrado ? "Total filtrado" : "Total"} · {totalVisibles.n}{" "}
+                        {totalVisibles.n === 1 ? "movimiento" : "movimientos"}
                       </TableCell>
                       <TableCell
-                        className={`text-right font-bold tabular-nums ${totalSinConciliar.neto < 0 ? "text-destructive" : ""}`}
+                        className={`text-right font-bold tabular-nums ${totalVisibles.neto < 0 ? "text-destructive" : ""}`}
                       >
-                        {eur(totalSinConciliar.neto)}
+                        {eur(totalVisibles.neto)}
                       </TableCell>
                       <TableCell colSpan={2} />
                     </TableRow>
@@ -445,40 +652,254 @@ export function MotorConciliacion({
         Las facturas emitidas no se modifican: solo se enlazan.
       </p>
 
-      <Dialog open={!!sugerir} onOpenChange={(o) => !o && setSugerir(null)}>
+      <Dialog open={!!conciliar} onOpenChange={(o) => !o && setConciliar(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Conciliar el movimiento</DialogTitle>
+            <DialogTitle>
+              {conciliar && conciliar.length > 1
+                ? `Conciliar ${conciliar.length} movimientos juntos`
+                : "Conciliar el movimiento"}
+            </DialogTitle>
             <DialogDescription>
-              {sugerir &&
-                `${fechaCorta(sugerir.fecha)} · ${sugerir.concepto || "sin concepto"} · ${eur(sugerir.importe)}. `}
+              {conciliar?.length === 1 &&
+                `${fechaCorta(conciliar[0].fecha)} · ${conciliar[0].concepto || "sin concepto"} · ${eur(conciliar[0].importe)}. `}
               No se guarda nada hasta que enlazas.
             </DialogDescription>
           </DialogHeader>
-          {sugerir && (
+          {conciliar && (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Con el mismo importe</h3>
-                <ListaSugerencias
-                  movimiento={sugerir}
-                  libres={libres}
-                  ocupado={enlazar.isPending}
-                  alEnlazar={(documento) =>
-                    enlazar.mutate({ movimiento: sugerir.id, documentos: [documento] })
-                  }
-                />
-              </div>
+              {conciliar.length > 1 && (
+                <ul className="divide-y rounded-md border text-sm">
+                  {conciliar.map((m) => (
+                    <li key={m.id} className="flex items-center justify-between gap-3 p-2">
+                      <span className="min-w-0 truncate">
+                        {fechaCorta(m.fecha)} · {m.concepto || "—"}
+                      </span>
+                      <span className="tabular-nums">{eur(m.importe)}</span>
+                    </li>
+                  ))}
+                  <li className="flex justify-between p-2 font-semibold">
+                    <span>Suma</span>
+                    <span className="tabular-nums">
+                      {eur(resumenSeleccion(conciliar, []).sumaMovimientos)}
+                    </span>
+                  </li>
+                </ul>
+              )}
+              {conciliar.length === 1 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Con el mismo importe</h3>
+                  <ListaSugerencias
+                    movimiento={conciliar[0]}
+                    libres={libres}
+                    ocupado={enlazar.isPending}
+                    alEnlazar={(documento) =>
+                      enlazar.mutate({ movimientos: [conciliar[0].id], documentos: [documento] })
+                    }
+                  />
+                </div>
+              )}
               <BuscarDocumentos
-                key={sugerir.id}
-                movimiento={sugerir}
+                key={conciliar.map((m) => m.id).join(",")}
+                movimientos={conciliar}
                 ocupado={enlazar.isPending}
-                alEnlazar={(documentos) => enlazar.mutate({ movimiento: sugerir.id, documentos })}
+                alEnlazar={(documentos) =>
+                  enlazar.mutate({ movimientos: conciliar.map((m) => m.id), documentos })
+                }
               />
+              {enlazar.error && (
+                <p className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive">
+                  <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {mensajeDeError(enlazar.error)}
+                </p>
+              )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={reconciliarAbierto} onOpenChange={setReconciliarAbierto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Re-conciliar</DialogTitle>
+            <DialogDescription>
+              Vuelve a leer los movimientos y las facturas de ahora (también las registradas o
+              emitidas después de subir el extracto) y vuelve a intentar casarlos. Lo ya conciliado
+              y los traspasos no se tocan.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex cursor-pointer items-start gap-3 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={rehacerRevisar}
+              onCheckedChange={(v) => setRehacerRevisar(v === true)}
+            />
+            <span>
+              Volver a calcular también{" "}
+              {cuantos.revisar === 1
+                ? "la propuesta «por revisar»"
+                : `las ${cuantos.revisar} propuestas «por revisar»`}
+              . Todavía no han marcado nada como pagado: se deshacen y entran otra vez en el
+              cálculo.
+            </span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setReconciliarAbierto(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={reconciliarM.isPending} onClick={() => reconciliarM.mutate()}>
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${reconciliarM.isPending ? "animate-spin" : ""}`}
+              />
+              Re-conciliar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+/** Cuántos cobros o pagos quedan y cuánto suman; al pulsar, filtra la lista por ellos. */
+function CifraSentido({
+  titulo,
+  detalle,
+  total,
+  activo,
+  alPulsar,
+}: {
+  titulo: string;
+  detalle: string;
+  total: TotalSentido;
+  activo: boolean;
+  alPulsar: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={alPulsar}
+      aria-pressed={activo}
+      className={`rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/50 ${activo ? "border-primary ring-1 ring-primary" : ""}`}
+    >
+      <div className="text-sm text-muted-foreground">{titulo}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span
+          className={`text-2xl font-semibold tabular-nums ${total.total < 0 ? "text-destructive" : ""}`}
+        >
+          {eur(total.total)}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          {total.n} {total.n === 1 ? "movimiento" : "movimientos"}
+        </span>
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">
+        {activo ? "Filtrando la lista · pulsa otra vez para quitarlo" : detalle}
+      </div>
+    </button>
+  );
+}
+
+function EtiquetaSentido({ importe }: { importe: number }) {
+  return sentidoDe(importe) === "cobro" ? (
+    <span className="text-xs text-status-completado">Cobro</span>
+  ) : (
+    <span className="text-xs text-destructive">Pago</span>
+  );
+}
+
+/** Cobros o pagos, cuenta y concepto o importe. */
+function FiltrosMovimientos({
+  filtro,
+  cuentas,
+  alCambiar,
+}: {
+  filtro: FiltroMovimientos;
+  cuentas: { id: string; alias: string }[];
+  alCambiar: (f: FiltroMovimientos) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        value={filtro.sentido}
+        onValueChange={(v) =>
+          v && alCambiar({ ...filtro, sentido: v as FiltroMovimientos["sentido"] })
+        }
+      >
+        <ToggleGroupItem value="todo">Todo</ToggleGroupItem>
+        <ToggleGroupItem value="cobro">Cobros</ToggleGroupItem>
+        <ToggleGroupItem value="pago">Pagos</ToggleGroupItem>
+      </ToggleGroup>
+      {cuentas.length > 1 && (
+        <Select
+          value={filtro.cuenta ?? "todas"}
+          onValueChange={(v) => alCambiar({ ...filtro, cuenta: v === "todas" ? null : v })}
+        >
+          <SelectTrigger className="h-9 w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas las cuentas</SelectItem>
+            {cuentas.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.alias}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <div className="relative min-w-48 flex-1">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="h-9 pl-8"
+          placeholder="Concepto o importe"
+          value={filtro.texto}
+          onChange={(e) => alCambiar({ ...filtro, texto: e.target.value })}
+        />
+      </div>
+      {(filtro.sentido !== "todo" || filtro.cuenta || filtro.texto) && (
+        <Button variant="ghost" size="sm" onClick={() => alCambiar(SIN_FILTRO)}>
+          Quitar filtros
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Lo que hizo el último «Aplicar» o «Re-conciliar», con cada error a la vista. */
+function TarjetaResultado({ resultado, alCerrar }: { resultado: Resultado; alCerrar: () => void }) {
+  const r = resultado;
+  return (
+    <Card className={r.errores.length > 0 ? "border-amber-500" : ""}>
+      <CardContent className="space-y-2 py-4 text-sm">
+        <div className="flex items-start justify-between gap-2">
+          <p>
+            <span className="font-semibold">{r.titulo}:</span> {r.verdes} conciliados, {r.ambares}{" "}
+            por revisar, {r.traspasos} traspasos
+            {r.rehechos > 0 && `, ${r.rehechos} propuestas recalculadas`}.
+          </p>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Cerrar" onClick={alCerrar}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        {r.errores.length > 0 && (
+          <div className="space-y-1">
+            <p className="flex items-center gap-2 font-medium text-amber-700">
+              <AlertTriangle className="h-4 w-4" />
+              {r.errores.length}{" "}
+              {r.errores.length === 1 ? "no se pudo hacer" : "no se pudieron hacer"}:
+            </p>
+            <ul className="list-disc space-y-0.5 pl-6 text-muted-foreground">
+              {r.errores.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -583,25 +1004,56 @@ function HistorialEnlaces({
   const { data, error, isPending, isFetching, setPedida } = usePaginaHistorial(estado, (pagina) =>
     verFn({ data: { estado, pagina } }),
   );
+  const [sentido, setSentido] = useState<FiltroMovimientos["sentido"]>("todo");
+  const parcial = !!data && data.total > data.porPagina;
+  const enlaces = (data?.enlaces ?? []).filter(
+    (e) => sentido === "todo" || sentidoDe(e.movimientos[0]?.importe ?? 0) === sentido,
+  );
   return (
-    <TablaEnlaces
-      enlaces={data?.enlaces ?? []}
-      cuentaDe={cuentaDe}
-      vacio={error ? `No se pudo leer: ${mensajeDeError(error)}` : isPending ? "Cargando…" : vacio}
-      acciones={acciones}
-      parcial={!!data && data.total > data.porPagina}
-      paginas={
-        data && (
-          <Paginas
-            pagina={data.pagina}
-            porPagina={data.porPagina}
-            total={data.total}
-            ocupado={isFetching}
-            alCambiar={setPedida}
-          />
-        )
-      }
-    />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={sentido}
+          onValueChange={(v) => v && setSentido(v as FiltroMovimientos["sentido"])}
+        >
+          <ToggleGroupItem value="todo">Todo</ToggleGroupItem>
+          <ToggleGroupItem value="cobro">Cobros</ToggleGroupItem>
+          <ToggleGroupItem value="pago">Pagos</ToggleGroupItem>
+        </ToggleGroup>
+        {parcial && sentido !== "todo" && (
+          <span className="text-xs text-muted-foreground">Filtra la página que se ve.</span>
+        )}
+      </div>
+      <TablaEnlaces
+        enlaces={enlaces}
+        cuentaDe={cuentaDe}
+        vacio={
+          error
+            ? `No se pudo leer: ${mensajeDeError(error)}`
+            : isPending
+              ? "Cargando…"
+              : sentido !== "todo" && (data?.enlaces.length ?? 0) > 0
+                ? `No hay ${sentido === "cobro" ? "cobros" : "pagos"} aquí.`
+                : vacio
+        }
+        acciones={acciones}
+        parcial={parcial}
+        paginas={
+          data && (
+            <Paginas
+              pagina={data.pagina}
+              porPagina={data.porPagina}
+              total={data.total}
+              ocupado={isFetching}
+              alCambiar={setPedida}
+            />
+          )
+        }
+      />
+    </div>
   );
 }
 
@@ -671,12 +1123,11 @@ function TablaEnlaces({
                   ))}
                 </TableCell>
                 <TableCell>
+                  <EtiquetaSentido importe={e.movimientos[0]?.importe ?? 0} />
                   <div className="text-xs">
                     {ETIQUETA_MOTIVO[e.motivo as keyof typeof ETIQUETA_MOTIVO] ?? e.motivo}
                   </div>
-                  {e.diferencia !== 0 && (
-                    <div className="text-xs text-amber-600">Difiere {eur(e.diferencia)}</div>
-                  )}
+                  {e.diferencia !== 0 && <Diferencia enlace={e} />}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex items-center gap-1">{acciones(e)}</div>
@@ -737,6 +1188,25 @@ function TablaEnlaces({
         {paginas}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * La diferencia de un enlace: si es una sola factura y el banco se quedó
+ * corto, lo que falta por cobrar o pagar (se completa buscándola en
+ * «Conciliar» con el siguiente pago); si no, cuánto difiere.
+ */
+function Diferencia({ enlace }: { enlace: EnlaceGuardado }) {
+  const falta =
+    enlace.documentos.length === 1
+      ? pendienteDeEnlace(enlace.documentos[0].esperado, enlace.diferencia)
+      : null;
+  return falta !== null ? (
+    <div className="text-xs text-status-pendiente">
+      Falta {sentidoDe(falta) === "cobro" ? "cobrar" : "pagar"} {eur(Math.abs(falta))}
+    </div>
+  ) : (
+    <div className="text-xs text-amber-600">Difiere {eur(enlace.diferencia)}</div>
   );
 }
 
@@ -970,24 +1440,31 @@ function ListaSugerencias({
 }
 
 /**
- * Buscar a mano en todos los documentos sin conciliar (no solo los cargados):
- * por nombre, número o importe. Se pueden marcar varios, para una remesa de
- * TPV que junta varias ventas o un pago de varias facturas; abajo dice cuánto
- * suman y cuánto falta para el movimiento.
+ * Buscar a mano en todos los documentos (no solo los cargados): por nombre,
+ * NIF, número o importe, varias palabras a la vez y sin acentos. Empieza
+ * buscando el importe de lo que se concilia, lo más probable primero. Se
+ * pueden marcar varias facturas para un movimiento (una remesa de TPV, un
+ * pago de varias) o una factura para varios movimientos; una factura cobrada
+ * en parte sale con lo que le falta, y enlazarla le añade este pago. Abajo
+ * dice cuánto suma lo marcado, cuánto falta y, si no se puede, por qué.
  */
 function BuscarDocumentos({
-  movimiento,
+  movimientos,
   ocupado,
   alEnlazar,
 }: {
-  movimiento: Movimiento;
+  movimientos: Movimiento[];
   ocupado: boolean;
-  alEnlazar: (documentos: DocumentoConciliable[]) => void;
+  alEnlazar: (documentos: DocumentoEncontrado[]) => void;
 }) {
   const buscarFn = useServerFn(buscarConciliables);
-  const [texto, setTexto] = useState("");
-  const [buscado, setBuscado] = useState("");
-  const [elegidos, setElegidos] = useState<Map<string, DocumentoConciliable>>(new Map());
+  const suma = resumenSeleccion(movimientos, []).sumaMovimientos;
+  const inicial = numero(Math.abs(suma), 2);
+  const [texto, setTexto] = useState(inicial);
+  const [buscado, setBuscado] = useState(inicial);
+  const [elegidos, setElegidos] = useState<Map<string, DocumentoEncontrado>>(new Map());
+  // Con varios movimientos, una sola factura: la base no enlaza varios con varios.
+  const unaSola = movimientos.length > 1;
 
   // Espera a que se deje de escribir para no buscar con cada letra.
   useEffect(() => {
@@ -995,25 +1472,30 @@ function BuscarDocumentos({
     return () => clearTimeout(t);
   }, [texto]);
 
-  const signo = movimiento.importe < 0 ? "cargo" : "abono";
+  const signo = suma < 0 ? "cargo" : "abono";
+  const ultima = movimientos.reduce(
+    (f, m) => (m.fecha > f ? m.fecha : f),
+    movimientos[0]?.fecha ?? "",
+  );
+  const objetivo = { importe: suma, fecha: ultima };
   const {
     data: encontrados = [],
     isFetching,
     error,
   } = useQuery({
-    queryKey: ["conciliar-buscar", signo, buscado],
+    queryKey: ["conciliar-buscar", signo, buscado, objetivo.importe, objetivo.fecha],
     enabled: buscado.length > 0,
     placeholderData: keepPreviousData,
-    queryFn: () => buscarFn({ data: { texto: buscado, signo } }),
+    queryFn: () => buscarFn({ data: { texto: buscado, signo, objetivo } }),
   });
 
   const lista = buscado ? encontrados : [];
-  const suma = [...elegidos.values()].reduce((s, d) => s + d.esperado, 0);
-  const falta = Math.round((movimiento.importe - suma) * 100) / 100;
+  const marcados = [...elegidos.values()];
+  const resumen = resumenSeleccion(movimientos, marcados);
 
-  const alternar = (d: DocumentoConciliable, marcado: boolean) =>
+  const alternar = (d: DocumentoEncontrado, marcado: boolean) =>
     setElegidos((m) => {
-      const n = new Map(m);
+      const n = unaSola ? new Map<string, DocumentoEncontrado>() : new Map(m);
       if (marcado) n.set(claveDoc(d), d);
       else n.delete(claveDoc(d));
       return n;
@@ -1028,19 +1510,28 @@ function BuscarDocumentos({
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-8"
-          placeholder="Nombre, número (T2026/0057) o importe (15,72)"
+          placeholder="Nombre, NIF, número (T2026/0057) o importe (15,72)"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
         />
       </div>
+      <p className="text-xs text-muted-foreground">
+        Varias palabras: tienen que estar todas. Un importe encuentra lo que está a 1 € o menos; lo
+        que casa al céntimo y la fecha más cercana van primero.
+        {unaSola && " Con varios movimientos se elige una sola factura."}
+      </p>
       {error && <p className="text-sm text-destructive">{mensajeDeError(error)}</p>}
       {buscado && !isFetching && lista.length === 0 && !error && (
-        <p className="text-sm text-muted-foreground">Nada sin conciliar coincide.</p>
+        <p className="text-sm text-muted-foreground">
+          Nada sin conciliar coincide. Prueba con otra palabra del nombre, el NIF o el número.
+        </p>
       )}
       {lista.length > 0 && (
         <ul className="max-h-[40vh] divide-y overflow-y-auto rounded-md border text-sm">
           {lista.map((d) => {
             const clave = claveDoc(d);
+            const exacto = coincideImporte(suma, queda(d));
+            const dias = diasEntre(d.fecha, ultima);
             return (
               <li key={clave}>
                 <label className="flex cursor-pointer items-center gap-3 p-2.5">
@@ -1050,7 +1541,23 @@ function BuscarDocumentos({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{etiquetaDoc(d)}</span>
-                    <span className="text-xs text-muted-foreground">{fechaCorta(d.fecha)}</span>
+                    <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      {fechaCorta(d.fecha)}
+                      <span>
+                        {dias === 0
+                          ? "el mismo día"
+                          : dias > 0
+                            ? `${dias} días antes del banco`
+                            : `${-dias} días después del banco`}
+                      </span>
+                      {exacto && <span className="text-status-completado">mismo importe</span>}
+                      {d.parcial && (
+                        <span className="text-status-pendiente">
+                          cobrada en parte: ya {eur(Math.abs(d.parcial.pagado))}, falta{" "}
+                          {eur(Math.abs(d.parcial.pendiente))}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span className="tabular-nums">{eur(Math.abs(d.esperado))}</span>
                 </label>
@@ -1060,22 +1567,35 @@ function BuscarDocumentos({
         </ul>
       )}
       {elegidos.size > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 p-2.5 text-sm">
-          <span>
-            {elegidos.size} {elegidos.size === 1 ? "documento" : "documentos"} ·{" "}
-            {eur(Math.abs(suma))}
-            {falta === 0 ? (
-              <span className="ml-2 text-status-completado">cuadra con el movimiento</span>
-            ) : (
-              <span className="ml-2 text-status-pendiente">
-                diferencia {eur(falta)} (comisión, redondeo o falta algo)
-              </span>
-            )}
-          </span>
-          <Button size="sm" disabled={ocupado} onClick={() => alEnlazar([...elegidos.values()])}>
-            <ArrowLeftRight className="h-4 w-4 mr-1" />
-            Enlazar {elegidos.size > 1 ? `los ${elegidos.size}` : ""}
-          </Button>
+        <div className="space-y-1 rounded-md bg-muted/50 p-2.5 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {elegidos.size} {elegidos.size === 1 ? "documento" : "documentos"} ·{" "}
+              {eur(Math.abs(resumen.sumaDocumentos))}
+              {!resumen.error &&
+                (resumen.diferencia === 0 ? (
+                  <span className="ml-2 text-status-completado">cuadra con el banco</span>
+                ) : (
+                  <span className="ml-2 text-status-pendiente">
+                    diferencia {eur(resumen.diferencia)}
+                    {Math.abs(resumen.sumaMovimientos) < Math.abs(resumen.sumaDocumentos)
+                      ? " (cobro parcial: quedará pendiente lo que falta)"
+                      : " (comisión, redondeo o falta algo)"}
+                  </span>
+                ))}
+            </span>
+            <Button
+              size="sm"
+              disabled={ocupado || !!resumen.error}
+              onClick={() => alEnlazar(marcados)}
+            >
+              <ArrowLeftRight className="h-4 w-4 mr-1" />
+              {resumen.ampliaGrupo
+                ? "Añadir este pago"
+                : `Enlazar ${elegidos.size > 1 ? `los ${elegidos.size}` : ""}`}
+            </Button>
+          </div>
+          {resumen.error && <p className="text-destructive">{resumen.error}</p>}
         </div>
       )}
     </div>
