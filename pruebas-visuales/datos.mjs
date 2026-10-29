@@ -583,6 +583,11 @@ BANCO.push(
   movBanco(4, 1, "2026-10-10", "TRASPASO A TARJETAS", -500),
   movBanco(5, 2, "2026-10-11", "TRASPASO DESDE BBVA", 500),
   movBanco(6, 1, "2026-09-20", "PAGO PROVEEDOR", -363),
+  // Cobro en dos partes de la factura 2026/0004 de textil (108,90): la primera
+  // ya enlazada, la segunda pendiente.
+  movBanco(7, 1, "2026-10-12", "TRANSF CLIENTE TEXTIL A CUENTA", 50),
+  movBanco(8, 1, "2026-10-20", "TRANSF CLIENTE TEXTIL RESTO", 58.9),
+  movBanco(9, 1, "2026-10-21", "ABONO TPV REMESA 20/10", 212.4),
 );
 const CONCILIACIONES = [
   {
@@ -596,6 +601,19 @@ const CONCILIACIONES = [
     motivo: "importe_fecha",
     diferencia: 0,
     importe: -363,
+    marco_pagada: false,
+  },
+  {
+    id: id("bc", 2),
+    movimiento_id: id("9", 17),
+    factura_id: null,
+    compra_id: null,
+    textil_factura_id: id("r", 2),
+    estado: "conciliada",
+    grupo: id("bg", 2),
+    motivo: "manual",
+    diferencia: -58.9,
+    importe: 108.9,
     marco_pagada: false,
   },
 ];
@@ -1174,4 +1192,109 @@ Object.assign(RPC, {
   ],
   tienda_credenciales_leer: () => [],
   smtp_estado: () => [],
+});
+
+// Las funciones de la conciliación (20261025100000), calculadas con los datos
+// de arriba en cada llamada: lo pendiente, el historial y los recuentos.
+const enlazado = (c) => c.factura_id ?? c.compra_id ?? c.textil_factura_id;
+const movPlano = (m) => ({
+  id: m.id,
+  fecha: m.fecha,
+  concepto: m.concepto,
+  importe: m.importe,
+  cuenta_id: m.cuenta_id,
+});
+const documentosBanco = () => [
+  ...DATOS.textil_compras
+    .filter((c) => c.estado === "registrada" && !c.borrada_en)
+    .map((c) => ({
+      tipo: "compra",
+      id: c.id,
+      fecha: c.fecha,
+      importe: c.liquido ?? c.total,
+      contraparte: c.proveedor,
+      nif: c.nif_proveedor,
+      serie: null,
+      ejercicio: null,
+      numero: c.numero,
+      tipo_documento: c.tipo_documento ?? "factura",
+    })),
+  ...DATOS.facturas
+    .filter((f) => ["emitida", "vencida"].includes(f.estado))
+    .map((f) => ({
+      tipo: "factura",
+      id: f.id,
+      fecha: f.fecha,
+      importe: f.total,
+      contraparte: f.cliente_nombre,
+      nif: f.cliente_nif,
+      serie: f.serie,
+      ejercicio: f.ejercicio,
+      numero: f.numero,
+      tipo_documento: null,
+    })),
+  ...DATOS.textil_facturas
+    .filter((f) => !["borrador", "anulada"].includes(f.estado))
+    .map((f) => ({
+      tipo: "textil",
+      id: f.id,
+      fecha: f.fecha,
+      importe: f.total,
+      contraparte: f.cliente_nombre,
+      nif: f.cliente_nif,
+      serie: f.serie,
+      ejercicio: null,
+      numero: f.numero,
+      tipo_documento: null,
+    })),
+];
+Object.assign(RPC, {
+  banco_movimientos_por_conciliar: () => {
+    const usados = new Set(DATOS.banco_conciliaciones.map((c) => c.movimiento_id));
+    return DATOS.banco_movimientos
+      .filter((m) => !m.traspaso_con && !usados.has(m.id))
+      .map(movPlano);
+  },
+  banco_documentos_por_conciliar: () => {
+    const usados = new Set(DATOS.banco_conciliaciones.map(enlazado));
+    return documentosBanco().filter((d) => !usados.has(d.id));
+  },
+  banco_conciliacion_cuantos: () => {
+    const grupos = (estado) =>
+      new Set(DATOS.banco_conciliaciones.filter((c) => c.estado === estado).map((c) => c.grupo))
+        .size;
+    return [
+      {
+        revisar: grupos("revisar"),
+        conciliados: grupos("conciliada"),
+        traspasos: DATOS.banco_movimientos.filter((m) => m.traspaso_con && m.importe < 0).length,
+      },
+    ];
+  },
+  banco_enlaces: () => {
+    const docs = new Map(documentosBanco().map((d) => [d.id, d]));
+    const movs = new Map(DATOS.banco_movimientos.map((m) => [m.id, m]));
+    const grupos = new Map();
+    for (const c of DATOS.banco_conciliaciones) {
+      const g = grupos.get(c.grupo) ?? { filas: [] };
+      g.filas.push(c);
+      grupos.set(c.grupo, g);
+    }
+    return [...grupos.entries()].map(([grupo, { filas }]) => {
+      const ms = [...new Set(filas.map((f) => f.movimiento_id))].map((id) => movs.get(id));
+      return {
+        grupo,
+        empresa_id: EMPRESA,
+        estado: filas.some((f) => f.estado === "revisar") ? "revisar" : "conciliada",
+        motivo: filas[0].motivo,
+        diferencia: filas[0].diferencia,
+        fecha: ms
+          .map((m) => m.fecha)
+          .sort()
+          .at(-1),
+        movimientos: ms.map(movPlano),
+        documentos: [...new Set(filas.map(enlazado))].map((id) => docs.get(id)).filter(Boolean),
+      };
+    });
+  },
 });

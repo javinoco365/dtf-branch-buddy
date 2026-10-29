@@ -74,7 +74,12 @@ function cumple(fila, columna, expresion) {
 const RESERVADOS = new Set(["select", "order", "limit", "offset", "or", "and", "on_conflict"]);
 
 function leerTabla(tabla, query) {
-  let filas = [...(DATOS[tabla] ?? [])];
+  return filtrar([...(DATOS[tabla] ?? [])], query);
+}
+
+// Filtros, orden y página de PostgREST sobre unas filas: las de una tabla o
+// las que devuelve una función que da filas (rpc con .eq(), .order()…).
+function filtrar(filas, query) {
   for (const [clave, valor] of query) {
     if (RESERVADOS.has(clave)) continue;
     filas = filas.filter((f) => cumple(f, clave, valor));
@@ -187,7 +192,12 @@ const servidor = http.createServer((req, res) => {
   const rpc = ruta.match(/^\/rest\/v1\/rpc\/([a-z_0-9]+)$/);
   if (rpc) {
     const r = RPC[rpc[1]];
-    return responder(res, 200, typeof r === "function" ? r() : (r ?? null));
+    const valor = typeof r === "function" ? r() : (r ?? null);
+    if (!Array.isArray(valor)) return responder(res, 200, valor);
+    const filas = filtrar(valor, url.searchParams);
+    const rango = { "content-range": `0-${Math.max(filas.length - 1, 0)}/${filas.length}` };
+    if (req.method === "HEAD") return responder(res, 200, undefined, rango);
+    return responder(res, 200, filas, rango);
   }
 
   // Tablas

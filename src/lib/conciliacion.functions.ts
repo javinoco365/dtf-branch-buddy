@@ -19,7 +19,15 @@ import {
   type FilaConciliacion,
 } from "@/dominio/enlaces-conciliacion";
 import { filasDePagina, paginaDeLista, ultimaPagina } from "@/dominio/paginacion";
-import { criterioBusqueda } from "@/dominio/conciliacion";
+import {
+  cumpleBusqueda,
+  interpretarBusqueda,
+  MARGEN_IMPORTE,
+  ordenarCandidatos,
+  patronIlike,
+  pendienteDeEnlace,
+  type Parcial,
+} from "@/dominio/conciliar-a-mano";
 import { desgloseDeRecibo } from "@/dominio/recibos-tarjeta";
 
 /**
@@ -53,6 +61,9 @@ export type DocumentoConciliable = Documento & {
   /** Para pintar: «Recibida», «Factura» o «Textil». */
   clase: string;
 };
+
+/** Lo que devuelve el buscador: puede ser una factura ya cobrada en parte. */
+export type DocumentoEncontrado = DocumentoConciliable & { parcial?: Parcial };
 
 export type EnlaceGuardado = {
   grupo: string;
@@ -560,16 +571,31 @@ export const verEnlaces = createServerFn({ method: "GET" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const p = await leerPagina<FilaEnlace>(
-      (a, b) =>
-        filasDeFuncion(context.supabase, "banco_enlaces", { count: "exact" })
+    // El recuento va en otra llamada, sin orden: en la función, contar y
+    // ordenar en la misma petición le hace a la API escribir «record.fecha»
+    // («column record.fecha does not exist»).
+    const consulta = async (a: number, b: number): Promise<PaginaContada<FilaEnlace>> => {
+      const [filas, total] = await Promise.all([
+        filasDeFuncion(context.supabase, "banco_enlaces")
           .select("grupo, estado, motivo, diferencia, movimientos, documentos")
           .eq("estado", data.estado)
           .order("fecha", { ascending: false })
           .order("grupo")
           .range(a, b),
-      data.pagina,
-    );
+        filasDeFuncion(context.supabase, "banco_enlaces", { count: "exact", head: true }).eq(
+          "estado",
+          data.estado,
+        ),
+      ]);
+      return { data: filas.data, error: filas.error ?? total.error, count: total.count };
+    };
+    let p: Awaited<ReturnType<typeof leerPagina<FilaEnlace>>> = null;
+    try {
+      p = await leerPagina<FilaEnlace>(consulta, data.pagina);
+    } catch (e) {
+      // Si la API sigue sin poder leer la función, de las tablas (abajo).
+      if (!/does not exist/.test(String((e as Error)?.message))) throw e;
+    }
     if (p) {
       return {
         enlaces: p.filas.map(enlaceDe),
@@ -628,43 +654,94 @@ export const verTraspasos = createServerFn({ method: "GET" })
     };
   });
 
+type Hechos = {
+  verdes: number;
+  ambares: number;
+  traspasos: number;
+  /** Propuestas «por revisar» deshechas para volver a calcularlas. */
+  rehechos: number;
+  /** Uno por cada enlace que no se pudo hacer, para enseñarlos en pantalla. */
+  errores: string[];
+};
+
+const mensaje = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
 /**
- * Aplica el plan: los verdes quedan conciliados, los ámbar en «revisar» (no
- * tocan nada hasta que alguien los confirma) y los traspasos marcados. El
- * plan se vuelve a calcular aquí con los datos de ahora, no se fía del que
- * vio la pantalla. Si uno falla (otra pestaña acaba de enlazarlo), se sigue
- * con los demás y se dice cuál.
+ * Calcula el plan con los datos de ahora y lo escribe: los verdes quedan
+ * conciliados, los ámbar en «revisar» (no tocan nada hasta que alguien los
+ * confirma) y los traspasos marcados. Si uno falla (otra pestaña acaba de
+ * enlazarlo), se sigue con los demás y se apunta por qué.
+ */
+async function aplicarAhora(supabase: unknown, hechos: Hechos): Promise<Hechos> {
+  const datos = await leer(supabase);
+  if (!datos) throw new Error(`Falta aplicar la migración ${MIGRACION_MOTOR}.`);
+  const plan = planConciliacion(datos.movimientos, datos.documentos);
+  for (const e of [...plan.verdes, ...plan.ambares]) {
+    try {
+      await llamarRpc(supabase, "banco_enlazar", {
+        _movimientos: e.movimientos,
+        _documentos: e.documentos,
+        _estado: e.estado,
+        _motivo: e.motivo,
+      });
+      if (e.estado === "conciliada") hechos.verdes++;
+      else hechos.ambares++;
+    } catch (err) {
+      hechos.errores.push(mensaje(err));
+    }
+  }
+  for (const t of plan.traspasos) {
+    try {
+      await llamarRpc(supabase, "banco_marcar_traspaso", { _a: t.a, _b: t.b });
+      hechos.traspasos++;
+    } catch (err) {
+      hechos.errores.push(mensaje(err));
+    }
+  }
+  return hechos;
+}
+
+const sinHechos = (): Hechos => ({ verdes: 0, ambares: 0, traspasos: 0, rehechos: 0, errores: [] });
+
+/**
+ * Aplica el plan. Se vuelve a calcular aquí con los datos de ahora, no se fía
+ * del que vio la pantalla.
  */
 export const aplicarPlan = createServerFn({ method: "POST" })
   .middleware([exigeEscribir])
-  .handler(async ({ context }) => {
-    const datos = await leer(context.supabase);
-    if (!datos) throw new Error(`Falta aplicar la migración ${MIGRACION_MOTOR}.`);
-    const plan = planConciliacion(datos.movimientos, datos.documentos);
-    const hechos = { verdes: 0, ambares: 0, traspasos: 0, errores: [] as string[] };
-    for (const e of [...plan.verdes, ...plan.ambares]) {
-      try {
-        await llamarRpc(context.supabase, "banco_enlazar", {
-          _movimientos: e.movimientos,
-          _documentos: e.documentos,
-          _estado: e.estado,
-          _motivo: e.motivo,
-        });
-        if (e.estado === "conciliada") hechos.verdes++;
-        else hechos.ambares++;
-      } catch (err) {
-        hechos.errores.push(err instanceof Error ? err.message : String(err));
+  .handler(async ({ context }) => aplicarAhora(context.supabase, sinHechos()));
+
+/**
+ * Re-conciliar: vuelve a intentarlo con lo que hay ahora (facturas
+ * registradas o emitidas después, extractos nuevos). Con `rehacer_revisar`,
+ * antes deshace las propuestas que siguen «por revisar» para que entren
+ * otra vez en el cálculo: no han marcado nada como pagado, así que deshacerlas
+ * no cambia ninguna factura. Lo conciliado y los traspasos no se tocan.
+ */
+export const reconciliar = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d: unknown) => z.object({ rehacer_revisar: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const hechos = sinHechos();
+    if (data.rehacer_revisar) {
+      const r = await leerTodas<{ grupo: string }>((a, b) =>
+        tabla(context.supabase, "banco_conciliaciones")
+          .select("grupo")
+          .eq("estado", "revisar")
+          .order("id")
+          .range(a, b),
+      );
+      if (r.error) throw new Error(r.error.message);
+      for (const grupo of new Set(r.data.map((f) => f.grupo))) {
+        try {
+          await llamarRpc(context.supabase, "banco_desenlazar", { _grupo: grupo });
+          hechos.rehechos++;
+        } catch (err) {
+          hechos.errores.push(mensaje(err));
+        }
       }
     }
-    for (const t of plan.traspasos) {
-      try {
-        await llamarRpc(context.supabase, "banco_marcar_traspaso", { _a: t.a, _b: t.b });
-        hechos.traspasos++;
-      } catch (err) {
-        hechos.errores.push(err instanceof Error ? err.message : String(err));
-      }
-    }
-    return hechos;
+    return aplicarAhora(context.supabase, hechos);
   });
 
 const documentoSchema = z.object({
@@ -696,6 +773,74 @@ export const enlazarManual = createServerFn({ method: "POST" })
     return { grupo };
   });
 
+/**
+ * Añadir uno o varios pagos a una factura que ya estaba cobrada (o pagada) en
+ * parte. La base no deja que una factura esté en dos enlaces, así que el
+ * enlace se rehace con todos los movimientos juntos: se deshace el que había
+ * y se crea uno con los de antes y los nuevos. Si el nuevo no se puede crear,
+ * se vuelve a dejar el de antes como estaba.
+ */
+export const anadirAlEnlace = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d: unknown) =>
+    z.object({ grupo: z.string().uuid(), movimientos: z.array(z.string().uuid()).min(1) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const sb = context.supabase;
+    const { data: filas, error } = await tabla(sb, "banco_conciliaciones")
+      .select("movimiento_id, factura_id, compra_id, textil_factura_id, estado, motivo")
+      .eq("grupo", data.grupo);
+    if (error) throw new Error(error.message);
+    type Fila = {
+      movimiento_id: string;
+      factura_id: string | null;
+      compra_id: string | null;
+      textil_factura_id: string | null;
+      estado: EstadoEnlace;
+      motivo: string;
+    };
+    const lista = (filas ?? []) as Fila[];
+    if (lista.length === 0) throw new Error("Ese enlace ya no existe: vuelve a buscar la factura.");
+    const docs = new Map<string, { tipo: TipoDocumento; id: string }>();
+    for (const f of lista) {
+      const d = f.compra_id
+        ? { tipo: "compra" as const, id: f.compra_id }
+        : f.factura_id
+          ? { tipo: "factura" as const, id: f.factura_id }
+          : f.textil_factura_id
+            ? { tipo: "textil" as const, id: f.textil_factura_id }
+            : null;
+      if (d) docs.set(`${d.tipo}:${d.id}`, d);
+    }
+    if (docs.size !== 1) {
+      throw new Error(
+        "Ese enlace paga varias facturas: para añadir un pago, deshazlo y enlázalo por partes.",
+      );
+    }
+    const antes = [...new Set(lista.map((f) => f.movimiento_id))];
+    const documentos = [...docs.values()];
+
+    await llamarRpc(sb, "banco_desenlazar", { _grupo: data.grupo });
+    try {
+      const grupo = await llamarRpc<string>(sb, "banco_enlazar", {
+        _movimientos: [...new Set([...antes, ...data.movimientos])],
+        _documentos: documentos,
+        _estado: "conciliada",
+        _motivo: "manual",
+      });
+      return { grupo };
+    } catch (err) {
+      // Que no se pierda lo que ya estaba enlazado.
+      await llamarRpc(sb, "banco_enlazar", {
+        _movimientos: antes,
+        _documentos: documentos,
+        _estado: lista[0].estado,
+        _motivo: lista[0].motivo,
+      }).catch(() => {});
+      throw err;
+    }
+  });
+
 const grupoSchema = (d: unknown) => z.object({ grupo: z.string().uuid() }).parse(d);
 
 export const confirmarEnlace = createServerFn({ method: "POST" })
@@ -722,38 +867,120 @@ export const desmarcarTraspaso = createServerFn({ method: "POST" })
   }));
 
 /** Lo que admite el filtro .or() de PostgREST dentro de un ilike: sin comas ni paréntesis. */
-const paraIlike = (t: string) => t.replace(/[,()*%\\]/g, " ").trim();
+const paraIlike = (t: string) => t.replace(/[,()*%\\.:"]/g, "").trim();
+
+/** Cuántos candidatos se traen de cada tabla antes de filtrar y ordenar aquí. */
+const CANDIDATOS_POR_TABLA = 150;
+/** Cuántos se enseñan. */
+const RESULTADOS_BUSQUEDA = 40;
 
 /**
- * «Conciliar a mano»: busca en TODOS los documentos todavía sin conciliar,
- * no solo en los que tiene cargados la pantalla, por nombre, número o
- * importe. Los cargos buscan facturas recibidas; los abonos, facturas y
- * tickets emitidos (de tienda y de textil), también los ya marcados como
- * cobrados: una venta cobrada con Bizum o tarjeta llega al banco igual y hay
- * que poder enlazarla. Con la sesión del usuario: solo lo que su RLS le deja ver.
+ * Los documentos enlazados cuyo enlace no cuadra (el banco trajo más o menos
+ * que la factura), del lado que se busca, los 150 enlaces más recientes:
+ * entre ellos están los cobrados o pagados solo en parte.
+ */
+async function idsConDiferencia(sb: unknown, signo: "cargo" | "abono"): Promise<Set<string>> {
+  const columnas = signo === "cargo" ? ["compra_id"] : ["factura_id", "textil_factura_id"];
+  const r = await tabla(sb, "banco_conciliaciones")
+    .select("factura_id, compra_id, textil_factura_id")
+    .neq("diferencia", 0)
+    .or(columnas.map((c) => `${c}.not.is.null`).join(","))
+    .order("created_at", { ascending: false })
+    .limit(150);
+  if (r.error) throw new Error(r.error.message);
+  const ids = new Set<string>();
+  for (const e of (r.data ?? []) as Record<string, string | null>[]) {
+    for (const c of columnas) if (e[c]) ids.add(String(e[c]));
+  }
+  return ids;
+}
+
+/** Unos documentos por su id, del lado que se busca, con las mismas condiciones que el buscador. */
+async function documentosPorId(
+  sb: unknown,
+  signo: "cargo" | "abono",
+  ids: string[],
+): Promise<FilaDocumento[]> {
+  if (signo === "cargo") {
+    const r = await tabla(sb, "textil_compras")
+      .select(COLUMNAS_COMPRA)
+      .eq("estado", "registrada")
+      .is("borrada_en", null)
+      .in("id", ids);
+    if (r.error) throw new Error(r.error.message);
+    return ((r.data ?? []) as FilaCompra[]).map(deCompra);
+  }
+  const [tienda, textil] = await Promise.all([
+    tabla(sb, "facturas")
+      .select(COLUMNAS_FACTURA)
+      .in("estado", ["emitida", "vencida", "pagada"])
+      .in("id", ids),
+    tabla(sb, "textil_facturas")
+      .select(COLUMNAS_TEXTIL)
+      .not("estado", "in", "(borrador,anulada)")
+      .in("id", ids),
+  ]);
+  if (tienda.error) throw new Error(tienda.error.message);
+  if (textil.error) throw new Error(textil.error.message);
+  return [
+    ...((tienda.data ?? []) as FilaFactura[]).map(deFactura),
+    ...((textil.data ?? []) as FilaTextil[]).map(deTextil),
+  ];
+}
+
+/**
+ * «Conciliar a mano»: busca en TODOS los documentos, no solo en los que tiene
+ * cargados la pantalla. Los cargos buscan facturas recibidas; los abonos,
+ * facturas y tickets emitidos (de tienda y de textil), también los ya
+ * marcados como cobrados: una venta cobrada con Bizum o tarjeta llega al
+ * banco igual y hay que poder enlazarla.
+ *
+ * Varias palabras: tienen que estar todas, en el nombre, el NIF o el número,
+ * sin importar acentos. Un importe: lo que está a un euro o menos. Lo ya
+ * conciliado no sale, salvo una factura cobrada solo en parte, que sale con
+ * lo que le falta para poder añadirle otro pago. Con `objetivo` (el
+ * movimiento que se concilia), lo más probable va primero: el mismo importe,
+ * luego el más cercano y, a igualdad, la fecha más próxima.
+ *
+ * Con la sesión del usuario: solo lo que su RLS le deja ver.
  */
 export const buscarConciliables = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ texto: z.string().trim().max(80), signo: z.enum(["cargo", "abono"]) }).parse(d),
+    z
+      .object({
+        texto: z.string().trim().max(80),
+        signo: z.enum(["cargo", "abono"]),
+        objetivo: z.object({ importe: z.number(), fecha: z.string().max(30) }).nullish(),
+      })
+      .parse(d),
   )
-  .handler(async ({ data, context }): Promise<DocumentoConciliable[]> => {
-    const c = criterioBusqueda(data.texto);
-    if (c.texto === null && c.importe === null && c.numero === null) return [];
+  .handler(async ({ data, context }): Promise<DocumentoEncontrado[]> => {
+    const b = interpretarBusqueda(data.texto);
+    if (b.palabras.length === 0 && b.importe === null && b.numero === null) return [];
     const sb = context.supabase;
-    const LIMITE = 25;
+
+    // Lo que se pide a la base trae de más (el patrón ignora acentos con
+    // comodines y cualquier palabra vale); el filtro fino va después, aquí.
+    const patrones = b.palabras
+      .map((p) => `*${paraIlike(patronIlike(p))}*`)
+      .filter((p) => p !== "**");
     const rango = (col: string) =>
-      c.importe === null
+      b.importe === null
         ? []
-        : [`and(${col}.gte.${c.importe - 0.01},${col}.lte.${c.importe + 0.01})`];
-    const texto = c.texto ? paraIlike(c.texto) : "";
+        : [
+            `and(${col}.gte.${(b.importe - MARGEN_IMPORTE).toFixed(2)},` +
+              `${col}.lte.${(b.importe + MARGEN_IMPORTE).toFixed(2)})`,
+          ];
+    const porTexto = (cols: string[]) =>
+      patrones.flatMap((p) => cols.map((c) => `${c}.ilike.${p}`));
 
     let filas: FilaDocumento[] = [];
     if (data.signo === "cargo") {
       const conds = [
         ...rango("liquido"),
-        ...(texto ? [`proveedor.ilike.*${texto}*`, `numero.ilike.*${texto}*`] : []),
-        ...(c.numero !== null ? [`numero.ilike.*${c.numero}*`] : []),
+        ...porTexto(["proveedor", "nif_proveedor", "numero"]),
+        ...(b.numero !== null ? [`numero.ilike.*${b.numero}*`] : []),
       ];
       const r = await tabla(sb, "textil_compras")
         .select(COLUMNAS_COMPRA)
@@ -761,33 +988,35 @@ export const buscarConciliables = createServerFn({ method: "GET" })
         .is("borrada_en", null)
         .or(conds.join(","))
         .order("fecha", { ascending: false })
-        .limit(LIMITE);
+        .limit(CANDIDATOS_POR_TABLA);
       if (r.error) throw new Error(r.error.message);
       filas = ((r.data ?? []) as FilaCompra[]).map(deCompra);
     } else {
       const condsTienda = [
         ...rango("total"),
-        ...(texto ? [`cliente_nombre.ilike.*${texto}*`] : []),
-        ...(c.numero !== null ? [`numero.eq.${c.numero}`] : []),
+        ...porTexto(["cliente_nombre", "cliente_nif"]),
+        ...(b.numero !== null ? [`numero.eq.${b.numero}`] : []),
       ];
       const condsTextil = [
         ...rango("total"),
-        ...(texto ? [`cliente_nombre.ilike.*${texto}*`, `numero.ilike.*${texto}*`] : []),
-        ...(c.numero !== null ? [`numero.ilike.*${c.numero}*`] : []),
+        ...porTexto(["cliente_nombre", "cliente_nif", "numero"]),
+        ...(b.numero !== null ? [`numero.ilike.*${b.numero}*`] : []),
       ];
       const [tienda, textil] = await Promise.all([
-        tabla(sb, "facturas")
-          .select(COLUMNAS_FACTURA)
-          .in("estado", ["emitida", "vencida", "pagada"])
-          .or(condsTienda.join(","))
-          .order("fecha", { ascending: false })
-          .limit(LIMITE),
+        condsTienda.length === 0
+          ? { data: [], error: null }
+          : tabla(sb, "facturas")
+              .select(COLUMNAS_FACTURA)
+              .in("estado", ["emitida", "vencida", "pagada"])
+              .or(condsTienda.join(","))
+              .order("fecha", { ascending: false })
+              .limit(CANDIDATOS_POR_TABLA),
         tabla(sb, "textil_facturas")
           .select(COLUMNAS_TEXTIL)
           .not("estado", "in", "(borrador,anulada)")
           .or(condsTextil.join(","))
           .order("fecha", { ascending: false })
-          .limit(LIMITE),
+          .limit(CANDIDATOS_POR_TABLA),
       ]);
       if (tienda.error) throw new Error(tienda.error.message);
       if (textil.error) throw new Error(textil.error.message);
@@ -796,24 +1025,68 @@ export const buscarConciliables = createServerFn({ method: "GET" })
         ...((textil.data ?? []) as FilaTextil[]).map(deTextil),
       ];
     }
-    if (filas.length === 0) return [];
+    // Con un importe, también las cobradas (o pagadas) en parte: se buscan
+    // por lo que les falta, que no es su total, así que la consulta de arriba
+    // no las trae.
+    const parciales =
+      b.importe === null ? new Set<string>() : await idsConDiferencia(sb, data.signo);
+    const yaLeidas = new Set(filas.map((f) => f.id));
+    const faltan = [...parciales].filter((id) => !yaLeidas.has(id));
+    if (faltan.length > 0) filas = [...filas, ...(await documentosPorId(sb, data.signo, faltan))];
 
-    // Fuera lo que ya está conciliado.
+    const encontrados = filas
+      .map(documentoDe)
+      .filter((d) => cumpleBusqueda(d, b) || parciales.has(d.id));
+    if (encontrados.length === 0) return [];
+
+    // Lo ya conciliado: fuera, salvo lo cobrado solo en parte.
     const columna = { compra: "compra_id", factura: "factura_id", textil: "textil_factura_id" };
-    const enlazados = new Set<string>();
+    const enlaceDe = new Map<string, { grupo: string; diferencia: number }>();
     for (const tipo of ["compra", "factura", "textil"] as const) {
-      const ids = filas.filter((f) => f.tipo === tipo).map((f) => f.id);
+      const ids = encontrados.filter((f) => f.tipo === tipo).map((f) => f.id);
       if (ids.length === 0) continue;
       const r = await tabla(sb, "banco_conciliaciones")
-        .select(columna[tipo])
+        .select(`${columna[tipo]}, grupo, diferencia`)
         .in(columna[tipo], ids);
       if (r.error) throw new Error(r.error.message);
-      for (const e of (r.data ?? []) as Record<string, string>[]) enlazados.add(e[columna[tipo]]);
+      for (const e of (r.data ?? []) as Record<string, string>[]) {
+        enlaceDe.set(e[columna[tipo]], { grupo: e.grupo, diferencia: Number(e.diferencia) });
+      }
     }
-    return filas
-      .filter((f) => !enlazados.has(f.id))
-      .map(documentoDe)
-      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    // De los enlazados, cuántos documentos tiene su enlace: solo se puede
+    // añadir un pago a un enlace de una sola factura.
+    const grupos = [...new Set([...enlaceDe.values()].map((e) => e.grupo))];
+    const docsPorGrupo = new Map<string, Set<string>>();
+    if (grupos.length > 0) {
+      const r = await tabla(sb, "banco_conciliaciones")
+        .select("grupo, factura_id, compra_id, textil_factura_id")
+        .in("grupo", grupos);
+      if (r.error) throw new Error(r.error.message);
+      for (const e of (r.data ?? []) as Record<string, string | null>[]) {
+        const g = String(e.grupo);
+        const set = docsPorGrupo.get(g) ?? new Set<string>();
+        set.add(String(e.factura_id ?? e.compra_id ?? e.textil_factura_id));
+        docsPorGrupo.set(g, set);
+      }
+    }
+
+    const resultado: DocumentoEncontrado[] = [];
+    for (const d of encontrados) {
+      const e = enlaceDe.get(d.id);
+      if (!e) {
+        resultado.push(d);
+        continue;
+      }
+      if ((docsPorGrupo.get(e.grupo)?.size ?? 0) !== 1) continue;
+      const pendiente = pendienteDeEnlace(d.esperado, e.diferencia);
+      if (pendiente === null) continue;
+      const pagado = Math.round((d.esperado - pendiente) * 100) / 100;
+      resultado.push({ ...d, parcial: { grupo: e.grupo, pagado, pendiente } });
+    }
+    return ordenarCandidatos(
+      resultado.filter((d) => cumpleBusqueda(d, b)),
+      data.objetivo ?? null,
+    ).slice(0, RESULTADOS_BUSQUEDA);
   });
 
 /**
