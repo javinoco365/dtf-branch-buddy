@@ -373,7 +373,7 @@ function Ajustes() {
                   try {
                     const r = await syncClientes({ data: { tienda_id: tiendaId } });
                     toast.success(
-                      `Clientes al día: ${r.clientes_registrados} con cuenta, ${r.clientes_invitados} de invitado nuevos (revisados ${r.pedidos_revisados} pedidos)`,
+                      `Clientes al día: ${r.clientes_registrados} con cuenta, ${r.clientes_invitados} de invitado nuevos, ${r.nifs_completados} NIF completados (revisados ${r.pedidos_revisados} pedidos)`,
                     );
                     qc.invalidateQueries();
                   } catch (e) {
