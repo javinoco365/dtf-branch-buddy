@@ -14,6 +14,7 @@ import { describirMetaWoo } from "@/dominio/diagnostico-lineas-woo";
 import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 import {
   clientesInvitadosNuevos,
+  nifPedidoWoo,
   nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
@@ -675,6 +676,10 @@ async function guardarPedidosWoo(
       cliente_nombre: facturacion?.nombre || null,
       cliente_email: facturacion?.email || null,
       cliente_telefono: facturacion?.telefono || null,
+      // El NIF que trajo el pedido (meta del plugin del checkout), congelado
+      // aquí como el nombre y el correo: la factura lo usa si no hay ficha o
+      // la ficha no tiene NIF.
+      cliente_nif: nifPedidoWoo(o),
       direccion_facturacion: facturacion,
       // Woo manda `shipping` vacío cuando el envío es igual que la
       // facturación. Guardar un objeto de huecos sería peor que no guardar
@@ -715,16 +720,21 @@ async function guardarPedidosWoo(
       .upsert(filas, { onConflict: "tienda_id,woo_order_id" })
       .select("id, woo_order_id, total");
   let res = await guardar(filasPedidos);
-  // Sin la migración de realizado_en (20261027100000) la columna no existe:
-  // se guarda sin ella antes que dejar la sincronización parada.
-  if (res.error && /realizado_en/.test(res.error.message)) {
-    res = await guardar(
-      filasPedidos.map((fila) => {
-        const sinColumna: Record<string, unknown> = { ...fila };
-        delete sinColumna.realizado_en;
-        return sinColumna;
-      }),
-    );
+  // Sin la migración de realizado_en (20261027100000) o la de cliente_nif
+  // (20261104100000) la columna no existe: se guarda sin ella antes que dejar
+  // la sincronización parada. Puede faltar más de una: se quitan de una en una.
+  const opcionales = ["realizado_en", "cliente_nif"];
+  let filasAGuardar: Record<string, unknown>[] = filasPedidos;
+  for (let intento = 0; intento < opcionales.length && res.error; intento++) {
+    const mensaje = res.error.message;
+    const falta = opcionales.find((c) => mensaje.includes(c));
+    if (!falta) break;
+    filasAGuardar = filasAGuardar.map((fila) => {
+      const sinColumna: Record<string, unknown> = { ...fila };
+      delete sinColumna[falta];
+      return sinColumna;
+    });
+    res = await guardar(filasAGuardar);
   }
   if (res.error) throw new Error(`No se pudieron guardar los pedidos: ${res.error.message}`);
   const pedidosGuardados = (res.data ?? []) as FilaPedidoGuardada[];

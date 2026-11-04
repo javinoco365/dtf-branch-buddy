@@ -7,16 +7,15 @@
  *
  * ## De dónde sale el receptor
  *
- * La ficha de cliente es la fuente fiscal buena: es donde vive el NIF, y es
- * el único sitio que lo tiene. La dirección congelada en el pedido —lo que
- * trae WooCommerce en `billing`— no incluye NIF en ningún caso: el
- * formulario de compra no lo pide.
+ * La ficha de cliente es la fuente fiscal buena: si el pedido tiene un
+ * cliente vinculado con nombre, ese cliente manda entero. Solo se cae a la
+ * dirección del pedido cuando no hay cliente vinculado —un pedido de
+ * invitado, o uno manual sin ficha—.
  *
- * Por eso, si el pedido tiene un cliente vinculado con nombre, ese cliente
- * manda entero. Solo se cae a la dirección del pedido cuando no hay cliente
- * vinculado —un pedido de invitado, o uno manual sin ficha—, y ahí no hay
- * NIF que poner: se deja en blanco y que se vea, en vez de dejarlo vacío sin
- * decir por qué.
+ * El NIF tiene además su copia en el pedido (`pedidos.cliente_nif`, el que
+ * trajo WooCommerce en `_billing_nif`). Se usa cuando la ficha no tiene NIF o
+ * no hay ficha; si la ficha tiene uno, gana la ficha, que puede estar
+ * corregida a mano. Sin ninguno de los dos, se deja en blanco.
  *
  * ## Por qué `empresa` gana a `nombre` en la dirección del pedido
  *
@@ -81,18 +80,20 @@ export type ReceptorFactura = {
  * lo que guardó la sincronización directamente en el pedido
  * (`pedidos.cliente_nombre` / `cliente_email`), para el caso —raro, pero
  * posible— de un pedido sin cliente vinculado y sin dirección de
- * facturación guardada.
+ * facturación guardada. `nifCongelado` es `pedidos.cliente_nif`.
  */
 export function receptorDesdePedido(
   cliente: ClienteFiscal | null,
   direccion: DireccionPedido | null,
   clienteNombreCongelado: string | null,
   clienteEmailCongelado: string | null,
+  nifCongelado: string | null = null,
 ): ReceptorFactura {
+  const nifPedido = nifCongelado?.trim() || null;
   if (cliente?.nombre?.trim()) {
     return {
       nombre: cliente.nombre.trim(),
-      nif: cliente.nif?.trim() || null,
+      nif: cliente.nif?.trim() || nifPedido,
       direccion: cliente.direccion?.trim() || null,
       codigo_postal: cliente.codigo_postal?.trim() || null,
       ciudad: cliente.ciudad?.trim() || null,
@@ -105,7 +106,7 @@ export function receptorDesdePedido(
   const d = direccion ?? {};
   return {
     nombre: d.empresa?.trim() || d.nombre?.trim() || clienteNombreCongelado?.trim() || "",
-    nif: null,
+    nif: nifPedido,
     direccion: d.direccion?.trim() || null,
     codigo_postal: d.codigo_postal?.trim() || null,
     ciudad: d.ciudad?.trim() || null,
