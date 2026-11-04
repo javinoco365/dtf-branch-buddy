@@ -14,6 +14,7 @@ import { describirMetaWoo } from "@/dominio/diagnostico-lineas-woo";
 import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 import {
   clientesInvitadosNuevos,
+  nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
   pedidosDesaparecidos,
@@ -520,6 +521,30 @@ async function clientesPorEmail(ctx: ContextoSync): Promise<Map<string, string>>
   return ctx.clientePorEmail;
 }
 
+/**
+ * Pone el NIF que trae WooCommerce a las fichas que no tienen ninguno. Una
+ * ficha con NIF no se toca, aunque el del pedido sea otro: puede estar
+ * corregido a mano. Devuelve cuántas fichas ha completado.
+ */
+async function completarNifClientes(sb: unknown, nifs: Map<string, string>): Promise<number> {
+  let completados = 0;
+  const pares = [...nifs];
+  for (let i = 0; i < pares.length; i += 10) {
+    const tanda = await Promise.all(
+      pares
+        .slice(i, i + 10)
+        .map(([id, nif]) =>
+          tabla(sb, "clientes").update({ nif }).eq("id", id).or("nif.is.null,nif.eq.").select("id"),
+        ),
+    );
+    for (const r of tanda) {
+      if (r.error) throw new Error(`No se pudo guardar el NIF de un cliente: ${r.error.message}`);
+      completados += r.data?.length ?? 0;
+    }
+  }
+  return completados;
+}
+
 const ESTADO_WOO: Record<string, string> = {
   pending: "pendiente",
   processing: "en_produccion",
@@ -669,6 +694,18 @@ async function guardarPedidosWoo(
       metodo_pago: o.payment_method_title || o.payment_method || null,
     };
   });
+
+  // El NIF no viene en billing: lo guarda el plugin del checkout en
+  // meta_data (ver nifPedidoWoo). Se pasa a la ficha del cliente si no tiene.
+  try {
+    const clienteDelPedido = new Map(orders.map((o, i) => [o, filasPedidos[i].cliente_id]));
+    await completarNifClientes(
+      ctx.sb,
+      nifsDeClientes(orders, (o) => clienteDelPedido.get(o) ?? null),
+    );
+  } catch (e) {
+    ctx.avisos.push(`Algún NIF de cliente no se ha podido guardar: ${(e as Error).message}`);
+  }
 
   // tabla() y no .from(): types.ts está generado y todavía no conoce las
   // columnas de dirección. Se quita cuando se regenere.
@@ -1247,21 +1284,26 @@ export const sincronizarClientesWoo = createServerFn({ method: "POST" })
       headers,
     );
     let clientesRegistrados = 0;
+    const clientePorWooId = new Map<number, string>();
     if (customers.length) {
       const filas = customers.map((c) => filaClienteRegistrado(c, data.tienda_id));
-      const { error } = await supabaseAdmin
+      const { data: guardados, error } = await supabaseAdmin
         .from("clientes")
-        .upsert(filas, { onConflict: "tienda_id,woo_customer_id" });
+        .upsert(filas, { onConflict: "tienda_id,woo_customer_id" })
+        .select("id, woo_customer_id");
       if (error) throw new Error(`No se pudieron guardar los clientes: ${error.message}`);
       clientesRegistrados = filas.length;
+      for (const c of guardados ?? []) {
+        if (c.woo_customer_id != null) clientePorWooId.set(Number(c.woo_customer_id), c.id);
+      }
     }
 
-    // --- Todos los pedidos, solo para encontrar invitados sin ficha ------
+    // --- Todos los pedidos: invitados sin ficha y NIF de cada comprador --
     // status=any: un invitado que compró una vez y canceló sigue siendo un
     // comprador real. _fields reduce cada pedido a lo mínimo que hace falta
-    // aquí, nada de líneas ni totales: esto no toca pedidos.
+    // aquí (meta_data, por el NIF), nada de líneas ni totales: esto no toca pedidos.
     const orders = await fetchTodasLasPaginasWoo(
-      `${base}/wp-json/wc/v3/orders?status=any&_fields=id,customer_id,billing`,
+      `${base}/wp-json/wc/v3/orders?status=any&_fields=id,customer_id,billing,meta_data,date_created`,
       headers,
     );
 
@@ -1287,11 +1329,27 @@ export const sincronizarClientesWoo = createServerFn({ method: "POST" })
       clientesInvitados = creados?.length ?? 0;
     }
 
+    // El NIF de cada comprador, sacado de sus pedidos (ver nifPedidoWoo), a
+    // las fichas que aún no lo tienen.
+    const clientePorEmail = await correosDeClientes(
+      supabaseAdmin,
+      await empresaDeTienda(supabaseAdmin, data.tienda_id),
+    );
+    const nifsCompletados = await completarNifClientes(
+      supabaseAdmin,
+      nifsDeClientes(orders, (o: any) =>
+        o.customer_id
+          ? (clientePorWooId.get(Number(o.customer_id)) ?? null)
+          : (clientePorEmail.get(o.billing?.email?.trim().toLowerCase() ?? "") ?? null),
+      ),
+    );
+
     return {
       ok: true,
       clientes_registrados: clientesRegistrados,
       clientes_invitados: clientesInvitados,
       pedidos_revisados: orders.length,
+      nifs_completados: nifsCompletados,
     };
   });
 

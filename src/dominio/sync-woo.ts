@@ -21,6 +21,8 @@
  * acaba de devolver es que ha desaparecido de verdad.
  */
 
+import { normalizarNif } from "./clientes";
+
 /** Lo mínimo de un pedido de WooCommerce que hace falta para estas cuentas. */
 export type PedidoWooResumen = {
   id: number;
@@ -124,6 +126,8 @@ export function estadoPagoPorDevolucion(
  */
 export type PedidoWooBilling = {
   customer_id?: number | null;
+  /** Ahí guarda el plugin del checkout el NIF/DNI: ver nifPedidoWoo. */
+  meta_data?: readonly MetaPedidoWoo[] | null;
   billing?: {
     first_name?: string | null;
     last_name?: string | null;
@@ -150,6 +154,7 @@ export type ClienteInvitadoNuevo = {
   ciudad: string | null;
   provincia: string | null;
   pais: string;
+  nif: string | null;
 };
 
 function limpio(v: string | null | undefined): string | null {
@@ -199,8 +204,59 @@ export function clientesInvitadosNuevos(
       ciudad: limpio(b?.city),
       provincia: limpio(b?.state),
       pais: limpio(b?.country) ?? "ES",
+      nif: nifPedidoWoo(o),
     });
   }
 
   return nuevos;
+}
+
+/** Un dato de `meta_data` de un pedido de WooCommerce. */
+export type MetaPedidoWoo = { key?: string | null; value?: unknown };
+
+/**
+ * Dónde guarda el NIF/DNI de facturación el plugin del checkout.
+ *
+ * WooCommerce no tiene campo de NIF: lo añade un plugin y lo guarda en el
+ * `meta_data` del pedido. En DTF Culture salen las dos claves,
+ * `_billing_nif` y `billing_nif` (diagnóstico del 4-11-2026). Las de
+ * `shipping_nif` no cuentan: son de quien recibe el paquete, que no tiene
+ * por qué ser quien paga.
+ */
+export const CLAVES_NIF_WOO = ["_billing_nif", "billing_nif"] as const;
+
+/** El NIF de facturación de un pedido, normalizado; `null` si no lo trae. */
+export function nifPedidoWoo(o: { meta_data?: readonly MetaPedidoWoo[] | null }): string | null {
+  const metas = Array.isArray(o.meta_data) ? o.meta_data : [];
+  for (const clave of CLAVES_NIF_WOO) {
+    const m = metas.find((x) => x?.key === clave);
+    const v = m?.value;
+    if (typeof v !== "string" && typeof v !== "number") continue;
+    const nif = normalizarNif(String(v));
+    if (nif) return nif;
+  }
+  return null;
+}
+
+/**
+ * Qué NIF poner a cada cliente a partir de una tanda de pedidos.
+ *
+ * `clienteDe` dice a qué ficha va cada pedido (o `null` si a ninguna). Si un
+ * cliente tiene varios pedidos con NIF distinto, gana el del pedido más
+ * reciente por fecha de creación. Quien escribe aquí lo hace solo en fichas
+ * sin NIF: uno puesto a mano no se pisa.
+ */
+export function nifsDeClientes<
+  P extends { meta_data?: readonly MetaPedidoWoo[] | null; date_created?: string | null },
+>(orders: readonly P[], clienteDe: (o: P) => string | null): Map<string, string> {
+  const elegido = new Map<string, { nif: string; fecha: string }>();
+  for (const o of orders) {
+    const cliente = clienteDe(o);
+    const nif = nifPedidoWoo(o);
+    if (!cliente || !nif) continue;
+    const fecha = o.date_created ?? "";
+    const previo = elegido.get(cliente);
+    if (!previo || fecha >= previo.fecha) elegido.set(cliente, { nif, fecha });
+  }
+  return new Map([...elegido].map(([cliente, { nif }]) => [cliente, nif]));
 }

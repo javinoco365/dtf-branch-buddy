@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   clientesInvitadosNuevos,
+  nifPedidoWoo,
+  nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
   idsVistosWoo,
@@ -129,6 +131,7 @@ describe("clientesInvitadosNuevos", () => {
         ciudad: "Huelva",
         provincia: null,
         pais: "ES",
+        nif: null,
       },
     ]);
   });
@@ -190,5 +193,60 @@ describe("clientesInvitadosNuevos", () => {
     expect(
       clientesInvitadosNuevos([{ billing: { email: "ana@example.com" } }], new Set())[0].pais,
     ).toBe("ES");
+  });
+});
+
+describe("nifPedidoWoo", () => {
+  it("lee el NIF de facturación del meta_data del pedido, normalizado", () => {
+    expect(nifPedidoWoo({ meta_data: [{ key: "_billing_nif", value: " 12.345.678-z " }] })).toBe(
+      "12345678Z",
+    );
+    expect(nifPedidoWoo({ meta_data: [{ key: "billing_nif", value: "B21000000" }] })).toBe(
+      "B21000000",
+    );
+  });
+
+  it("si la primera clave viene vacía, prueba la otra", () => {
+    expect(
+      nifPedidoWoo({
+        meta_data: [
+          { key: "_billing_nif", value: "" },
+          { key: "billing_nif", value: "B21000000" },
+        ],
+      }),
+    ).toBe("B21000000");
+  });
+
+  it("el NIF de envío no cuenta: es de quien recibe, no de quien paga", () => {
+    expect(nifPedidoWoo({ meta_data: [{ key: "_shipping_nif", value: "B21000000" }] })).toBeNull();
+  });
+
+  it("sin meta_data o sin NIF, null", () => {
+    expect(nifPedidoWoo({})).toBeNull();
+    expect(nifPedidoWoo({ meta_data: [{ key: "_billing_nif", value: { raro: 1 } }] })).toBeNull();
+  });
+});
+
+describe("nifsDeClientes", () => {
+  const pedido = (cliente: string | null, nif: string, fecha: string) => ({
+    cliente,
+    date_created: fecha,
+    meta_data: [{ key: "_billing_nif", value: nif }],
+  });
+
+  it("con varios pedidos del mismo cliente, gana el NIF del más reciente", () => {
+    const r = nifsDeClientes(
+      [pedido("c1", "B2", "2026-11-02T10:00:00"), pedido("c1", "B1", "2026-10-01T10:00:00")],
+      (o) => o.cliente,
+    );
+    expect(r.get("c1")).toBe("B2");
+  });
+
+  it("un pedido sin ficha de cliente o sin NIF no aporta nada", () => {
+    const r = nifsDeClientes(
+      [pedido(null, "B1", "2026-11-01"), pedido("c2", "", "2026-11-01")],
+      (o) => o.cliente,
+    );
+    expect(r.size).toBe(0);
   });
 });
