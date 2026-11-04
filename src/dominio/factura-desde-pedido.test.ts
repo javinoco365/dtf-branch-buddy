@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { lineasDesdePedido, receptorDesdePedido } from "./factura-desde-pedido";
 
 describe("receptorDesdePedido", () => {
+  it("sin ficha, usa el NIF congelado en el pedido", () => {
+    expect(
+      receptorDesdePedido(null, { nombre: "Ana Ejemplo" }, null, null, " B21000000 ").nif,
+    ).toBe("B21000000");
+  });
+
+  it("con ficha sin NIF, usa el del pedido", () => {
+    expect(receptorDesdePedido({ nombre: "Ana", nif: "" }, null, null, null, "B21000000").nif).toBe(
+      "B21000000",
+    );
+  });
+
+  it("si la ficha tiene NIF, gana la ficha aunque el pedido traiga otro", () => {
+    expect(
+      receptorDesdePedido({ nombre: "Ana", nif: "B12345678" }, null, null, null, "B21000000").nif,
+    ).toBe("B12345678");
+  });
+
   it("usa la ficha de cliente entera cuando existe, NIF incluido", () => {
     expect(
       receptorDesdePedido(

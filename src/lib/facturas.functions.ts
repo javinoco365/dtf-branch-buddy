@@ -560,15 +560,29 @@ async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
   };
 }
 
+/**
+ * Lee pedidos con `cliente_nif` si la columna existe. Sin la migración
+ * 20261104100000 no existe, y la lectura falla entera: se repite sin ella
+ * antes que dejar sin poder facturar.
+ */
+async function conNifDelPedido(
+  leer: (columnaNif: string) => PromiseLike<{ data: any; error: { message: string } | null }>,
+): Promise<{ data: any; error: { message: string } | null }> {
+  const r = await leer(", cliente_nif");
+  return r.error && /cliente_nif/.test(r.error.message) ? leer("") : r;
+}
+
 /** Todo lo que hace falta para emitir el documento de un pedido. Solo lee. */
 async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string) {
   // tabla() y no .from(): direccion_facturacion no está en types.ts.
-  const { data: pedido, error: pErr } = await tabla(sb, "pedidos")
-    .select(
-      "id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas, fecha_pedido, origen",
-    )
-    .eq("id", pedidoId)
-    .maybeSingle();
+  const { data: pedido, error: pErr } = await conNifDelPedido((nif) =>
+    tabla(sb, "pedidos")
+      .select(
+        `id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas, fecha_pedido, origen${nif}`,
+      )
+      .eq("id", pedidoId)
+      .maybeSingle(),
+  );
   if (pErr || !pedido) throw new Error("Pedido no encontrado");
   await comprobarAccesoTienda(sb, pedido.tienda_id, userId);
 
@@ -595,6 +609,7 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
     pedido.direccion_facturacion,
     pedido.cliente_nombre,
     pedido.cliente_email,
+    pedido.cliente_nif ?? null,
   );
   const tipoFiscal = esTipoFiscal(clienteRes.data?.tipo_fiscal)
     ? clienteRes.data.tipo_fiscal
@@ -937,11 +952,13 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const sb = adminComoUsuario(context.userId);
 
-    const { data: filas, error } = await tabla(sb, "pedidos")
-      .select(
-        "id, numero, empresa_id, tienda_id, fecha_pedido, origen, total, cancelado_en, cliente_id, cliente_nombre, cliente_email, direccion_facturacion",
-      )
-      .in("id", data.pedido_ids);
+    const { data: filas, error } = await conNifDelPedido((nif) =>
+      tabla(sb, "pedidos")
+        .select(
+          `id, numero, empresa_id, tienda_id, fecha_pedido, origen, total, cancelado_en, cliente_id, cliente_nombre, cliente_email, direccion_facturacion${nif}`,
+        )
+        .in("id", data.pedido_ids),
+    );
     if (error) throw new Error(error.message);
     const pedidos = (filas ?? []) as Record<string, any>[];
     for (const tiendaId of new Set(pedidos.map((p) => p.tienda_id as string))) {
@@ -983,6 +1000,7 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
           p.direccion_facturacion,
           p.cliente_nombre,
           p.cliente_email,
+          p.cliente_nif ?? null,
         );
         const tipoFiscal = esTipoFiscal(ficha?.tipo_fiscal) ? ficha.tipo_fiscal : null;
         const total = Number(p.total) || 0;
