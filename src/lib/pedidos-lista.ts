@@ -215,7 +215,12 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
     lineasDePedidos(supabase, ids),
     supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
     leerPorIds<any>(clienteIds, (trozo, a, b) =>
-      supabase.from("clientes").select("id, nombre, email").in("id", trozo).order("id").range(a, b),
+      supabase
+        .from("clientes")
+        .select("id, nombre, email, nif")
+        .in("id", trozo)
+        .order("id")
+        .range(a, b),
     ),
     leerPorIds<any>(ids, (trozo, a, b) =>
       supabase
@@ -257,6 +262,9 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
         tienda_nombre: nombresTienda.get(p.tienda_id) ?? null,
         cliente_nombre: p.cliente_nombre ?? cli?.nombre ?? null,
         cliente_email: p.cliente_email ?? cli?.email ?? null,
+        // El NIF como lo pone la factura (receptorDesdePedido): el de la ficha
+        // si tiene, y si no el que trajo el pedido (pedidos.cliente_nif).
+        cliente_nif: cli?.nif?.trim() || p.cliente_nif?.trim() || null,
         items: lineasDe.get(p.id) ?? [],
         tracking: seguimientoDe.get(p.id)?.[0] ?? null,
         cobros: cobrosDe.get(p.id) ?? [],

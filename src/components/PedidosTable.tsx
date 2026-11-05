@@ -148,6 +148,8 @@ export type PedidoFila = {
   cliente_nombre: string | null;
   cliente_email: string | null;
   cliente_telefono: string | null;
+  /** El de la ficha si tiene; si no, el que trajo el pedido. */
+  cliente_nif?: string | null;
   direccion_facturacion: Direccion | null;
   direccion_envio: Direccion | null;
   origen: string | null;
@@ -1559,6 +1561,9 @@ function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
           Cliente
         </div>
         <div className="font-medium">{pedido.cliente_nombre ?? "—"}</div>
+        {pedido.cliente_nif && (
+          <div className="text-muted-foreground">NIF: {pedido.cliente_nif}</div>
+        )}
         {pedido.cliente_email && (
           <div className="text-muted-foreground">{pedido.cliente_email}</div>
         )}
