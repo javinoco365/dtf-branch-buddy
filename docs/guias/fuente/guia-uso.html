@@ -1,0 +1,1691 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guía de uso del CRM · DTI S.L.</title>
+<link rel="stylesheet" href="estilos.css">
+<style>
+  figure svg text{font-family:Arial,Helvetica,sans-serif;fill:#1f2433}
+  .t9{font-size:9.5px}.t10{font-size:10px}.t11{font-size:11px}.t12{font-size:12px}.t13{font-size:13px}.t14{font-size:14px}.t16{font-size:16px}
+  .b{font-weight:700}.it{font-style:italic}
+  svg .w{fill:#fff}svg .g{fill:#5b6275}svg .az{fill:#2457c5}svg .ve{fill:#1e8a4c}svg .am{fill:#b26a00}svg .ro{fill:#c0352b}svg .mo{fill:#6b3fc0}
+  svg .mid{text-anchor:middle}svg .end{text-anchor:end}
+  .ln{stroke:#8a90a0;stroke-width:1.4;fill:none}
+  .lna{stroke:#2457c5;stroke-width:1.6;fill:none}
+  .lnv{stroke:#1e8a4c;stroke-width:1.6;fill:none}
+  .lnr{stroke:#c0352b;stroke-width:1.6;fill:none}
+  .lnam{stroke:#b26a00;stroke-width:1.6;fill:none}
+  .lnm{stroke:#6b3fc0;stroke-width:1.6;fill:none}
+  .disc{stroke-dasharray:4 3}
+  .fig-alta svg{max-height:none}
+  .pantalla .fila{display:flex;gap:2mm;flex-wrap:wrap;align-items:center;margin-bottom:2mm}
+  .pantalla .chip{border:1px solid #c9cfda;border-radius:1.2mm;padding:.2mm 1.6mm;background:#fff;font-size:8.2pt}
+  .pantalla .chip.az{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .pantalla .kpi{border:1px solid var(--linea);border-radius:1.6mm;padding:1.4mm 2mm;flex:1;min-width:26mm;background:#fff}
+  .pantalla .kpi small{display:block;color:var(--suave);font-size:7.6pt}
+  .pantalla .kpi b{display:block;font-size:10.5pt}
+  .pantalla .kpi i{font-style:normal;font-size:7.4pt;color:var(--verde)}
+  .pantalla table{font-size:8pt;margin:1mm 0}
+  .pantalla th{padding:1mm 1.6mm;font-size:7.8pt}
+  .pantalla td{padding:1mm 1.6mm}
+  .pantalla .dia{background:var(--gris-c);font-weight:700;font-size:7.8pt;padding:1mm 1.6mm;letter-spacing:.03em}
+  .pantalla .vacio{color:var(--suave);font-style:italic}
+  .n-r{display:inline-flex;width:4.4mm;height:4.4mm;border-radius:50%;background:var(--rojo);color:#fff;font-size:7pt;font-weight:800;align-items:center;justify-content:center;vertical-align:middle;margin:0 .6mm}
+  .ver{display:inline-block;font-size:7.6pt;font-weight:700;color:#fff;background:var(--verde);border-radius:1mm;padding:0 1.4mm}
+  .est{display:inline-block;font-size:7.6pt;font-weight:700;border-radius:5mm;padding:0 1.8mm}
+  .est.gr{background:var(--gris-c);color:var(--suave)}.est.az{background:var(--azul-c);color:var(--azul)}.est.am{background:var(--ambar-c);color:var(--ambar)}.est.ve{background:var(--verde-c);color:var(--verde)}.est.ro{background:var(--rojo-c);color:var(--rojo)}
+  .indice li{align-items:baseline}
+  .indice .d{color:var(--suave);font-size:8.8pt;margin-left:auto;text-align:right;max-width:85mm}
+  .anexo td{font-size:8.6pt}
+  .anexo .ref{font-size:7.4pt;color:var(--suave);font-family:"JetBrains Mono",Menlo,monospace;word-break:break-all}
+  .faq h4{color:var(--azul)}
+  .faq .q{break-inside:avoid;margin-bottom:3.4mm;padding-bottom:2.4mm;border-bottom:1px dashed var(--linea)}
+  .faq .q p:last-child{margin-bottom:0}
+  .rutina{border:1px solid var(--linea);border-radius:2.4mm;padding:3mm 4mm;margin:3mm 0;break-inside:avoid}
+  .rutina h4{margin-top:0}
+  .comp td:nth-child(n+2),.comp th:nth-child(n+2){text-align:center}
+  .si{color:var(--verde);font-weight:800}.no{color:var(--rojo);font-weight:800}
+  .lead{font-size:11pt;color:var(--suave);margin-bottom:4mm}
+  h3{color:var(--tinta)}
+  .sinruptura{break-inside:avoid}
+  h3,h4{break-after:avoid}
+  svg text{white-space:pre}
+</style>
+</head>
+<body>
+
+<!-- Marcadores de flecha comunes a todos los esquemas -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a90a0"/></marker>
+    <marker id="fla" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2457c5"/></marker>
+    <marker id="flv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1e8a4c"/></marker>
+    <marker id="flr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c0352b"/></marker>
+    <marker id="flam" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b26a00"/></marker>
+    <marker id="flm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b3fc0"/></marker>
+  </defs>
+</svg>
+
+<!-- ============================ PORTADA ============================ -->
+<section class="portada">
+  <div>
+    <div class="sello">DTI S.L. · RONOCA DESARROLLOS S.L.</div>
+    <h1>Guía de uso del CRM</h1>
+    <div class="bajada">Cómo se usa toda la aplicación, de principio a fin: cómo entran los pedidos, cómo salen, cómo se cobran y se documentan, cómo funciona el textil y quién mira qué cifra y cada cuánto.</div>
+  </div>
+  <div>
+    <svg viewBox="0 0 600 150" width="150mm" style="display:block;margin-bottom:12mm" aria-hidden="true">
+      <g font-family="Arial" font-size="13" fill="#fff">
+        <rect x="0" y="40" width="110" height="56" rx="10" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.5)"/>
+        <text x="55" y="73" text-anchor="middle" fill="#fff" font-weight="700">Entra</text>
+        <rect x="163" y="40" width="110" height="56" rx="10" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.5)"/>
+        <text x="218" y="73" text-anchor="middle" fill="#fff" font-weight="700">Se hace</text>
+        <rect x="326" y="40" width="110" height="56" rx="10" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.5)"/>
+        <text x="381" y="73" text-anchor="middle" fill="#fff" font-weight="700">Se cobra</text>
+        <rect x="489" y="40" width="110" height="56" rx="10" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.5)"/>
+        <text x="544" y="73" text-anchor="middle" fill="#fff" font-weight="700">Se cuenta</text>
+        <path d="M114 68 H158" stroke="#fff" stroke-width="2"/><path d="M152 62 L160 68 L152 74" fill="none" stroke="#fff" stroke-width="2"/>
+        <path d="M277 68 H321" stroke="#fff" stroke-width="2"/><path d="M315 62 L323 68 L315 74" fill="none" stroke="#fff" stroke-width="2"/>
+        <path d="M440 68 H484" stroke="#fff" stroke-width="2"/><path d="M478 62 L486 68 L478 74" fill="none" stroke="#fff" stroke-width="2"/>
+      </g>
+    </svg>
+    <div class="meta">Aplicación «DTF Culture» · Versión de la guía: noviembre de 2026<br>
+    Para Javier y para quien se incorpore al equipo · Lector no técnico<br>
+    Complementa a la <b>Guía económica</b>, que desarrolla caja, banco, compras y cifras contables.</div>
+  </div>
+</section>
+
+<!-- ============================ CÓMO USAR / ÍNDICE ============================ -->
+<section>
+  <h2>Cómo usar esta guía</h2>
+  <p class="lead">Esta guía explica <b>qué hace cada pantalla</b> del CRM, <b>en qué orden</b> conviene usarlas y <b>qué significa cada cifra</b>. No hace falta leerla entera de una vez.</p>
+  <div class="dos">
+    <div class="ficha">
+      <h4>Si eres nuevo en el equipo</h4>
+      <p>Lee los capítulos <b>1, 2, 4, 5 y 6</b> (qué es la app, cómo entrar, cómo entran y salen los pedidos). Después, el capítulo <b>13</b> con la rutina de tu perfil. Ten a mano el <b>14</b> (problemas frecuentes).</p>
+    </div>
+    <div class="ficha">
+      <h4>Si eres Javier (o llevas los números)</h4>
+      <p>Repasa el <b>3</b> (configuración bien hecha), el <b>12</b> (resúmenes y cómo leer cada cifra) y el <b>13</b> (rutinas). El <b>16</b> resume con honestidad lo que la app aún no hace.</p>
+    </div>
+  </div>
+  <h4>Convenciones</h4>
+  <ul>
+    <li>Los menús y caminos van así: <span class="ruta">Ventas › Pedidos</span>. Los botones, así: <span class="btn">Sincronizar</span>. Los textos que verás en pantalla, entre comillas «así».</li>
+    <li>Las etiquetas <span class="etq e-admin">Admin</span> <span class="etq e-editor">Editor</span> <span class="etq e-visor">Visor</span> indican qué nivel de usuario puede hacer algo.</li>
+    <li>Las cajas de color te avisan:</li>
+  </ul>
+  <div class="tres">
+    <div class="caja idea" style="margin:0"><span class="tit">Idea</span>Explicación o concepto que conviene entender.</div>
+    <div class="caja ok" style="margin:0"><span class="tit">Bien hecho</span>La forma correcta de hacerlo.</div>
+    <div class="caja ojo" style="margin:0"><span class="tit">Ojo</span>Detalle que confunde o descuadra.</div>
+  </div>
+  <div class="dos" style="margin-top:3mm">
+    <div class="caja nunca" style="margin:0"><span class="tit">Nunca</span>Algo que no se debe hacer (o que no tiene vuelta atrás).</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Truco</span>Un atajo para sacarle más partido.</div>
+  </div>
+  <div class="caja idea"><span class="tit">Dos guías</span>Esta es la <b>Guía de uso</b>: el día a día de toda la aplicación. La <b>Guía económica</b> desarrolla la caja, el banco y la conciliación, las facturas de compra, la inversión, el archivo para la gestoría y las cifras contables. Aquí se explica para qué sirve cada una de esas pantallas y se remite allí para el detalle.</div>
+</section>
+
+<section class="capitulo">
+  <h2>Índice</h2>
+  <ol class="indice">
+    <li><span class="n">1</span><span>La app de un vistazo</span><span class="d">Qué es, mapa del menú, qué hace y qué no</span></li>
+    <li><span class="n">2</span><span>Primeros pasos</span><span class="d">Entrar, contraseña, pantalla, niveles y permisos</span></li>
+    <li><span class="n">3</span><span>Configuración inicial bien hecha</span><span class="d">Lista de comprobación paso a paso</span></li>
+    <li><span class="n">4</span><span>Cómo entran los pedidos</span><span class="d">WooCommerce, mostrador, presupuestos y textil</span></li>
+    <li><span class="n">5</span><span>La pantalla de Pedidos a fondo</span><span class="d">Filtros, columnas, estados, envío, cancelar, borrar</span></li>
+    <li><span class="n">6</span><span>Cómo salen los pedidos</span><span class="d">Producción, envío, cobro y documento</span></li>
+    <li><span class="n">7</span><span>Cobros y documentos</span><span class="d">Registrar cobros, ticket o factura, rectificar</span></li>
+    <li><span class="n">8</span><span>Presupuestos</span><span class="d">De tienda y textil, a mano o con IA</span></li>
+    <li><span class="n">9</span><span>Clientes y productos</span><span class="d">Ficha única, NIF, duplicados, catálogo</span></li>
+    <li><span class="n">10</span><span>Textil personalizado</span><span class="d">Marcas, stock, compras con escáner, pedidos</span></li>
+    <li><span class="n">11</span><span>Dinero: visión de uso</span><span class="d">Qué es cada pantalla y cuándo se usa</span></li>
+    <li><span class="n">12</span><span>Resúmenes y cifras</span><span class="d">Inicio, Gerencia, Resumen diario, informe socios</span></li>
+    <li><span class="n">13</span><span>Rutinas por perfil</span><span class="d">Diario, semanal, mensual y trimestral</span></li>
+    <li><span class="n">14</span><span>Problemas frecuentes</span><span class="d">Síntoma, causa y solución</span></li>
+    <li><span class="n">15</span><span>Sacarle el máximo partido</span><span class="d">Trucos y buenas prácticas</span></li>
+    <li><span class="n">16</span><span>Anexo: lo que aún no hace</span><span class="d">Huecos conocidos y qué hacer mientras</span></li>
+  </ol>
+</section>
+
+<!-- ============================ CAPÍTULO 1 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">1</div><div><h2>La app de un vistazo</h2><div class="sub">Qué es, qué resuelve, dónde está cada cosa y qué no hace</div></div></div>
+
+  <h3>Qué es</h3>
+  <p>El CRM es la aplicación interna de <b>DTI S.L.</b> (RONOCA DESARROLLOS S.L.). En pantalla se llama <b>DTF Culture</b>. Reúne en un solo sitio todo lo que pasa en el negocio:</p>
+  <ul>
+    <li><b>La venta de impresión DTF por metros</b>, sobre todo a profesionales (B2B), que llega por varias <b>tiendas WooCommerce</b> y también por mostrador o por presupuesto.</li>
+    <li><b>El textil personalizado</b>: prendas compradas a proveedores, con su almacén, que se venden personalizadas.</li>
+    <li><b>El dinero</b>: lo que se cobra, lo que falta por cobrar, la caja de efectivo, el banco, las facturas de proveedores.</li>
+    <li><b>Los resúmenes</b>: cuánto se vende, se cobra, se imprime y se gana (estimado), con objetivos y avisos.</li>
+  </ul>
+  <p>Hay <b>una sola sociedad</b> (un CIF) con varias tiendas. Las tiendas son marcas o webs distintas, pero las facturas, los clientes y las cifras son de la misma empresa.</p>
+
+  <h3>Qué problemas resuelve</h3>
+  <div class="tres">
+    <div class="ficha"><h4>Todo junto</h4><p class="peq" style="color:inherit">Los pedidos de todas las webs, del mostrador y del textil en una sola lista, con su cobro y su documento al lado.</p></div>
+    <div class="ficha"><h4>Nada se olvida</h4><p class="peq" style="color:inherit">Qué falta por cobrar, qué pedido no tiene ticket, qué sigue en el taller, qué compra está sin registrar.</p></div>
+    <div class="ficha"><h4>Números claros</h4><p class="peq" style="color:inherit">Cada cifra tiene su ⓘ con qué es y cómo se calcula, y se compara con el periodo anterior.</p></div>
+  </div>
+
+  <h3>El mapa del menú</h3>
+  <p>El menú lateral (a la izquierda; en el móvil, un cajón que se abre con el botón de arriba) tiene seis bloques. Todas las personas con nivel ven todas las entradas, salvo <b>Usuarios</b> y <b>Nueva tienda</b>, que son solo del administrador.</p>
+
+  <figure class="fig-alta">
+  <svg viewBox="0 0 680 470" width="100%">
+    <!-- Bloque 1: arriba -->
+    <rect x="4" y="4" width="216" height="118" rx="10" fill="#fff" stroke="#c5d6f7" stroke-width="1.5"/>
+    <rect x="4" y="4" width="216" height="26" rx="10" fill="#2457c5"/><rect x="4" y="20" width="216" height="10" fill="#2457c5"/>
+    <text x="16" y="22" class="t12 b w">ARRIBA (sin rótulo)</text>
+    <text x="16" y="52" class="t12 b">Inicio</text><text x="16" y="67" class="t10 g">Cifras del periodo de las tiendas</text>
+    <text x="16" y="90" class="t12 b">Gerencia</text><text x="16" y="105" class="t10 g">Toda la empresa: tiendas y textil</text>
+
+    <!-- Bloque 2: Ventas -->
+    <rect x="232" y="4" width="216" height="118" rx="10" fill="#fff" stroke="#bfe3cf" stroke-width="1.5"/>
+    <rect x="232" y="4" width="216" height="26" rx="10" fill="#1e8a4c"/><rect x="232" y="20" width="216" height="10" fill="#1e8a4c"/>
+    <text x="244" y="22" class="t12 b w">VENTAS</text>
+    <text x="244" y="50" class="t12 b">Pedidos</text><text x="300" y="50" class="t10 g">de todas las tiendas</text>
+    <text x="244" y="72" class="t12 b">Clientes</text><text x="300" y="72" class="t10 g">ficha única por empresa</text>
+    <text x="244" y="94" class="t12 b">Productos</text><text x="310" y="94" class="t10 g">productos generales</text>
+    <text x="244" y="113" class="t10 g it">Aquí empieza el día a día</text>
+
+    <!-- Bloque 3: Dinero -->
+    <rect x="460" y="4" width="216" height="200" rx="10" fill="#fff" stroke="#f3d9a8" stroke-width="1.5"/>
+    <rect x="460" y="4" width="216" height="26" rx="10" fill="#b26a00"/><rect x="460" y="20" width="216" height="10" fill="#b26a00"/>
+    <text x="472" y="22" class="t12 b w">DINERO</text>
+    <text x="472" y="50" class="t11 b">Cobros pendientes</text><text x="472" y="63" class="t10 g">lo que falta por cobrar</text>
+    <text x="472" y="80" class="t11 b">Lo cobrado</text><text x="545" y="80" class="t10 g">todo lo que entró</text>
+    <text x="472" y="99" class="t11 b">Facturas de compra</text><text x="472" y="112" class="t10 g">proveedores (con IA)</text>
+    <text x="472" y="129" class="t11 b">Conciliación bancaria</text><text x="472" y="142" class="t10 g">casar el banco con facturas</text>
+    <text x="472" y="159" class="t11 b">Caja</text><text x="505" y="159" class="t10 g">efectivo y gastos de socios</text>
+    <text x="472" y="176" class="t11 b">Inversión</text><text x="533" y="176" class="t10 g">capital de los socios</text>
+    <text x="472" y="193" class="t11 b">Archivo</text><text x="522" y="193" class="t10 g">ZIP para la gestoría</text>
+
+    <!-- Bloque 4: Tiendas -->
+    <rect x="4" y="136" width="216" height="232" rx="10" fill="#fff" stroke="#c5d6f7" stroke-width="1.5"/>
+    <rect x="4" y="136" width="216" height="26" rx="10" fill="#2457c5"/><rect x="4" y="152" width="216" height="10" fill="#2457c5"/>
+    <text x="16" y="154" class="t12 b w">TIENDAS</text>
+    <circle cx="20" cy="178" r="5" fill="#e0457b"/><text x="31" y="182" class="t12 b">Cada tienda activa ▾</text>
+    <text x="30" y="200" class="t11">Resumen</text><text x="104" y="200" class="t10 g">el mes de la tienda</text>
+    <text x="30" y="216" class="t11">Pedidos</text><text x="104" y="216" class="t10 g">sincronizar, nuevo</text>
+    <text x="30" y="232" class="t11">Presupuestos</text><text x="104" y="232" class="t10 g">con PDF</text>
+    <text x="30" y="248" class="t11">Facturas</text><text x="104" y="248" class="t10 g">tickets y facturas</text>
+    <text x="30" y="264" class="t11">Facturación</text><text x="104" y="264" class="t10 g">ventas (no facturas)</text>
+    <text x="30" y="280" class="t11">Productos</text><text x="104" y="280" class="t10 g">su catálogo</text>
+    <text x="30" y="296" class="t11">Clientes</text><text x="104" y="296" class="t10 g">dados de alta allí</text>
+    <text x="30" y="312" class="t11">Ajustes</text><text x="104" y="312" class="t10 g">Woo, correo, logo</text>
+    <line x1="16" y1="322" x2="208" y2="322" stroke="#dfe3ea"/>
+    <text x="16" y="340" class="t11 b">Gestionar tiendas</text>
+    <text x="16" y="357" class="t11 b">Nueva tienda</text><text x="100" y="357" class="t10 ro b">solo admin</text>
+
+    <!-- Bloque 5: Textil -->
+    <rect x="232" y="136" width="216" height="232" rx="10" fill="#fff" stroke="#d9cbf5" stroke-width="1.5"/>
+    <rect x="232" y="136" width="216" height="26" rx="10" fill="#6b3fc0"/><rect x="232" y="152" width="216" height="10" fill="#6b3fc0"/>
+    <text x="244" y="154" class="t12 b w">TEXTIL</text>
+    <text x="244" y="182" class="t12 b">Textil personalizado ▾</text>
+    <text x="258" y="200" class="t11">Resumen</text><text x="340" y="200" class="t10 g">accesos rápidos</text>
+    <text x="258" y="216" class="t11">Stock</text><text x="340" y="216" class="t10 g">almacén por tallas</text>
+    <text x="258" y="232" class="t11">Compras</text><text x="340" y="232" class="t10 g">factura → stock</text>
+    <text x="258" y="248" class="t11">Pedidos</text><text x="340" y="248" class="t10 g">TPD-…, reservan</text>
+    <text x="258" y="264" class="t11">Presupuestos</text><text x="340" y="264" class="t10 g">PRES-…, con IA</text>
+    <text x="258" y="280" class="t11">Facturas</text><text x="340" y="280" class="t10 g">tickets y facturas</text>
+    <text x="258" y="296" class="t11">Clientes</text><text x="340" y="296" class="t10 g">la misma ficha</text>
+    <text x="258" y="312" class="t11">Ajustes</text><text x="340" y="312" class="t10 g">marcas comerciales</text>
+    <text x="244" y="345" class="t10 g it">Módulo aparte de las tiendas</text>
+    <text x="244" y="358" class="t10 g it">WooCommerce, misma sociedad</text>
+
+    <!-- Bloque 6: Sistema -->
+    <rect x="460" y="218" width="216" height="150" rx="10" fill="#fff" stroke="#c9cfda" stroke-width="1.5"/>
+    <rect x="460" y="218" width="216" height="26" rx="10" fill="#5b6275"/><rect x="460" y="234" width="216" height="10" fill="#5b6275"/>
+    <text x="472" y="236" class="t12 b w">SISTEMA</text>
+    <text x="472" y="264" class="t12 b">Ajustes</text>
+    <text x="486" y="281" class="t10 g">· Datos de la empresa</text>
+    <text x="486" y="296" class="t10 g">· PDF de presupuestos</text>
+    <text x="486" y="311" class="t10 g">· Caja (conceptos y socios)</text>
+    <text x="486" y="326" class="t10 g">· Usuarios y permisos</text>
+    <text x="472" y="352" class="t12 b">Usuarios</text><text x="535" y="352" class="t10 ro b">solo admin</text>
+
+    <!-- Cabecera -->
+    <rect x="4" y="384" width="672" height="78" rx="10" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="18" y="404" class="t12 b">En la cabecera de todas las pantallas</text>
+    <rect x="18" y="414" width="26" height="20" rx="4" fill="#fff" stroke="#c9cfda"/><text x="31" y="428" class="t11 mid">☰</text>
+    <text x="52" y="428" class="t11">Plegar / abrir el menú</text>
+    <text x="200" y="428" class="t11 az b">Dinero › Lo cobrado</text><text x="200" y="444" class="t10 g">«dónde estoy»</text>
+    <text x="400" y="428" class="t11 g">tu correo</text>
+    <rect x="470" y="414" width="64" height="20" rx="4" fill="#fff" stroke="#c9cfda"/><text x="502" y="428" class="t10 mid">☀ / ☾</text>
+    <text x="502" y="452" class="t10 g mid">tema</text>
+    <rect x="550" y="414" width="56" height="20" rx="4" fill="#fff" stroke="#c9cfda"/><text x="578" y="428" class="t10 mid">Salir</text>
+    <text x="620" y="428" class="t10 g">v1.0.0</text>
+    <text x="620" y="444" class="t10 g">(pie menú)</text>
+  </svg>
+  <figcaption>Figura 1 · El menú completo. Las tiendas desactivadas no salen en el menú (siguen en «Gestionar tiendas»).</figcaption>
+  </figure>
+
+  <h3>Qué hace el CRM y qué NO hace</h3>
+  <p>Es muy importante tener claro <b>quién manda en qué</b>. El CRM no sustituye ni a la web ni a la gestoría: recoge lo que pasa y te ayuda a llevarlo al día.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 300" width="100%">
+    <rect x="250" y="95" width="180" height="110" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="2"/>
+    <text x="340" y="122" class="t14 b az mid">CRM · DTF Culture</text>
+    <text x="340" y="142" class="t11 mid">Pedidos manuales y textil</text>
+    <text x="340" y="158" class="t11 mid">Cobros · Documentos internos</text>
+    <text x="340" y="174" class="t11 mid">Stock textil · Caja · Cifras</text>
+    <text x="340" y="192" class="t10 g mid">Lo que pasa, junto y al día</text>
+
+    <rect x="10" y="20" width="190" height="88" rx="10" fill="#fff" stroke="#6b3fc0" stroke-width="1.5"/>
+    <text x="105" y="42" class="t13 b mo mid">WooCommerce (webs)</text>
+    <text x="105" y="60" class="t11 mid">Manda en los pedidos web:</text>
+    <text x="105" y="75" class="t11 mid">estado, líneas, importes,</text>
+    <text x="105" y="90" class="t11 mid">pago y devoluciones</text>
+    <path d="M200 70 C230 80 235 110 248 120" class="lnm" marker-end="url(#flm)"/>
+    <text x="214" y="118" class="t10 mo">Sincronizar</text>
+
+    <rect x="10" y="192" width="190" height="88" rx="10" fill="#fff" stroke="#b26a00" stroke-width="1.5"/>
+    <text x="105" y="214" class="t13 b am mid">Banco</text>
+    <text x="105" y="232" class="t11 mid">Manda en el dinero real.</text>
+    <text x="105" y="247" class="t11 mid">El CRM solo sabe lo de los</text>
+    <text x="105" y="262" class="t11 mid">extractos que subes</text>
+    <path d="M200 230 C230 220 235 195 248 185" class="lnam" marker-end="url(#flam)"/>
+    <text x="206" y="252" class="t10 am">Subir extracto</text>
+
+    <rect x="480" y="20" width="190" height="88" rx="10" fill="#fff" stroke="#c0352b" stroke-width="1.5"/>
+    <text x="575" y="42" class="t13 b ro mid">Gestoría</text>
+    <text x="575" y="60" class="t11 mid">Emite las facturas que</text>
+    <text x="575" y="75" class="t11 mid">recibe el cliente y declara</text>
+    <text x="575" y="90" class="t11 mid">los impuestos (Hacienda)</text>
+    <path d="M432 120 C450 110 455 85 476 72" class="lnr" marker-end="url(#flr)"/>
+    <text x="440" y="140" class="t10 ro">Archivo ZIP +</text>
+    <text x="440" y="153" class="t10 ro">extracto, cada trimestre</text>
+
+    <rect x="480" y="192" width="190" height="88" rx="10" fill="#fff" stroke="#1e8a4c" stroke-width="1.5"/>
+    <text x="575" y="214" class="t13 b ve mid">Cliente</text>
+    <text x="575" y="232" class="t11 mid">Recibe su pedido y el</text>
+    <text x="575" y="247" class="t11 mid">aviso de «pedido enviado».</text>
+    <text x="575" y="262" class="t11 mid b">No recibe tickets del CRM</text>
+    <path d="M432 185 C450 195 455 215 476 225" class="lnv" marker-end="url(#flv)"/>
+    <text x="436" y="178" class="t10 ve">Aviso de envío</text>
+  </svg>
+  <figcaption>Figura 2 · Quién manda en qué. El CRM recoge y ordena; la web, el banco y la gestoría siguen siendo la referencia de lo suyo.</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:50%">Sí lo hace el CRM</th><th>No lo hace (o no es el sitio)</th></tr>
+    <tr><td>Traer los pedidos de las webs cuando pulsas <span class="btn">Sincronizar</span>.</td><td>No sincroniza solo: si nadie pulsa, los pedidos nuevos no entran.</td></tr>
+    <tr><td>Crear pedidos manuales, de mostrador, de presupuesto y textil.</td><td>No es la web: un pedido web se cambia en WooCommerce (la web manda).</td></tr>
+    <tr><td>Registrar cobros (efectivo, tarjeta, transferencia) y ver lo pendiente.</td><td>No cobra ni conecta con el TPV: el cobro lo apuntas tú (o llega de la web).</td></tr>
+    <tr><td>Emitir <b>tickets y facturas internas</b>, numeradas sin huecos.</td><td><b>No es el sistema de facturación ante Hacienda.</b> Las facturas que se declaran y que recibe el cliente las hace la <b>gestoría</b>. Los documentos del CRM <b>no se envían al cliente</b> (decisiones de Javier, 9 y 21 de octubre de 2026).</td></tr>
+    <tr><td>Mandar al cliente el aviso de «pedido enviado» con el seguimiento.</td><td>No envía facturas ni tickets por correo, y no debe hacerlo.</td></tr>
+    <tr><td>Llevar el almacén textil, con coste medio, reservas y compras leídas con IA.</td><td>No lleva inventario de film, tinta ni polvo (se estiman con el coste por metro).</td></tr>
+    <tr><td>Calcular cifras, márgenes, beneficio estimado e impuestos <b>orientativos</b>.</td><td>No hace nóminas, ni presenta modelos, ni envía nada a la AEAT. Desde el 1-1-2027 la empresa está sujeta a Verifactu; hoy el CRM no envía nada.</td></tr>
+  </table>
+
+  <h3>Cuatro ideas que hay que tener claras desde el principio</h3>
+  <div class="dos">
+    <div class="caja idea" style="margin:0"><span class="tit">1 · Pedido, cobro y documento son tres cosas</span>Un pedido puede estar cobrado sin ticket, o con factura y sin cobrar. Cada una se hace aparte y ninguna hace las otras solas (salvo el cobro web automático). En el capítulo 7 lo verás con un esquema.</div>
+    <div class="caja idea" style="margin:0"><span class="tit">2 · El día de un pedido es en hora de España</span>Todas las pantallas cuentan cada pedido en su día en hora de España, el mismo que llevará su ticket. Un pedido web de las 23:15 del día 31 cuenta el 31.</div>
+    <div class="caja idea" style="margin:0"><span class="tit">3 · Los costes se congelan</span>El coste por metro se guarda en cada pedido al crearlo. Si mañana cambias el coste, los márgenes de meses pasados no cambian.</div>
+    <div class="caja idea" style="margin:0"><span class="tit">4 · Todo deja rastro</span>Cada cambio queda registrado con su autor en un registro (auditoría) que no se puede tocar. Por eso los usuarios no se borran: se desactivan.</div>
+  </div>
+</section>
+
+<!-- ============================ CAPÍTULO 2 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">2</div><div><h2>Primeros pasos</h2><div class="sub">Entrar, la contraseña, cómo es la pantalla y qué puede hacer cada nivel</div></div></div>
+
+  <h3>Entrar en la aplicación</h3>
+  <p>El acceso es <b>solo por invitación</b>: no hay registro libre. Un administrador te da de alta (capítulo 3) y te pasa un enlace o una contraseña inicial.</p>
+  <ol class="pasos">
+    <li>Abre la dirección del CRM. Verás «<b>DTF Culture</b> — Acceso restringido por invitación».</li>
+    <li>Escribe tu <b>Email</b> y tu <b>Contraseña</b> (mínimo 8 caracteres) y pulsa <span class="btn">Iniciar sesión</span>.</li>
+    <li>Sale el aviso «Bienvenido» y entras en <span class="ruta">Inicio</span>. Si ya tenías la sesión abierta, entras directamente.</li>
+  </ol>
+  <div class="caja idea"><span class="tit">Solo la primera vez de todas</span>Si la empresa aún no tiene ningún administrador, la misma pantalla dice «Crea la cuenta del administrador inicial», pide además el <b>Nombre completo</b> y el botón es <span class="btn">Crear administrador y entrar</span>. Esto solo pasa una vez en la vida de la aplicación.</div>
+
+  <h3>Elegir o cambiar la contraseña</h3>
+  <p>Cuando un administrador te genera un <b>enlace</b>, al abrirlo verás «Comprobando el enlace…» y después dos campos: <b>Contraseña nueva</b> y <b>Repítela</b>. Pulsa <span class="btn">Guardar y entrar</span>.</p>
+  <ul>
+    <li>Mínimo 8 caracteres, y las dos tienen que coincidir («Al menos 8 caracteres», «Las dos contraseñas no coinciden»).</li>
+    <li>El enlace <b>sirve una sola vez</b> y <b>caduca en unas horas</b>. Si ya se usó o caducó, verás «El enlace ha caducado o ya se ha usado. Pide otro a un administrador.» y el botón <span class="btn">Ir al acceso</span>.</li>
+  </ul>
+  <div class="caja ojo"><span class="tit">No hay «¿Olvidaste tu contraseña?»</span>Si alguien olvida su contraseña, se la tiene que pedir a un administrador: en <span class="ruta">Sistema › Usuarios</span>, el botón de la <b>llave</b> («Enlace para poner contraseña») genera un enlace nuevo. El CRM <b>no manda correos</b> de acceso: el administrador copia el enlace y se lo envía por WhatsApp, correo, etc.</div>
+
+  <h3>Bloqueo por intentos fallidos</h3>
+  <p>Si se escribe mal la contraseña <b>5 veces seguidas en 15 minutos</b>, la cuenta queda <b>bloqueada 15 minutos</b>, aunque después se escriba bien. Un acceso correcto pone el contador a cero. Si te pasa: espera 15 minutos o pide a un administrador un enlace nuevo con la llave.</p>
+  <p class="peq">Este bloqueo depende de un ajuste que se activa a mano en el panel de Supabase. Si no se activó, no hay bloqueo por cuenta.</p>
+
+  <h3>Cómo es la pantalla</h3>
+  <div class="pantalla">
+    <div class="barra"><span>☰ &nbsp; Dinero › Lo cobrado</span><span>javier@… &nbsp; ☀ &nbsp; Salir</span></div>
+    <div class="cuerpo" style="background:#fdf1dc;color:#b26a00;font-weight:600">Tienes acceso de solo lectura: puedes ver todo, pero no crear, cambiar ni borrar.</div>
+    <div class="cuerpo">
+      <div class="fila"><b style="font-size:11pt">Lo cobrado</b></div>
+      <div class="fila"><span class="chip az">Mes ▾</span><span class="chip">Frente al periodo anterior ▾</span><span class="chip">Exportar CSV</span></div>
+      <div class="fila"><div class="kpi"><small>Total cobrado ⓘ</small><b>— €</b><i>↗ variación</i></div><div class="kpi"><small>Base imponible ⓘ</small><b>— €</b></div><div class="kpi"><small>IVA repercutido ⓘ</small><b>— €</b></div><div class="kpi"><small>Propinas ⓘ</small><b>— €</b></div></div>
+    </div>
+  </div>
+  <ul>
+    <li><b>Cabecera fija</b>: el botón ☰ pliega o abre el menú; al lado, la «miga» que te dice dónde estás (por ejemplo «Tienda Uno › Facturas»); a la derecha tu correo (en pantallas grandes), el botón de <b>tema claro/oscuro</b> y <span class="btn">Salir</span>.</li>
+    <li><b>Franja de solo lectura</b>: si eres visor verás «Tienes acceso de solo lectura…». Si tu usuario no tiene nivel o está desactivado: «Tu usuario no tiene nivel de acceso o está desactivado: no puedes cambiar datos. Habla con un administrador.»</li>
+    <li><b>ⓘ en cada cifra</b>: pasa el ratón por encima (o tócalo en el móvil) y te dice qué es, el cálculo y de dónde salen los datos. Es la definición oficial de cada número.</li>
+    <li><b>Los filtros viajan en la dirección</b>: si copias el enlace de la barra del navegador y se lo mandas a alguien, verá exactamente lo mismo (periodo, pestaña, filtros). Recargar no los pierde.</li>
+  </ul>
+
+  <h3>En el móvil o la tablet</h3>
+  <p>La aplicación funciona en el móvil. El menú es un cajón que se abre con ☰ y se cierra solo al elegir pantalla. En la cabecera sale solo el nombre de la pantalla. Las listas largas (como Pedidos) se convierten en <b>tarjetas</b>, una por pedido, con un botón <span class="btn">Detalle</span>. Los filtros de Gerencia se pliegan y muestran un resumen en una línea. El ⓘ se abre tocándolo.</p>
+  <div class="caja truco"><span class="tit">Truco</span>En el taller, un móvil o una tablet con <span class="ruta">Ventas › Pedidos</span> filtrado por estado «Procesando» sirve de cola de producción: cambias el estado tocando la etiqueta.</div>
+</section>
+
+<section class="capitulo">
+  <h3 style="margin-top:0">Los tres niveles de usuario</h3>
+  <p>Cada persona tiene <b>un</b> nivel. Desde el 21-10-2026, <b>todos los niveles ven todas las pantallas y todas las tiendas</b>: el nivel solo decide qué puedes <b>cambiar</b>.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 350" width="100%">
+    <rect x="6" y="6" width="668" height="248" rx="14" fill="#fbe7e5" stroke="#c0352b" stroke-width="1.5"/>
+    <text x="22" y="30" class="t14 b ro">Administrador</text>
+    <text x="22" y="48" class="t11">Todo lo del editor, y además:</text>
+    <text x="22" y="68" class="t11">· Borrar (pedidos, cobros, clientes,</text>
+    <text x="22" y="83" class="t11">  presupuestos, apuntes, variantes…)</text>
+    <text x="22" y="98" class="t11">· Usuarios y niveles</text>
+    <text x="22" y="113" class="t11">· Datos de la empresa y series</text>
+    <text x="22" y="128" class="t11">· Tiendas: alta, datos, credenciales</text>
+    <text x="22" y="143" class="t11">  de WooCommerce y servidor de correo</text>
+    <text x="22" y="158" class="t11">· PDF de presupuestos (guardar)</text>
+    <text x="22" y="173" class="t11">· Borrar la última factura de la serie</text>
+    <text x="22" y="188" class="t11">· Fusionar variantes textil</text>
+    <text x="22" y="203" class="t11">· Coste real del envío, corregir</text>
+    <text x="22" y="218" class="t11">  «realizado», recuperar fechas Woo</text>
+    <text x="22" y="233" class="t11">· Descartar compras, marcarlas borradas</text>
+
+    <rect x="262" y="40" width="400" height="202" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="1.5"/>
+    <text x="278" y="64" class="t14 b az">Editor</text>
+    <text x="278" y="82" class="t11">Todo lo del visor, y además crear y modificar:</text>
+    <text x="278" y="102" class="t11">· Pedidos, estados, seguimiento, cobros</text>
+    <text x="278" y="117" class="t11">· Emitir tickets y facturas, canjear, rectificar</text>
+    <text x="278" y="132" class="t11">· Presupuestos, clientes, productos</text>
+    <text x="278" y="147" class="t11">· Sincronizar tiendas · Compras · Caja</text>
+    <text x="278" y="162" class="t11">· Gerencia › Ajustes (objetivos, gastos, precio del metro)</text>
+    <text x="278" y="177" class="t11">· Stock textil: movimientos, recuentos, unir</text>
+
+    <rect x="470" y="188" width="180" height="44" rx="10" fill="#fff" stroke="#8a90a0" stroke-width="1.5"/>
+    <text x="484" y="207" class="t13 b g">Visor (solo lectura)</text>
+    <text x="484" y="223" class="t11">Ve todo. No cambia nada.</text>
+
+    <rect x="6" y="268" width="668" height="76" rx="10" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="22" y="288" class="t12 b">Sin nivel o desactivado</text>
+    <text x="22" y="305" class="t11">Sin fila de nivel: no escribe nada y solo ve las tiendas que tenga asignadas (alta a medias).</text>
+    <text x="22" y="320" class="t11">Desactivado: ni entra, ni ve, ni cambia. Sus acciones pasadas siguen en la auditoría.</text>
+    <text x="22" y="336" class="t11 ro">Solo el admin ve, además: credenciales de WooCommerce, servidor de correo, clave del transportista y Usuarios.</text>
+  </svg>
+  <figcaption>Figura 3 · Cada nivel contiene al anterior. El visor lo ve todo; el editor crea y modifica; el administrador además borra y gestiona.</figcaption>
+  </figure>
+
+  <h3>Tabla de permisos completa</h3>
+  <table class="comp">
+    <tr><th>Acción</th><th>Admin</th><th>Editor</th><th>Visor</th></tr>
+    <tr><td>Ver todas las pantallas, tiendas, cifras, PDF guardados</td><td class="si">Sí</td><td class="si">Sí</td><td class="si">Sí</td></tr>
+    <tr><td>Exportar CSV, descargar ZIP del Archivo, PDF de presupuestos</td><td class="si">Sí</td><td class="si">Sí</td><td class="si">Sí</td></tr>
+    <tr><td>Sincronizar tiendas con WooCommerce, «Sincronizar clientes», «Recuperar envíos»</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Crear y editar pedidos, cambiar estados, poner seguimiento</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Coste real del envío en el seguimiento; corregir la fecha «realizado»</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Registrar cobros</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Borrar un cobro</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Emitir ticket o factura, facturar en bloque, canjear, anular con rectificativa, marcar pagada</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Borrar la última factura o ticket de la serie</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Presupuestos: crear, editar, confirmar (crear pedido)</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Borrar presupuestos, pedidos, clientes, productos, marcas</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Textil: compras, movimientos, recuentos, variantes, unir productos</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Textil: fusionar variantes, eliminar variantes, descartar compras de la cola</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Caja e Inversión: nuevo apunte y editar · Ajustes › Caja</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Caja e Inversión: borrar apuntes</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Gerencia › Ajustes: objetivos, gastos, precio del metro, Sociedades, jornada</td><td class="si">Sí</td><td class="si">Sí</td><td class="no">No</td></tr>
+    <tr><td>Borrar objetivos y gastos de Gerencia</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Datos de la empresa, series, costes por metro, PDF de presupuestos</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Tiendas: alta, editar, activar, borrar; datos, logo, credenciales, correo</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Usuarios: alta, nivel, activar/desactivar, enlaces de contraseña</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Rehacer PDF de facturas (Archivo); recuperar fechas de WooCommerce</td><td class="si">Sí</td><td class="no">No</td><td class="no">No</td></tr>
+  </table>
+  <div class="caja idea"><span class="tit">Quién manda de verdad</span>La pantalla esconde o desactiva los botones que no te tocan, pero <b>la seguridad está en la base de datos</b>: aunque alguien forzara un botón, la base lo rechaza con mensajes como «Tu nivel (solo lectura) solo permite ver: no puedes crear ni modificar datos» o «Solo un administrador puede borrar».</div>
+  <div class="caja ojo"><span class="tit">Ojo con un detalle</span>El <b>precio del metro</b> y el <b>% de Sociedades</b> de <span class="ruta">Gerencia › Ajustes</span> los puede cambiar un <b>editor</b>. El precio del metro cambia cómo se estiman los metros de los pedidos web (capítulo 3): acordad quién lo toca.</div>
+</section>
+
+<!-- ============================ CAPÍTULO 3 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">3</div><div><h2>Configuración inicial bien hecha</h2><div class="sub">Lo que hay que dejar bien puesto para que todas las cifras salgan bien</div></div></div>
+  <p class="lead">Casi todos los «números raros» vienen de una configuración incompleta: sin costes por metro no hay margen; con un precio del metro mal puesto, los metros web salen mal; sin credenciales, no entran pedidos. Repasa esta lista una vez al principio y cada vez que algo cambie.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 200" width="100%">
+    <g>
+      <rect x="4" y="20" width="120" height="70" rx="10" fill="#fbe7e5" stroke="#c0352b"/>
+      <text x="64" y="44" class="t12 b ro mid">1 · Empresa</text><text x="64" y="61" class="t10 mid">datos, series,</text><text x="64" y="75" class="t10 mid">costes por metro</text>
+      <rect x="140" y="20" width="120" height="70" rx="10" fill="#fbe7e5" stroke="#c0352b"/>
+      <text x="200" y="44" class="t12 b ro mid">2 · Tiendas</text><text x="200" y="61" class="t10 mid">Woo, credenciales,</text><text x="200" y="75" class="t10 mid">logo, correo</text>
+      <rect x="276" y="20" width="120" height="70" rx="10" fill="#e8effc" stroke="#2457c5"/>
+      <text x="336" y="44" class="t12 b az mid">3 · Gerencia</text><text x="336" y="61" class="t10 mid">precio del metro,</text><text x="336" y="75" class="t10 mid">gastos, objetivos</text>
+      <rect x="412" y="20" width="120" height="70" rx="10" fill="#e8effc" stroke="#2457c5"/>
+      <text x="472" y="44" class="t12 b az mid">4 · Jornada</text><text x="472" y="61" class="t10 mid">m/hora, corte,</text><text x="472" y="75" class="t10 mid">coste de envío</text>
+      <rect x="548" y="20" width="128" height="70" rx="10" fill="#e8effc" stroke="#2457c5"/>
+      <text x="612" y="44" class="t12 b az mid">5 · Caja y PDF</text><text x="612" y="61" class="t10 mid">conceptos, socios,</text><text x="612" y="75" class="t10 mid">plantillas</text>
+      <path d="M124 55 H138" class="ln" marker-end="url(#fl)"/><path d="M260 55 H274" class="ln" marker-end="url(#fl)"/><path d="M396 55 H410" class="ln" marker-end="url(#fl)"/><path d="M532 55 H546" class="ln" marker-end="url(#fl)"/>
+    </g>
+    <rect x="140" y="112" width="256" height="60" rx="10" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="268" y="136" class="t12 b mo mid">6 · Textil</text><text x="268" y="154" class="t10 mid">marcas y marca predeterminada</text>
+    <rect x="412" y="112" width="264" height="60" rx="10" fill="#fbe7e5" stroke="#c0352b"/>
+    <text x="544" y="136" class="t12 b ro mid">7 · Usuarios</text><text x="544" y="154" class="t10 mid">cada persona con su nivel</text>
+    <rect x="4" y="112" width="120" height="60" rx="10" fill="#fff" stroke="#c9cfda"/>
+    <text x="64" y="134" class="t10 b mid">Rojo = solo admin</text><text x="64" y="152" class="t10 b az mid">Azul = admin/editor</text><text x="64" y="166" class="t10 b mo mid">Morado = textil</text>
+    <text x="340" y="194" class="t10 g mid">Orden recomendado. Los pasos 1, 2 y 7 los hace un administrador.</text>
+  </svg>
+  <figcaption>Figura 4 · Orden recomendado para dejar el CRM bien configurado.</figcaption>
+  </figure>
+
+  <h3>3.1 · Datos de la empresa <span class="etq e-admin">Admin</span></h3>
+  <p>En <span class="ruta">Sistema › Ajustes › Datos de la empresa</span>. «Estos datos son únicos para toda la SL. Se aplican automáticamente a todas las tiendas (sucursales) que crees, así como a sus facturas.»</p>
+  <ul class="check">
+    <li><b>Identidad fiscal</b>: Razón social, CIF / NIF, Email fiscal, Teléfono, Dirección, Código postal, Ciudad, Provincia, País. Salen en tickets, facturas, presupuestos y en el Informe PDF para socios.</li>
+    <li><b>Método de pago en las facturas</b> (por ejemplo «Transferencia bancaria ES00 …»): se imprime en las facturas.</li>
+    <li><b>Numeración de facturas</b>: una sola serie para toda la sociedad (tiendas, manuales y textil comparten numeración) y se reinicia cada año. <b>Prefijo ordinario</b> (vacío → 2026/0001), <b>Prefijo de rectificativas</b> (R) y <b>Prefijo de tickets</b> (T). Los tres distintos.</li>
+    <li><b>Límites del ticket</b>: <b>Límite general (€)</b> (400 por defecto) y <b>Límite a particulares (€)</b> (3.000). Por encima hay que emitir factura completa.</li>
+    <li><b>Por dónde va la numeración</b>: por cada serie verás «N emitidas · la próxima será la X». Solo si una serie aún no tiene ninguna emitida puedes usar <span class="btn">Cambiar por dónde empieza</span> → número → <span class="btn">Fijar</span>.</li>
+    <li><b>Costes de producción por metro</b>: <b>Consumibles (€/m)</b>, <b>Packaging (€/m)</b> y <b>Electricidad (€/m)</b>. Verás «Coste total estimado: X €/m». <b>Sin esto no hay margen ni beneficio</b> en ninguna pantalla.</li>
+  </ul>
+  <p>Pulsa <span class="btn">Guardar</span> («Datos de la empresa guardados»).</p>
+  <div class="caja nunca"><span class="tit">Nunca</span>Cambies un prefijo con facturas ya emitidas este año: «Cambiar un prefijo abre una serie nueva que empieza otra vez por 1.» Y no intentes fijar el número de inicio de una serie que ya tiene documentos: la app no lo deja porque dejaría huecos o repetiría números.</div>
+  <div class="caja idea"><span class="tit">Los costes se congelan en cada pedido</span>Al crear un pedido se guarda el coste por metro de ese momento. Si en marzo subes los consumibles, los pedidos de marzo en adelante llevan el coste nuevo y los de febrero mantienen el suyo. Revisa estos costes cada pocos meses con <span class="ruta">Gerencia › Resultados › Compras frente a lo estimado</span> (capítulo 12): si compras bastante más de lo que el CRM estima, el coste por metro está bajo y todos los márgenes salen inflados.</div>
+
+  <h3>3.2 · Gerencia › Ajustes <span class="etq e-admin">Admin</span><span class="etq e-editor">Editor</span></h3>
+  <p>Está en la última pestaña de <span class="ruta">Gerencia</span>. Todo lo que se cambia aquí queda en la auditoría con su autor.</p>
+  <ol class="pasos">
+    <li><b>Qué cuenta como vendido</b>: interruptor «Contar los pedidos web sin pagar como vendidos» (activado de fábrica). En WooCommerce un pedido «pendiente de pago» o «en espera» puede no pagarse nunca. Apagado, Gerencia no los cuenta hasta que se paguen. <b>No cambia Inicio ni la Facturación de las tiendas</b>. Decidid una vez y no lo toquéis cada semana: si lo cambias, las cifras de Gerencia de meses pasados cambian también.</li>
+    <li><b>Objetivos al mes</b>: <b>Desde el mes</b>, <b>Metros al mes</b> y <b>Ventas al mes (€)</b> (con IVA, como «Vendido») → <span class="btn">Añadir objetivo</span>. Cada objetivo vale desde su mes hasta que pongas otro, y se reparte por días.</li>
+    <li><b>Datos fiscales</b>: <b>Sociedades (%)</b>, <b>Cuota del último 200 (€)</b> y el <b>Precio del metro (€, sin IVA)</b> (7 € de fábrica) → <span class="btn">Guardar</span>.</li>
+    <li><b>Gastos</b>: alquiler, nóminas, cuota de autónomos, gestoría, seguros… con su Tipo, Grupo (A con justificante / B sin él), Cada cuánto, Base, IVA, IRPF, desde y hasta. La tinta y el film no van aquí: ya están en el coste por metro. El detalle está en la Guía económica.</li>
+  </ol>
+  <div class="dos">
+    <div class="caja ok" style="margin:0"><span class="tit">Qué ES el precio del metro</span>El precio real por metro al que vendéis en la web, <b>sin IVA</b>. Lo usa la <b>sincronización</b> para <b>estimar los metros</b> de las líneas web que no traen la longitud del montador: metros ≈ importe de la línea ÷ precio del metro.</div>
+    <div class="caja nunca" style="margin:0"><span class="tit">Qué NO es</span>No es una tarifa de venta ni cambia ningún precio. No afecta a los pedidos ya traídos: solo a los que se sincronicen (o se re-sincronicen porque cambiaron en Woo) a partir de entonces. Un precio mal puesto falsea metros, €/metro y uso de la máquina.</div>
+  </div>
+
+  <h3>3.3 · Jornada y máquina <span class="etq e-admin">Admin</span><span class="etq e-editor">Editor</span></h3>
+  <p>Se abre con el botón <span class="btn">Jornada y máquina</span> dentro de <span class="ruta">Gerencia › Resumen diario</span>:</p>
+  <table>
+    <tr><th>Campo</th><th>De fábrica</th><th>Para qué sirve</th></tr>
+    <tr><td><b>Metros por hora</b></td><td>70</td><td>Capacidad de la máquina = m/h × horas de jornada × días laborables (lunes a viernes, sin festivos) hasta hoy.</td></tr>
+    <tr><td><b>Hora de corte</b></td><td>13:30</td><td>Los pedidos que entran a esa hora o después se marcan con una <b>luna</b> («fuera de hora»): se hacen al día siguiente. <b>Es solo informativa</b>: no cambia el día en que cuenta el pedido en ninguna cifra.</td></tr>
+    <tr><td><b>Empieza / Acaba</b></td><td>09:00 / 13:00</td><td>Horas de máquina al día (formato 09:00; tiene que acabar después de empezar).</td></tr>
+    <tr><td><b>Envío sin coste apuntado (€, sin IVA)</b></td><td>5</td><td>Lo que se supone que cobra la agencia cuando un pedido con envío no tiene apuntado su coste real. Se usa en el «Margen neto» del Resumen diario.</td></tr>
+  </table>
+
+  <h3>3.4 · Tiendas <span class="etq e-admin">Admin</span></h3>
+  <p><b>Alta</b>: <span class="ruta">Tiendas › Nueva tienda</span>. Un asistente con pestañas (identidad, facturación, WooCommerce): <b>Nombre comercial</b>, Slug, <b>Color identificativo</b> (el del menú y las etiquetas), IVA por defecto, Gastos de envío, <b>URL de la tienda WooCommerce</b>, interruptor <b>Activar sincronización al crear</b>, <b>Consumer Key</b> y <b>Consumer Secret</b>. Botones <span class="btn">Siguiente</span> y <span class="btn">Crear tienda</span>. «La serie y la numeración de las facturas son de la sociedad, no de la tienda.»</p>
+  <p>Después, en <span class="ruta">Tiendas › (tienda) › Ajustes</span>, hay cuatro pestañas:</p>
+  <div class="dos">
+    <div class="ficha"><h4>WooCommerce</h4><ul class="check">
+      <li><b>URL de la tienda</b> (https://…) e interruptor <b>Sincronización activa</b>.</li>
+      <li><b>Credenciales API</b> (solo admin): pega la Consumer Key y el Consumer Secret y pulsa <span class="btn">Guardar credenciales</span>. Saldrá la insignia «Configurado». Se guardan cifradas: «El navegador nunca las recibe en claro.»</li>
+      <li>Botones <span class="btn">Sincronizar ahora</span>, <span class="btn">Sincronizar clientes</span> y dos diagnósticos (capítulo 4).</li></ul></div>
+    <div class="ficha"><h4>Mi empresa</h4><ul class="check">
+      <li><b>Logo de la tienda</b> (PNG, JPG o WebP de hasta 2 MB) y nombre comercial: es lo único que toma la factura de aquí. El emisor es siempre la sociedad.</li>
+      <li>Acuérdate de pulsar <span class="btn">Guardar cambios</span> tras subir el logo. Las facturas ya emitidas conservan el logo que tenían.</li></ul></div>
+    <div class="ficha"><h4>Facturación</h4><ul class="check">
+      <li><b>IVA por defecto (%)</b> y <b>Gastos de envío por defecto (€)</b> para pedidos nuevos.</li>
+      <li><b>Prefijo de los presupuestos</b> (mayúsculas y números, hasta 8): numeración PRES-&lt;prefijo&gt;-&lt;año&gt;-0001.</li></ul></div>
+    <div class="ficha"><h4>Correos</h4><ul class="check">
+      <li><b>Remitente</b>: nombre visible y dirección (de un dominio verificado).</li>
+      <li><b>Servidor de correo</b> (solo admin): Host, Puerto (465 o 587), Usuario, Contraseña. Prueba con <span class="btn">Mandar un correo de prueba</span>.</li>
+      <li><b>Aviso de pedido enviado</b>: interruptor <b>Enviar este aviso</b>, asunto y cuerpo con variables ({{cliente_nombre}}, {{pedido_numero}}, {{seguimiento_url}}…).</li></ul></div>
+  </div>
+  <div class="caja ojo"><span class="tit">Activar, desactivar, borrar</span><b>Desactivar</b> una tienda la quita del menú y del día a día, pero conserva todo. <b>Borrar</b> pide escribir su nombre y borra pedidos, productos y borradores (los clientes se quedan); si la tienda tiene facturas emitidas, <b>no se puede borrar</b>: desactívala.</div>
+
+  <h3>3.5 · Caja, PDF de presupuestos, textil y usuarios</h3>
+  <ul class="check">
+    <li><b>Caja</b> (<span class="ruta">Ajustes › Caja</span>, editor o admin): <b>Conceptos de caja</b> (cada uno de ingreso o de gasto) y <b>Socios</b> (quién pone dinero en los gastos; no son usuarios). Nada se borra: se desactiva. Debe haber al menos un concepto de ingreso parecido a «Metros» (lo propone el cobro en efectivo) y otro de «Textil».</li>
+    <li><b>PDF de presupuestos</b> <span class="etq e-admin">Admin</span>: una plantilla por tienda y otra para el textil. Diseñador de cabecera, colores, logo, textos y pie, con vista previa real. <span class="btn">Guardar</span> («Plantilla guardada…»).</li>
+    <li><b>Marcas textiles</b> (<span class="ruta">Textil › Ajustes</span>): crea cada marca con email y teléfono, y elige la <b>Marca predeterminada</b> (capítulo 10).</li>
+    <li><b>Usuarios</b> <span class="etq e-admin">Admin</span>: ver abajo.</li>
+  </ul>
+
+  <h3>3.6 · Usuarios <span class="etq e-admin">Admin</span></h3>
+  <p>En <span class="ruta">Sistema › Usuarios</span> («Usuarios y permisos»). Columnas: Usuario, <b>Nivel</b> (desplegable), Tiendas, Último acceso, <b>Activo</b> (interruptor), y los botones de tienda y de <b>llave</b>.</p>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn">Nuevo usuario</span>. Escribe Nombre y Correo y elige el <b>Nivel</b>.</li>
+    <li>Acceso: «Le pongo una contraseña inicial» (mín. 8) o «Genero un enlace para que la elija él».</li>
+    <li>Si eliges enlace, verás «Enlace para &lt;correo&gt;» con botón de copiar. <b>Cópialo y mándaselo tú</b>: el CRM no envía el correo. Caduca en unas horas.</li>
+    <li>El campo «Tiendas que ve» puedes dejarlo como esté: con un nivel activo ya se ve todo.</li>
+  </ol>
+  <div class="caja nunca"><span class="tit">Los usuarios no se borran</span>Para que alguien deje de entrar, apaga <b>Activo</b>: «Deja de poder entrar, ver y cambiar nada desde ya. No se borra: lo que hizo sigue en la auditoría con su nombre…». Nadie puede desactivarse a sí mismo y <b>siempre queda al menos un administrador activo</b>.</div>
+
+  <h3>Lista de comprobación final</h3>
+  <ul class="check">
+    <li>Datos de la empresa completos (razón social, CIF, dirección, email, método de pago).</li>
+    <li>Costes por metro puestos («Coste total estimado» distinto de 0).</li>
+    <li>Series y límites de ticket revisados <b>antes del primer documento del año</b>.</li>
+    <li>Cada tienda: URL, credenciales «Configurado», Sincronización activa, logo, IVA y envío por defecto, prefijo de presupuestos, remitente y servidor de correo probados.</li>
+    <li>Gerencia › Ajustes: precio del metro real de la web, Sociedades, cuota del 200, gastos fijos, objetivos y decisión sobre los pedidos web sin pagar.</li>
+    <li>Jornada y máquina ajustadas a la realidad del taller.</li>
+    <li>Caja: conceptos y socios. PDF de presupuestos de cada tienda y textil. Marcas textiles.</li>
+    <li>Cada persona con su usuario y su nivel. Al menos un admin activo.</li>
+  </ul>
+</section>
+
+<!-- ============================ CAPÍTULO 4 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">4</div><div><h2>Cómo entran los pedidos</h2><div class="sub">Las cuatro puertas: web, mostrador, presupuesto y textil</div></div></div>
+  <p class="lead">Un pedido puede llegar por cuatro caminos. Los tres primeros acaban en la lista de <span class="ruta">Ventas › Pedidos</span>; el textil tiene su propia lista en <span class="ruta">Textil › Pedidos</span>. Todos acaban en las mismas cifras de Gerencia, Cobros pendientes y Lo cobrado.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 330" width="100%">
+    <rect x="4" y="10" width="170" height="64" rx="10" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="89" y="32" class="t12 b mo mid">Tienda WooCommerce</text><text x="89" y="49" class="t10 mid">el cliente compra en la web</text><text x="89" y="63" class="t10 mid">número de la web</text>
+    <rect x="4" y="90" width="170" height="64" rx="10" fill="#e8effc" stroke="#2457c5"/>
+    <text x="89" y="112" class="t12 b az mid">Mostrador / teléfono</text><text x="89" y="129" class="t10 mid">«Nuevo pedido» en la tienda</text><text x="89" y="143" class="t10 mid">MAN-AAAAMMDD-nnnn</text>
+    <rect x="4" y="170" width="170" height="64" rx="10" fill="#e8effc" stroke="#2457c5"/>
+    <text x="89" y="192" class="t12 b az mid">Presupuesto de tienda</text><text x="89" y="209" class="t10 mid">«Confirmar: crear el pedido»</text><text x="89" y="223" class="t10 mid">PED-prefijo-año-nnnn</text>
+    <rect x="4" y="250" width="170" height="64" rx="10" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="89" y="272" class="t12 b mo mid">Textil</text><text x="89" y="289" class="t10 mid">a mano o desde presupuesto</text><text x="89" y="303" class="t10 mid">TPD-AAAA-NNNN</text>
+
+    <rect x="232" y="22" width="150" height="40" rx="8" fill="#fff" stroke="#6b3fc0" stroke-dasharray="4 3"/>
+    <text x="307" y="40" class="t11 b mo mid">Sincronizar</text><text x="307" y="54" class="t10 mid">alguien pulsa el botón</text>
+    <path d="M174 42 H230" class="lnm" marker-end="url(#flm)"/>
+    <path d="M382 42 C410 42 410 120 440 130" class="lnm" marker-end="url(#flm)"/>
+    <path d="M174 122 H438" class="lna" marker-end="url(#fla)"/>
+    <path d="M174 202 C300 202 400 160 438 150" class="lna" marker-end="url(#fla)"/>
+
+    <rect x="440" y="96" width="236" height="78" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="2"/>
+    <text x="558" y="120" class="t14 b az mid">Ventas › Pedidos</text>
+    <text x="558" y="138" class="t11 mid">y Tiendas › (tienda) › Pedidos</text>
+    <text x="558" y="156" class="t10 g mid">origen «WooCommerce» o «Manual»</text>
+
+    <path d="M174 282 H438" class="lnm" marker-end="url(#flm)"/>
+    <rect x="440" y="250" width="236" height="64" rx="12" fill="#efe8fb" stroke="#6b3fc0" stroke-width="2"/>
+    <text x="558" y="274" class="t14 b mo mid">Textil › Pedidos</text>
+    <text x="558" y="292" class="t11 mid">reservan stock del almacén</text>
+
+    <path d="M558 174 V200" class="ln"/><path d="M558 250 V226" class="ln"/>
+    <rect x="452" y="200" width="212" height="26" rx="6" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="558" y="217" class="t10 b mid">Gerencia · Cobros · Lo cobrado</text>
+  </svg>
+  <figcaption>Figura 5 · Las cuatro puertas de entrada de los pedidos. Solo la web necesita que alguien pulse «Sincronizar».</figcaption>
+  </figure>
+
+  <h3>4.1 · Pedidos de la web (WooCommerce)</h3>
+  <div class="caja nunca"><span class="tit">La sincronización no es automática</span>No hay ninguna tarea programada ni aviso automático desde la web: <b>los pedidos web solo entran cuando alguien pulsa un botón</b>. Si nadie sincroniza, la lista de pedidos y todas las cifras se quedan cortas. Sincroniza cada tienda <b>al empezar el día</b> y <b>antes</b> de cobrar, emitir tickets, mirar cifras o cerrar un mes.</div>
+
+  <h4>Dos botones, dos usos</h4>
+  <figure>
+  <svg viewBox="0 0 680 230" width="100%">
+    <rect x="4" y="6" width="330" height="216" rx="12" fill="#fff" stroke="#2457c5" stroke-width="1.5"/>
+    <rect x="4" y="6" width="330" height="30" rx="12" fill="#2457c5"/><rect x="4" y="24" width="330" height="12" fill="#2457c5"/>
+    <text x="18" y="26" class="t13 b w">«Sincronizar»</text><text x="320" y="26" class="t10 w end">Tienda › Pedidos</text>
+    <text x="18" y="58" class="t11">· Solo aparece con una tienda delante</text>
+    <text x="18" y="76" class="t11">  (no en la vista de todas las tiendas).</text>
+    <text x="18" y="96" class="t11">· Hace <tspan class="b">una tanda</tspan> (unos segundos).</text>
+    <text x="18" y="116" class="t11">· Si queda algo: «Queda por traer: unos N</text>
+    <text x="18" y="134" class="t11">  pedidos…». Vuelve a pulsar para seguir.</text>
+    <text x="18" y="154" class="t11">· Clientes y productos nuevos que falten se</text>
+    <text x="18" y="172" class="t11">  completan con «Sincronizar ahora».</text>
+    <text x="18" y="200" class="t11 b az">Úsalo: cada mañana, antes de trabajar.</text>
+
+    <rect x="346" y="6" width="330" height="216" rx="12" fill="#fff" stroke="#6b3fc0" stroke-width="1.5"/>
+    <rect x="346" y="6" width="330" height="30" rx="12" fill="#6b3fc0"/><rect x="346" y="24" width="330" height="12" fill="#6b3fc0"/>
+    <text x="360" y="26" class="t13 b w">«Sincronizar ahora»</text><text x="662" y="26" class="t10 w end">Tienda › Ajustes › WooCommerce</text>
+    <text x="360" y="58" class="t11">· Repite tandas hasta acabar: «Sincronizando…</text>
+    <text x="360" y="76" class="t11">  N pedidos, quedan unos M».</text>
+    <text x="360" y="96" class="t11">· Trae pedidos, clientes nuevos y productos.</text>
+    <text x="360" y="116" class="t11">· Junto a él: <tspan class="b">«Sincronizar clientes»</tspan>, que</text>
+    <text x="360" y="134" class="t11">  recorre todo el historial para dar ficha a</text>
+    <text x="360" y="152" class="t11">  clientes que nunca la tuvieron y completar</text>
+    <text x="360" y="170" class="t11">  NIF. Más lento: úsalo si faltan clientes.</text>
+    <text x="360" y="200" class="t11 b mo">Úsalo: antes de cerrar un mes o si va atrasado.</text>
+  </svg>
+  <figcaption>Figura 6 · Los dos botones de sincronización. Solo puede haber una sincronización a la vez por tienda.</figcaption>
+  </figure>
+
+  <h4>Qué trae cada sincronización</h4>
+  <p>Siempre los <b>100 últimos pedidos</b> de la web y, después, <b>todo lo que ha cambiado desde la última vez</b>: pedidos nuevos o modificados (estado, líneas, reembolsos), clientes nuevos y productos. Lo traído se guarda aunque una tanda falle. Repetir no duplica nada: cada pedido web se identifica por su tienda y su número interno de WooCommerce.</p>
+  <table>
+    <tr><th style="width:30%">Qué</th><th>Qué hace el CRM</th></tr>
+    <tr><td><b>Número</b></td><td>El que ve el cliente (si la web usa un plugin de numeración); si no, el número interno.</td></tr>
+    <tr><td><b>Estado</b></td><td>pending / on-hold → <span class="est gr">Pendiente</span> · processing → <span class="est az">Procesando</span> · completed → <span class="est ve">Completado</span> · cancelled / refunded / failed → <span class="est ro">Cancelado</span>. <b>Cada sincronización vuelve a escribir el estado que tenga la web.</b></td></tr>
+    <tr><td><b>Cliente</b></td><td>Busca o crea la ficha (por su cuenta de la web o, si es invitado, por su email). Guarda en el pedido nombre, email, teléfono, NIF (campo «NIF» de facturación de la web) y direcciones. Si la ficha no tenía NIF, se lo pasa.</td></tr>
+    <tr><td><b>Importes</b></td><td>Total, IVA, base (con el envío dentro) y envío, tal y como los da la web.</td></tr>
+    <tr><td><b>Líneas</b></td><td>Se borran y se vuelven a escribir en cada pasada, con los metros de cada línea (ver 4.2).</td></tr>
+    <tr><td><b>Método de pago</b></td><td>El texto de la web («Pago con tarjeta (Redsys)», «Bizum»…). Solo informativo.</td></tr>
+    <tr><td><b>Cobro</b></td><td>Si la web lo da por pagado, se crea solo un <b>cobro «Web»</b> por el total menos devoluciones. No hace falta (ni se puede) cobrarlo a mano.</td></tr>
+    <tr><td><b>Devoluciones</b></td><td>Los reembolsos de la web se guardan y restan en Vendido; el cobro web baja en lo devuelto.</td></tr>
+    <tr><td><b>Fecha «realizado»</b></td><td>La fecha de completado de la web.</td></tr>
+    <tr><td><b>Pedidos borrados en la web</b></td><td>Dentro de los 100 últimos, los que ya no existen en la web <b>se borran del CRM</b>, salvo que tengan ticket o factura (se avisa) y solo si sincroniza un administrador.</td></tr>
+    <tr><td><b>Productos</b></td><td>Se crean o actualizan en el catálogo de la tienda (todos como «metro» y 21 % de IVA).</td></tr>
+  </table>
+
+  <h4>4.2 · Los metros de los pedidos web</h4>
+  <p>El montador DTF de la web vende cada trabajo con cantidad 1 y el precio de su longitud. El CRM averigua los metros así:</p>
+  <figure>
+  <svg viewBox="0 0 680 210" width="100%">
+    <rect x="4" y="76" width="120" height="56" rx="10" fill="#f6f7fa" stroke="#8a90a0"/>
+    <text x="64" y="100" class="t12 b mid">Línea web</text><text x="64" y="117" class="t10 mid">cantidad 1 · X €</text>
+    <path d="M124 104 H160" class="ln" marker-end="url(#fl)"/>
+    <polygon points="230,60 300,104 230,148 160,104" fill="#fff" stroke="#2457c5" stroke-width="1.5"/>
+    <text x="230" y="100" class="t10 b mid">¿Trae la</text><text x="230" y="113" class="t10 b mid">longitud?</text>
+    <path d="M300 104 H340" class="lnv" marker-end="url(#flv)"/><text x="320" y="96" class="t10 ve b mid">sí</text>
+    <rect x="342" y="74" width="330" height="60" rx="10" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="356" y="96" class="t12 b ve">Metros leídos del montador</text>
+    <text x="356" y="113" class="t10">«Longitud facturada», o longitud de hoja × nº de hojas;</text>
+    <text x="356" y="126" class="t10">solo si el €/m resultante es razonable.</text>
+    <path d="M230 148 V172 H340" class="lnam" marker-end="url(#flam)"/><text x="238" y="166" class="t10 am b">no, y es de metros</text>
+    <rect x="342" y="146" width="330" height="58" rx="10" fill="#fdf1dc" stroke="#b26a00"/>
+    <text x="356" y="168" class="t12 b am">≈ Metros estimados</text>
+    <text x="356" y="185" class="t10">importe ÷ precio por metro (el de la línea o el de</text>
+    <text x="356" y="198" class="t10">Gerencia › Ajustes). Salen con «≈» y la palabra «estimado».</text>
+    <path d="M230 60 V34 H340" class="ln" marker-end="url(#fl)"/><text x="238" y="30" class="t10 g b">no es de metros</text>
+    <rect x="342" y="6" width="330" height="56" rx="10" fill="#fff" stroke="#c9cfda"/>
+    <text x="356" y="28" class="t12 b">En unidades</text>
+    <text x="356" y="45" class="t10">Textil, accesorios…: no suma metros.</text>
+  </svg>
+  <figcaption>Figura 7 · Cómo calcula el CRM los metros de cada línea web.</figcaption>
+  </figure>
+  <p>En la lista de pedidos un metro estimado sale con <b>«≈»</b> y la palabra «estimado»; al abrir la línea verás «Estimado: X € ÷ Y €/m. WooCommerce no trajo la longitud del montador.» Los totales del día y del periodo también llevan «≈» si algún pedido es estimado.</p>
+  <div class="caja truco"><span class="tit">Diagnósticos (Tienda › Ajustes › WooCommerce)</span><b>«Qué trae WooCommerce en las líneas de un pedido»</b>: escribe un número (por ejemplo DCUL-64-2026) y <span class="btn">Consultar</span>; te dice, línea a línea, «el CRM guardaría: X m, leídos del montador / estimados…» y los datos que manda la web (<span class="btn">Copiar resultado</span> para pasárselo a quien mantenga la web). <b>«De dónde sale el número de pedido»</b> → <span class="btn">Consultar</span>: muestra los 3 últimos pedidos con su número interno y el que guardaría el CRM. Úsalo si el número del CRM no es el que ve el cliente.</div>
+
+  <h4>4.3 · Mensajes de la sincronización y qué hacer</h4>
+  <table>
+    <tr><th style="width:45%">Mensaje</th><th>Qué significa / qué hacer</th></tr>
+    <tr><td>«Sincronizado: 120 pedidos, 3 clientes, 0 productos, 2 con devolución, 1 borrados (ya no están en WooCommerce)»</td><td>Todo bien. Lee los números: si hay borrados o devoluciones, tenlo en cuenta en cobros y documentos.</td></tr>
+    <tr><td>«Queda por traer: unos N pedidos…»</td><td>Vuelve a pulsar <span class="btn">Sincronizar</span> o usa <span class="btn">Sincronizar ahora</span> en Ajustes.</td></tr>
+    <tr><td>«N pedidos han desaparecido de WooCommerce pero no se han borrado: tienen una factura emitida.»</td><td>Mira por qué se borraron en la web. Si la venta no existió, anula el documento con rectificativa (capítulo 7).</td></tr>
+    <tr><td>«Solo un administrador puede quitarlos»</td><td>Hay pedidos borrados en la web; que sincronice un admin para que desaparezcan también aquí.</td></tr>
+    <tr><td>«La tienda no tiene URL de WooCommerce» · «La sincronización está desactivada» · «Faltan credenciales de WooCommerce»</td><td>En Ajustes de la tienda: URL correcta, «Sincronización activa» encendida e insignia «Configurado» en credenciales.</td></tr>
+    <tr><td>«No se pudo sincronizar…» (y «antes de fallar se guardaron N pedidos»)</td><td>Vuelve a pulsar: sigue donde se quedó. Si persiste, ¿se regeneraron las claves en la web? El admin las vuelve a pegar.</td></tr>
+    <tr><td>«La sincronización no avanzaba y se ha parado.» / «Se ha parado después de N tandas…»</td><td>Espera unos minutos y vuelve a pulsar <span class="btn">Sincronizar ahora</span>.</td></tr>
+  </table>
+  <div class="caja ojo"><span class="tit">Clientes invitados y NIF</span>Un cliente que compra como invitado tiene ficha por su email. Si compra con dos emails distintos, tendrá dos fichas (capítulo 9). El NIF solo llega si la web tiene el campo NIF en la facturación; si falta, la factura no lo llevará hasta que lo pongas en la ficha.</div>
+
+  <h3>4.4 · Pedidos manuales y de mostrador</h3>
+  <p>En <span class="ruta">Tiendas › (tienda) › Pedidos</span> pulsa <span class="btn">Nuevo pedido</span> <span class="etq e-editor">Editor</span>. El botón solo aparece con una tienda delante. Se abre «Nuevo pedido manual»:</p>
+  <ol class="pasos">
+    <li><b>Cliente</b>: elige la ficha (rellena nombre, email y teléfono) o «O escribe el nombre, sin ficha». Mejor con ficha: así cuenta en su historial.</li>
+    <li><b>Método de pago</b>: «Transferencia bancaria directa» (por defecto), «Bizum», «Pago con tarjeta (Redsys)», «Contra reembolso», «Efectivo», «Otro». <b>Es solo un texto</b>: no registra ningún cobro.</li>
+    <li><b>Gastos de envío (€)</b>: base sin IVA (se le suma el 21 %).</li>
+    <li><b>Direcciones</b> (desplegable): facturación y, si se desmarca «El envío va a la misma dirección», la de envío. En blanco: «Sin dirección».</li>
+    <li><b>Líneas</b>: Producto (texto libre), Cantidad, Precio (sin IVA), IVA %. <span class="btn">Añadir línea</span>. Si es una exportación o entrega intracomunitaria, desmarca «Aplicar IVA (21 %)».</li>
+    <li>Revisa Subtotal, IVA y Total, añade <b>Notas</b> si hace falta y pulsa <span class="btn">Guardar</span>.</li>
+  </ol>
+  <p>El pedido nace en <span class="est gr">Pendiente</span>, con número <b>MAN-AAAAMMDD-nnnn</b> y la fecha de ahora.</p>
+  <div class="caja ojo"><span class="tit">Metros de un pedido manual</span>En un pedido manual, los «metros» son la <b>suma de todas las cantidades</b>, sean metros o unidades. Si vendes 10 camisetas en un pedido de tienda, sumará 10 m. Para prendas usa el módulo <b>Textil</b>; en las tiendas, pon en un pedido manual solo metros (y, si hace falta, el resto en otro pedido).</div>
+  <div class="caja nunca"><span class="tit">Lo más importante del pedido manual</span>Si el cliente paga en el momento, <b>registra el cobro</b> (capítulo 7). Poner «Efectivo» en el método de pago no cobra nada: sin «Registrar cobro» el pedido sale como pendiente, no cuenta en Lo cobrado y el efectivo no entra en Caja.</div>
+
+  <h3>4.5 · Presupuestos que se convierten en pedido</h3>
+  <p>Cuando el cliente acepta un presupuesto de tienda, en su menú ⋮ pulsa <b>Confirmar: crear el pedido</b> → <span class="btn">Crear el pedido</span>. Se crea un pedido manual <b>PED-&lt;prefijo&gt;-&lt;año&gt;-nnnn</b> en Pendiente con las mismas líneas e importes, fechado el día de la confirmación. El presupuesto queda «Aceptado» y ya no se edita. Detalle en el capítulo 8.</p>
+
+  <h3>4.6 · Pedidos textiles</h3>
+  <p>No vienen de ninguna web: se crean a mano en <span class="ruta">Textil › Pedidos</span> (<span class="btn">Nuevo pedido</span>), desde una selección del stock, o confirmando un presupuesto textil. Al crearse <b>apartan (reservan) las prendas del almacén</b>. Todo en el capítulo 10.</p>
+</section>
+
+<!-- ============================ CAPÍTULO 5 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">5</div><div><h2>La pantalla de Pedidos a fondo</h2><div class="sub">Donde pasa casi todo el día a día</div></div></div>
+  <p>Hay dos formas de verla: <span class="ruta">Ventas › Pedidos</span> («Vista unificada de pedidos de todas las tiendas») y <span class="ruta">Tiendas › (tienda) › Pedidos</span> (solo esa tienda, con los botones <span class="btn">Sincronizar</span> y <span class="btn">Nuevo pedido</span>). La lista es la misma.</p>
+
+  <div class="pantalla">
+    <div class="barra"><span>Tienda Uno › Pedidos</span><span>Pedidos · Tienda Uno</span></div>
+    <div class="cuerpo">
+      <div class="fila"><span class="chip az">Mes ▾</span><span class="n-r">1</span><span class="chip">Sincronizar</span><span class="chip">Exportar ▾</span><span class="chip">Facturar</span><span class="chip az">Nuevo pedido</span></div>
+      <div class="fila"><span class="chip">Buscar cliente, email o nº…</span><span class="chip">Estado ▾</span><span class="chip">Cobro ▾</span><span class="chip">Origen ▾</span><span class="n-r">2</span><span style="margin-left:auto" class="peq">N pedidos (+ M cancelados) · total €</span></div>
+      <div class="dia">LUNES, 3 DE NOVIEMBRE 2026 &nbsp;·&nbsp; total del día · N pedidos <span class="n-r">3</span></div>
+      <table>
+        <tr><th>Nº Pedido</th><th>Cliente</th><th>Origen</th><th>Estado</th><th>Metros</th><th>Total</th><th>Cobrado</th><th>Pendiente</th><th>Env.</th><th></th></tr>
+        <tr><td><b>DCUL-64-2026</b><br><span class="ver">T2026/0045</span> <span class="peq">09:12</span></td><td>Cliente A<br><span class="est ve">1.er pedido</span></td><td>WooCommerce</td><td><span class="est az">Procesando</span></td><td>≈ 3,2<br><span class="peq">estimado</span></td><td>— €<br><span class="peq">Tarjeta</span></td><td>— €</td><td>0 €<br><span class="peq">Cobrado</span></td><td>🚚</td><td>⋮</td></tr>
+        <tr><td><b>MAN-20261103-4821</b><br><span class="peq">14:05 ☾</span></td><td>Cliente B<br><span class="est am">¿1.er pedido?</span></td><td>Manual</td><td><span class="est ve">Enviado</span><br><span class="peq">✓ 04/11 · 10:30</span></td><td>5</td><td>— €</td><td>— €</td><td>— €<br><span class="peq">Parcial</span></td><td>🚚</td><td>⋮</td></tr>
+      </table>
+      <div class="peq">Las cantidades se dejan en blanco a propósito: la maqueta solo muestra dónde está cada dato. <span class="n-r">4</span> el ⋮ de cada fila abre Editar, Tracking, Cobros, Ticket o factura y Borrar.</div>
+    </div>
+  </div>
+  <p class="peq" style="text-align:center">Figura 8 · Maqueta simplificada de la lista de pedidos (con datos de ejemplo vacíos).</p>
+
+  <h3>5.1 · La barra de arriba <span class="n-r">1</span></h3>
+  <ul>
+    <li><b>Periodo</b>: abre en el <b>mes</b> en curso. Puedes elegir Día, Semana, Mes, Trimestre, Año, últimos 7/30/90 días o fechas libres.</li>
+    <li><span class="btn">Sincronizar</span> (solo dentro de una tienda) y <span class="btn">Nuevo pedido</span> <span class="etq e-editor">Editor</span>.</li>
+    <li><span class="btn">Exportar</span>: <b>CSV</b> («Los pedidos que se ven, para abrir en Excel»: Fecha, Nº, Tienda, Cliente, Email, Estado, Origen, Pago, Total, Cobrado, Pendiente) o <b>Para análisis</b> (todos los pedidos de todas las fechas, con líneas, cobros y documentos, en un fichero que se explica solo, pensado para analizarlo con Claude; no lleva textil ni datos de contacto, y no se puede lanzar mientras se sincroniza).</li>
+    <li><span class="btn">Facturar</span> <span class="etq e-editor">Editor</span>: emite tickets o facturas de varios pedidos a la vez (capítulo 7).</li>
+  </ul>
+
+  <h3>5.2 · Los filtros <span class="n-r">2</span></h3>
+  <p>Buscador (cliente, email o nº), <b>Tienda</b> (en la vista global), <b>Estado</b>, <b>Cobro</b> («Cobrado o no», «Con algo pendiente», «Cobrado en parte», «Cobrado entero») y <b>Origen</b> («Web y manuales», «Solo web», «Solo manuales»). <span class="btn">Quitar filtros</span> lo deja todo como al principio. A la derecha: «N pedidos (+ M cancelados) · total €».</p>
+  <div class="caja truco"><span class="tit">Combinaciones útiles</span><b>Estado = Procesando</b>: la cola del taller. · <b>Cobro = Con algo pendiente</b> + <b>Origen = Solo manuales</b>: lo que tienes que reclamar en mostrador. · Copia el enlace del navegador con los filtros puestos y guárdalo en favoritos: es tu «vista» de cada mañana.</div>
+
+  <h3>5.3 · La lista, día a día <span class="n-r">3</span></h3>
+  <p>Los pedidos se agrupan por <b>día del pedido en hora de España</b> (el mismo día que llevará su ticket). Cada día tiene su cabecera con el total, el número de pedidos y «+ N cancelados»; al pie, «Total del día» y al final «Total del periodo». Los totales <b>no incluyen cancelados</b>.</p>
+  <table>
+    <tr><th style="width:22%">Columna</th><th>Qué verás</th></tr>
+    <tr><td><b>Nº Pedido</b></td><td>El número. Debajo, si ya tiene documento, un <b>botón verde con su referencia</b> (abre el PDF) y la <b>hora</b> de entrada; con una <b>luna ☾</b> si entró después de la hora de corte (se hace al día siguiente).</td></tr>
+    <tr><td><b>Cliente</b></td><td>Nombre, email y la etiqueta <span class="est ve">1.er pedido</span>, <span class="est am">¿1.er pedido?</span> (dudosa) o «Ya era cliente» (decidido a mano).</td></tr>
+    <tr><td><b>Origen</b></td><td>«WooCommerce» (globo) o «Manual» (mano).</td></tr>
+    <tr><td><b>Estado</b></td><td>Etiqueta de color. Quien puede escribir la pulsa para cambiarla. Debajo, en enviados y completados: «✓ 20/10 · 09:15» (fecha de realizado; en azul si fue otro día que el pedido).</td></tr>
+    <tr><td><b>Metros</b></td><td>Los metros del pedido; «—» si no lleva; «≈» si son estimados.</td></tr>
+    <tr><td><b>Total · Cobrado · Pendiente</b></td><td>Total con el método de pago debajo; lo cobrado; lo pendiente (pulsable: abre sus cobros) con «Pendiente», «Parcial», «Cobrado» o «Cobrado de más».</td></tr>
+    <tr><td><b>Env.</b></td><td>Camión (azul si ya tiene seguimiento): abre el Tracking.</td></tr>
+  </table>
+  <p>Al desplegar ▾ una fila verás las <b>Líneas del pedido</b> (Producto, Cantidad, Precio, Subtotal), el desglose <b>Productos (sin IVA) + Envío (sin IVA) + IVA = Total</b>, el cliente (nombre, NIF, email, teléfono), las direcciones, el seguimiento («Seguir envío») y las notas. En el móvil cada pedido es una tarjeta con <span class="btn">Detalle</span>.</p>
+
+  <h3>5.4 · Los estados del pedido de tienda</h3>
+  <figure>
+  <svg viewBox="0 0 680 290" width="100%">
+    <text x="4" y="16" class="t11 b g">ESTADO EN EL CRM</text>
+    <rect x="4" y="26" width="86" height="34" rx="17" fill="#eef0f4" stroke="#8a90a0"/><text x="47" y="47" class="t11 b mid g">Pendiente</text>
+    <rect x="106" y="26" width="92" height="34" rx="17" fill="#e8effc" stroke="#2457c5"/><text x="152" y="47" class="t11 b mid az">Procesando</text>
+    <rect x="214" y="26" width="96" height="34" rx="17" fill="#e8effc" stroke="#2457c5"/><text x="262" y="47" class="t11 b mid az">Imprimiendo</text>
+    <rect x="326" y="26" width="70" height="34" rx="17" fill="#fdf1dc" stroke="#b26a00"/><text x="361" y="47" class="t11 b mid am">Listo</text>
+    <rect x="412" y="26" width="80" height="34" rx="17" fill="#e5f4ec" stroke="#1e8a4c"/><text x="452" y="47" class="t11 b mid ve">Enviado</text>
+    <rect x="508" y="26" width="98" height="34" rx="17" fill="#e5f4ec" stroke="#1e8a4c"/><text x="557" y="47" class="t11 b mid ve">Completado</text>
+    <rect x="610" y="26" width="66" height="34" rx="17" fill="#fbe7e5" stroke="#c0352b"/><text x="643" y="47" class="t10 b mid ro">Cancelado</text>
+    <path d="M90 43 H104" class="ln" marker-end="url(#fl)"/><path d="M198 43 H212" class="ln" marker-end="url(#fl)"/><path d="M310 43 H324" class="ln" marker-end="url(#fl)"/><path d="M396 43 H410" class="ln" marker-end="url(#fl)"/><path d="M492 43 H506" class="ln" marker-end="url(#fl)"/>
+
+    <text x="4" y="90" class="t11 b g">QUÉ PROVOCA AL ELEGIRLO</text>
+    <rect x="4" y="98" width="200" height="74" rx="8" fill="#fff" stroke="#c9cfda"/>
+    <text x="14" y="116" class="t10 b">Salir de Pendiente (pedido web)</text>
+    <text x="14" y="131" class="t10">Se da por pagado y se crea</text>
+    <text x="14" y="145" class="t10">solo el cobro «Web». Volver a</text>
+    <text x="14" y="159" class="t10">Pendiente o Cancelado lo quita.</text>
+    <rect x="214" y="98" width="220" height="74" rx="8" fill="#fff" stroke="#c9cfda"/>
+    <text x="224" y="116" class="t10 b">Pasar a Enviado</text>
+    <text x="224" y="131" class="t10">Se apunta la fecha «realizado» y se</text>
+    <text x="224" y="145" class="t10">manda al cliente el aviso de pedido</text>
+    <text x="224" y="159" class="t10">enviado (una vez, si está activado).</text>
+    <rect x="444" y="98" width="232" height="74" rx="8" fill="#fff" stroke="#c9cfda"/>
+    <text x="454" y="116" class="t10 b">Cancelar</text>
+    <text x="454" y="131" class="t10">Deja de sumar y sale de pendientes.</text>
+    <text x="454" y="145" class="t10">No borra cobros manuales ni anula</text>
+    <text x="454" y="159" class="t10">su ticket o factura (hazlo aparte).</text>
+
+    <text x="4" y="198" class="t11 b mo">CON LA WEB (pedidos WooCommerce)</text>
+    <rect x="4" y="206" width="672" height="78" rx="8" fill="#efe8fb" stroke="#d9cbf5"/>
+    <text x="14" y="224" class="t10"><tspan class="b">CRM → web:</tspan> Pendiente → en espera · Procesando, Imprimiendo, Listo → processing</text>
+    <text x="14" y="239" class="t10">                    Enviado, Completado → completed · Cancelado → cancelled</text>
+    <text x="14" y="257" class="t10"><tspan class="b">Web → CRM</tspan> (al sincronizar): processing → <tspan class="b">Procesando</tspan> · completed → <tspan class="b">Completado</tspan>. Por eso «Imprimiendo», «Listo» y</text>
+    <text x="14" y="272" class="t10">«Enviado» de un pedido web <tspan class="b">vuelven a Procesando o Completado</tspan> en la siguiente sincronización: la web solo conoce esos.</text>
+  </svg>
+  <figcaption>Figura 9 · Los siete estados de un pedido de tienda y lo que pasa al cambiarlos.</figcaption>
+  </figure>
+  <p>Cambiar el estado de un pedido web lo empuja a la web si la tienda tiene credenciales y sincronización activa: verás «Estado actualizado y sincronizado con WooCommerce». Si solo ves «Estado actualizado», <b>no llegó a la web</b>, y la próxima sincronización lo devolverá al estado de la web: cámbialo también allí.</p>
+  <div class="caja nunca"><span class="tit">Nunca</span>Pases un pedido web de «Pendiente» a «Procesando» si el dinero no ha llegado (por ejemplo, una transferencia anunciada): el CRM crea el cobro web y lo da por cobrado.</div>
+
+  <h3>5.5 · «1.er pedido» y las decisiones dudosas</h3>
+  <p>El CRM mira <b>todos</b> los pedidos de la empresa (tiendas, manuales y textil, sin cancelados). Un pedido <b>no</b> es el primero si hay uno anterior con la misma ficha, el mismo email, el mismo teléfono, o el mismo nombre con el mismo NIF o dirección. Si solo coincide el nombre, sale <span class="est am">¿1.er pedido?</span>: púlsalo y verás «¿Es su primer pedido?» con los pedidos parecidos y los botones <span class="btn">Ya era cliente</span>, <span class="btn">Es cliente nuevo</span> o <span class="btn">Quitar la decisión</span> <span class="etq e-editor">Editor</span>. Resolverlos mejora la cifra de «Nuevos» de Gerencia.</p>
+
+  <h3>5.6 · Fuera de hora y fecha de «realizado»</h3>
+  <ul>
+    <li><b>Fuera de hora (☾)</b>: entró a la hora de corte (13:30 de fábrica) o después. Solo avisa de que se hará al día siguiente; <b>no cambia el día en que cuenta</b>.</li>
+    <li><b>Realizado</b>: el día en que el pedido se imprimió y salió de verdad. Se pone solo al pasar a Enviado (en web, la fecha de completado de la web) y se borra si vuelves a un estado anterior. Cuenta para los «metros realizados» del Resumen diario.</li>
+    <li><b>Corregirlo</b> <span class="etq e-admin">Admin</span>: pulsa la fecha «✓ 20/10 · 09:15» bajo el estado → «Realizado el (hora de España)» → «El día en que se imprimió de verdad.» Útil si alguien marcó Enviado con un día de retraso.</li>
+  </ul>
+
+  <h3>5.7 · Seguimiento del envío (Tracking)</h3>
+  <p>Pulsa el camión o ⋮ › <b>Tracking</b>. En «Tracking de envío · &lt;nº&gt;» rellena <b>Transportista</b> (con botones «Usar &lt;transportista&gt;»), <b>Número de seguimiento</b> y <b>URL de seguimiento</b> (https; con CTT Express y Nacex el enlace se genera solo desde el número). El administrador ve además <b>Coste real del envío (€, sin IVA)</b>: si lo dejas vacío se estima con el coste por defecto (5 €).</p>
+  <p>En los pedidos web se añade una nota al cliente en WooCommerce con el seguimiento. <b>Poner el tracking no cambia el estado</b>: marca «Enviado» aparte (y es entonces cuando sale el aviso por correo).</p>
+
+  <h3>5.8 · Editar, cancelar y borrar</h3>
+  <div class="tres">
+    <div class="ficha"><h4>Editar <span class="etq e-editor">Editor</span></h4><p>⋮ › Editar abre el mismo formulario. Si cambias líneas, se recalculan total, IVA y metros. <b>Un pedido web editado aquí se reescribe</b> en la siguiente sincronización: cámbialo en la web.</p></div>
+    <div class="ficha"><h4>Cancelar <span class="etq e-editor">Editor</span></h4><p>Cambia el estado a Cancelado. No se borra, deja de sumar y no admite cobros nuevos. Si tenía cobros manuales y devolviste el dinero, un admin borra ese cobro. Si tenía ticket o factura, anúlalo con rectificativa.</p></div>
+    <div class="ficha"><h4>Borrar <span class="etq e-admin">Admin</span></h4><p>«Esta acción no se puede deshacer.» Se borran líneas, devoluciones, tracking y cobros automáticos. No se deja si tiene cobros hechos a mano: «Bórralos antes de borrar el pedido.»</p></div>
+  </div>
+  <div class="caja ojo"><span class="tit">Mejor cancelar que borrar</span>Borrar es para errores (un pedido duplicado o de prueba). Una venta que no se hizo se <b>cancela</b>: queda constancia. Y si el pedido tiene ticket o factura, al borrarlo el documento se queda sin pedido enlazado y la app no lo avisa: anúlalo antes.</div>
+</section>
+
+<!-- ============================ CAPÍTULO 6 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">6</div><div><h2>Cómo salen los pedidos</h2><div class="sub">Producción, envío, entrega, cobro y documento: el ciclo de vida completo</div></div></div>
+  <p class="lead">Un pedido «sale bien» cuando pasa por cinco hitos: se fabrica, se envía (o se recoge), se cobra y tiene su documento. El orden del cobro y del documento puede variar; lo importante es que <b>al final del mes ninguno se haya quedado a medias</b>.</p>
+
+  <figure class="fig-alta">
+  <svg viewBox="0 0 680 400" width="100%">
+    <line x1="30" y1="70" x2="660" y2="70" stroke="#c9cfda" stroke-width="6" stroke-linecap="round"/>
+    <g>
+      <circle cx="50" cy="70" r="16" fill="#8a90a0"/><text x="50" y="75" class="t12 b w mid">1</text>
+      <circle cx="170" cy="70" r="16" fill="#2457c5"/><text x="170" y="75" class="t12 b w mid">2</text>
+      <circle cx="290" cy="70" r="16" fill="#b26a00"/><text x="290" y="75" class="t12 b w mid">3</text>
+      <circle cx="410" cy="70" r="16" fill="#1e8a4c"/><text x="410" y="75" class="t12 b w mid">4</text>
+      <circle cx="530" cy="70" r="16" fill="#1e8a4c"/><text x="530" y="75" class="t12 b w mid">5</text>
+      <circle cx="640" cy="70" r="16" fill="#6b3fc0"/><text x="640" y="75" class="t12 b w mid">6</text>
+    </g>
+    <text x="50" y="30" class="t12 b mid">Entra</text><text x="50" y="45" class="t10 g mid">Pendiente</text>
+    <text x="170" y="30" class="t12 b mid">Se imprime</text><text x="170" y="45" class="t10 g mid">Procesando › Imprimiendo</text>
+    <text x="290" y="30" class="t12 b mid">Listo</text><text x="290" y="45" class="t10 g mid">empaquetado</text>
+    <text x="410" y="30" class="t12 b mid">Se envía</text><text x="410" y="45" class="t10 g mid">tracking + Enviado</text>
+    <text x="530" y="30" class="t12 b mid">Se cobra</text><text x="530" y="45" class="t10 g mid">cobro registrado</text>
+    <text x="640" y="30" class="t12 b mid">Documento</text><text x="640" y="45" class="t10 g mid">ticket o factura</text>
+
+    <rect x="4" y="104" width="100" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="12" y="122" class="t10 b">Quién</text><text x="12" y="137" class="t10">Web: sincroniza</text><text x="12" y="151" class="t10">quien abre.</text><text x="12" y="165" class="t10">Mostrador:</text><text x="12" y="179" class="t10">quien atiende.</text><text x="12" y="200" class="t10 g it">Revisa avisos</text><text x="12" y="213" class="t10 g it">y metros ≈</text>
+    <rect x="114" y="104" width="112" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="122" y="122" class="t10 b">Quién</text><text x="122" y="137" class="t10">Producción.</text><text x="122" y="151" class="t10">Cambia el estado</text><text x="122" y="165" class="t10">tocando la</text><text x="122" y="179" class="t10">etiqueta.</text><text x="122" y="200" class="t10 g it">Web: vuelve a</text><text x="122" y="213" class="t10 g it">Procesando al sinc.</text>
+    <rect x="236" y="104" width="108" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="244" y="122" class="t10 b">Quién</text><text x="244" y="137" class="t10">Producción.</text><text x="244" y="151" class="t10">«Listo» avisa a</text><text x="244" y="165" class="t10">quien envía o a</text><text x="244" y="179" class="t10">mostrador si se</text><text x="244" y="193" class="t10">recoge.</text>
+    <rect x="354" y="104" width="112" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="362" y="122" class="t10 b">Quién</text><text x="362" y="137" class="t10">Envíos.</text><text x="362" y="151" class="t10">1. Tracking</text><text x="362" y="165" class="t10">2. Estado Enviado</text><text x="362" y="179" class="t10">→ fecha realizado</text><text x="362" y="193" class="t10">→ aviso al cliente</text><text x="362" y="213" class="t10 g it">Admin: coste real</text>
+    <rect x="476" y="104" width="108" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="484" y="122" class="t10 b">Quién</text><text x="484" y="137" class="t10">Web: automático.</text><text x="484" y="151" class="t10">Mostrador: quien</text><text x="484" y="165" class="t10">cobra, en el</text><text x="484" y="179" class="t10">momento.</text><text x="484" y="200" class="t10 g it">Puede ir antes</text><text x="484" y="213" class="t10 g it">(anticipo)</text>
+    <rect x="594" y="104" width="82" height="120" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="602" y="122" class="t10 b">Quién</text><text x="602" y="137" class="t10">Admin.</text><text x="602" y="151" class="t10">o editor,</text><text x="602" y="165" class="t10">en bloque</text><text x="602" y="179" class="t10">cada día o</text><text x="602" y="193" class="t10">semana.</text>
+
+    <text x="4" y="252" class="t12 b">Variantes del recorrido</text>
+    <rect x="4" y="262" width="330" height="62" rx="8" fill="#e5f4ec" stroke="#bfe3cf"/>
+    <text x="14" y="281" class="t11 b ve">Recogida en tienda</text>
+    <text x="14" y="297" class="t10">Sin tracking. Pásalo a Enviado o Completado al entregarlo</text>
+    <text x="14" y="311" class="t10">para que cuente como realizado ese día.</text>
+    <rect x="346" y="262" width="330" height="62" rx="8" fill="#fdf1dc" stroke="#f3d9a8"/>
+    <text x="356" y="281" class="t11 b am">Pago por adelantado o a plazos</text>
+    <text x="356" y="297" class="t10">Un cobro por cada pago (anticipo, resto). El pedido sale</text>
+    <text x="356" y="311" class="t10">como «Parcial» hasta completar.</text>
+    <rect x="4" y="332" width="330" height="62" rx="8" fill="#e8effc" stroke="#c5d6f7"/>
+    <text x="14" y="351" class="t11 b az">Web por transferencia</text>
+    <text x="14" y="367" class="t10">Entra Pendiente («Web (sin pagar)»). Cuando llegue el</text>
+    <text x="14" y="381" class="t10">dinero: márcalo pagado en la web y sincroniza.</text>
+    <rect x="346" y="332" width="330" height="62" rx="8" fill="#fbe7e5" stroke="#f2c3be"/>
+    <text x="356" y="351" class="t11 b ro">Se cancela</text>
+    <text x="356" y="367" class="t10">Estado Cancelado + borrar cobro devuelto (admin) +</text>
+    <text x="356" y="381" class="t10">anular su ticket o factura con rectificativa.</text>
+  </svg>
+  <figcaption>Figura 10 · El ciclo de vida de un pedido de tienda, quién hace cada paso y las variantes más habituales.</figcaption>
+  </figure>
+
+  <h3>6.1 · Paso a paso, para un pedido web</h3>
+  <ol class="pasos">
+    <li><b>Sincroniza</b> la tienda por la mañana. Lee el mensaje final y los avisos amarillos.</li>
+    <li>Los pagados entran en <span class="est az">Procesando</span> y ya traen su cobro «Web». Los que esperan una transferencia entran en <span class="est gr">Pendiente</span> y salen en Cobros pendientes como «Web (sin pagar)».</li>
+    <li>Producción va pasando <span class="est az">Imprimiendo</span> → <span class="est am">Listo</span>. (En pedidos web esos dos estados se pierden al sincronizar; si os sirven para organizaros, cambiadlos durante el día y no os extrañe que vuelvan a «Procesando».)</li>
+    <li>Envíos pone el <b>Tracking</b> y después el estado <span class="est ve">Enviado</span>: se apunta la fecha realizado y sale el aviso al cliente.</li>
+    <li>El documento (ticket o factura) se emite en bloque con <span class="btn">Facturar</span> o <span class="btn">Tickets pendientes</span> (capítulo 7).</li>
+  </ol>
+
+  <h3>6.2 · Paso a paso, para un pedido de mostrador</h3>
+  <ol class="pasos">
+    <li>Crea el pedido con <span class="btn">Nuevo pedido</span> (o confirma su presupuesto). Comprueba que el total es el que vas a cobrar.</li>
+    <li>Si paga ya, <b>registra el cobro</b> en ese momento con el método real (efectivo, tarjeta o transferencia).</li>
+    <li>Producción y envío o recogida, igual que arriba.</li>
+    <li>Emite su documento: ticket si no hay NIF y cabe; factura si hay NIF.</li>
+  </ol>
+  <div class="caja ok"><span class="tit">Señal de que todo ha salido bien</span>Un pedido terminado tiene: estado <b>Enviado</b> o <b>Completado</b> con su fecha ✓, <b>Pendiente 0 €</b> («Cobrado»), y el <b>botón verde</b> con la referencia de su ticket o factura.</div>
+</section>
+
+<!-- ============================ CAPÍTULO 7 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">7</div><div><h2>Cobros y documentos</h2><div class="sub">El resumen operativo (el detalle contable está en la Guía económica)</div></div></div>
+
+  <figure>
+  <svg viewBox="0 0 680 250" width="100%">
+    <rect x="250" y="8" width="180" height="70" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="2"/>
+    <text x="340" y="34" class="t14 b az mid">PEDIDO</text><text x="340" y="52" class="t10 mid">qué se vendió y por cuánto</text><text x="340" y="66" class="t10 g mid">Ventas › Pedidos</text>
+    <rect x="20" y="150" width="210" height="88" rx="12" fill="#e5f4ec" stroke="#1e8a4c" stroke-width="2"/>
+    <text x="125" y="176" class="t14 b ve mid">COBRO</text><text x="125" y="194" class="t10 mid">el dinero que entró</text><text x="125" y="208" class="t10 mid">«Registrar cobro» (o web automático)</text><text x="125" y="224" class="t10 g mid">Efectivo → también en Caja</text>
+    <rect x="450" y="150" width="210" height="88" rx="12" fill="#efe8fb" stroke="#6b3fc0" stroke-width="2"/>
+    <text x="555" y="176" class="t14 b mo mid">DOCUMENTO</text><text x="555" y="194" class="t10 mid">ticket o factura interna</text><text x="555" y="208" class="t10 mid">«Ticket o factura» / «Facturar»</text><text x="555" y="224" class="t10 g mid">numerado, no se edita</text>
+    <path d="M280 78 L150 148" class="lnv" marker-end="url(#flv)"/><path d="M400 78 L530 148" class="lnm" marker-end="url(#flm)"/>
+    <path d="M232 194 H448" class="lnr disc"/>
+    <text x="340" y="186" class="t11 b ro mid">no se cruzan solos</text>
+    <text x="340" y="212" class="t10 mid">Cobrar no emite ticket.</text>
+    <text x="340" y="226" class="t10 mid">Emitir ticket no registra cobro.</text>
+    <text x="340" y="240" class="t10 mid">«Pagada» en la factura no es un cobro.</text>
+    <text x="200" y="104" class="t10 g end">lo que se debe = total − cobrado</text>
+    <text x="480" y="104" class="t10 g">un pedido, un documento vigente</text>
+  </svg>
+  <figcaption>Figura 11 · Pedido, cobro y documento: tres registros separados que tienes que completar uno a uno.</figcaption>
+  </figure>
+
+  <h3>7.1 · Registrar un cobro</h3>
+  <p>Desde la lista de pedidos (columna <b>Pendiente</b> o ⋮ › <b>Cobros</b>) o desde <span class="ruta">Dinero › Cobros pendientes</span> (<span class="btn">Cobrar</span>) se abre «Cobros del pedido &lt;nº&gt;» con Total, Cobrado y Pendiente, y la lista de cobros ya registrados.</p>
+  <ol class="pasos">
+    <li><b>Importe recibido (€)</b>: propone lo pendiente. Si es un anticipo, escribe solo lo que te han dado.</li>
+    <li><b>Fecha</b>: hoy por defecto. Cámbiala si registras un cobro de otro día.</li>
+    <li><b>Método</b>: <b>Efectivo</b>, <b>Tarjeta</b> o <b>Transferencia</b>. No existe «Bizum»: acordad uno fijo (por ejemplo, Transferencia) y usadlo siempre.</li>
+    <li>En efectivo, elige el <b>Concepto de caja</b>: el cobro se apuntará también como ingreso en Caja.</li>
+    <li>Si te dan más de lo pendiente, marca <b>«Es propina»</b> (si no, no deja registrar). Añade <b>Notas</b> («el anticipo; falta el resto») y pulsa <span class="btn">Registrar cobro</span>.</li>
+  </ol>
+  <div class="dos">
+    <div class="caja ok" style="margin:0"><span class="tit">Bien hecho</span>El efectivo de una venta <b>siempre</b> por «Registrar cobro» en su pedido. Un cobro por cada pago real. La fecha, la del día que entró el dinero.</div>
+    <div class="caja nunca" style="margin:0"><span class="tit">Nunca</span>Apuntes a mano en Caja el efectivo de un pedido: el pedido seguiría pendiente y, si luego alguien registra el cobro, el ingreso quedaría <b>duplicado</b>.</div>
+  </div>
+  <p>Un cobro <b>no se edita</b>: si está mal, un administrador lo borra (papelera; se borra también su apunte de Caja) y se registra de nuevo. Los pedidos web no se cobran a mano: «se cobra en la web, y su cobro llega al sincronizar cuando WooCommerce lo da por pagado».</p>
+
+  <h3>7.2 · ¿Ticket o factura?</h3>
+  <p>El CRM te propone qué documento toca según el cliente y el importe (con IVA). Los límites son los de <span class="ruta">Datos de la empresa</span>:</p>
+  <figure>
+  <svg viewBox="0 0 680 230" width="100%">
+    <rect x="4" y="90" width="110" height="50" rx="10" fill="#f6f7fa" stroke="#8a90a0"/>
+    <text x="59" y="112" class="t12 b mid">Pedido</text><text x="59" y="128" class="t10 g mid">importe con IVA</text>
+    <path d="M114 115 H150" class="ln" marker-end="url(#fl)"/>
+    <polygon points="210,75 270,115 210,155 150,115" fill="#fff" stroke="#2457c5" stroke-width="1.5"/>
+    <text x="210" y="112" class="t11 b mid">¿Tiene</text><text x="210" y="126" class="t11 b mid">NIF?</text>
+    <path d="M210 75 V30 H300" class="lnm" marker-end="url(#flm)"/><text x="218" y="56" class="t10 b mo">sí</text>
+    <rect x="302" y="8" width="374" height="44" rx="10" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="316" y="28" class="t12 b mo">Factura completa</text><text x="316" y="44" class="t10">«El cliente tiene NIF: factura completa.» (cualquier importe)</text>
+    <path d="M270 115 H300" class="ln" marker-end="url(#fl)"/><text x="274" y="108" class="t10 b g">no</text>
+    <rect x="302" y="66" width="374" height="156" rx="10" fill="#fff" stroke="#c9cfda"/>
+    <text x="316" y="86" class="t11 b">Según quién sea el cliente:</text>
+    <text x="316" y="108" class="t11"><tspan class="b">Particular</tspan>: hasta 3.000 € → <tspan class="b ve">ticket</tspan>; más → factura</text>
+    <text x="316" y="128" class="t11"><tspan class="b">Profesional</tspan>: hasta 400 € → <tspan class="b ve">ticket</tspan>; más → factura</text>
+    <text x="316" y="148" class="t11"><tspan class="b">Sin indicar</tspan>: hasta 400 € → <tspan class="b ve">ticket</tspan></text>
+    <text x="316" y="166" class="t11">   de 400 a 3.000 € → pregunta: <tspan class="b">«¿Lo es?»</tspan></text>
+    <text x="316" y="184" class="t11">   más de 3.000 € → factura (pide nombre y NIF)</text>
+    <text x="316" y="208" class="t10 g">La ficha del cliente no guarda si es particular: te preguntará cada vez.</text>
+  </svg>
+  <figcaption>Figura 12 · Cómo decide el CRM entre ticket y factura (límites de fábrica: 400 € y 3.000 €).</figcaption>
+  </figure>
+
+  <h3>7.3 · Emitir el documento de un pedido</h3>
+  <p>⋮ › <b>Ticket o factura</b> <span class="etq e-editor">Editor</span>. Se abre «Ticket o factura · pedido &lt;nº&gt;»: «Las líneas salen del pedido. La aplicación propone qué documento toca; revísalo y emite.»</p>
+  <ol class="pasos">
+    <li>Lee la propuesta del recuadro («Cabe en un ticket…», «El cliente tiene NIF…», «Pasa del límite…» o «¿Lo es?» con <span class="btn">Es particular</span> / <span class="btn">Es profesional o empresa</span>).</li>
+    <li>Revisa el <b>Cliente</b> (nombre o razón social, NIF, dirección). Si escribes un NIF, pasa a factura. Lo que escribas aquí <b>no se guarda en la ficha</b>: corrige la ficha aparte si hace falta.</li>
+    <li>La <b>Fecha de emisión</b> es la del pedido: no se cambia. Las líneas son las del pedido más una línea «Gastos de envío» si lo tenía.</li>
+    <li>Pulsa <span class="btn">Emitir ticket</span> o <span class="btn">Emitir factura</span>. Se abre el PDF y en la lista aparece el botón verde con la referencia (por ejemplo T2026/0045).</li>
+  </ol>
+
+  <h3>7.4 · Emitir muchos a la vez</h3>
+  <div class="dos">
+    <div class="ficha"><h4>«Facturar» (en Pedidos)</h4><p>Toma los pedidos <b>que estás viendo</b> (periodo y filtros), no cancelados y sin documento (hasta 500). Eliges <b>Tickets</b> o <b>Facturas</b>, marcas los pedidos («Marcar todos los que se pueden») y emite del más antiguo al más nuevo, cada uno con la fecha de su pedido. Los que no se pueden salen con su motivo. <b>No exige que estén cobrados.</b></p></div>
+    <div class="ficha"><h4>«Tickets pendientes» (en Facturas de la tienda)</h4><p>Solo pedidos <b>cobrados enteros</b> sin documento, desde la fecha que elijas. Tres bloques: «Van en ticket (N)» (se emiten de golpe con <span class="btn">Emitir N ticket(s)</span>), «Uno a uno, desde el pedido» (dudosos) y «Tienen NIF: factura desde el pedido».</p></div>
+  </div>
+  <div class="caja truco"><span class="tit">Rutina recomendada</span>Una vez al día (o a la semana), en la tienda: <span class="btn">Tickets pendientes</span> para todo lo cobrado, y después los dudosos uno a uno. Al cerrar el mes, la insignia «N sin documento» de Gerencia te dice si se ha quedado alguno atrás.</div>
+
+  <h3>7.5 · Corregir un documento: canjear, rectificar o borrar la última</h3>
+  <table>
+    <tr><th style="width:30%">Situación</th><th>Qué hacer (en Facturas de la tienda o del textil)</th></tr>
+    <tr><td>Se hizo ticket y el cliente pide factura</td><td><b>Canjear por factura</b>: pide nombre, <b>NIF</b> (obligatorio) y dirección. Sale una factura con las mismas líneas; el ticket queda intacto y enlazado («Canjeado por …»). No anules.</td></tr>
+    <tr><td>El documento está mal (importe, cliente) o la venta no se hizo</td><td><b>Anular con una rectificativa</b> (↶): «Se emitirá una factura rectificativa que anula la X. La original no se borra ni se modifica.» Después el pedido admite un documento nuevo.</td></tr>
+    <tr><td>Es <b>el último</b> de su serie y ejercicio y te has equivocado</td><td><span class="etq e-admin">Admin</span> Papelera «Borrar (es la última de su serie)»: se borra del todo y su número lo usa la siguiente. No se deja si una rectificativa o canje apunta a ella o si está conciliada con el banco. La serie es de toda la empresa: la última puede ser de otra tienda o del textil.</td></tr>
+    <tr><td>La factura está cobrada</td><td>✓ <b>Marcar como pagada</b> en Facturas de la tienda (cambia el estado del documento, no registra cobro). Los tickets nacen ya «Pagada».</td></tr>
+  </table>
+  <div class="caja nunca"><span class="tit">Reglas de oro de los documentos</span>Un ticket o factura emitido <b>no se edita ni se borra</b> (salvo el último de la serie). Un pedido solo puede tener <b>un</b> documento vigente. La fecha es la del pedido. Los documentos son internos y <b>no se envían al cliente</b>. Si cambias un pedido después de emitir su documento, el documento <b>no cambia</b>: anúlalo y emite otro.</div>
+
+  <h3>7.6 · Facturas de la tienda y factura manual</h3>
+  <p><span class="ruta">Tiendas › (tienda) › Facturas</span> lista los documentos con filtros, el aviso «N documento(s) emitido(s) sin el PDF guardado» (botón <span class="btn">Generar los que faltan</span>), <span class="btn">Descargar PDFs</span> (ZIP de lo filtrado) y el pie con los totales (los borradores no suman, las rectificativas restan, un ticket canjeado lo cuenta su factura). <span class="btn">Nueva factura</span> crea una factura <b>sin pedido</b>, con fecha libre.</p>
+  <div class="caja ojo"><span class="tit">Cuidado con la «Nueva factura»</span>Una factura manual no está enlazada a ningún pedido ni cobro: no sale en Pedidos, ni en Cobros pendientes, ni en Lo cobrado. Úsala solo para algo que no sea un pedido. Si la haces para una venta que ya es un pedido, se contará dos veces.</div>
+  <p class="peq">Cobros pendientes, Lo cobrado y la relación con Caja y banco se explican en el capítulo 11 y, en detalle, en la Guía económica.</p>
+</section>
+
+<!-- ============================ CAPÍTULO 8 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">8</div><div><h2>Presupuestos</h2><div class="sub">De tienda y de textil, a mano o con ayuda de la IA</div></div></div>
+  <p>Un presupuesto <b>no cuenta</b> como venta ni como cobro: lo que cuenta es el pedido que sale de él al confirmarlo. Hay dos tipos: los de cada tienda (<span class="ruta">Tiendas › (tienda) › Presupuestos</span>) y los del textil (<span class="ruta">Textil › Presupuestos</span>).</p>
+
+  <figure>
+  <svg viewBox="0 0 680 210" width="100%">
+    <rect x="4" y="40" width="96" height="40" rx="20" fill="#eef0f4" stroke="#8a90a0"/><text x="52" y="65" class="t11 b g mid">Borrador</text>
+    <rect x="126" y="40" width="96" height="40" rx="20" fill="#e8effc" stroke="#2457c5"/><text x="174" y="65" class="t11 b az mid">Enviado</text>
+    <rect x="248" y="40" width="96" height="40" rx="20" fill="#e5f4ec" stroke="#1e8a4c"/><text x="296" y="65" class="t11 b ve mid">Aceptado</text>
+    <path d="M100 60 H124" class="ln" marker-end="url(#fl)"/><path d="M222 60 H246" class="ln" marker-end="url(#fl)"/>
+    <rect x="370" y="22" width="150" height="76" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="2"/>
+    <text x="445" y="46" class="t12 b az mid">PEDIDO</text><text x="445" y="63" class="t10 mid">mismas líneas e importes</text><text x="445" y="78" class="t10 mid">estado Pendiente</text><text x="445" y="92" class="t10 g mid">textil: reserva el stock</text>
+    <path d="M344 60 H368" class="lna" marker-end="url(#fla)"/>
+    <text x="286" y="20" class="t10 b az">«Confirmar: crear el pedido»</text>
+    <rect x="548" y="22" width="128" height="76" rx="12" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="612" y="46" class="t11 b ve mid">Luego, en el</text><text x="612" y="62" class="t11 b ve mid">pedido:</text><text x="612" y="80" class="t10 mid">cobros y documento</text>
+    <path d="M520 60 H546" class="lnv" marker-end="url(#flv)"/>
+    <rect x="126" y="112" width="96" height="36" rx="18" fill="#fbe7e5" stroke="#c0352b"/><text x="174" y="135" class="t11 b ro mid">Rechazado</text>
+    <path d="M174 80 V110" class="lnr" marker-end="url(#flr)"/>
+    <rect x="4" y="112" width="96" height="36" rx="18" fill="#fdf1dc" stroke="#b26a00"/><text x="52" y="135" class="t11 b am mid">Caducado</text>
+    <text x="4" y="168" class="t10 g">Caducado: borrador o enviado pasado de plazo (en tiendas se calcula solo;</text>
+    <text x="4" y="182" class="t10 g">en textil la validez solo se imprime). Rechazado no se puede confirmar.</text>
+    <text x="370" y="130" class="t10 b ro">Ojo: marcar «Aceptado» a mano NO crea el pedido.</text>
+    <text x="370" y="146" class="t10">Usa siempre «Confirmar: crear el pedido».</text>
+    <text x="370" y="168" class="t10 g">Un presupuesto se confirma una sola vez y después</text>
+    <text x="370" y="182" class="t10 g">ya no se edita. Si se borra su pedido, se puede volver</text>
+    <text x="370" y="196" class="t10 g">a confirmar (en tiendas).</text>
+  </svg>
+  <figcaption>Figura 13 · Vida de un presupuesto hasta convertirse en pedido.</figcaption>
+  </figure>
+
+  <h3>8.1 · Crear un presupuesto</h3>
+  <p>Pulsa <span class="btn">Nuevo presupuesto ▾</span> <span class="etq e-editor">Editor</span>. Tres maneras:</p>
+  <div class="tres">
+    <div class="ficha"><h4>Rellenarlo a mano</h4><p>«Como siempre.» Eliges cliente, fecha, validez (30 días de fábrica) y líneas.</p></div>
+    <div class="ficha"><h4>Desde un documento</h4><p>«PDF o imagen, con sus fotos.» Subes el pedido del cliente (un PDF de hasta 10 MB o una foto) y la IA monta el borrador.</p></div>
+    <div class="ficha"><h4>Escribiéndolo</h4><p>«Como en un chat.» Por ejemplo: «50 camisetas Gildan negras talla M con logo en pecho, 10 € cada una, para Pepe SL».</p></div>
+  </div>
+  <p>En la tienda, las líneas pueden ser del <b>catálogo</b> de productos o «Línea libre» (Descripción, Cant., Unidad, Precio, IVA), con <b>Envío sin IVA (€)</b> aparte e imágenes. En el textil, cada línea se puede enlazar a una prenda del <b>stock</b> (ver capítulo 10) y verás si hay disponible, el coste y el margen previsto; el textil no lleva envío aparte (añádelo como línea). Al <span class="btn">Guardar</span> se descarga el PDF.</p>
+
+  <h3>8.2 · Presupuestos con IA: cómo funcionan</h3>
+  <ul>
+    <li>«La IA monta un borrador con el catálogo y el stock. Se abre en el editor de siempre para revisarlo: <b>no se guarda nada hasta que pulses Guardar</b>.»</li>
+    <li>Puedes dar <b>Indicaciones para la IA</b> («es para Pepe SL; sin IVA») y añadir imágenes. Botón <span class="btn">Montar el borrador</span>.</li>
+    <li>El borrador busca el cliente en las fichas (por email, NIF o nombre exacto) y el precio: primero el del papel (si dice IVA incluido lo pasa a base y avisa), si no el PVP de la prenda, si no lo deja vacío («Falta»).</li>
+    <li>Se abre con el recuadro ámbar <b>«Borrador de la IA: revísalo antes de guardar»</b> y una lista de avisos (líneas sin cantidad o sin precio, prendas que no existen, cliente que no está en la ficha…). No deja guardar con cantidades a 0 ni precios pendientes.</li>
+  </ul>
+  <div class="caja ojo"><span class="tit">La IA propone, tú decides</span>Lee siempre los avisos y comprueba cliente, cantidades, precios (sin IVA) e IVA. Si la opción sale desactivada con «Falta la clave de la IA», hazlo a mano: la lectura con IA depende de una clave que configura quien mantiene la app.</div>
+
+  <h3>8.3 · Lista, estados y PDF</h3>
+  <p>La lista muestra Nº, Fecha, Válido hasta, Cliente, Estado y, si ya es pedido, «Pedido &lt;nº&gt;». En el menú ⋮ de cada presupuesto: <b>Descargar PDF</b>, <b>Editar</b> (o «Ver» para el visor), <b>Confirmar: crear el pedido</b>, «Marcar como &lt;estado&gt;» y <b>Borrar</b> <span class="etq e-admin">Admin</span> («Su número no se vuelve a usar»). El PDF se genera con la plantilla de <span class="ruta">Ajustes › PDF de presupuestos</span> de esa tienda o del textil.</p>
+  <div class="caja ojo"><span class="tit">Al confirmar en tienda</span>El pedido se fecha el <b>día de la confirmación</b> (no el del presupuesto) y <b>no copia las direcciones</b>: si va a enviarse, edita el pedido y pon la dirección.</div>
+
+  <h3>8.4 · Buenas prácticas</h3>
+  <ul class="check">
+    <li>Pasa el estado a <b>Enviado</b> cuando lo mandes: así Gerencia › Comercial mide la conversión.</li>
+    <li>Revisa cada semana «Esperando respuesta» en <span class="ruta">Gerencia › Comercial</span> y llama a los que más pueden entrar.</li>
+    <li>Cuando acepten: <b>Confirmar: crear el pedido</b>. Los cobros (también el anticipo) se registran luego en el pedido.</li>
+    <li>Marca «Rechazado» los que no salen: dejan de sumar y la conversión es real.</li>
+  </ul>
+</section>
+
+<!-- ============================ CAPÍTULO 9 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">9</div><div><h2>Clientes y productos</h2><div class="sub">Una ficha por cliente para toda la empresa</div></div></div>
+
+  <figure>
+  <svg viewBox="0 0 680 190" width="100%">
+    <rect x="250" y="56" width="180" height="78" rx="14" fill="#e8effc" stroke="#2457c5" stroke-width="2"/>
+    <text x="340" y="82" class="t14 b az mid">Ficha del cliente</text><text x="340" y="100" class="t10 mid">nombre, apodo, email, NIF,</text><text x="340" y="114" class="t10 mid">teléfono, empresa, dirección</text>
+    <rect x="4" y="10" width="170" height="44" rx="10" fill="#fff" stroke="#6b3fc0"/><text x="89" y="30" class="t11 b mo mid">Tienda Uno (web)</text><text x="89" y="45" class="t10 mid">pedidos sincronizados</text>
+    <rect x="4" y="72" width="170" height="44" rx="10" fill="#fff" stroke="#6b3fc0"/><text x="89" y="92" class="t11 b mo mid">Tienda Dos (web)</text><text x="89" y="107" class="t10 mid">pedidos sincronizados</text>
+    <rect x="4" y="134" width="170" height="44" rx="10" fill="#fff" stroke="#2457c5"/><text x="89" y="154" class="t11 b az mid">Mostrador</text><text x="89" y="169" class="t10 mid">pedidos manuales, caja</text>
+    <rect x="506" y="34" width="170" height="44" rx="10" fill="#fff" stroke="#6b3fc0"/><text x="591" y="54" class="t11 b mo mid">Textil</text><text x="591" y="69" class="t10 mid">presupuestos y pedidos</text>
+    <rect x="506" y="112" width="170" height="44" rx="10" fill="#fff" stroke="#1e8a4c"/><text x="591" y="132" class="t11 b ve mid">Documentos</text><text x="591" y="147" class="t10 mid">el NIF va a la factura</text>
+    <path d="M174 32 L248 76" class="ln"/><path d="M174 94 H248" class="ln"/><path d="M174 156 L248 118" class="ln"/><path d="M432 82 L504 58" class="ln"/><path d="M432 108 L504 132" class="ln"/>
+    <text x="340" y="152" class="t10 g mid">«Origen» solo dice dónde se dio de alta</text>
+  </svg>
+  <figcaption>Figura 14 · La ficha es única para toda la empresa: la usan todas las tiendas, el mostrador y el textil.</figcaption>
+  </figure>
+
+  <h3>9.1 · La ficha única</h3>
+  <p><span class="ruta">Ventas › Clientes</span> muestra todos; <span class="ruta">Tiendas › (tienda) › Clientes</span> y <span class="ruta">Textil › Clientes</span> son la misma lista con otro filtro inicial. El <b>Origen</b> («Dados de alta en textil», «Dados de alta en general», cada tienda) solo indica dónde nació la ficha: un cliente de la web puede comprar en el textil y al revés.</p>
+  <ul>
+    <li><b>Buscar</b>: «Buscar nombre, apodo, email, NIF, teléfono…» (sin importar tildes ni mayúsculas; el NIF sin espacios ni guiones).</li>
+    <li><b>Nuevo cliente</b> / <b>Editar cliente</b> <span class="etq e-editor">Editor</span>: Nombre *, <b>Apodo</b> (cómo lo llamáis en el taller; sirve para buscar), Email, Teléfono, NIF / CIF, Empresa, Dirección, CP, Ciudad, Provincia, País, Notas.</li>
+    <li>Al abrir una ficha verás sus pedidos de tiendas, del textil y sus facturas, con el total (sin cancelados).</li>
+    <li><b>NIF</b>: la factura usa el de la ficha; si no tiene, el que vino en el pedido web. Para una factura completa hacen falta nombre <b>y</b> NIF.</li>
+  </ul>
+
+  <h3>9.2 · Duplicados</h3>
+  <p>Si dos fichas comparten correo o NIF, sale la tarjeta <b>Posibles duplicados</b>: «Revísalas: la fusión, que junta el historial en una sola ficha, llega en el siguiente paso. Mientras, no borres la que sobre para juntarlas: sus pedidos se quedarían sin cliente.»</p>
+  <div class="caja ok"><span class="tit">Qué hacer con un duplicado hoy</span>Elige una ficha «buena» y úsala en los pedidos nuevos. En la sobrante, pon en <b>Notas</b> «Duplicada de …» y no la borres. Busca siempre antes de crear un cliente (por email o NIF).</div>
+  <div class="caja ojo"><span class="tit">Borrar un cliente</span><span class="etq e-admin">Admin</span> «Es la ficha de toda la empresa: desaparece de todas las tiendas y del textil.» Sus pedidos, presupuestos, facturas y apuntes de caja se quedan sin ficha. Si venía de la web, la próxima sincronización lo vuelve a crear.</div>
+
+  <h3>9.3 · Productos</h3>
+  <p><span class="ruta">Ventas › Productos</span> son los <b>productos generales</b> (disponibles en todas las tiendas); en <span class="ruta">Tiendas › (tienda) › Productos</span> ves los de esa tienda más los generales. Filtros: Activos · Todos / DTF (€/m) / Otros / Inactivos.</p>
+  <table>
+    <tr><th>Tipo</th><th>De dónde sale</th><th>Para qué se usa</th></tr>
+    <tr><td><b>Productos web</b></td><td>Los crea la sincronización (todos como metro lineal y 21 % de IVA; el precio, tal como lo tenga la web)</td><td>Catálogo de la tienda en presupuestos</td></tr>
+    <tr><td><b>Productos manuales</b></td><td>Los creas tú: SKU, Unidad (Metro lineal (DTF), Metro cuadrado, Unidad, Kilogramo, Litro), Disponible en (esta tienda / todas), Nombre, Precio, IVA, Activo</td><td>Presupuestos de tienda</td></tr>
+  </table>
+  <p>El pedido manual y la factura manual llevan líneas de texto libre: el catálogo se usa sobre todo en <b>presupuestos</b>. Si un producto deja de venderse, <b>desactívalo</b> con el interruptor en lugar de borrarlo.</p>
+</section>
+
+<!-- ============================ CAPÍTULO 10 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">10</div><div><h2>Textil personalizado</h2><div class="sub">Marcas, almacén, compras con escáner, presupuestos, pedidos y entregas</div></div></div>
+  <p>El textil es un <b>módulo aparte de las tiendas WooCommerce</b>: «Módulo independiente para tu línea de textil». Vende prendas por unidades, tiene almacén y sus pedidos se crean a mano. Pero comparte con el resto la <b>sociedad</b>, la <b>serie de facturas</b>, la <b>ficha de clientes</b> y los <b>cobros</b> (salen en Cobros pendientes y Lo cobrado).</p>
+
+  <figure class="fig-alta">
+  <svg viewBox="0 0 680 400" width="100%">
+    <!-- fila 1 -->
+    <rect x="4" y="8" width="150" height="80" rx="12" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="79" y="30" class="t12 b mo mid">1 · Compra</text><text x="79" y="47" class="t10 mid">Textil › Compras</text><text x="79" y="61" class="t10 mid">subir factura (IA)</text><text x="79" y="75" class="t10 mid">revisar y registrar</text>
+    <rect x="180" y="8" width="150" height="80" rx="12" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="255" y="30" class="t12 b ve mid">2 · Stock</text><text x="255" y="47" class="t10 mid">entran las unidades</text><text x="255" y="61" class="t10 mid">al coste de entrada</text><text x="255" y="75" class="t10 mid">poner PVP</text>
+    <rect x="356" y="8" width="150" height="80" rx="12" fill="#e8effc" stroke="#2457c5"/>
+    <text x="431" y="30" class="t12 b az mid">3 · Presupuesto</text><text x="431" y="47" class="t10 mid">a mano, desde stock</text><text x="431" y="61" class="t10 mid">o con IA · PDF</text><text x="431" y="75" class="t10 mid">PRES-AAAA-NNNN</text>
+    <rect x="532" y="8" width="144" height="80" rx="12" fill="#e8effc" stroke="#2457c5"/>
+    <text x="604" y="30" class="t12 b az mid">4 · Pedido</text><text x="604" y="47" class="t10 mid">«Confirmar: crear</text><text x="604" y="61" class="t10 mid">el pedido»</text><text x="604" y="75" class="t10 b mid">RESERVA el stock</text>
+    <path d="M154 48 H178" class="ln" marker-end="url(#fl)"/><path d="M330 48 H354" class="ln" marker-end="url(#fl)"/><path d="M506 48 H530" class="ln" marker-end="url(#fl)"/>
+    <!-- fila 2 -->
+    <rect x="532" y="124" width="144" height="80" rx="12" fill="#fdf1dc" stroke="#b26a00"/>
+    <text x="604" y="146" class="t12 b am mid">5 · Producción</text><text x="604" y="163" class="t10 mid">Pendiente →</text><text x="604" y="177" class="t10 mid">En producción →</text><text x="604" y="191" class="t10 mid">Listo</text>
+    <rect x="356" y="124" width="150" height="80" rx="12" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="431" y="146" class="t12 b ve mid">6 · Entrega</text><text x="431" y="163" class="t10 mid">Enviado / Entregado</text><text x="431" y="177" class="t10 b mid">SALE del stock</text><text x="431" y="191" class="t10 mid">al coste medio</text>
+    <rect x="180" y="124" width="150" height="80" rx="12" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="255" y="146" class="t12 b ve mid">7 · Cobro</text><text x="255" y="163" class="t10 mid">«Cobros» del pedido</text><text x="255" y="177" class="t10 mid">efectivo → Caja</text><text x="255" y="191" class="t10 mid">(o anticipos antes)</text>
+    <rect x="4" y="124" width="150" height="80" rx="12" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="79" y="146" class="t12 b mo mid">8 · Documento</text><text x="79" y="163" class="t10 mid">«Ticket o factura»</text><text x="79" y="177" class="t10 mid">serie de la empresa</text><text x="79" y="191" class="t10 mid">(opcional, interno)</text>
+    <path d="M604 88 V122" class="ln" marker-end="url(#fl)"/><path d="M532 164 H508" class="ln" marker-end="url(#fl)"/><path d="M356 164 H332" class="ln" marker-end="url(#fl)"/><path d="M180 164 H156" class="ln" marker-end="url(#fl)"/>
+    <!-- abajo -->
+    <rect x="4" y="226" width="672" height="168" rx="12" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="18" y="248" class="t12 b">Qué pasa en el almacén en cada paso</text>
+    <text x="18" y="270" class="t11"><tspan class="b ve">Compra registrada</tspan> → movimiento «Compra»: sube el físico, se recalcula el coste medio.</text>
+    <text x="18" y="290" class="t11"><tspan class="b az">Presupuesto</tspan> → no toca el almacén (avisa si falta stock, pero se puede guardar).</text>
+    <text x="18" y="310" class="t11"><tspan class="b az">Pedido Pendiente, En producción, Listo</tspan> → reserva: sube «Reservado», baja «Disponible».</text>
+    <text x="18" y="330" class="t11"><tspan class="b ve">Enviado o Entregado</tspan> → la reserva se convierte en «Venta»: baja el físico y se fija el coste.</text>
+    <text x="18" y="350" class="t11"><tspan class="b ro">Volver atrás o Cancelado</tspan> → entra como «Devolución de cliente» al coste al que salió / suelta la reserva.</text>
+    <text x="18" y="374" class="t11 b ro">Cambiar el estado en el desplegable de la lista mueve el stock en el acto, sin confirmación.</text>
+  </svg>
+  <figcaption>Figura 15 · El circuito textil completo y lo que provoca cada paso en el almacén.</figcaption>
+  </figure>
+
+  <h3>10.1 · Marcas comerciales</h3>
+  <p>En <span class="ruta">Textil › Ajustes</span>: «Gestiona las marcas comerciales que puedes usar en presupuestos y facturas. Los datos fiscales (SL) siguen siendo únicos.»</p>
+  <ul>
+    <li><span class="btn">Nueva marca</span> <span class="etq e-editor">Editor</span>: Nombre *, Color, Logo (URL), Dirección, Email, Teléfono, Notas, interruptor Activa.</li>
+    <li><b>Marca predeterminada</b>: se sugiere al crear presupuestos y pedidos y se usa en el PDF cuando un documento no tiene marca.</li>
+    <li>Para qué sirve: en el PDF del presupuesto salen el nombre, logo y color de la marca, con su email y teléfono (o los de la empresa si la marca no los tiene). La razón social y el CIF son siempre los de la empresa. También separa las ventas en <span class="ruta">Gerencia › Textil › Por marca</span>.</li>
+  </ul>
+  <div class="caja ok"><span class="tit">Bien hecho</span>Rellena email y teléfono de cada marca; usa un logo con una dirección https estable; <b>desactiva</b> una marca en lugar de borrarla (al borrarla, sus pedidos y facturas se quedan sin marca). Si la plantilla PDF del textil tiene nombre, logo o color propios, mandan sobre los de la marca: déjalos vacíos si usas varias marcas.</div>
+
+  <h3>10.2 · El almacén: producto, variante y las tres cantidades</h3>
+  <p>Un <b>producto</b> es un modelo de prenda (marca + referencia del fabricante + nombre). Una <b>variante</b> es producto × color × talla: es lo que tiene existencias.</p>
+  <figure>
+  <svg viewBox="0 0 680 220" width="100%">
+    <text x="4" y="18" class="t12 b">Camiseta negra, talla M</text>
+    <rect x="4" y="30" width="400" height="44" rx="6" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="16" y="50" class="t12 b ve">FÍSICO · 20 uds</text><text x="16" y="66" class="t10">«Lo que hay si vas y lo cuentas»</text>
+    <rect x="4" y="84" width="120" height="44" rx="6" fill="#fdf1dc" stroke="#b26a00"/>
+    <text x="14" y="104" class="t12 b am">RESERVADO · 6</text><text x="14" y="120" class="t10">pedidos sin entregar</text>
+    <rect x="124" y="84" width="280" height="44" rx="6" fill="#e8effc" stroke="#2457c5"/>
+    <text x="136" y="104" class="t12 b az">DISPONIBLE · 14</text><text x="136" y="120" class="t10">«lo que puedes prometer» = físico − reservado</text>
+    <rect x="4" y="140" width="400" height="72" rx="6" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="16" y="160" class="t11"><tspan class="b">Colores en la tabla</tspan> (cada talla muestra el disponible):</text>
+    <text x="16" y="178" class="t11"><tspan class="b ro">rojo</tspan> si es negativo · <tspan class="b am">ámbar</tspan> si está en el mínimo o por debajo</text>
+    <text x="16" y="196" class="t11">Las existencias nunca se escriben a mano: salen del libro.</text>
+    <rect x="430" y="30" width="246" height="182" rx="10" fill="#fff" stroke="#c9cfda"/>
+    <text x="444" y="52" class="t12 b">Coste medio</text>
+    <text x="444" y="72" class="t10">Media ponderada que solo cambia el libro</text>
+    <text x="444" y="86" class="t10">de movimientos:</text>
+    <text x="444" y="106" class="t10">· Una compra entra a su coste y</text>
+    <text x="444" y="120" class="t10">  recalcula la media.</text>
+    <text x="444" y="138" class="t10">· Toda salida (venta, merma…) sale</text>
+    <text x="444" y="152" class="t10">  al coste medio del momento.</text>
+    <text x="444" y="170" class="t10">· Valor del almacén = físico × coste</text>
+    <text x="444" y="184" class="t10">  medio (los negativos cuentan 0).</text>
+    <text x="444" y="202" class="t10 g">Ejemplo: 10 a 3 € + 10 a 4 € → 3,50 €</text>
+  </svg>
+  <figcaption>Figura 16 · Físico, reservado y disponible de una variante, y cómo se calcula su coste.</figcaption>
+  </figure>
+
+  <h3>10.3 · La pantalla Stock</h3>
+  <p><span class="ruta">Textil › Stock</span>: «Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado para pedidos.» Busca por SKU, nombre, marca, referencia, color, talla o <b>EAN</b> (puedes usar un lector: si queda una sola fila se abre sola y resalta la talla). Filtro «Solo poco stock». Al abrir una fila verás cada talla con SKU, EAN, Físico, Reservado, Disponible, Mín., Coste y PVP, y estos botones:</p>
+  <table>
+    <tr><th style="width:32%">Botón</th><th>Para qué</th></tr>
+    <tr><td><b>Otro movimiento: merma, devolución o ajuste</b> <span class="etq e-editor">Editor</span></td><td>Merma (rota, manchada, perdida), Devolución a proveedor, Devolución de cliente sin pedido, Ajuste de inventario (<b>Sobran</b> / <b>Faltan</b>). Unidades en positivo y una nota. <span class="btn">Anotar</span>.</td></tr>
+    <tr><td><b>Recuento físico</b> <span class="etq e-editor">Editor</span></td><td>«El sistema dice» / «He contado»: escribe lo contado, no la diferencia. Si no cuadra se anota un ajuste con el motivo. <span class="btn">Ajustar</span>.</td></tr>
+    <tr><td><b>Historial de movimientos</b></td><td>Los últimos 200 movimientos de la variante, con entradas, salidas y saldo.</td></tr>
+    <tr><td><b>Editar datos</b> <span class="etq e-editor">Editor</span></td><td>Nombre, color, talla, EAN, mínimo, <b>precio de venta</b> (con «Recomendado: …»). Existencias y coste se ven bloqueados.</td></tr>
+    <tr><td><b>Fusionar con…</b> <span class="etq e-admin">Admin</span></td><td>Solo en variantes «Repetida»: pasa unidades, reservas, historial y memoria a la buena. No se deshace.</td></tr>
+    <tr><td><b>Eliminar</b> <span class="etq e-admin">Admin</span></td><td>Si tiene movimientos se desactiva; si tiene unidades, déjala antes a 0 con merma o ajuste.</td></tr>
+  </table>
+  <p><span class="btn">Nuevo artículo</span> crea una variante con 0 unidades: «Las existencias entran con su factura (Textil › Compras) o con un recuento.» Si ves el aviso «N prendas están repartidas en varios productos (una referencia por talla)», pulsa <span class="btn">Revisar y unir</span> (pasa con proveedores como Roly, que ponen talla y color en la referencia): se queda un producto y los demás se desactivan; las existencias no cambian.</p>
+  <div class="caja truco"><span class="tit">Del stock al presupuesto en dos clics</span>Marca las casillas de las prendas en la tabla y usa la barra «N variantes · <b>Crear presupuesto</b> · <b>Crear pedido</b>»: se abre un documento nuevo con una línea por variante, al PVP de cada una.</div>
+</section>
+
+<section>
+  <h3>10.4 · Compras de prendas con el escáner de facturas</h3>
+  <p><span class="ruta">Textil › Compras</span>: «Sube la factura del proveedor y da el género de alta en el stock.» Es la <b>única puerta correcta</b> para que entren prendas en el almacén.</p>
+  <figure>
+  <svg viewBox="0 0 680 200" width="100%">
+    <rect x="4" y="20" width="120" height="70" rx="10" fill="#fff" stroke="#8a90a0"/><text x="64" y="44" class="t12 b mid">Subir</text><text x="64" y="61" class="t10 mid">PDF o foto,</text><text x="64" y="75" class="t10 mid">varias a la vez</text>
+    <rect x="144" y="20" width="120" height="70" rx="10" fill="#efe8fb" stroke="#6b3fc0"/><text x="204" y="44" class="t12 b mo mid">La IA lee</text><text x="204" y="61" class="t10 mid">queda en</text><text x="204" y="75" class="t10 mid">«Por revisar»</text>
+    <rect x="284" y="20" width="130" height="70" rx="10" fill="#fdf1dc" stroke="#b26a00"/><text x="349" y="44" class="t12 b am mid">Revisar</text><text x="349" y="61" class="t10 mid">líneas, packs, a qué</text><text x="349" y="75" class="t10 mid">variante va cada una</text>
+    <rect x="434" y="20" width="110" height="70" rx="10" fill="#e8effc" stroke="#2457c5"/><text x="489" y="44" class="t12 b az mid">Reparto</text><text x="489" y="61" class="t10 mid">portes y dtos.</text><text x="489" y="75" class="t10 mid">«= base ✓»</text>
+    <rect x="564" y="20" width="112" height="70" rx="10" fill="#e5f4ec" stroke="#1e8a4c"/><text x="620" y="44" class="t12 b ve mid">Registrar</text><text x="620" y="61" class="t10 mid">entra en el stock</text><text x="620" y="75" class="t10 mid">y no se borra</text>
+    <path d="M124 55 H142" class="ln" marker-end="url(#fl)"/><path d="M264 55 H282" class="ln" marker-end="url(#fl)"/><path d="M414 55 H432" class="ln" marker-end="url(#fl)"/><path d="M544 55 H562" class="ln" marker-end="url(#fl)"/>
+    <text x="4" y="122" class="t11 b">Cómo casa cada línea con el almacén (en este orden):</text>
+    <rect x="4" y="132" width="104" height="30" rx="15" fill="#e5f4ec" stroke="#1e8a4c"/><text x="56" y="152" class="t11 b ve mid">Memoria</text>
+    <rect x="118" y="132" width="80" height="30" rx="15" fill="#e5f4ec" stroke="#1e8a4c"/><text x="158" y="152" class="t11 b ve mid">EAN</text>
+    <rect x="208" y="132" width="104" height="30" rx="15" fill="#e5f4ec" stroke="#1e8a4c"/><text x="260" y="152" class="t11 b ve mid">Referencia</text>
+    <rect x="322" y="132" width="110" height="30" rx="15" fill="#fdf1dc" stroke="#b26a00"/><text x="377" y="152" class="t11 b am mid">Sugerencia</text>
+    <rect x="442" y="132" width="104" height="30" rx="15" fill="#fbe7e5" stroke="#c0352b"/><text x="494" y="152" class="t11 b ro mid">Sin casar</text>
+    <text x="4" y="184" class="t10">Memoria = lo que ese proveedor ya llamó así antes. Sugerencia = parecido de texto: <tspan class="b">no se asigna sin pulsarla</tspan>.</text>
+    <text x="4" y="198" class="t10 ro b">Una línea «Sin casar» o con sugerencia sin pulsar se registra como VARIANTE NUEVA (posible duplicado).</text>
+  </svg>
+  <figcaption>Figura 17 · De la factura del proveedor al almacén.</figcaption>
+  </figure>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn">Subir facturas</span> o arrastra los PDF. «La IA las lee y quedan por revisar: no cuentan hasta que las registres.» Si la IA no está activada, usa <span class="btn">A mano</span>.</li>
+    <li>En «Por revisar (N)» pulsa <span class="btn">Revisar</span>. Mira primero «Qué mirar» y los posibles duplicados.</li>
+    <li>Elige <b>Factura</b> o <b>Proforma</b>. Comprueba Proveedor, NIF, Número y Fecha.</li>
+    <li>Línea a línea: tipo (Artículo, Porte, Descuento, Otro cargo), <b>Uds/pack</b> (cajas de 5…: entran cantidad × pack), y la columna <b>Variante</b>. Pulsa la sugerencia buena o <span class="btn">Elegir…</span> (rejilla color × talla). Solo si de verdad es nueva, <span class="btn">Crear variante</span> o <span class="btn">Crear las variantes que faltan (N)</span>, poniendo su PVP.</li>
+    <li>Comprueba el <b>reparto</b>: los portes y descuentos se reparten en el coste de las prendas y debe salir «Coste de entrada X € = base X € ✓».</li>
+    <li>Importes: tipo de IVA, IVA y total de la factura. Si el líquido no cuadra, elige cuál vale y explica por qué.</li>
+    <li>Si es la factura de una proforma ya registrada, <b>cásala</b> con ella («¿Es la factura de una de estas proformas?»).</li>
+    <li>Pulsa <span class="btn">Registrar y dar de alta en el stock</span>. Verás algo como «Registrada: 12 líneas al stock, 3 variantes nuevas, 9 referencias aprendidas».</li>
+  </ol>
+  <div class="caja nunca"><span class="tit">Lo que no tiene vuelta atrás</span>Una compra textil registrada <b>no se edita ni se borra</b>: «movió stock». Si te equivocaste, corrige con <b>Otro movimiento</b> (devolución a proveedor o ajuste) y un recuento. Y si registras la factura de una proforma con «No es de ninguna», el género <b>entra dos veces</b>.</div>
+  <div class="caja idea"><span class="tit">Proformas</span>Una proforma registrada mete el género en el stock pero no cuenta en IVA ni en Gerencia. Cuando llega la factura y la casas, no se vuelve a meter el stock: se regularizan las diferencias de unidades y de coste. En Textil › Compras solo las proformas se marcan pagadas; el pago de una <b>factura</b> textil se marca en <span class="ruta">Dinero › Facturas de compra</span> o al conciliarla con el banco.</div>
+
+  <h3>10.5 · Presupuestos y pedidos textiles</h3>
+  <p>El editor de líneas es el mismo para los dos. Por línea: desplegable de <b>stock</b> («(N disp.)»), Descripción, Cant., Precio (sin IVA), IVA %. Debajo de cada línea con prenda: «Restante X / Y disponibles» (verde), «stock bajo» (ámbar) o «Faltan N uds» (rojo), el coste y, si el precio está a 0, el precio recomendado. Con <span class="btn">Elegir del stock</span> abres la rejilla color × talla y escribes cantidades por celda. Al pie: Subtotal, IVA, Total y «Coste previsto · Margen previsto».</p>
+  <div class="dos">
+    <div class="ficha"><h4>Presupuesto textil</h4><ul><li>Número PRES-AAAA-NNNN. Marca comercial (la predeterminada de inicio), cliente con alta rápida («+ Nuevo cliente…»), validez, imágenes y notas.</li><li><b>No reserva</b>. Si pide más de lo disponible, guarda y avisa «Falta stock para aceptarlo tal cual».</li><li>El coste de cada línea se congela al guardarlo por primera vez.</li><li><b>Confirmar: crear el pedido</b> crea el pedido TPD y <b>reserva</b>; si no hay disponible, falla con «Stock insuficiente — …».</li></ul></div>
+    <div class="ficha"><h4>Pedido textil</h4><ul><li>Número TPD-AAAA-NNNN. Cliente, Marca, Fecha, Método pago (texto), Envío (€ sin IVA), Estado, Líneas, Notas.</li><li><b>No puede llevar más de lo disponible</b>: «baja las cantidades en rojo».</li><li>Estados: <span class="est gr">Pendiente</span> <span class="est az">En producción</span> <span class="est am">Listo</span> <span class="est ve">Enviado</span> <span class="est ve">Entregado</span> <span class="est ro">Cancelado</span>.</li><li>El envío se suma a la base al 21 % al guardar (el total que ves al editar no lo incluye).</li></ul></div>
+  </div>
+
+  <h3>10.6 · Entrega, cobro y documento</h3>
+  <ul>
+    <li><b>Entrega</b>: pasa el pedido a <b>Enviado</b> o <b>Entregado</b> cuando la ropa sale de verdad: es lo que descuenta el físico y fija el coste de lo vendido (el margen real de Gerencia › Textil). No lo marques por adelantado.</li>
+    <li><b>Cobro</b>: botón <b>Cobros</b> (cartera) en la lista, igual que en las tiendas (efectivo con concepto de caja, normalmente «Textil»). Los cobros textil salen en Cobros pendientes y Lo cobrado.</li>
+    <li><b>Documento</b> (opcional, interno): <b>Ticket o factura</b> en la lista. Mismas reglas que en tiendas, misma serie de la empresa. En <span class="ruta">Textil › Facturas</span> se abren los PDF, se <b>canjea</b> un ticket por factura, se <b>anula con rectificativa</b> o (admin) se borra la última de la serie.</li>
+  </ul>
+  <div class="caja ojo"><span class="tit">PDF de facturas textil</span>Hoy, cuando un <b>editor</b> emite un ticket o factura textil, el documento queda emitido pero el PDF no se guarda: solo un administrador puede generarlo («Lo genera un administrador al abrirlo»). Si eres editor, avisa al admin o deja que use el aviso «N documento(s) emitido(s) sin el PDF guardado».</div>
+
+  <h3>10.7 · Errores típicos del textil y cómo corregirlos</h3>
+  <table>
+    <tr><th style="width:34%">Error</th><th>Cómo corregirlo</th></tr>
+    <tr><td>Variante duplicada al registrar (sale «Repetida»)</td><td>Admin: <b>Fusionar con…</b> la buena.</td></tr>
+    <tr><td>Pedido marcado Enviado/Entregado por error</td><td>Vuelve al estado anterior: entra como devolución de cliente al coste de la venta y se vuelve a reservar.</td></tr>
+    <tr><td>«Stock insuficiente» al guardar o confirmar</td><td>Mira en Stock qué está reservado; registra la compra pendiente, baja cantidades o cancela el pedido que reserva de más.</td></tr>
+    <tr><td>Presupuesto «Aceptado» sin pedido</td><td>Cambiar el estado a mano no crea el pedido: pulsa <b>Confirmar: crear el pedido</b>.</td></tr>
+    <tr><td>El cliente devuelve parte de un pedido entregado</td><td>Edita el pedido (no el stock): la diferencia vuelve al coste de la venta. Si tenía documento, rectifícalo.</td></tr>
+    <tr><td>Compra con cantidades o variante equivocadas</td><td>Otro movimiento en la variante mala (devolución a proveedor o ajuste) y ajuste o recuento en la buena, con nota.</td></tr>
+    <tr><td>EAN rechazado («Ese EAN ya lo tiene otra variante»)</td><td>Un EAN de una variante desactivada sigue ocupado: quítaselo antes.</td></tr>
+  </table>
+  <div class="caja ok"><span class="tit">Cada trimestre en el textil</span>Ninguna compra en «Por revisar», ninguna proforma sin explicación, recuento de las prendas que más se mueven y <span class="ruta">Gerencia › Textil › Controles del almacén</span> a 0.</div>
+</section>
+
+<!-- ============================ CAPÍTULO 11 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">11</div><div><h2>Dinero: visión de uso</h2><div class="sub">Qué es cada pantalla del bloque Dinero y cuándo se usa. El detalle, en la Guía económica</div></div></div>
+  <p class="lead">El CRM lleva <b>cuatro registros de dinero independientes</b>. Casi todos los descuadres vienen de creer que uno actualiza a otro.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 290" width="100%">
+    <rect x="4" y="8" width="160" height="96" rx="12" fill="#e5f4ec" stroke="#1e8a4c" stroke-width="1.5"/>
+    <text x="84" y="32" class="t13 b ve mid">Cobros</text><text x="84" y="50" class="t10 mid">lo que pagó un cliente</text><text x="84" y="64" class="t10 mid">de un pedido</text><text x="84" y="84" class="t10 g mid">Cobros pendientes</text><text x="84" y="97" class="t10 g mid">Lo cobrado</text>
+    <rect x="176" y="8" width="160" height="96" rx="12" fill="#fdf1dc" stroke="#b26a00" stroke-width="1.5"/>
+    <text x="256" y="32" class="t13 b am mid">Caja</text><text x="256" y="50" class="t10 mid">efectivo y gastos</text><text x="256" y="64" class="t10 mid">pagados por socios</text><text x="256" y="90" class="t10 g mid">Dinero › Caja</text>
+    <rect x="348" y="8" width="160" height="96" rx="12" fill="#e8effc" stroke="#2457c5" stroke-width="1.5"/>
+    <text x="428" y="32" class="t13 b az mid">Banco</text><text x="428" y="50" class="t10 mid">lo que dice el extracto</text><text x="428" y="64" class="t10 mid">que subes (no se teclea)</text><text x="428" y="90" class="t10 g mid">Conciliación bancaria</text>
+    <rect x="520" y="8" width="156" height="96" rx="12" fill="#efe8fb" stroke="#6b3fc0" stroke-width="1.5"/>
+    <text x="598" y="32" class="t13 b mo mid">Documentos</text><text x="598" y="50" class="t10 mid">factura pagada / por</text><text x="598" y="64" class="t10 mid">pagar (ventas y compras)</text><text x="598" y="90" class="t10 g mid">Facturas · Compras</text>
+
+    <text x="340" y="132" class="t12 b ve mid">Sí se conectan solos</text>
+    <path d="M84 104 C110 150 220 150 250 106" class="lnv" marker-end="url(#flv)"/>
+    <text x="104" y="160" class="t10">cobro en efectivo → apunte en Caja</text>
+    <path d="M440 104 C470 150 560 150 590 106" class="lnv" marker-end="url(#flv)"/>
+    <text x="440" y="160" class="t10">conciliar → factura pagada</text>
+    <text x="4" y="186" class="t10">· Pedido web pagado → cobro «Web» automático al sincronizar.</text>
+
+    <rect x="4" y="200" width="672" height="84" rx="10" fill="#fbe7e5" stroke="#f2c3be"/>
+    <text x="16" y="220" class="t12 b ro">No se conectan (hazlo tú)</text>
+    <text x="16" y="238" class="t10">· Conciliar un abono del banco <tspan class="b">no registra el cobro</tspan> del pedido.   · Cobrar por tarjeta o transferencia <tspan class="b">no marca la factura pagada</tspan>.</text>
+    <text x="16" y="254" class="t10">· Emitir un ticket no registra el cobro.   · Ingresar el efectivo en el banco no tiene apunte de traspaso caja ↔ banco.</text>
+    <text x="16" y="270" class="t10">· La conciliación casa movimientos con <tspan class="b">documentos</tspan> (facturas, tickets, compras), nunca con pedidos, cobros ni apuntes de caja.</text>
+  </svg>
+  <figcaption>Figura 18 · Los cuatro registros del dinero y qué se conecta solo y qué no.</figcaption>
+  </figure>
+
+  <table>
+    <tr><th style="width:22%">Pantalla</th><th style="width:43%">Qué es y para qué sirve</th><th>Cuándo usarla</th></tr>
+    <tr><td><b>Cobros pendientes</b></td><td>Lo que falta por cobrar. Pestaña <b>Pedidos</b>: pedidos vivos (tiendas y textil) con algo pendiente, con antigüedad («hace N días», rojo si más de 30) y botón <span class="btn">Cobrar</span> (o <span class="btn">Ver</span> en web). Pestaña <b>Facturas</b>: facturas de tienda en estado emitida, vencida o borrador.</td><td>Cada día en mostrador; cada semana para reclamar; al cerrar el mes. En la pestaña Facturas, para marcar una factura pagada usa el ✓ de <span class="ruta">Tienda › Facturas</span> (el botón «Cobrado» de esta pestaña no funciona hoy).</td></tr>
+    <tr><td><b>Lo cobrado</b></td><td>Todo el dinero registrado como cobro (tiendas, web y textil), por tienda y por método, con base, IVA y propinas. Interruptor <b>Fecha del pedido</b> (por defecto) / <b>Fecha del cobro</b>.</td><td>Al cerrar mes o trimestre (con «Fecha del cobro»), para cuadrar efectivo con Caja y tarjeta/transferencia/web con el banco. CSV para la gestoría.</td></tr>
+    <tr><td><b>Facturas de compra</b></td><td>Todas las facturas de proveedores: se suben, la IA las lee y quedan «Por revisar» hasta que alguien pulsa «Registrar factura». La categoría decide cómo cuenta en Gerencia.</td><td>Cada vez que llega una factura de proveedor (o una vez por semana, todas juntas).</td></tr>
+    <tr><td><b>Conciliación bancaria</b></td><td>Cuentas, extractos (Excel, CSV o Norma 43) y el motor que casa cada movimiento del banco con su factura. Los cargos con facturas de compra; los abonos con facturas y tickets emitidos.</td><td>Cada semana o cada mes, tras descargar el extracto del banco.</td></tr>
+    <tr><td><b>Caja</b></td><td>«Efectivo y aportaciones de los socios. No es el extracto del banco.» Ingresos y gastos en efectivo y gastos pagados por un socio de su bolsillo.</td><td>Cuando entra o sale efectivo que no es el cobro de un pedido. Arqueo manual al cerrar el día o la semana.</td></tr>
+    <tr><td><b>Inversión</b></td><td>El libro de capital: lo que cada socio mete (aportación) o saca (retirada). <b>No es para comprar máquinas</b> (eso es una factura de compra de categoría «Maquinaria»).</td><td>Solo cuando un socio pone o saca dinero.</td></tr>
+    <tr><td><b>Archivo</b></td><td>Facturas emitidas, tickets, rectificativas y facturas de compra del periodo (por defecto, el trimestre), con <span class="btn">Descargar PDFs</span>: un ZIP por carpetas y trimestre con un <code>indice.csv</code>.</td><td>Cada trimestre, para pasar a la gestoría junto al extracto del banco.</td></tr>
+  </table>
+  <div class="caja ojo"><span class="tit">Los tres errores que más descuadran</span>1) Cobrar en efectivo y no registrarlo en el pedido. 2) Apuntar en Caja a mano el efectivo de un pedido (y luego registrar el cobro: queda duplicado). 3) Registrar un Bizum unas veces como tarjeta y otras como transferencia: el desglose por método ya no casa con el banco.</div>
+  <div class="caja idea"><span class="tit">Para el detalle</span>Cómo se sube un extracto, cómo funcionan las propuestas verdes y ámbar de la conciliación, el arqueo de caja, las categorías de gasto, la tabla «tengo este gasto → lo meto aquí» y el cierre trimestral para la gestoría están en la <b>Guía económica</b>.</div>
+</section>
+
+<!-- ============================ CAPÍTULO 12 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">12</div><div><h2>Resúmenes y cifras</h2><div class="sub">Qué pantalla responde a qué pregunta, de dónde sale cada número y cómo no equivocarse al leerlo</div></div></div>
+
+  <h3>12.1 · Las herramientas comunes</h3>
+  <ul>
+    <li><b>Selector de periodo</b>: Día, Semana, Mes, Trimestre, Año, Últimos 7/30/90 días, Fechas libres. Inicio, Gerencia, Lo cobrado y Facturación de tienda abren en <b>Mes</b>.</li>
+    <li><b>Comparar</b>: «Frente al periodo anterior» (por defecto), «Frente al año pasado» o «Sin comparar». Es justo: el día 5 de octubre, «octubre» se compara con «del 1 al 5 de septiembre», no con septiembre entero.</li>
+    <li><b>Tarjeta de cifra</b>: valor, ⓘ y la variación «↗ 12,4 % frente a septiembre 2026» en verde si es buena noticia y en rojo si no (en Devoluciones y Cancelados, subir es malo). Si el periodo anterior fue 0 no se pinta variación; con bases muy pequeñas se dice «×61» en vez de «+5 992 %».</li>
+    <li>«<b>Actualizando…</b> Hasta que termine, las cifras son las del periodo de antes.» Espera a que desaparezca antes de leer o exportar.</li>
+  </ul>
+
+  <h3>12.2 · Las tres cifras que más se confunden</h3>
+  <figure>
+  <svg viewBox="0 52 680 198" width="100%">
+    <line x1="20" y1="120" x2="660" y2="120" stroke="#c9cfda" stroke-width="2"/>
+    <text x="20" y="150" class="t10 g">1 oct</text><text x="300" y="150" class="t10 g">31 oct</text><text x="600" y="150" class="t10 g">15 nov</text>
+    <rect x="20" y="104" width="300" height="32" fill="none" stroke="#2457c5" stroke-dasharray="3 3"/>
+    <text x="170" y="98" class="t10 b az mid">periodo elegido: octubre</text>
+    <circle cx="120" cy="120" r="9" fill="#2457c5"/><text x="120" y="124" class="t10 b w mid">P</text>
+    <circle cx="150" cy="120" r="9" fill="#6b3fc0"/><text x="150" y="124" class="t10 b w mid">D</text>
+    <circle cx="430" cy="120" r="9" fill="#1e8a4c"/><text x="430" y="124" class="t10 b w mid">C</text>
+    <text x="120" y="80" class="t10 mid">Pedido 10 oct</text><text x="150" y="66" class="t10 mid">ticket (fecha del pedido)</text>
+    <text x="430" y="98" class="t10 mid">Cobro 5 nov</text>
+
+    <rect x="4" y="160" width="216" height="84" rx="10" fill="#e8effc" stroke="#2457c5"/>
+    <text x="16" y="180" class="t12 b az">Vendido</text>
+    <text x="16" y="197" class="t10">Pedidos del periodo, con IVA y</text><text x="16" y="211" class="t10">envío, sin cancelados, − devuelto.</text>
+    <text x="16" y="230" class="t10 b">Cuenta en octubre</text>
+    <rect x="232" y="160" width="216" height="84" rx="10" fill="#efe8fb" stroke="#6b3fc0"/>
+    <text x="244" y="180" class="t12 b mo">Facturado</text>
+    <text x="244" y="197" class="t10">Base de tickets y facturas emitidos</text><text x="244" y="211" class="t10">en el CRM (fecha = la del pedido).</text>
+    <text x="244" y="230" class="t10 b">Cuenta en octubre (si se emitió)</text>
+    <rect x="460" y="160" width="216" height="84" rx="10" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="472" y="180" class="t12 b ve">Cobrado</text>
+    <text x="472" y="197" class="t10">Dinero que entró, por la fecha del</text><text x="472" y="211" class="t10">cobro, con IVA, sin propinas.</text>
+    <text x="472" y="230" class="t10 b">Cuenta en noviembre</text>
+  </svg>
+  <figcaption>Figura 19 · El mismo pedido cuenta en meses distintos según la cifra. Vendido ≠ Facturado ≠ Cobrado.</figcaption>
+  </figure>
+  <p>Y una cuarta: la <b>Facturación bruta</b> no son facturas emitidas: es lo vendido <b>sin IVA y sin el envío</b> (el envío se cobra al cliente y se paga a la agencia por lo mismo, así que no es venta; se enseña aparte: «Aparte, X € de envíos cobrados»). La pantalla <span class="ruta">Tienda › Facturación</span>, pese al nombre, también sale de los pedidos.</p>
+
+  <h3>12.3 · De dónde sale cada cifra</h3>
+  <figure class="fig-alta">
+  <svg viewBox="0 0 680 420" width="100%">
+    <text x="4" y="16" class="t11 b g">DE DÓNDE SALEN LOS DATOS</text>
+    <rect x="4" y="26" width="150" height="40" rx="8" fill="#e8effc" stroke="#2457c5"/><text x="79" y="44" class="t11 b az mid">Pedidos y líneas</text><text x="79" y="58" class="t10 mid">web, manuales, textil</text>
+    <rect x="4" y="76" width="150" height="40" rx="8" fill="#e5f4ec" stroke="#1e8a4c"/><text x="79" y="94" class="t11 b ve mid">Cobros</text><text x="79" y="108" class="t10 mid">por fecha del cobro</text>
+    <rect x="4" y="126" width="150" height="40" rx="8" fill="#efe8fb" stroke="#6b3fc0"/><text x="79" y="144" class="t11 b mo mid">Documentos</text><text x="79" y="158" class="t10 mid">tickets y facturas</text>
+    <rect x="4" y="176" width="150" height="40" rx="8" fill="#fdf1dc" stroke="#b26a00"/><text x="79" y="194" class="t11 b am mid">Ajustes</text><text x="79" y="208" class="t10 mid">coste/metro, gastos</text>
+    <rect x="4" y="226" width="150" height="40" rx="8" fill="#efe8fb" stroke="#6b3fc0"/><text x="79" y="244" class="t11 b mo mid">Almacén textil</text><text x="79" y="258" class="t10 mid">coste de lo que sale</text>
+    <rect x="4" y="276" width="150" height="40" rx="8" fill="#f6f7fa" stroke="#8a90a0"/><text x="79" y="294" class="t11 b mid">Compras · banco</text><text x="79" y="308" class="t10 mid">registradas / subidos</text>
+
+    <text x="196" y="16" class="t11 b g">CIFRA = CÁLCULO</text>
+    <g class="t10">
+    <rect x="196" y="26" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="45" class="t11"><tspan class="b az">Vendido</tspan> = totales (IVA y envío) de no cancelados − devuelto</text>
+    <rect x="196" y="60" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="79" class="t11"><tspan class="b az">Facturación bruta</tspan> = base − envío (sin IVA, sin portes) − parte devuelta</text>
+    <rect x="196" y="94" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="113" class="t11"><tspan class="b az">Metros</tspan> = suma de metros de no cancelados (las devoluciones no restan)</text>
+    <rect x="196" y="128" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="147" class="t11"><tspan class="b az">Ticket medio</tspan> = vendido ÷ nº de pedidos · <tspan class="b az">€ por metro</tspan> = bruta ÷ metros</text>
+    <rect x="196" y="162" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="181" class="t11"><tspan class="b ve">Cobrado</tspan> = cobros con fecha en el periodo (sin propinas)</text>
+    <rect x="196" y="196" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="215" class="t11"><tspan class="b ve">Pendiente de cobro</tspan> = total − cobrado de cada pedido · foto de HOY</text>
+    <rect x="196" y="230" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="249" class="t11"><tspan class="b am">Margen</tspan> = bruta − metros × coste/metro congelado − coste de la ropa</text>
+    <rect x="196" y="264" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="283" class="t11"><tspan class="b am">Beneficio estimado</tspan> = margen − gastos fijos del periodo (hasta hoy)</text>
+    <rect x="196" y="298" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="317" class="t11"><tspan class="b mo">IVA repercutido</tspan> = IVA de documentos emitidos (rectificativas restan)</text>
+    <rect x="196" y="332" width="480" height="30" rx="6" fill="#fff" stroke="#dfe3ea"/><text x="206" y="351" class="t11"><tspan class="b mo">IVA soportado</tspan> = IVA de compras REGISTRADAS en el CRM</text>
+    </g>
+    <path d="M154 46 H194" class="lna"/><path d="M154 96 C175 96 175 177 194 177" class="lnv"/><path d="M154 146 C175 146 175 313 194 313" class="lnm"/><path d="M154 196 C175 196 175 245 194 245" class="lnam"/><path d="M154 246 H194" class="lnm"/><path d="M154 296 C175 296 175 347 194 347" class="ln"/>
+    <rect x="4" y="376" width="672" height="40" rx="8" fill="#fdf1dc" stroke="#f3d9a8"/>
+    <text x="16" y="393" class="t10"><tspan class="b am">Margen ≠ beneficio.</tspan> El margen no resta alquiler, sueldos ni cuotas. El beneficio estimado sí (gastos de Gerencia › Ajustes).</text>
+    <text x="16" y="408" class="t10">El coste por metro es un estándar que pones tú, no una medida: si está bajo, todos los márgenes salen inflados.</text>
+  </svg>
+  <figcaption>Figura 20 · Las cifras principales de Inicio y Gerencia, su cálculo y de qué datos salen.</figcaption>
+  </figure>
+
+  <h3>12.4 · Inicio</h3>
+  <p>«Las cifras del periodo, de todas las tiendas.» <b>Solo tiendas: no incluye el textil.</b> Ocho tarjetas: <b>Vendido</b>, <b>Facturación bruta</b>, <b>Cobrado</b>, <b>Margen estimado</b>, <b>Ticket medio</b>, <b>Metros vendidos</b>, <b>Devoluciones</b> y <b>Cancelados</b>; gráficas <b>Ingresos por día</b> (o por mes) y <b>Top productos por metros</b>; <span class="btn">Exportar CSV</span>. Es la pantalla para un vistazo rápido de cómo va el mes en las webs y el mostrador. Inicio cuenta los pedidos web sin pagar como vendidos siempre.</p>
+
+  <h3>12.5 · Gerencia, pestaña a pestaña</h3>
+  <p>«Toda la empresa: tiendas y textil.» Filtros: periodo y comparar; <b>Tienda</b> (todas, cada una o «Textil personalizado»); <b>Canal</b> (Web, Manual, Textil); <b>Números</b>: <b>Total negocio</b>, <b>Documentado (A)</b> (pedidos con ticket o factura del CRM vigente) o <b>Sin documento (B)</b>. Arriba a la derecha, la insignia <b>«N sin documento»</b> (pedidos sin ticket ni factura, con enlace <b>Emitir</b> por tienda) y el botón <span class="btn">Resumen diario</span>.</p>
+  <table>
+    <tr><th style="width:20%">Pestaña</th><th style="width:40%">Qué pregunta responde</th><th>Lo más útil</th></tr>
+    <tr><td><b>Resumen</b></td><td>¿Cómo vamos? ¿Hay algo raro?</td><td><b>Avisos</b> (deudas de más de 60 días, caída de ventas del 20 % o más, web sin pagar, banco sin casar, proformas sin factura), Vendido, Cobrado, Pendiente de cobro, Margen, €/metro, <b>Beneficio estimado</b> y <b>Objetivos</b> («A este ritmo, X por delante/por detrás»).</td></tr>
+    <tr><td><b>Ventas</b></td><td>¿Qué tienda, canal y día vende más?</td><td>Por tienda, por canal, por día de la semana, productos más vendidos por metros.</td></tr>
+    <tr><td><b>Cobros y tesorería</b></td><td>¿Cuánto nos deben y cuánto debemos?</td><td>Días medios de cobro, deuda por antigüedad (30 / 60 / más de 60), por método, Caja, Banco, pagos pendientes a proveedores, anticipos.</td></tr>
+    <tr><td><b>Clientes</b></td><td>¿Quién compra y quién ha dejado de comprar?</td><td>Activos, Nuevos, Recurrentes, «El 80 % de las ventas», Quién más compra y <b>Clientes dormidos</b> (más de 60 días sin pedir).</td></tr>
+    <tr><td><b>Comercial</b></td><td>¿Convierten los presupuestos?</td><td>Enviados, Aceptados, Conversión, Días hasta el pedido, Esperando respuesta, «Los que más pueden entrar».</td></tr>
+    <tr><td><b>Producción</b></td><td>¿Qué hay en el taller y cuánto tardamos?</td><td>En el taller ahora, el que más espera, días hasta el envío (hasta el primer seguimiento).</td></tr>
+    <tr><td><b>Margen</b></td><td>¿Cuánto queda de cada venta?</td><td>Bruta, Coste, Margen, Margen sobre ventas; <b>El metro de DTF</b>: precio medio, coste medio y lo que queda de cada metro.</td></tr>
+    <tr><td><b>Resultados</b></td><td>¿Ganamos dinero?</td><td>Cuenta de resultados A · B · Total, Sociedades estimado, <b>Compras frente a lo estimado</b> (para revisar el coste por metro) e impuestos por trimestre (orientativos).</td></tr>
+    <tr><td><b>Fiscal</b></td><td>¿Cuánto IVA, según el CRM?</td><td>IVA repercutido, soportado, resultado orientativo, vendido sin factura y <b>Numeración de facturas</b> (huecos por serie).</td></tr>
+    <tr><td><b>Textil</b></td><td>¿Cómo va el textil y su almacén?</td><td>Vendido y margen textil, valor del almacén, por marca, cuenta del almacén y <b>Controles del almacén</b> (tienen que dar 0).</td></tr>
+    <tr><td><b>Ajustes</b></td><td>—</td><td>Configuración (capítulo 3).</td></tr>
+  </table>
+  <div class="caja ojo"><span class="tit">A y B no es «declarado / no declarado»</span>«A» quiere decir «tiene ticket o factura en el CRM»; «B», que aún no lo tiene. Como los documentos del CRM son internos, lo fiscal real lo lleva la gestoría. Toda venta debería acabar en A: B es lo pendiente de documentar. Todo lo fiscal de Gerencia es <b>orientativo</b>.</div>
+
+  <h3>12.6 · Resumen diario e Informe PDF para socios</h3>
+  <p>Botón <span class="btn">Resumen diario</span> en Gerencia. Se abre siempre en <b>Día (hoy)</b>; puedes cambiar el periodo dentro de la ventana. Tiene dos miradas separadas:</p>
+  <figure>
+  <svg viewBox="0 0 680 190" width="100%">
+    <text x="4" y="16" class="t11 b">Lunes</text><text x="174" y="16" class="t11 b">Martes</text><text x="344" y="16" class="t11 b">Miércoles</text>
+    <line x1="4" y1="24" x2="500" y2="24" stroke="#c9cfda"/>
+    <rect x="4" y="34" width="150" height="34" rx="6" fill="#e8effc" stroke="#2457c5"/><text x="14" y="55" class="t10">Entra pedido A · 4 m</text>
+    <rect x="4" y="74" width="150" height="34" rx="6" fill="#e8effc" stroke="#2457c5"/><text x="14" y="95" class="t10">Entra pedido B · 6 m ☾</text>
+    <rect x="174" y="34" width="150" height="34" rx="6" fill="#e5f4ec" stroke="#1e8a4c"/><text x="184" y="55" class="t10">Sale A y B (Enviado)</text>
+    <rect x="344" y="34" width="150" height="34" rx="6" fill="#e8effc" stroke="#2457c5"/><text x="354" y="55" class="t10">Entra pedido C · 3 m</text>
+    <path d="M154 51 H172" class="ln" marker-end="url(#fl)"/><path d="M154 91 C164 91 164 60 172 56" class="ln" marker-end="url(#fl)"/>
+    <rect x="4" y="122" width="490" height="62" rx="8" fill="#f6f7fa" stroke="#dfe3ea"/>
+    <text x="14" y="142" class="t11"><tspan class="b az">Lo pedido</tspan>: lunes 10 m (2 pedidos) · martes 0 m · miércoles 3 m</text>
+    <text x="14" y="160" class="t11"><tspan class="b ve">Lo realizado</tspan>: lunes 0 m · martes 10 m · miércoles 0 m</text>
+    <text x="14" y="176" class="t10 g">El objetivo de metros: Gerencia usa lo pedido; el Resumen diario, lo realizado.</text>
+    <rect x="514" y="6" width="162" height="178" rx="10" fill="#fff" stroke="#c9cfda"/>
+    <text x="526" y="28" class="t11 b">Máquina</text>
+    <text x="526" y="46" class="t10">Capacidad = m/h ×</text><text x="526" y="60" class="t10">horas × días laborables</text><text x="526" y="74" class="t10">hasta hoy (sin festivos)</text>
+    <text x="526" y="96" class="t10">Uso = realizado ÷</text><text x="526" y="110" class="t10">capacidad</text>
+    <text x="526" y="132" class="t10 ro b">≥ 90 %: no cabe más</text>
+    <text x="526" y="148" class="t10 g b">&lt; 50 %: hay sitio</text>
+    <text x="526" y="170" class="t10">☾ = entró tras el corte</text>
+  </svg>
+  <figcaption>Figura 21 · «Lo pedido» frente a «Lo realizado»: los metros cuentan el día que entran o el día que salen.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Página «Resumen»</b>: Pedidos, Metros realizados, Facturado (base de documentos emitidos), Cobrado (tiendas, web y textil), <b>Margen neto</b>, <b>Margen sin envíos</b>, la tarjeta <b>Máquina</b>, la tabla Por negocio, <b>Qué mirar</b> (hasta 5 avisos) y <b>Resultado</b> (margen neto − gastos fijos = Beneficio; objetivos).</li>
+    <li><b>Página «Desglose»</b>: producción (en cola al cerrar, fuera de hora, del pedido a realizado), dinero (hechos sin cobrar, precio medio y margen por metro), gastos uno a uno, cada negocio y día a día. Al final, solo admin: <b>Recuperar fechas de WooCommerce</b>.</li>
+    <li><b>Margen neto</b> = margen sin envíos + envío cobrado − lo que cobra la agencia (el coste real apuntado en el Tracking, o 5 € estimados si falta). Por eso el «Beneficio» del Resumen diario <b>no coincide</b> con el «Beneficio estimado» de Gerencia, que supone el envío neutro.</li>
+    <li><span class="btn">Informe PDF para socios</span>: descarga un PDF con el mismo periodo y cifras (diario, semanal, mensual, trimestral o anual): resumen ejecutivo, cuenta del periodo, en qué se fue el dinero, almacén textil y una ficha por negocio. Lleva la razón social y el CIF de Datos de la empresa.</li>
+  </ul>
+  <p>Avisos típicos de «Qué mirar»: «Margen neto negativo…», «La máquina ha ido al X % de su capacidad: no cabe más sin alargar la jornada.», «Quedan X m en cola, más de un día de máquina», «N pedidos hechos y sin cobrar del todo», «Los envíos cuestan X € más de lo que se cobra por ellos.», «N pedidos con envío sin coste real apuntado: se estiman a 5,00 € cada uno.», «N pedidos enviados sin fecha de realizado…».</p>
+
+  <h3>12.7 · Resumen y Facturación de cada tienda</h3>
+  <ul>
+    <li><span class="ruta">Tienda › Resumen</span>: sin selector de periodo. «Este mes» (Vendido, Pedidos, Metros, Margen estimado) y «Desde el principio» (Pedidos y Metros <b>incluidos cancelados</b>, Facturado y número de Facturas, este último con borradores y anulados). Úsalo como vistazo, no para cuadrar: con más de 1.000 pedidos o facturas, «Desde el principio» se queda corto.</li>
+    <li><span class="ruta">Tienda › Facturación</span>: «Vista contable filtrada a &lt;tienda&gt;». Las ocho tarjetas de Inicio para esa tienda y el desglose Bruta + Envíos cobrados + IVA = Total. <b>Sale de los pedidos, no de las facturas emitidas</b> (para eso, Facturas o Gerencia › Fiscal).</li>
+  </ul>
+
+  <h3>12.8 · Exportar para analizar</h3>
+  <p>En Pedidos, <span class="btn">Exportar</span> › <b>Para análisis</b> genera un fichero con todos los pedidos (de una tienda o de todas, de todas las fechas) con líneas, cobros y documentos, más un LEEME con definiciones y comprobaciones. Está pensado para dárselo a Claude y hacerle preguntas («¿qué clientes han bajado su consumo este trimestre?»). No lleva textil ni datos de contacto.</p>
+
+  <h3>12.9 · Errores de lectura típicos</h3>
+  <table>
+    <tr><th style="width:42%">Si ves…</th><th>Es porque…</th></tr>
+    <tr><td>Vendido de Gerencia menor que el de Inicio</td><td>Gerencia tiene apagado «Contar los pedidos web sin pagar» (Inicio los cuenta siempre), o Inicio no incluye textil y Gerencia sí.</td></tr>
+    <tr><td>Lo cobrado no coincide con el Cobrado de Gerencia</td><td>Lo cobrado abre por <b>Fecha del pedido</b>; Inicio y Gerencia van por fecha del cobro. Cambia el interruptor a «Fecha del cobro».</td></tr>
+    <tr><td>A fin de mes, Vendido y Cobrado web no cuadran por poco</td><td>El cobro de un pedido web de las últimas horas del último día cae al día siguiente (la hora de la web se pasa a hora de España).</td></tr>
+    <tr><td>Margen muy alto</td><td>Coste por metro bajo o sin poner; pedidos textil que aún no han salido del almacén (van sin coste).</td></tr>
+    <tr><td>Objetivo de metros con % distinto en Gerencia y en el Resumen diario</td><td>Gerencia mide metros vendidos; el Resumen diario, metros realizados.</td></tr>
+    <tr><td>Pendiente de cobro, taller o dormidos no cambian con el periodo</td><td>Son fotos de hoy.</td></tr>
+    <tr><td>Metros con «≈»</td><td>Son estimados con el precio del metro (revisa que esté bien en Gerencia › Ajustes).</td></tr>
+    <tr><td>Banco con entradas o salidas cortas</td><td>Falta subir algún extracto: el CRM solo sabe lo que se ha subido.</td></tr>
+    <tr><td>Pedido web con reembolso parcial que sale como pendiente</td><td>El cobro web es neto de la devolución pero lo pendiente se compara con el total: es un pendiente aparente. Compruébalo en la web.</td></tr>
+  </table>
+
+  <h3>12.10 · Quién debería mirar qué, y cada cuánto</h3>
+  <table class="comp">
+    <tr><th style="text-align:left">Pantalla</th><th>Mostrador / producción</th><th>Administración</th><th>Dueño / gerencia</th></tr>
+    <tr><td style="text-align:left">Ventas › Pedidos (filtrado)</td><td>Varias veces al día</td><td>Diario</td><td>—</td></tr>
+    <tr><td style="text-align:left">Cobros pendientes</td><td>Diario</td><td>Semanal</td><td>Mensual</td></tr>
+    <tr><td style="text-align:left">Gerencia › Producción</td><td>Diario</td><td>—</td><td>Semanal</td></tr>
+    <tr><td style="text-align:left">Resumen diario</td><td>Al cerrar el día</td><td>—</td><td>Diario o semanal</td></tr>
+    <tr><td style="text-align:left">Inicio</td><td>—</td><td>Semanal</td><td>Semanal</td></tr>
+    <tr><td style="text-align:left">Gerencia › Resumen y avisos</td><td>—</td><td>Semanal</td><td>Semanal</td></tr>
+    <tr><td style="text-align:left">Gerencia › Clientes y Comercial</td><td>—</td><td>—</td><td>Quincenal</td></tr>
+    <tr><td style="text-align:left">Lo cobrado (fecha del cobro), Conciliación, Caja</td><td>—</td><td>Semanal / mensual</td><td>Mensual</td></tr>
+    <tr><td style="text-align:left">Gerencia › Margen, Resultados, Fiscal, Textil</td><td>—</td><td>Mensual</td><td>Mensual</td></tr>
+    <tr><td style="text-align:left">Informe PDF para socios</td><td>—</td><td>—</td><td>Mensual y trimestral</td></tr>
+  </table>
+</section>
+
+<!-- ============================ CAPÍTULO 13 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">13</div><div><h2>Rutinas por perfil</h2><div class="sub">Qué hacer cada día, cada semana, cada mes y cada trimestre para que todo cuadre</div></div></div>
+  <p class="lead">Si cada persona hace su parte en su momento, a fin de mes no hay sorpresas. Estas listas se pueden imprimir y dejar junto al ordenador.</p>
+
+  <figure>
+  <svg viewBox="0 0 680 214" width="100%">
+    <rect x="4" y="6" width="160" height="180" rx="12" fill="#e8effc" stroke="#2457c5"/>
+    <text x="84" y="28" class="t13 b az mid">Cada día</text>
+    <text x="16" y="52" class="t10">· Sincronizar tiendas</text><text x="16" y="70" class="t10">· Cola del taller</text><text x="16" y="88" class="t10">· Estados y tracking</text><text x="16" y="106" class="t10">· Cobros en el momento</text><text x="16" y="124" class="t10">· Tickets de lo cobrado</text><text x="16" y="142" class="t10">· Resumen diario</text>
+    <rect x="176" y="6" width="160" height="180" rx="12" fill="#e5f4ec" stroke="#1e8a4c"/>
+    <text x="256" y="28" class="t13 b ve mid">Cada semana</text>
+    <text x="188" y="52" class="t10">· Cobros pendientes</text><text x="188" y="70" class="t10">· Facturas de compra</text><text x="188" y="88" class="t10">· Arqueo de caja</text><text x="188" y="106" class="t10">· Gerencia › avisos</text><text x="188" y="124" class="t10">· Presupuestos abiertos</text><text x="188" y="142" class="t10">· Duplicados, ¿1.er pedido?</text>
+    <rect x="348" y="6" width="160" height="180" rx="12" fill="#fdf1dc" stroke="#b26a00"/>
+    <text x="428" y="28" class="t13 b am mid">Cada mes</text>
+    <text x="360" y="52" class="t10">· Sincronizar ahora</text><text x="360" y="70" class="t10">· «N sin documento» a 0</text><text x="360" y="88" class="t10">· PDF que faltan</text><text x="360" y="106" class="t10">· Extracto y conciliación</text><text x="360" y="124" class="t10">· Margen y Resultados</text><text x="360" y="142" class="t10">· Informe para socios</text>
+    <rect x="520" y="6" width="156" height="180" rx="12" fill="#fbe7e5" stroke="#c0352b"/>
+    <text x="598" y="28" class="t13 b ro mid">Cada trimestre</text>
+    <text x="532" y="52" class="t10">· Cola de compras vacía</text><text x="532" y="70" class="t10">· Proformas explicadas</text><text x="532" y="88" class="t10">· Gerencia › Fiscal</text><text x="532" y="106" class="t10">· Archivo → ZIP</text><text x="532" y="124" class="t10">· Extracto a la gestoría</text><text x="532" y="142" class="t10">· Coste por metro</text><text x="532" y="160" class="t10">· Controles almacén = 0</text>
+    <text x="340" y="206" class="t11 g mid">Cuanto más a la derecha, más lo hace administración o el dueño.</text>
+  </svg>
+  <figcaption>Figura 22 · El calendario de tareas en un vistazo.</figcaption>
+  </figure>
+
+  <div class="rutina">
+    <h4><span class="etq e-editor">Editor</span> Mostrador y producción · cada día</h4>
+    <ul class="check">
+      <li><b>Al abrir</b>: en cada tienda, <span class="ruta">Pedidos</span> › <span class="btn">Sincronizar</span> (repite si dice «Queda por traer»). Lee los avisos amarillos.</li>
+      <li>Revisa los pedidos nuevos: metros con «≈» que parezcan raros, «¿1.er pedido?» y pedidos sin dirección si van a enviarse.</li>
+      <li>Abre la cola del taller: <span class="ruta">Ventas › Pedidos</span>, Estado = Procesando (o Pendiente en manuales). Los que tienen ☾ entraron tras el corte.</li>
+      <li>Ve cambiando estados: Imprimiendo → Listo. Al enviar: <b>Tracking</b> primero y después <b>Enviado</b>.</li>
+      <li>En mostrador: pedido manual (o confirmar presupuesto) y <b>cobro en el momento</b>, con el método real. El efectivo, siempre con su concepto de caja.</li>
+      <li>Textil: entregar (Enviado/Entregado) solo cuando la ropa sale de verdad.</li>
+      <li><b>Al cerrar</b>: <span class="ruta">Cobros pendientes</span> filtrado por «Pedido manual»: ¿algo cobrado sin registrar? Después, <span class="btn">Tickets pendientes</span> en cada tienda.</li>
+      <li>Echa un vistazo al <span class="btn">Resumen diario</span>: metros realizados, en cola y «Qué mirar».</li>
+    </ul>
+  </div>
+
+  <div class="rutina">
+    <h4><span class="etq e-editor">Editor</span> Administración y números · cada semana</h4>
+    <ul class="check">
+      <li><span class="ruta">Cobros pendientes › Pedidos</span>: reclamar lo de más de 30 días (rojo). Comprobar que los «Web (sin pagar)» siguen siéndolo.</li>
+      <li><span class="ruta">Facturas de compra</span> y <span class="ruta">Textil › Compras</span>: subir lo recibido, revisar y registrar. Vaciar «Por revisar».</li>
+      <li><span class="ruta">Caja</span>: arqueo (ver la Guía económica): lo que dice la caja frente a lo contado.</li>
+      <li>Documentos: <span class="btn">Facturar</span> o <span class="btn">Tickets pendientes</span> con lo que haya quedado; los dudosos, uno a uno.</li>
+      <li>Clientes: revisar «Posibles duplicados» y resolver los «¿1.er pedido?».</li>
+      <li>Presupuestos: pasar a Enviado los mandados, a Rechazado los perdidos; confirmar los aceptados.</li>
+    </ul>
+  </div>
+
+  <div class="rutina">
+    <h4><span class="etq e-admin">Admin</span> Cierre de mes</h4>
+    <ul class="check">
+      <li><span class="btn">Sincronizar ahora</span> en cada tienda (trae cancelaciones y devoluciones del mes).</li>
+      <li>Gerencia con el mes cerrado: la insignia <b>«N sin documento»</b> debería ser 0 (o estar explicada). Usa <b>Emitir</b>.</li>
+      <li>En Facturas de cada tienda y del textil: <span class="btn">Generar los que faltan</span> (PDF) y ✓ <b>Marcar como pagada</b> las facturas cobradas.</li>
+      <li>Subir el extracto del banco y conciliar; revisar «Para resolver».</li>
+      <li><span class="ruta">Lo cobrado</span> con «Fecha del cobro» y «Por método»: efectivo frente a Caja; tarjeta, transferencia y web frente al banco.</li>
+      <li>Revisar en el Tracking que los envíos llevan su coste real (admin).</li>
+      <li>Gerencia › Margen y Resultados; enviar el <b>Informe PDF para socios</b> del mes.</li>
+    </ul>
+  </div>
+
+  <div class="rutina">
+    <h4><span class="etq e-admin">Admin</span> Dueño / gerencia · cada trimestre</h4>
+    <ul class="check">
+      <li>Cola de Facturas de compra vacía y compras sin fichero completadas; proformas sin factura explicadas.</li>
+      <li>Gerencia › Fiscal con el trimestre: anotar IVA repercutido, soportado y resultado orientativo para contrastar con la gestoría. Revisar «Numeración de facturas»: «Sin huecos».</li>
+      <li><span class="ruta">Dinero › Archivo</span> (periodo Trimestre) › <span class="btn">Descargar PDFs</span>; enviar el ZIP a la gestoría con el extracto bancario.</li>
+      <li>Gerencia › Resultados › <b>Compras frente a lo estimado</b>: si lo comprado es bastante mayor durante meses, subir el coste por metro.</li>
+      <li>Gerencia › Textil: Controles del almacén a 0; recuento físico de las prendas principales.</li>
+      <li>Revisar objetivos, gastos fijos y, en Usuarios, que cada persona tiene el nivel que le toca.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================ CAPÍTULO 14 ============================ -->
+<section class="capitulo faq">
+  <div class="cab-capitulo"><div class="num-capitulo">14</div><div><h2>Problemas frecuentes y soluciones</h2><div class="sub">Síntoma → por qué pasa → qué hacer</div></div></div>
+
+  <h3>Sincronización y pedidos web</h3>
+  <div class="q"><h4>Un pedido de la web no aparece en el CRM</h4><p>Nadie ha sincronizado desde que entró, o la sincronización se quedó a medias. Entra en la tienda › Pedidos › <span class="btn">Sincronizar</span> hasta que no diga «Queda por traer», o usa <span class="btn">Sincronizar ahora</span> en Ajustes. Si da error, mira el capítulo 4.3.</p></div>
+  <div class="q"><h4>Puse «Imprimiendo» o «Listo» a un pedido web y ha vuelto a «Procesando»</h4><p>La web solo conoce «processing» y «completed»; al sincronizar se reescribe el estado. Es normal. Si os molesta, usad esos estados solo durante el día y fijaos en la fecha «realizado» al pasar a Enviado.</p></div>
+  <div class="q"><h4>Cambié el estado y solo salió «Estado actualizado» (sin «sincronizado con WooCommerce»)</h4><p>No llegó a la web (sin credenciales, sincronización apagada o error). Cámbialo también en la web; si no, la próxima sincronización lo deshará.</p></div>
+  <div class="q"><h4>Edité un pedido web y mis cambios han desaparecido</h4><p>La web manda en sus pedidos: al sincronizar se reescriben importes y líneas. Cambia el pedido en WooCommerce y sincroniza.</p></div>
+  <div class="q"><h4>Un pedido ha desaparecido del CRM</h4><p>Lo borraron en la web y un administrador sincronizó: el CRM borra los que ya no están (salvo los que tienen factura, que se avisan). Si no debía borrarse, recupéralo en la web.</p></div>
+
+  <h3>Metros y cifras</h3>
+  <div class="q"><h4>Los metros de un pedido web son raros o llevan «≈»</h4><p>La web no mandó la longitud y se estimó con el precio del metro. Usa el diagnóstico «Qué trae WooCommerce en las líneas de un pedido» (Ajustes de la tienda) y revisa el <b>Precio del metro</b> de Gerencia › Ajustes: debe ser el precio real sin IVA de la web.</p></div>
+  <div class="q"><h4>Un pedido manual de camisetas suma metros</h4><p>En un pedido manual de tienda se suman todas las cantidades como metros. Las prendas van en el módulo Textil.</p></div>
+  <div class="q"><h4>El margen sale «—» o altísimo</h4><p>Faltan los costes por metro en Datos de la empresa, o hay pedidos textil sin entregar (van sin coste). Configura los costes y entrega los pedidos al salir.</p></div>
+  <div class="q"><h4>Las cifras de dos pantallas no coinciden</h4><p>Repasa el capítulo 12.9: fecha del pedido frente a fecha del cobro, textil incluido o no, pedidos web sin pagar, envío neutro frente a coste real.</p></div>
+
+  <h3>Clientes</h3>
+  <div class="q"><h4>Un cliente está duplicado</h4><p>Pasa si compró con otro email o en otra tienda. Aún no hay fusión: elige la ficha buena, anota «Duplicada de…» en la otra y no la borres (sus pedidos se quedarían sin cliente).</p></div>
+  <div class="q"><h4>Un pedido no tiene cliente (o sale «sin ficha»)</h4><p>Se creó escribiendo solo el nombre, o se borró su ficha. Edita el pedido y elige la ficha. Para los web, <span class="btn">Sincronizar clientes</span> da ficha a los que nunca la tuvieron.</p></div>
+  <div class="q"><h4>La factura sale sin NIF</h4><p>La ficha no lo tiene y la web no lo mandó. Ponlo en la ficha antes de emitir; si ya se emitió como ticket, <b>Canjear por factura</b>.</p></div>
+
+  <h3>Cobros y documentos</h3>
+  <div class="q"><h4>Me equivoqué al registrar un cobro</h4><p>Un cobro no se edita: un administrador lo borra (si era efectivo, se borra también de Caja) y se registra de nuevo.</p></div>
+  <div class="q"><h4>Emití ticket y el cliente quiere factura</h4><p><b>Canjear por factura</b> en Facturas, con su NIF. No anules el ticket.</p></div>
+  <div class="q"><h4>Emití el documento equivocado o con datos mal</h4><p>Si es el último de la serie, un administrador puede borrarlo. Si no, <b>Anular con una rectificativa</b> y emitir otro desde el pedido.</p></div>
+  <div class="q"><h4>«El pedido ya tiene el documento X»</h4><p>Un pedido solo admite un documento vigente. Para cambiarlo, rectifica el que tiene y vuelve a emitir.</p></div>
+  <div class="q"><h4>El botón «Cobrado» de Cobros pendientes › Facturas no hace nada (o da error de permisos)</h4><p>Es un fallo conocido. Marca la factura pagada con el ✓ de <span class="ruta">Tienda › Facturas</span>.</p></div>
+  <div class="q"><h4>Una factura textil no tiene PDF</h4><p>La emitió un editor: solo un administrador puede generar ese PDF. Que un admin la abra o use «Generar los que faltan».</p></div>
+
+  <h3>Accesos y usuarios</h3>
+  <div class="q"><h4>Alguien no puede entrar</h4><p>¿Escribió mal 5 veces? Espera 15 minutos. ¿Olvidó la contraseña? El admin le genera un enlace con la llave en Usuarios. ¿Está desactivado? Lo reactiva el admin.</p></div>
+  <div class="q"><h4>«El enlace ha caducado o ya se ha usado»</h4><p>Los enlaces sirven una vez y caducan en unas horas. Pide otro.</p></div>
+  <div class="q"><h4>No veo el botón para hacer algo</h4><p>Tu nivel no lo permite (mira la franja de arriba). Pídeselo a un editor o a un admin, o que el admin cambie tu nivel.</p></div>
+
+  <h3>Textil</h3>
+  <div class="q"><h4>«Stock insuficiente» al guardar un pedido</h4><p>Lo disponible ya está reservado por otros pedidos o falta registrar una compra. Revisa Stock (Reservado) y la cola de Compras.</p></div>
+  <div class="q"><h4>El stock no coincide con lo que hay en la estantería</h4><p>Haz un <b>Recuento físico</b> con motivo. Revisa antes pedidos marcados entregados por adelantado y compras sin registrar.</p></div>
+  <div class="q"><h4>Una prenda sale «Repetida»</h4><p>Se creó una variante nueva al registrar una compra sin casar. Un administrador la fusiona con la buena.</p></div>
+</section>
+
+<!-- ============================ CAPÍTULO 15 ============================ -->
+<section class="capitulo">
+  <div class="cab-capitulo"><div class="num-capitulo">15</div><div><h2>Sacarle el máximo partido</h2><div class="sub">Trucos y buenas prácticas</div></div></div>
+  <div class="dos">
+    <div class="caja truco" style="margin:0"><span class="tit">Enlaces guardados</span>Los filtros y el periodo van en la dirección. Guarda en favoritos «Pedidos · Procesando», «Cobros pendientes · Pedido manual» o «Gerencia · Producción» y abre cada vista con un clic. Y mándale a un compañero el enlace exacto de lo que quieres que mire.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Lee el ⓘ</span>Cada cifra explica qué es y cómo se calcula. Antes de sacar una conclusión de un número, pasa el ratón por su ⓘ.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Comparar frente al año pasado</span>Para ver estacionalidad (verano, campañas), cambia a «Frente al año pasado». El periodo en curso se compara con el mismo trozo.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Clientes dormidos</span>En Gerencia › Clientes, los que llevan más de 60 días sin pedir, ordenados por lo que han comprado. Es tu lista de llamadas comerciales.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Los que más pueden entrar</span>Gerencia › Comercial ordena los presupuestos esperando respuesta por importe. Empieza la semana llamando a los tres primeros.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">La máquina dice si vender más</span>Uso por debajo del 50 % durante semanas: hay sitio para campañas. Por encima del 90 %: alargar jornada o subir precio.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Coste real del envío</span>Apuntarlo en el Tracking (admin) convierte el Margen neto en real. El aviso «Los envíos cuestan X € más de lo que se cobra» te dice si hay que subir los portes.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Apodo del cliente</span>El campo Apodo sirve para buscar («el de los clubes»). Úsalo para los clientes que en el taller se conocen por otro nombre.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Lector de códigos en el textil</span>En Stock, escanear un EAN abre directamente la talla. Y selecciona varias tallas para crear un presupuesto en un clic.</div>
+    <div class="caja truco" style="margin:0"><span class="tit">Pregúntale a Claude</span>Exporta «Para análisis» y pide preguntas abiertas: tendencias por cliente, días flojos, productos que caen. El fichero ya lleva las definiciones.</div>
+  </div>
+  <h3>Diez buenas prácticas que lo cambian todo</h3>
+  <ol class="pasos">
+    <li><b>Sincronizar cada mañana</b> y antes de cualquier cierre.</li>
+    <li><b>Cobro en el momento</b>, con el método real y la fecha real. El efectivo, siempre por el pedido.</li>
+    <li><b>Un criterio para el Bizum</b> (por ejemplo, Transferencia) y que todo el equipo lo use.</li>
+    <li><b>Cada pedido con su ficha de cliente</b>; buscar antes de crear.</li>
+    <li><b>Tracking y Enviado</b> el mismo día que sale el paquete.</li>
+    <li><b>Documento de todo lo vendido</b>: «N sin documento» a 0 cada mes.</li>
+    <li><b>Corregir con rectificativa o canje</b>, nunca con una factura manual de más.</li>
+    <li><b>Cambiar pedidos web en la web</b>, no en el CRM.</li>
+    <li><b>Toda prenda entra por su factura</b> en Textil › Compras, casando línea a línea.</li>
+    <li><b>Revisar la configuración</b> (coste por metro, precio del metro, objetivos) cada trimestre.</li>
+  </ol>
+</section>
+
+<!-- ============================ CAPÍTULO 16 ============================ -->
+<section class="capitulo anexo">
+  <div class="cab-capitulo"><div class="num-capitulo">16</div><div><h2>Anexo: lo que aún no hace la app</h2><div class="sub">Huecos y cosas a medias que no son económicos, por impacto, con el apaño mientras tanto</div></div></div>
+  <p>Esta lista es honesta a propósito: mejor saber dónde están los límites que descubrirlos con un descuadre. Los huecos de caja, banco, compras y cifras contables están en la Guía económica. La referencia en letra pequeña es para quien mantenga la aplicación.</p>
+
+  <h3>Impacto alto</h3>
+  <table>
+    <tr><th style="width:36%">Qué falta o falla</th><th>Qué hacer mientras</th></tr>
+    <tr><td><b>Sincronización solo por botón</b>: sin tarea programada ni avisos automáticos de la web.<div class="ref">src/lib/woocommerce.functions.ts:956</div></td><td>Rutina diaria: sincronizar al abrir y antes de cerrar.</td></tr>
+    <tr><td><b>Los estados de producción de los pedidos web no se conservan</b> (Imprimiendo, Listo y Enviado vuelven a Procesando o Completado al sincronizar).<div class="ref">src/lib/pedidos.functions.ts:25-33 · src/lib/woocommerce.functions.ts:549-557</div></td><td>Usarlos como apoyo durante el día; la fecha «realizado» sí se conserva.</td></tr>
+    <tr><td><b>Editar un pedido</b> (web o con documento o cobros) no avisa: los web se reescriben al sincronizar y el documento ya emitido no cambia.<div class="ref">src/components/PedidosTable.tsx · src/lib/pedidos.functions.ts (updatePedido)</div></td><td>Pedidos web: cambiar en la web. Con documento: rectificar y volver a emitir.</td></tr>
+    <tr><td><b>Metros de los pedidos manuales</b> = suma de todas las cantidades; las líneas se guardan como «ud».<div class="ref">src/lib/pedidos.functions.ts:213, :252, :379, :392</div></td><td>En tienda, pedidos manuales solo de metros; prendas en Textil.</td></tr>
+    <tr><td><b>Cupones de la web no llegan a las líneas</b> (se guarda el importe antes de descuento) y todas las líneas web van al 21 %: el ticket o factura puede salir por más de lo cobrado.<div class="ref">src/lib/woocommerce.functions.ts:757-770</div></td><td>En pedidos con cupón, comprobar el documento antes de emitir.</td></tr>
+    <tr><td><b>Sin fusión de clientes</b> ni regla de «un email, una ficha».<div class="ref">src/components/clientes/PantallaClientes.tsx:392-436 · CLAUDE.md «Clientes globales: A medias»</div></td><td>Ficha buena + nota en la duplicada; no borrar.</td></tr>
+    <tr><td><b>Textil: cambiar el estado desde la lista mueve stock sin pedir confirmación.</b><div class="ref">src/routes/panel/textil/pedidos.tsx:367-371</div></td><td>Cambiar estados con calma; si te equivocas, volver al anterior (deja rastro).</td></tr>
+    <tr><td><b>Textil: una línea sin casar se registra como variante nueva</b> sin preguntar.<div class="ref">src/components/compras/RevisarCompraTextil.tsx:516-522, :1121-1129</div></td><td>No registrar con líneas «Sin casar» o con sugerencias sin pulsar.</td></tr>
+    <tr><td><b>Textil: un editor emite pero no puede generar el PDF</b> de la factura.<div class="ref">src/lib/textil.functions.ts:1317-1318</div></td><td>Un admin genera los PDF pendientes.</td></tr>
+    <tr><td><b>Textil: guardar o confirmar un pedido no es «todo o nada»</b>; un fallo a mitad puede dejarlo a medias (y una línea con cantidad 0 provoca ese fallo).<div class="ref">src/lib/textil.functions.ts:1120-1176, :829-859, :912-985, :497-503</div></td><td>No guardar líneas a 0; si sale un error, abrir el pedido y revisarlo.</td></tr>
+  </table>
+
+  <h3>Impacto medio</h3>
+  <table>
+    <tr><th style="width:36%">Qué falta o falla</th><th>Qué hacer mientras</th></tr>
+    <tr><td><b>Sin pantalla de auditoría</b>: todo se registra, pero no se puede consultar desde la app.<div class="ref">tabla auditoria; ninguna ruta en src/ la lee</div></td><td>Pedirlo a quien mantenga la base (Supabase).</td></tr>
+    <tr><td><b>Sin «¿Olvidaste tu contraseña?»</b> y las invitaciones no se envían por correo.<div class="ref">src/routes/auth.tsx · src/lib/usuarios.functions.ts:209</div></td><td>El admin genera el enlace con la llave y lo manda él.</td></tr>
+    <tr><td><b>Sin pantalla del transportista</b> (plantilla de seguimiento, clave).<div class="ref">src/integrations/supabase/types.ts:1209 (tienda_seguimiento_config)</div></td><td>Escribir el seguimiento a mano en cada pedido.</td></tr>
+    <tr><td><b>Se puede emitir documento de un pedido cancelado</b> desde «Ticket o factura».<div class="ref">src/lib/facturas.functions.ts:634-693 · src/components/PedidosTable.tsx:1046-1056</div></td><td>No hacerlo; si pasa, rectificar.</td></tr>
+    <tr><td><b>Borrar un pedido con documento</b> deja el documento sin pedido, sin aviso (también en textil).<div class="ref">src/components/PedidosTable.tsx:932 · migración 20261004100100:103-104</div></td><td>Rectificar antes de borrar; mejor cancelar.</td></tr>
+    <tr><td><b>La ficha no guarda si el cliente es particular o profesional</b>: la pregunta sale cada vez.<div class="ref">src/components/clientes/PantallaClientes.tsx:460 en adelante</div></td><td>Contestar en cada documento; anotarlo en Notas.</td></tr>
+    <tr><td><b>«Nueva factura» solo ofrece clientes dados de alta en esa tienda.</b><div class="ref">src/routes/panel/tiendas/$tiendaId/facturas.tsx:589</div></td><td>Escribir los datos a mano.</td></tr>
+    <tr><td><b>Pedido desde presupuesto de tienda</b>: fecha de la confirmación y sin direcciones.<div class="ref">supabase/migrations/20261002100000_confirmar_presupuestos.sql:89-96</div></td><td>Editar el pedido y añadir la dirección.</td></tr>
+    <tr><td><b>Presupuestos textil</b>: no caducan solos; «Aceptado» a mano no crea pedido; el editor no tiene email ni dirección del cliente sin ficha.<div class="ref">src/dominio/estados.ts:61 · src/routes/panel/textil/presupuestos.tsx:386-404, :617-701</div></td><td>Rechazar a mano los vencidos; usar «Confirmar»; dar de alta la ficha.</td></tr>
+    <tr><td><b>Marcas textiles</b>: el diálogo de editar puede abrir con los datos de otra marca; las inactivas siguen saliendo en los desplegables.<div class="ref">src/routes/panel/textil/ajustes.tsx:227-234, :69-82 · presupuestos.tsx:673 · pedidos.tsx:651</div></td><td>Al editar una marca, comprobar el nombre antes de guardar.</td></tr>
+    <tr><td><b>Pedido textil con envío</b>: el total que se ve al editar no incluye el envío; el guardado sí.<div class="ref">src/components/textil/LineasEditor.tsx:89 · src/lib/textil.functions.ts:1101</div></td><td>Sumar mentalmente envío + 21 %; mirar el total en la lista.</td></tr>
+    <tr><td><b>Fechas por defecto en hora universal</b> en textil y caja: entre medianoche y las 1-2 h puede salir el día anterior.<div class="ref">presupuestos.tsx:600 · pedidos.tsx:585 · textil.functions.ts:785, :930, :1847</div></td><td>Revisar la fecha si se trabaja de madrugada.</td></tr>
+    <tr><td><b>Precio del metro y % de Sociedades los cambia un editor.</b><div class="ref">src/lib/gerencia.functions.ts:160-161</div></td><td>Acordar que solo los toque el dueño.</td></tr>
+    <tr><td><b>Tres estados del pedido (pago, producción, envío) a medias</b>: la app sigue usando un único estado.<div class="ref">CLAUDE.md «Tres estados de pedido: A medias» · H15 textil.functions.ts:1078</div></td><td>Pago se mira en Cobrado/Pendiente; producción y envío, en el estado.</td></tr>
+    <tr><td><b>Sin devoluciones de pedidos manuales</b> (solo llegan las de la web).<div class="ref">análisis de ventas §2.9</div></td><td>Rectificar el documento y, si se devolvió dinero, borrar el cobro (admin).</td></tr>
+  </table>
+
+  <h3>Impacto bajo (pero conviene saberlo)</h3>
+  <table>
+    <tr><th style="width:36%">Qué</th><th>Qué hacer mientras</th></tr>
+    <tr><td>Resumen de tienda «Desde el principio» sin paginar e incluyendo cancelados y borradores.<div class="ref">src/routes/panel/tiendas/$tiendaId/index.tsx:25-30, :48-51, :137-146</div></td><td>Usar Gerencia para cifras de verdad.</td></tr>
+    <tr><td>Resumen textil: «bajo mínimo» usa el físico y «€ este mes» suma el mismo mes de todos los años; «Clientes» cuenta todos los de la empresa.<div class="ref">src/routes/panel/textil/index.tsx:21-26 · textil.functions.ts:244</div></td><td>Mirar Stock y Facturas textil con periodo.</td></tr>
+    <tr><td>La ruta de cobros pendientes de cada tienda existe pero no está en el menú.<div class="ref">src/dominio/navegacion.ts:90-103</div></td><td>Dinero › Cobros pendientes filtrando por tienda.</td></tr>
+    <tr><td>«Tiendas que ve» en el alta de usuario ya no limita nada; «Mi empresa» pide datos fiscales que la factura no usa.<div class="ref">src/routes/panel/usuarios.tsx:537-545 · tiendas/$tiendaId/ajustes.tsx:409-413</div></td><td>Ignorarlos.</td></tr>
+    <tr><td>Capacidad de la máquina sin festivos.<div class="ref">src/dominio/resumen-diario.ts:291-322</div></td><td>Tenerlo en cuenta en semanas con fiesta.</td></tr>
+    <tr><td>Productos web todos como metro y 21 %; número de pedido manual aleatorio (no correlativo).<div class="ref">woocommerce.functions.ts:383-385 · pedidos.functions.ts:216</div></td><td>Revisar productos que no son de metros.</td></tr>
+    <tr><td>Historial de stock limitado a 200 movimientos; la memoria del escáner no se puede «olvidar» desde la pantalla.<div class="ref">textil.functions.ts:398 · escaner-textil.functions.ts:167</div></td><td>Se reaprende al registrar con otra variante.</td></tr>
+    <tr><td>Textos desfasados o distintos: «Configuración › Empresa» en Margen, subtítulo de Facturas textil, CSV de Inicio con el código interno de la tienda.<div class="ref">gerencia/Margen.tsx:130 · textil/facturas.tsx:207 · panel/index.tsx:133</div></td><td>Leer «Ajustes › Datos de la empresa»; las facturas textil se emiten desde Pedidos.</td></tr>
+  </table>
+
+  <div class="caja idea" style="margin-top:6mm"><span class="tit">Última idea</span>El CRM funciona bien cuando cada cosa se hace en su sitio y en su momento: <b>sincronizar, cobrar, documentar, registrar las compras</b>. Si dudas de una cifra, mira su ⓘ; si dudas de un paso, vuelve al capítulo correspondiente de esta guía; y si es de dinero, a la Guía económica.</div>
+</section>
+</body></html>
