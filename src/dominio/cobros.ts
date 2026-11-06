@@ -18,7 +18,7 @@
 import { redondear } from "./importes";
 
 /** Los que se registran a mano. */
-export type MetodoCobroManual = "efectivo" | "tarjeta" | "transferencia";
+export type MetodoCobroManual = "efectivo" | "tarjeta" | "transferencia" | "bizum";
 
 /**
  * Todos los que puede tener un cobro guardado: además de los manuales, el web
@@ -31,12 +31,15 @@ export const METODOS_COBRO: readonly { valor: MetodoCobroManual; etiqueta: strin
   { valor: "efectivo", etiqueta: "Efectivo" },
   { valor: "tarjeta", etiqueta: "Tarjeta" },
   { valor: "transferencia", etiqueta: "Transferencia" },
+  // Desde 20261107100000: antes un Bizum se apuntaba como transferencia.
+  { valor: "bizum", etiqueta: "Bizum" },
 ];
 
 const ETIQUETAS_METODO: Record<MetodoCobro, string> = {
   efectivo: "Efectivo",
   tarjeta: "Tarjeta",
   transferencia: "Transferencia",
+  bizum: "Bizum",
   web: "Web",
   sin_especificar: "Sin especificar",
 };

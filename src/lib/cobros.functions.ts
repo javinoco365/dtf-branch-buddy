@@ -50,7 +50,7 @@ export const registrarCobro = createServerFn({ method: "POST" })
         textil_pedido_id: z.string().uuid().nullable().optional(),
         fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
         importe: z.number().positive("El importe tiene que ser mayor que cero"),
-        metodo: z.enum(["efectivo", "tarjeta", "transferencia"]),
+        metodo: z.enum(["efectivo", "tarjeta", "transferencia", "bizum"]),
         es_propina: z.boolean().default(false),
         concepto_caja_id: z.string().uuid().nullable().optional(),
         notas: z.string().nullable().optional(),

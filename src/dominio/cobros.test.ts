@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   desglosarCobro,
   etiquetaMetodo,
+  METODOS_COBRO,
   pasaPorCaja,
   repartirCobro,
   resumenCobros,
@@ -12,6 +13,7 @@ describe("pasaPorCaja", () => {
     expect(pasaPorCaja("efectivo")).toBe(true);
     expect(pasaPorCaja("tarjeta")).toBe(false);
     expect(pasaPorCaja("transferencia")).toBe(false);
+    expect(pasaPorCaja("bizum")).toBe(false);
     expect(pasaPorCaja("web")).toBe(false);
   });
 });
@@ -21,6 +23,18 @@ describe("etiquetaMetodo", () => {
     expect(etiquetaMetodo("web")).toBe("Web");
     expect(etiquetaMetodo("sin_especificar")).toBe("Sin especificar");
     expect(etiquetaMetodo("tarjeta")).toBe("Tarjeta");
+    expect(etiquetaMetodo("bizum")).toBe("Bizum");
+  });
+});
+
+describe("METODOS_COBRO", () => {
+  it("Bizum se elige a mano, detrás de la transferencia", () => {
+    expect(METODOS_COBRO.map((m) => m.valor)).toEqual([
+      "efectivo",
+      "tarjeta",
+      "transferencia",
+      "bizum",
+    ]);
   });
 });
 
