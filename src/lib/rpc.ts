@@ -102,3 +102,27 @@ export function faltaLaTabla(error: { code?: string } | null | undefined): boole
 export function faltaLaColumna(error: { code?: string } | null | undefined): boolean {
   return !!error && (error.code === "42703" || error.code === "PGRST204");
 }
+
+/**
+ * Emite por emitir_factura() o emitir_factura_textil() guardando además el
+ * método de pago elegido (migración 20261106100000): pasa por su envoltura
+ * `*_con_pago`, que fija el texto para el INSERT de esa misma transacción.
+ *
+ * Con `metodoPago` undefined, o si la envoltura todavía no existe (falta la
+ * migración), emite como siempre: el PDF saldrá con el de Ajustes > Empresa.
+ */
+export async function emitirConMetodoPago<T>(
+  cliente: unknown,
+  funcion: "emitir_factura" | "emitir_factura_textil",
+  argumentos: Record<string, unknown>,
+  metodoPago: string | null | undefined,
+): Promise<T> {
+  if (metodoPago === undefined) return llamarRpc<T>(cliente, funcion, argumentos);
+  const { data, error } = await llamarRpcConError<T>(cliente, `${funcion}_con_pago`, {
+    _metodo_pago: metodoPago?.trim() ?? "",
+    ...argumentos,
+  });
+  if (faltaLaFuncion(error)) return llamarRpc<T>(cliente, funcion, argumentos);
+  if (error) throw new Error(error.message);
+  return data as T;
+}

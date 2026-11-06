@@ -1,3 +1,4 @@
+import { CLAVE_EMPRESA, leerEmpresa } from "@/lib/empresa";
 import { createFileRoute } from "@tanstack/react-router";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
@@ -576,6 +577,10 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   const [fecha, setFecha] = useState(hoy);
   const [vencimiento, setVencimiento] = useState("");
   const [notas, setNotas] = useState("");
+  // Lo que sale bajo «Método de pago»: se propone el de Ajustes › Empresa.
+  const [metodoPago, setMetodoPago] = useState<string | null>(null);
+  const { data: empresa } = useQuery({ queryKey: CLAVE_EMPRESA, queryFn: leerEmpresa });
+  const metodoPagoMostrado = metodoPago ?? empresa?.factura_metodo_pago ?? "";
 
   // Los clientes ya dados de alta en esta tienda, para no reescribir el NIF y
   // la dirección en cada factura.
@@ -649,6 +654,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
           fecha_vencimiento: vencimiento || null,
           cliente_id: clienteId,
           notas: notas.trim() || null,
+          metodo_pago: metodoPagoMostrado.trim() || null,
         },
       });
 
@@ -835,6 +841,19 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
             <Label>Notas</Label>
             <Textarea rows={2} value={notas} onChange={(e) => setNotas(e.target.value)} />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Método de pago</Label>
+          <Textarea
+            rows={2}
+            value={metodoPagoMostrado}
+            onChange={(e) => setMetodoPago(e.target.value)}
+            placeholder="Por ejemplo: Transferencia bancaria ES00…, Efectivo, Tarjeta, Bizum"
+          />
+          <p className="text-xs text-muted-foreground">
+            Sale en el PDF de esta factura. Por defecto, el de Ajustes › Empresa.
+          </p>
         </div>
 
         <div className="border-t pt-3 grid grid-cols-3 gap-3 text-sm">

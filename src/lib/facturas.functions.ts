@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { leerMiNivel } from "./nivel-sesion";
 import { puede } from "@/dominio/permisos";
-import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { emitirConMetodoPago, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esMiembroTienda, exigirMiembroEmpresa } from "./acceso";
 import { leerTodas, trozos } from "./paginar";
 import { leerPorIds } from "./leer-por-ids";
@@ -28,6 +28,7 @@ import {
   type FechaPedido,
 } from "@/dominio/dia-pedido";
 import { calcularTotales } from "@/dominio/importes";
+import { emisorParaVistaPrevia } from "@/lib/pdf-factura-estilo";
 import {
   LIMITES_TICKET,
   clasificarParaTickets,
@@ -111,6 +112,15 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     },
   );
 
+  // El método de pago elegido al emitir (20261106100000); si no hay, el de
+  // Ajustes > Empresa que trae el estilo. Aparte: sin la migración la columna
+  // no existe y no puede tirar la lectura de la factura.
+  const { data: pago } = await tabla(supabaseAdmin, "facturas")
+    .select("metodo_pago")
+    .eq("id", factura.id)
+    .maybeSingle();
+  const metodoPagoFactura = (pago?.metodo_pago as string | null | undefined)?.trim() || null;
+
   const pdfData: FacturaPDFData = {
     desglose: Array.isArray(factura.desglose_iva)
       ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
@@ -125,6 +135,7 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     // Y lleva las líneas sin IVA y la suma Base / IVA / TOTAL.
     simplificada: factura.tipo === "simplificada",
     ...estilo,
+    metodo_pago: metodoPagoFactura ?? estilo.metodo_pago,
     fecha: factura.fecha ?? new Date().toISOString(),
     fecha_vencimiento: factura.fecha_vencimiento,
     emisor: {
@@ -481,25 +492,32 @@ export const emitirFactura = createServerFn({ method: "POST" })
         cliente_id: z.string().uuid().nullable().optional(),
         pedido_id: z.string().uuid().nullable().optional(),
         notas: z.string().nullable().optional(),
+        // Lo que sale bajo «Método de pago» en el PDF. Sin él, el de Ajustes > Empresa.
+        metodo_pago: z.string().max(500).nullable().optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const fecha = await fechaDeEmision(supabaseAdmin, context.userId, data);
-    const r = await llamarRpc<ResultadoEmision>(supabaseAdmin, "emitir_factura", {
-      _usuario_id: context.userId,
-      _tienda_id: data.tienda_id,
-      _receptor: data.receptor,
-      _lineas: data.lineas,
-      _fecha: fecha,
-      _fecha_vencimiento: data.fecha_vencimiento ?? null,
-      _cliente_id: data.cliente_id ?? null,
-      _pedido_id: data.pedido_id ?? null,
-      _notas: data.notas ?? null,
-      _rectifica_a_id: null,
-      _motivo_rectificacion: null,
-    });
+    const r = await emitirConMetodoPago<ResultadoEmision>(
+      supabaseAdmin,
+      "emitir_factura",
+      {
+        _usuario_id: context.userId,
+        _tienda_id: data.tienda_id,
+        _receptor: data.receptor,
+        _lineas: data.lineas,
+        _fecha: fecha,
+        _fecha_vencimiento: data.fecha_vencimiento ?? null,
+        _cliente_id: data.cliente_id ?? null,
+        _pedido_id: data.pedido_id ?? null,
+        _notas: data.notas ?? null,
+        _rectifica_a_id: null,
+        _motivo_rectificacion: null,
+      },
+      data.metodo_pago,
+    );
     return {
       ...r,
       fecha,
@@ -668,6 +686,8 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
 
     return {
       ya_facturado: false as const,
+      // Para la vista previa de la factura: la sociedad y el método de pago de Ajustes.
+      ...(await emisorParaVistaPrevia(supabaseAdmin)),
       tienda_id: pedido.tienda_id as string,
       cliente_id: (pedido.cliente_id as string | null) ?? null,
       receptor,
