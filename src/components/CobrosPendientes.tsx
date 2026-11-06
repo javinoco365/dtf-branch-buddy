@@ -28,6 +28,8 @@ import {
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { avisarError } from "@/lib/errores";
+import { useServerFn } from "@tanstack/react-start";
+import { cambiarEstadoCobro } from "@/lib/facturas.functions";
 
 type Factura = {
   id: string;
@@ -76,11 +78,12 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
     },
   });
 
+  // Por el servidor y factura_cambiar_estado_cobro(), como el ✓ de Tienda ›
+  // Facturas. Antes escribía en `facturas` desde el navegador, que no tiene ese
+  // permiso desde 20260902130000_motor_facturacion.sql: el botón siempre fallaba.
+  const cambiarEstadoFn = useServerFn(cambiarEstadoCobro);
   const marcar = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("facturas").update({ estado: "pagada" }).eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => cambiarEstadoFn({ data: { factura_id: id, estado: "pagada" } }),
     onSuccess: () => {
       toast.success("Marcada como cobrada");
       qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
