@@ -68,10 +68,12 @@ export function FacturarPedidoDialog({
               nif: p.nif || null,
               direccion: p.direccion || null,
             },
-            lineas: prep.lineas,
+            // Las de la vista previa: se emite con lo que se revisó y editó.
+            lineas: p.lineas ?? prep.lineas,
             cliente_id: prep.cliente_id,
             pedido_id: pedidoId,
             notas: p.notas,
+            metodo_pago: p.metodo_pago,
           },
         });
       }}

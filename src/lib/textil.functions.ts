@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeAdmin, exigeBorrar, exigeEscribir } from "./permisos-middleware";
-import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { emitirConMetodoPago, faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { esAdminActivo, exigirFilas } from "./acceso";
 import { CACHE_PDF, rutaPdfGuardada, rutaPdfTextil, rutaPdfVersion } from "./rutas-pdf";
 import { leerTodas } from "./paginar";
@@ -12,7 +12,11 @@ import type { Cobro } from "./cobros.functions";
 // forma normal, y cargarlo de las dos formas tira el arranque del servidor
 // (como logo-descarga, más abajo). jspdf sigue cargándose bajo demanda dentro.
 import { generarFacturaPDF, type FacturaPDFData } from "@/lib/pdf-factura";
-import { estiloFactura, type IdentidadFactura } from "@/lib/pdf-factura-estilo";
+import {
+  emisorParaVistaPrevia,
+  estiloFactura,
+  type IdentidadFactura,
+} from "@/lib/pdf-factura-estilo";
 import {
   generarPresupuestoPDF,
   type PresupuestoPDFData,
@@ -1361,6 +1365,10 @@ async function leerDatosPdfTextil(supabaseAdmin: any, facturaId: string, userId:
       await identidadFacturaTextil(supabaseAdmin, factura.marca_id, emisor.logo_url),
       factura.empresa_id,
     )),
+    // El método de pago elegido al emitir (20261106100000) manda sobre el de Ajustes.
+    ...(typeof factura.metodo_pago === "string" && factura.metodo_pago.trim()
+      ? { metodo_pago: factura.metodo_pago.trim() }
+      : {}),
     fecha: factura.fecha ?? new Date().toISOString(),
     fecha_vencimiento: factura.vencimiento,
     emisor: {
@@ -1648,6 +1656,8 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
     const fechaPedido = fechaDocumentoDePedido(pedido.fecha as string | null);
     return {
       ya_facturado: false as const,
+      // Para la vista previa de la factura: la sociedad y el método de pago de Ajustes.
+      ...(await emisorParaVistaPrevia(context.supabase)),
       receptor,
       lineas,
       total: calcularTotalesDominio(lineas).total,
@@ -1662,9 +1672,12 @@ export const prepararDocumentoTextil = createServerFn({ method: "POST" })
 /**
  * Emite el ticket o la factura de un pedido textil.
  *
- * Las líneas se vuelven a leer del pedido aquí, en el servidor: del navegador
- * solo llega qué documento y los datos del cliente. La marca del pedido pone
- * el nombre comercial y el logo; la identidad fiscal es la de la sociedad.
+ * Un ticket sale con las líneas del pedido, leídas aquí en el servidor. Una
+ * factura sale con las líneas y el método de pago que se revisaron y
+ * editaron en su vista previa (decisión de Javier, 6-11-2026: lo que se
+ * escribe ahí es lo que se guarda); sin líneas, las del pedido. La marca del
+ * pedido pone el nombre comercial y el logo; la identidad fiscal es la de la
+ * sociedad.
  */
 export const emitirDocumentoTextil = createServerFn({ method: "POST" })
   .middleware([exigeEscribir])
@@ -1678,16 +1691,34 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         direccion: z.string().nullable().optional(),
         tipo_fiscal: z.enum(["particular", "profesional"]).nullable().optional(),
         notas: z.string().nullable().optional(),
+        // Solo factura: lo editado en la vista previa.
+        lineas: z
+          .array(
+            z.object({
+              descripcion: z.string().trim().min(1, "Cada línea necesita descripción"),
+              cantidad: z.number().refine((n) => n !== 0, "La cantidad no puede ser 0"),
+              unidad: z.string().default("ud"),
+              precio_unitario: z.number(),
+              iva_rate: z.number().min(0).max(100),
+            }),
+          )
+          .min(1, "Una factura sin líneas no se emite")
+          .optional(),
+        metodo_pago: z.string().max(500).nullable().optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { pedido, vigente, receptor, lineas } = await leerPedidoTextilParaDocumento(
-      context.supabase,
-      data.textil_pedido_id,
-    );
+    const {
+      pedido,
+      vigente,
+      receptor,
+      lineas: lineasPedido,
+    } = await leerPedidoTextilParaDocumento(context.supabase, data.textil_pedido_id);
     if (vigente) throw new Error(`El pedido ya tiene el documento ${vigente.numero}.`);
+    const editadas = data.documento === "factura" ? data.lineas : undefined;
+    const lineas = editadas ?? lineasPedido;
     if (lineas.length === 0) throw new Error("Este pedido no tiene líneas.");
 
     const nombre = data.nombre?.trim() || "";
@@ -1712,7 +1743,7 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
     // Con la fecha del pedido, siempre, aunque la serie ya tenga un documento
     // posterior (decisión de Javier, 8-10-2026). Se lee del pedido, no del navegador.
     const fecha = fechaDocumentoDePedido(pedido.fecha as string | null);
-    const r = await llamarRpcTextil<{ id: string; referencia: string }>(
+    const r = await emitirConMetodoPago<{ id: string; referencia: string }>(
       supabaseAdmin,
       "emitir_factura_textil",
       {
@@ -1726,6 +1757,7 @@ export const emitirDocumentoTextil = createServerFn({ method: "POST" })
         _simplificada: data.documento === "ticket",
         _textil_pedido_id: data.textil_pedido_id,
       },
+      data.documento === "factura" ? data.metodo_pago : undefined,
     );
     return {
       ...r,

@@ -46,6 +46,9 @@ export function DocumentoTextilDialog({
             direccion: p.direccion || null,
             tipo_fiscal: p.tipo_fiscal,
             notas: p.notas,
+            // Solo la factura: lo revisado y editado en su vista previa.
+            lineas: p.lineas,
+            metodo_pago: p.metodo_pago,
           },
         })
       }

@@ -93,3 +93,44 @@ export async function estiloFactura(
     metodo_pago: pago,
   };
 }
+
+/** Lo que la vista previa de una factura enseña de la sociedad y propone de pago. */
+export type EmisorVistaPrevia = {
+  emisor: { nombre: string; cif: string; direccion: string };
+  /** El de Ajustes > Empresa: el que sale si no se cambia. */
+  metodo_pago: string | null;
+};
+
+/**
+ * Los datos de la sociedad para la vista previa de «Emitir factura». Son los
+ * que emitir_factura() congelará como emisor (salen del mismo sitio,
+ * empresas): aquí solo se enseñan, no se editan.
+ */
+export async function emisorParaVistaPrevia(sb: unknown): Promise<EmisorVistaPrevia> {
+  const [{ data: empresa }, pago] = await Promise.all([
+    tabla(sb, "empresas")
+      .select("razon_social, cif, direccion, codigo_postal, ciudad, provincia, pais")
+      .eq("activa", true)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle(),
+    metodoPago(sb),
+  ]);
+  const direccion = [
+    empresa?.direccion,
+    [empresa?.codigo_postal, empresa?.ciudad].filter(Boolean).join(" "),
+    empresa?.provincia,
+    empresa?.pais,
+  ]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean)
+    .join(", ");
+  return {
+    emisor: {
+      nombre: (empresa?.razon_social as string | null) ?? "",
+      cif: (empresa?.cif as string | null) ?? "",
+      direccion,
+    },
+    metodo_pago: pago,
+  };
+}
