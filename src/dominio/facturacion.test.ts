@@ -202,6 +202,22 @@ describe("desglosePorTienda", () => {
   });
 });
 
+describe("desglosePorMetodo con Bizum", () => {
+  it("el Bizum sale aparte, entre la transferencia y la web", () => {
+    const conBizum = [
+      ...cobros,
+      { ...cobros[0], metodo: "bizum" as const, importe: 10, propina: 0 },
+    ];
+    expect(desglosePorMetodo(conBizum).map((f) => f.etiqueta)).toEqual([
+      "Efectivo",
+      "Tarjeta",
+      "Transferencia",
+      "Bizum",
+      "Web",
+    ]);
+  });
+});
+
 describe("desglosePorMetodo", () => {
   it("cada método con lo suyo, en orden fijo, y solo los que tienen cobros", () => {
     expect(desglosePorMetodo(cobros).map((f) => [f.etiqueta, f.total])).toEqual([

@@ -281,6 +281,7 @@ const ORDEN_METODOS: readonly MetodoCobro[] = [
   "efectivo",
   "tarjeta",
   "transferencia",
+  "bizum",
   "web",
   "sin_especificar",
 ];

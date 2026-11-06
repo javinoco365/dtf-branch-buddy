@@ -92,6 +92,7 @@ const METODOS_FILTRO: readonly MetodoCobro[] = [
   "efectivo",
   "tarjeta",
   "transferencia",
+  "bizum",
   "web",
   "sin_especificar",
 ];
