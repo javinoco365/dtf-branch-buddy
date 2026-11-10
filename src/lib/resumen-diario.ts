@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
+import { CAMPOS_UV } from "@/lib/periodo";
 import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
 import { useFiscal } from "@/lib/gerencia";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
@@ -81,9 +82,14 @@ async function leerTres<T extends { id: string }>(
   return { data: [...porId.values()], error: null };
 }
 
-async function leerPedidosTienda(desde: string, hasta: string, conRealizado: boolean) {
+async function leerPedidosTienda(
+  desde: string,
+  hasta: string,
+  conRealizado: boolean,
+  conUv = false,
+) {
   const tramo = tramoDeConsulta(desde, hasta);
-  const campos = `${CAMPOS_PEDIDO}${conRealizado ? `, ${CAMPOS_REALIZADO}` : ""}`;
+  const campos = `${CAMPOS_PEDIDO}${conRealizado ? `, ${CAMPOS_REALIZADO}` : ""}${conUv ? `, ${CAMPOS_UV}` : ""}`;
   const base = () => tabla(supabase, "pedidos").select(campos);
   const consultas = [
     () =>
@@ -238,9 +244,11 @@ export function useDatosResumen(tramo: Rango) {
       lecturaCobros.catch(() => {});
       let conRealizado = true;
       let [t, x] = await Promise.all([
-        leerPedidosTienda(desde, hasta, true),
+        leerPedidosTienda(desde, hasta, true, true),
         leerPedidosTextil(desde, hasta, true),
       ]);
+      // Sin la migración del DTF UV: como antes, sin separar el UV.
+      if (faltaLaColumna(t.error)) t = await leerPedidosTienda(desde, hasta, true);
       // Sin la migración del Resumen: se lee sin las columnas nuevas.
       if (faltaLaColumna(t.error) || faltaLaColumna(x.error)) {
         conRealizado = false;

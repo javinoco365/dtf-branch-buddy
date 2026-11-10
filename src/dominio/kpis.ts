@@ -38,6 +38,13 @@ export type PedidoResumen = {
    * pedidos de antes de congelarlo, o si la migración no está aplicada.
    */
   coste_metro_snapshot?: number | string | null;
+  /**
+   * Metros de DTF UV (subcontratado). `metros_total` es solo el DTF propio.
+   * Nulo o ausente sin la migración 20261110100000.
+   */
+  metros_uv?: number | string | null;
+  /** Coste por metro de UV congelado al crear el pedido (ver metros_uv). */
+  coste_uv_snapshot?: number | string | null;
   /** `manual` o `woocommerce`. Solo lo traen las consultas que lo necesitan. */
   origen?: string | null;
   cliente_id?: string | null;
@@ -164,21 +171,34 @@ export function calcularKpis(pedidos: readonly PedidoResumen[]): KpisPeriodo {
   };
 }
 
+/** Lo que cobra la subcontrata por metro de DTF UV si no se sabe otra cosa. */
+export const COSTE_UV_POR_DEFECTO = 15;
+
 /**
  * Coste de producción de los pedidos no cancelados: metros × coste por metro.
  *
- * Cada pedido con su coste congelado; los que no lo tienen, con el coste de
- * hoy (`costeActual`), que es lo único que se sabe de ellos.
+ * El DTF propio (`metros_total`) con su coste por metro y el DTF UV
+ * (`metros_uv`) con lo que cobra la subcontrata. Cada pedido con su coste
+ * congelado; los que no lo tienen, con el coste de hoy (`costeActual`,
+ * `costeUvActual`), que es lo único que se sabe de ellos.
  */
-export function costeProduccion(pedidos: readonly PedidoResumen[], costeActual: number): number {
+export function costeProduccion(
+  pedidos: readonly PedidoResumen[],
+  costeActual: number,
+  costeUvActual: number = COSTE_UV_POR_DEFECTO,
+): number {
+  const congeladoO = (v: number | string | null | undefined, hoy: number) =>
+    v == null || v === "" ? hoy : num(v);
   return redondear(
     pedidos
       .filter((p) => p.estado !== ESTADO_CANCELADO)
-      .reduce((s, p) => {
-        const congelado = p.coste_metro_snapshot;
-        const coste = congelado == null || congelado === "" ? costeActual : num(congelado);
-        return s + num(p.metros_total) * coste;
-      }, 0),
+      .reduce(
+        (s, p) =>
+          s +
+          num(p.metros_total) * congeladoO(p.coste_metro_snapshot, costeActual) +
+          num(p.metros_uv) * congeladoO(p.coste_uv_snapshot, costeUvActual),
+        0,
+      ),
   );
 }
 
@@ -193,8 +213,9 @@ export function costeProduccion(pedidos: readonly PedidoResumen[], costeActual: 
 export function costeVariable(
   pedidos: readonly PedidoResumen[],
   costeActual: number,
+  costeUvActual: number = COSTE_UV_POR_DEFECTO,
 ): { produccion: number; envios: number; total: number } {
-  const produccion = costeProduccion(pedidos, costeActual);
+  const produccion = costeProduccion(pedidos, costeActual, costeUvActual);
   const envios = calcularKpis(pedidos).envios;
   return { produccion, envios, total: redondear(produccion + envios) };
 }

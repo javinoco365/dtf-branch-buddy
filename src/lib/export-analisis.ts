@@ -169,6 +169,10 @@ export async function exportarPedidosParaAnalisis({
     total: p.total,
     metros_total: p.metros_total,
     coste_metro_snapshot: p.coste_metro_snapshot ?? null,
+    // El DTF UV, para que su coste (lo que cobra la subcontrata) entre en el
+    // margen. Sin la migración 20261110100000, select("*") no las trae.
+    metros_uv: p.metros_uv ?? null,
+    coste_uv_snapshot: p.coste_uv_snapshot ?? null,
     devuelto: ((p.devoluciones ?? []) as { importe: number | string }[]).reduce(
       (s, x) => s + (Number(x.importe) || 0),
       0,

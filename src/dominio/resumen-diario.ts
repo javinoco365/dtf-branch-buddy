@@ -37,6 +37,7 @@ import {
 import { diaDelPedido, momentoDelPedido } from "./dia-pedido";
 import { diaRealizado, fueraDeHora, horaCorta, momentoDeInstante } from "./realizado";
 import type { Venta } from "./gerencia";
+import { esSoloUv } from "./linea-producto";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -226,10 +227,17 @@ export type Resumen = {
 const enRango = (dia: string | null, desde: string, hasta: string) =>
   dia != null && dia >= desde && dia <= hasta;
 
-/** Lo que cobra la agencia por un pedido y si es estimado. */
+/**
+ * Lo que cobra la agencia por un pedido y si es estimado.
+ *
+ * Un pedido solo de DTF UV lo envía la subcontrata, que cobra por el envío lo
+ * mismo que pagó el cliente: sin coste apuntado, cuesta lo cobrado (y no es
+ * una estimación). Si se apunta otro coste, manda el apuntado.
+ */
 function costeEnvio(p: PedidoParaResumen, defecto: number): { coste: number; estimado: boolean } {
   const real = p.coste_envio_real;
   if (real != null && real !== "") return { coste: num(real), estimado: false };
+  if (esSoloUv(p)) return { coste: redondear(num(p.envio) * parteVendida(p)), estimado: false };
   return p.con_envio ? { coste: defecto, estimado: true } : { coste: 0, estimado: false };
 }
 

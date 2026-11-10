@@ -30,6 +30,8 @@ export type Empresa = {
   coste_consumibles_metro: number | null;
   coste_packaging_metro: number | null;
   coste_electricidad_metro: number | null;
+  /** Lo que cobra la subcontrata por metro de DTF UV, sin IVA (20261110100000). */
+  coste_uv_metro?: number | null;
   textil_marca_predeterminada_id: string | null;
   /** Bajo «Método de pago» en el PDF de las facturas (20261102100000). */
   factura_metodo_pago?: string | null;

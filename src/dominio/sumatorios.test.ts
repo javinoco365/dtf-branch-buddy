@@ -34,6 +34,7 @@ describe("totalesPedidos", () => {
       cobrado: 120,
       pendiente: 30,
       metros: 0,
+      metrosUv: 0,
       metrosEstimados: false,
     });
   });
@@ -46,6 +47,16 @@ describe("totalesPedidos", () => {
       { total: 30, estado: "pendiente", metros_total: null },
     ]);
     expect(t.metros).toBe(12.755);
+  });
+
+  it("los metros de UV van aparte de los de la máquina", () => {
+    const t = totalesPedidos([
+      { total: 100, metros_total: 4, metros_uv: 0 },
+      { total: 135.52, metros_total: 0, metros_uv: "7" },
+      { total: 80, estado: "cancelado", metros_uv: 3 },
+    ]);
+    expect(t.metros).toBe(4);
+    expect(t.metrosUv).toBe(7);
   });
 
   it("la suma es estimada si lo es algún metro de un pedido que cuenta", () => {

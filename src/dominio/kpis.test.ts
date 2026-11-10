@@ -357,6 +357,31 @@ describe("costeProduccion", () => {
   it("un coste congelado a cero es cero, no el de hoy", () => {
     expect(costeProduccion([pedido({ metros_total: 10, coste_metro_snapshot: 0 })], 5)).toBe(0);
   });
+
+  // DCUL-146-2026: 7 m de UV a 15 €/m de la subcontrata, ningún metro propio.
+  it("el UV cuesta lo que cobra la subcontrata, congelado o el de hoy", () => {
+    expect(
+      costeProduccion([pedido({ metros_total: 0, metros_uv: 7, coste_uv_snapshot: 15 })], 2),
+    ).toBe(105);
+    expect(costeProduccion([pedido({ metros_total: 0, metros_uv: "7" })], 2, 16)).toBe(112);
+    expect(costeProduccion([pedido({ metros_total: 0, metros_uv: 7 })], 2)).toBe(105);
+  });
+
+  it("un pedido mixto suma el DTF con su coste y el UV con el suyo", () => {
+    expect(
+      costeProduccion(
+        [
+          pedido({
+            metros_total: 4,
+            coste_metro_snapshot: 1.5,
+            metros_uv: 2,
+            coste_uv_snapshot: 15,
+          }),
+        ],
+        3,
+      ),
+    ).toBe(4 * 1.5 + 2 * 15);
+  });
 });
 
 describe("coste variable: producción y envío", () => {

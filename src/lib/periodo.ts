@@ -30,6 +30,8 @@ import { delPeriodoAnterior } from "@/lib/cache";
 
 const CAMPOS_PEDIDO =
   "id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id";
+/** Los metros y el coste del DTF UV (migración 20261110100000). */
+export const CAMPOS_UV = "metros_uv, coste_uv_snapshot";
 
 export type RangoFechas = { desde: Date; hasta: Date };
 
@@ -63,11 +65,12 @@ export function usePedidosPeriodo(filtro: Filtro, { activo = true }: OpcionesLec
       // Con sus devoluciones, para restarlas de lo vendido, y con el coste
       // por metro congelado al crear el pedido (ver kpis.ts).
       // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
-      const leer = (conCoste: boolean) =>
+      // `conUv`: los metros y el coste del DTF UV (20261110100000).
+      const leer = (conCoste: boolean, conUv = false) =>
         leerTodas<unknown>((a, b) => {
           let consulta = tabla(supabase, "pedidos")
             .select(
-              `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}, devoluciones:pedido_devoluciones(importe)`,
+              `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}${conUv ? `, ${CAMPOS_UV}` : ""}, devoluciones:pedido_devoluciones(importe)`,
             )
             .gte("fecha_pedido", tramo.desde)
             .lt("fecha_pedido", tramo.hasta);
@@ -75,7 +78,9 @@ export function usePedidosPeriodo(filtro: Filtro, { activo = true }: OpcionesLec
           return consulta.order("id").range(a, b);
         });
 
-      let { data, error } = await leer(true);
+      let { data, error } = await leer(true, true);
+      // Sin la migración del DTF UV, como antes: el UV no se separa.
+      if (faltaLaColumna(error)) ({ data, error } = await leer(true));
       // Sin la migración 20261007100000_cifras_fiables la columna no existe:
       // se lee sin ella y el margen usa el coste actual, como antes.
       if (faltaLaColumna(error)) ({ data, error } = await leer(false));

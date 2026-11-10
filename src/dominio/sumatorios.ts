@@ -50,6 +50,8 @@ export type TotalesPedidos = {
   pendiente: number;
   /** Los metros de los que cuentan (`metros_total`), a tres decimales. 0 en el textil. */
   metros: number;
+  /** Los metros de DTF UV (`metros_uv`, subcontratado), aparte de los de la máquina. */
+  metrosUv: number;
   /** Si alguno de esos metros es estimado: la suma tampoco es exacta. */
   metrosEstimados: boolean;
 };
@@ -65,6 +67,7 @@ export function totalesPedidos(
     cancelado?: boolean;
     cobros?: readonly { importe: Valor }[] | null;
     metros_total?: Valor;
+    metros_uv?: Valor;
     /** Sus líneas, para saber si algún metro es estimado. */
     items?: readonly { metros_origen?: string | null }[] | null;
   }[],
@@ -79,6 +82,7 @@ export function totalesPedidos(
     cobrado: sumarImportes(resumenes, (r) => r.cobrado),
     pendiente: sumarImportes(resumenes, (r) => Math.max(r.pendiente, 0)),
     metros: sumarCantidades(validos, (p) => p.metros_total),
+    metrosUv: sumarCantidades(validos, (p) => p.metros_uv),
     metrosEstimados: validos.some((p) => pedidoConMetrosEstimados(p.items)),
   };
 }

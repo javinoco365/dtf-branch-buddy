@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { EtiquetaUv } from "@/components/EtiquetaLinea";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
   component: Ajustes,
@@ -1155,6 +1156,7 @@ const ORIGEN_METROS: Record<string, string> = {
   montador: "leídos del montador",
   precio_linea: "estimados con el precio por metro de la línea",
   precio_ajustes: "estimados con el precio por metro de Ajustes",
+  cantidad: "la cantidad de la línea",
 };
 
 /**
@@ -1290,9 +1292,17 @@ function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
                 <span className="text-muted-foreground">subtotal:</span> {eur(l.subtotal)}
               </span>
               <span>
+                <span className="text-muted-foreground">línea:</span>{" "}
+                {l.linea === "uv" ? <EtiquetaUv /> : "DTF"}
+              </span>
+              <span>
                 <span className="text-muted-foreground">el CRM guardaría:</span>{" "}
                 {l.calculo
-                  ? `${fmtMetros(l.calculo.metros)}, ${ORIGEN_METROS[l.calculo.origen]}`
+                  ? `${fmtMetros(l.calculo.metros)}, ${
+                      l.linea === "uv" && l.calculo.origen === "precio_ajustes"
+                        ? "estimados con el precio del producto UV"
+                        : ORIGEN_METROS[l.calculo.origen]
+                    }`
                   : "en unidades (no es de metros)"}
               </span>
             </div>
