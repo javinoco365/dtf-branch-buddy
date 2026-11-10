@@ -13,7 +13,15 @@ import { eur, metros, numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { AvisoActualizando } from "@/components/AvisoActualizando";
 import { propsDatosDeAntes } from "@/lib/datos-de-antes";
-import { useCobrosPeriodo, useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
+import {
+  useCobrosPeriodo,
+  useLineasPeriodo,
+  usePedidosPeriodo,
+  usePedidosSoloUv,
+} from "@/lib/periodo";
+import { cifrasUv, separarPorLinea } from "@/dominio/ventas-uv";
+import { lineasDelPedido } from "@/dominio/linea-producto";
+import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
@@ -74,22 +82,37 @@ function FacturacionTienda() {
   const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro", tiendaId);
   const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro", tiendaId);
 
+  // Todos los pedidos del periodo, para la exportación; las cifras van sin
+  // los de DTF UV, que tienen su tarjeta aparte (ver ventas-uv.ts).
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
-  const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
-  const kPrev = useMemo(() => calcularKpis(consultaAnterior.data ?? []), [consultaAnterior.data]);
-  const cobrosDisponibles = consultaCobros.data?.disponible ?? false;
-  const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [], tiendaId)).cobrado;
-  const cobradoPrev = totalizar(
-    cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [], tiendaId),
-  ).cobrado;
+  const porLinea = useMemo(() => separarPorLinea(pedidos), [pedidos]);
+  const porLineaPrev = useMemo(
+    () => separarPorLinea(consultaAnterior.data ?? []),
+    [consultaAnterior.data],
+  );
+  const k = useMemo(() => calcularKpis(porLinea.dtf), [porLinea]);
+  const kPrev = useMemo(() => calcularKpis(porLineaPrev.dtf), [porLineaPrev]);
+  const uv = useMemo(() => cifrasUv(porLinea.uv), [porLinea]);
+  const uvPrev = useMemo(() => cifrasUv(porLineaPrev.uv), [porLineaPrev]);
+  // Lo cobrado de los pedidos de DTF UV va con el UV, no con el DTF.
+  const consultaSoloUv = usePedidosSoloUv(tiendaId);
+  const soloUv = consultaSoloUv.data;
+  const cobrosDisponibles = (consultaCobros.data?.disponible ?? false) && !!soloUv;
+  const cobradoDe = (cobros: Parameters<typeof cobrosDeTiendas>[0], deUv: boolean) =>
+    totalizar(
+      cobrosDeTiendas(cobros, tiendaId).filter((c) => (soloUv?.has(c.pedido_id) ?? false) === deUv),
+    ).cobrado;
+  const cobrado = cobradoDe(consultaCobros.data?.cobros ?? [], false);
+  const cobradoPrev = cobradoDe(consultaCobrosAnt.data?.cobros ?? [], false);
+  const cobradoUv = cobradoDe(consultaCobros.data?.cobros ?? [], true);
 
   const grafica = useMemo(() => {
     const { por, tramos: todos } = tramosGrafica({ desde, hasta });
     // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
     const tramos = tramosHastaHoy(todos, new Date());
-    const totales = agruparPorRangos(pedidos, tramos);
+    const totales = agruparPorRangos(porLinea.dtf, tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
-  }, [pedidos, desde, hasta]);
+  }, [porLinea, desde, hasta]);
 
   const topProductos = useMemo(
     () => topPorMetros(consultaLineas.data ?? []),
@@ -112,12 +135,15 @@ function FacturacionTienda() {
 
   function exportar() {
     const filas: (string | number)[][] = [
-      ["Fecha", "Estado", "Metros", "Base", "IVA", "Envío", "Total"],
-      // El día del pedido, el de su ticket y el de la lista de pedidos.
+      ["Fecha", "Estado", "Línea", "Metros DTF", "Metros UV", "Base", "IVA", "Envío", "Total"],
+      // El día del pedido, el de su ticket y el de la lista de pedidos. Todos,
+      // los de DTF UV también, con su línea para poder separarlos.
       ...pedidos.map((p) => [
         diaDelPedido(p),
         p.estado,
+        { dtf: "DTF", uv: "DTF UV", mixto: "DTF + UV", ninguna: "" }[lineasDelPedido(p)],
         Number(p.metros_total ?? 0),
+        Number(p.metros_uv ?? 0),
         Number(p.subtotal ?? 0),
         Number(p.iva ?? 0),
         Number(p.envio ?? 0),
@@ -281,6 +307,81 @@ function FacturacionTienda() {
               tono="success"
             />
           </div>
+
+          {/* DTF UV: aparte, no es venta de DTF */}
+          {(uv.pedidos > 0 || uvPrev.pedidos > 0 || cobradoUv > 0) && (
+            <Card className="border-violet-500/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <EtiquetaUv />
+                  Ventas de DTF UV
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Subcontratado: no cuenta en lo vendido, la facturación ni los metros de arriba. La
+                  ganancia es la facturación bruta menos lo que cobra la subcontrata; el envío se
+                  paga por lo mismo que se cobra.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+                  <TarjetaKpi
+                    titulo="Vendido UV"
+                    valor={eur(uv.vendido)}
+                    frente={comparacion?.etiqueta}
+                    delta={variacion(uv.vendido, uvPrev.vendido)}
+                    icon={Euro}
+                  />
+                  <TarjetaKpi
+                    titulo="Facturación bruta UV"
+                    valor={eur(uv.bruta)}
+                    frente={comparacion?.etiqueta}
+                    delta={variacion(uv.bruta, uvPrev.bruta)}
+                    icon={Receipt}
+                  />
+                  <TarjetaKpi
+                    titulo="Metros UV"
+                    valor={metros(uv.metros)}
+                    frente={comparacion?.etiqueta}
+                    delta={variacion(uv.metros, uvPrev.metros)}
+                    icon={Ruler}
+                  />
+                  <TarjetaKpi
+                    titulo="Ganancia UV"
+                    valor={eur(uv.ganancia)}
+                    frente={comparacion?.etiqueta}
+                    delta={variacion(uv.ganancia, uvPrev.ganancia)}
+                    icon={Wallet}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                  <span>
+                    Pedidos: <span className="font-medium text-foreground">{uv.pedidos}</span>
+                  </span>
+                  <span>
+                    Coste subcontrata:{" "}
+                    <span className="font-medium text-foreground">{eur(uv.coste)}</span>
+                  </span>
+                  <span>
+                    Ganancia por metro:{" "}
+                    <span className="font-medium text-foreground">{eur(uv.gananciaMetro)}</span>
+                  </span>
+                  {cobrosDisponibles && (
+                    <span>
+                      Cobrado UV:{" "}
+                      <span className="font-medium text-foreground">{eur(cobradoUv)}</span>
+                    </span>
+                  )}
+                </div>
+                {porLinea.mixtos > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {porLinea.mixtos === 1
+                      ? "1 pedido lleva DTF y UV juntos: su importe cuenta arriba, con el DTF, porque no se puede partir; sus metros de UV no."
+                      : `${porLinea.mixtos} pedidos llevan DTF y UV juntos: su importe cuenta arriba, con el DTF, porque no se puede partir; sus metros de UV no.`}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Gráficas */}
           <div className="grid gap-4 lg:grid-cols-2">

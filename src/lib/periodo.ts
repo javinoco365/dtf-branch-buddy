@@ -260,19 +260,49 @@ export function useLineasPeriodo(filtro: Filtro) {
       const dias = diasDelRango(filtro);
       if (!dias) return [];
       const tramo = tramoDeConsulta(dias.desde, dias.hasta);
-      const { data, error } = await leerTodas<LineaResumen & { pedidos: FechaPedido }>((a, b) => {
-        let consulta = tabla(supabase, "pedido_items")
-          .select(
-            "descripcion, cantidad, unidad, pedidos!inner(fecha_pedido, origen, tienda_id, estado)",
-          )
-          .gte("pedidos.fecha_pedido", tramo.desde)
-          .lt("pedidos.fecha_pedido", tramo.hasta)
-          .neq("pedidos.estado", ESTADO_CANCELADO);
-        if (filtro.tiendaId) consulta = consulta.eq("pedidos.tienda_id", filtro.tiendaId);
-        return consulta.order("id").range(a, b);
-      });
+      // `conLinea`: si es DTF o DTF UV (20261110100000).
+      const leer = (conLinea: boolean) =>
+        leerTodas<LineaResumen & { pedidos: FechaPedido }>((a, b) => {
+          let consulta = tabla(supabase, "pedido_items")
+            .select(
+              `descripcion, cantidad, unidad${conLinea ? ", linea" : ""}, pedidos!inner(fecha_pedido, origen, tienda_id, estado)`,
+            )
+            .gte("pedidos.fecha_pedido", tramo.desde)
+            .lt("pedidos.fecha_pedido", tramo.hasta)
+            .neq("pedidos.estado", ESTADO_CANCELADO);
+          if (filtro.tiendaId) consulta = consulta.eq("pedidos.tienda_id", filtro.tiendaId);
+          return consulta.order("id").range(a, b);
+        });
+      let { data, error } = await leer(true);
+      // Sin la migración del DTF UV: como antes, todas son DTF.
+      if (faltaLaColumna(error)) ({ data, error } = await leer(false));
       if (error) throw error;
       return data.filter((l) => pedidoEnDias(l.pedidos, dias.desde, dias.hasta));
+    },
+  });
+}
+
+/**
+ * Los pedidos de una tienda que son solo de DTF UV, de cualquier fecha. Para
+ * quitar de lo cobrado los cobros de UV: un cobro puede ser de un pedido de
+ * otro periodo. Sin la migración del DTF UV, ninguno.
+ */
+export function usePedidosSoloUv(tiendaId: string) {
+  return useQuery({
+    queryKey: ["pedidos-solo-uv", tiendaId],
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await leerTodas<{ id: string }>((a, b) =>
+        tabla(supabase, "pedidos")
+          .select("id")
+          .eq("tienda_id", tiendaId)
+          .gt("metros_uv", 0)
+          .eq("metros_total", 0)
+          .order("id")
+          .range(a, b),
+      );
+      if (faltaLaColumna(error)) return new Set();
+      if (error) throw error;
+      return new Set(data.map((p) => p.id));
     },
   });
 }
