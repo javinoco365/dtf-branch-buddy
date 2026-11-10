@@ -9,7 +9,16 @@ import { esAdminActivo, esMiembroTienda, exigirMiembroTienda } from "./acceso";
 import { leerTodas } from "./paginar";
 import { numero } from "./format";
 import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
-import { lineaPedidoWoo, medirLineaWoo, metrosPedidoWoo, type MetaWoo } from "@/dominio/metros-woo";
+import {
+  lineaPedidoWoo,
+  medirLineaWoo,
+  metrosPedidoWooPorLinea,
+  opcionesDeLineaWoo,
+  type LineaWoo,
+  type MetaWoo,
+  type ProductoDelCatalogo,
+} from "@/dominio/metros-woo";
+import { lineaDeProductoWoo } from "@/dominio/linea-producto";
 import { describirMetaWoo } from "@/dominio/diagnostico-lineas-woo";
 import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 import {
@@ -191,6 +200,12 @@ type ContextoSync = {
    * llamada, la primera vez que un pedido de invitado lo necesita.
    */
   clientePorEmail: Map<string, string> | null;
+  /**
+   * Producto de WooCommerce → su línea (DTF o UV) y su precio, del catálogo
+   * de la tienda. Se lee una vez por llamada, con la primera página de
+   * pedidos.
+   */
+  catalogo: Map<number, ProductoDelCatalogo> | null;
   avisos: string[];
   esquema: EsquemaSync;
   /** El turno de esta llamada (woo_sincronizacion.bloqueo_id); `null` sin turno. */
@@ -369,7 +384,7 @@ const CAMPOS_CLIENTE_WOO = "id,first_name,last_name,username,email,billing";
 
 /** Lo que hace falta de un producto de WooCommerce (`_fields`). */
 const CAMPOS_PRODUCTO_WOO =
-  "id,sku,name,short_description,price,status,date_modified_gmt,date_created_gmt";
+  "id,sku,name,short_description,price,status,date_modified_gmt,date_created_gmt,categories";
 
 /** Guarda una página de productos, en una sola escritura. */
 async function guardarProductosWoo(ctx: ContextoSync, items: any[]): Promise<number> {
@@ -384,10 +399,22 @@ async function guardarProductosWoo(ctx: ContextoSync, items: any[]): Promise<num
     unidad: "m",
     iva_rate: 21,
     activo: p.status === "publish",
+    // DTF o DTF UV, por su categoría de WooCommerce (ver linea-producto.ts).
+    linea: lineaDeProductoWoo(p),
   }));
-  const { error } = await tabla(ctx.sb, "productos").upsert(filas, {
-    onConflict: "tienda_id,woo_product_id",
-  });
+  const guardar = (f: Record<string, unknown>[]) =>
+    tabla(ctx.sb, "productos").upsert(f, { onConflict: "tienda_id,woo_product_id" });
+  let { error } = await guardar(filas);
+  // Sin la migración 20261110100000 la columna no existe: sin la línea.
+  if (faltaLaColumna(error)) {
+    ({ error } = await guardar(
+      filas.map((fila) => {
+        const sinLinea: Record<string, unknown> = { ...fila };
+        delete sinLinea.linea;
+        return sinLinea;
+      }),
+    ));
+  }
   if (error) throw new Error(`No se pudieron guardar los productos: ${error.message}`);
   return filas.length;
 }
@@ -523,6 +550,40 @@ async function clientesPorEmail(ctx: ContextoSync): Promise<Map<string, string>>
 }
 
 /**
+ * Los productos de WooCommerce de la tienda con su línea y su precio. Sin la
+ * migración 20261110100000 (o si la lectura falla), vacío: entonces decide el
+ * nombre de cada línea (ver opcionesDeLineaWoo).
+ */
+async function catalogoDeLaTienda(sb: unknown, tiendaId: string) {
+  const catalogo = new Map<number, ProductoDelCatalogo>();
+  const { data, error } = await leerTodas<{
+    woo_product_id: number | string | null;
+    linea: string | null;
+    precio_unitario: number | string | null;
+  }>((a, b) =>
+    tabla(sb, "productos")
+      .select("woo_product_id, linea, precio_unitario")
+      .eq("tienda_id", tiendaId)
+      .not("woo_product_id", "is", null)
+      .order("id")
+      .range(a, b),
+  );
+  if (error) return catalogo;
+  for (const p of data) {
+    catalogo.set(Number(p.woo_product_id), {
+      linea: p.linea === "uv" || p.linea === "dtf" ? p.linea : null,
+      precio: p.precio_unitario == null ? null : Number(p.precio_unitario),
+    });
+  }
+  return catalogo;
+}
+
+async function catalogo(ctx: ContextoSync): Promise<Map<number, ProductoDelCatalogo>> {
+  if (!ctx.catalogo) ctx.catalogo = await catalogoDeLaTienda(ctx.sb, ctx.tiendaId);
+  return ctx.catalogo;
+}
+
+/**
  * Pone el NIF que trae WooCommerce a las fichas que no tienen ninguno. Una
  * ficha con NIF no se toca, aunque el del pedido sea otro: puede estar
  * corregido a mano. Devuelve cuántas fichas ha completado.
@@ -647,10 +708,15 @@ async function guardarPedidosWoo(
     }
   }
 
+  // De qué línea es cada línea de pedido (DTF o UV): ver linea-producto.ts.
+  const productos = await catalogo(ctx);
+  const opcionesDe = (li: LineaWoo & { product_id?: unknown }) =>
+    opcionesDeLineaWoo(li, productos.get(Number(li.product_id)));
+
   const filasPedidos = orders.map((o) => {
     // Los metros que mide el trabajo (montador), no la cantidad: ver
-    // src/dominio/metros-woo.ts.
-    const metros_total = metrosPedidoWoo(o.line_items, ctx.precioMetro);
+    // src/dominio/metros-woo.ts. Los del DTF propio y los del UV, aparte.
+    const metros = metrosPedidoWooPorLinea(o.line_items, ctx.precioMetro, opcionesDe);
     // Las direcciones del PEDIDO, no las de la ficha del cliente. Un pedido de
     // invitado no trae customer_id y se quedaba sin nombre ni correo: es el
     // «—» de la columna Cliente. Estos datos sí vienen siempre, dentro de
@@ -685,7 +751,8 @@ async function guardarPedidosWoo(
       // facturación. Guardar un objeto de huecos sería peor que no guardar
       // nada: la pantalla lo enseñaría como una dirección.
       direccion_envio: envio ?? facturacion,
-      metros_total,
+      metros_total: metros.dtf,
+      metros_uv: metros.uv,
       // Base con el envío dentro y el envío aparte (ver importesPedidoWoo).
       ...importesPedidoWoo(o),
       fecha_pedido: o.date_created,
@@ -723,7 +790,9 @@ async function guardarPedidosWoo(
   // Sin la migración de realizado_en (20261027100000) o la de cliente_nif
   // (20261104100000) la columna no existe: se guarda sin ella antes que dejar
   // la sincronización parada. Puede faltar más de una: se quitan de una en una.
-  const opcionales = ["realizado_en", "cliente_nif"];
+  // Sin la del DTF UV (20261110100000), los metros de UV vuelven a sumarse
+  // a metros_total, como antes de separarlos.
+  const opcionales = ["realizado_en", "cliente_nif", "metros_uv"];
   let filasAGuardar: Record<string, unknown>[] = filasPedidos;
   for (let intento = 0; intento < opcionales.length && res.error; intento++) {
     const mensaje = res.error.message;
@@ -731,6 +800,9 @@ async function guardarPedidosWoo(
     if (!falta) break;
     filasAGuardar = filasAGuardar.map((fila) => {
       const sinColumna: Record<string, unknown> = { ...fila };
+      if (falta === "metros_uv") {
+        sinColumna.metros_total = Number(fila.metros_total ?? 0) + Number(fila.metros_uv ?? 0);
+      }
       delete sinColumna[falta];
       return sinColumna;
     });
@@ -756,12 +828,16 @@ async function guardarPedidosWoo(
     return (o.line_items || []).map((li: any) => {
       const sub = Number(li.subtotal || 0);
       const ivaLi = Number(li.subtotal_tax || 0);
-      // En metros si es un trabajo del montador (leídos o estimados); en
-      // unidades si no.
+      // En metros si es un trabajo del montador (leídos o estimados) o DTF UV;
+      // en unidades si no.
+      const opciones = opcionesDe(li);
       const { cantidad, unidad, precio_unitario, metros_origen, precio_metro_usado } =
-        lineaPedidoWoo(li, ctx.precioMetro);
+        lineaPedidoWoo(li, ctx.precioMetro, opciones);
       return {
         pedido_id,
+        linea: opciones.linea,
+        woo_product_id: Number(li.product_id) || null,
+        sku: li.sku || null,
         descripcion: li.name,
         cantidad,
         unidad,
@@ -777,6 +853,19 @@ async function guardarPedidosWoo(
   });
   if (todasLasLineas.length) {
     let r = await tabla(ctx.sb, "pedido_items").insert(todasLasLineas);
+    // Sin la migración del DTF UV (20261110100000): sin la línea ni el
+    // producto, y sin el origen «cantidad», que la base aún no admite.
+    if (faltaLaColumna(r.error)) {
+      const sinUv = todasLasLineas.map((linea) => {
+        const copia: Record<string, unknown> = { ...linea };
+        delete copia.linea;
+        delete copia.woo_product_id;
+        delete copia.sku;
+        if (copia.metros_origen === "cantidad") copia.metros_origen = null;
+        return copia;
+      });
+      r = await tabla(ctx.sb, "pedido_items").insert(sinUv);
+    }
     // Sin la migración 20261020100000 no existen las columnas del origen: se
     // guardan las líneas sin ellas.
     if (faltaLaColumna(r.error)) {
@@ -1010,6 +1099,7 @@ export const sincronizarWoo = createServerFn({ method: "POST" })
       base: tienda.woo_url.replace(/\/$/, ""),
       headers: { Authorization: autorizacionWoo(creds), Accept: "application/json" },
       clientePorEmail: null,
+      catalogo: null,
       avisos: [],
       esquema: bloqueo ? "completo" : "sin_bloqueo",
       bloqueo,
@@ -1489,10 +1579,10 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
     if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
     const o = (await r.json()) as { number?: unknown; line_items?: any[] };
 
-    const precioMetro = await precioMetroDeEmpresa(
-      supabaseAdmin,
-      await empresaDeTienda(supabaseAdmin, data.tienda_id),
-    );
+    const [precioMetro, productos] = await Promise.all([
+      precioMetroDeEmpresa(supabaseAdmin, await empresaDeTienda(supabaseAdmin, data.tienda_id)),
+      catalogoDeLaTienda(supabaseAdmin, data.tienda_id),
+    ]);
     return {
       numero: String(o.number ?? data.numero),
       precio_metro: precioMetro,
@@ -1504,7 +1594,12 @@ export const diagnosticoLineasWoo = createServerFn({ method: "POST" })
           subtotal: Number(li.subtotal ?? 0),
           metas: metas.map(describirMetaWoo),
           // Lo que guardaría hoy la sincronización.
-          calculo: medirLineaWoo(li, precioMetro),
+          linea: opcionesDeLineaWoo(li, productos.get(Number(li.product_id))).linea,
+          calculo: medirLineaWoo(
+            li,
+            precioMetro,
+            opcionesDeLineaWoo(li, productos.get(Number(li.product_id))),
+          ),
         };
       }),
     };

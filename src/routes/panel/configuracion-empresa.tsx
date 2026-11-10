@@ -34,6 +34,7 @@ type EmpresaForm = {
   coste_consumibles_metro: number;
   coste_packaging_metro: number;
   coste_electricidad_metro: number;
+  coste_uv_metro: number;
   serie_factura: string;
   serie_rectificativa: string;
   serie_simplificada: string;
@@ -55,6 +56,7 @@ const EMPTY: EmpresaForm = {
   coste_consumibles_metro: 0,
   coste_packaging_metro: 0,
   coste_electricidad_metro: 0,
+  coste_uv_metro: 15,
   serie_factura: "",
   serie_rectificativa: "R",
   serie_simplificada: "T",
@@ -89,6 +91,7 @@ function EmpresaPage() {
         coste_consumibles_metro: Number(data.coste_consumibles_metro ?? 0),
         coste_packaging_metro: Number(data.coste_packaging_metro ?? 0),
         coste_electricidad_metro: Number(data.coste_electricidad_metro ?? 0),
+        coste_uv_metro: Number(data.coste_uv_metro ?? 15),
         serie_factura: data.serie_factura ?? "",
         serie_rectificativa: data.serie_rectificativa ?? "R",
         serie_simplificada: data.serie_simplificada ?? "T",
@@ -110,13 +113,17 @@ function EmpresaPage() {
       const conTickets = "serie_simplificada" in data;
       // Igual con el método de pago, sin la migración 20261102100000.
       const conPago = "factura_metodo_pago" in data;
+      // E igual con el coste del DTF UV, sin la migración 20261110100000.
+      const conUv = "coste_uv_metro" in data;
       const {
         serie_simplificada,
         limite_simplificada,
         limite_simplificada_particular,
         factura_metodo_pago,
-        ...base
+        coste_uv_metro,
+        ...sinOpcionales
       } = f;
+      const base = conUv ? { ...sinOpcionales, coste_uv_metro } : sinOpcionales;
       const resto = conPago
         ? { ...base, factura_metodo_pago: factura_metodo_pago.trim() || null }
         : base;
@@ -365,6 +372,23 @@ function EmpresaPage() {
                   €/m
                 </span>
               </div>
+              {data && "coste_uv_metro" in data && (
+                <div className="space-y-2 border-t pt-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <NumberField
+                      label="DTF UV: lo que cobra la subcontrata (€/m)"
+                      v={f.coste_uv_metro}
+                      on={(v) => set("coste_uv_metro", v)}
+                      disabled={!isAdmin}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sin IVA. El DTF UV no pasa por la máquina: su coste es solo este. Cada pedido
+                    guarda el que había el día que entró, así que cambiarlo no altera los pedidos
+                    anteriores.
+                  </p>
+                </div>
+              )}
               {isAdmin && (
                 <div className="flex justify-end pt-2">
                   <Button onClick={guardar} disabled={saving}>

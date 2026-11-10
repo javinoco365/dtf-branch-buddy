@@ -132,6 +132,35 @@ describe("margenes", () => {
   it("los cancelados no cuentan", () => {
     expect(margenes([web("a", { estado: "cancelado" })], AJUSTES).pedidos).toBe(0);
   });
+
+  // DCUL-146-2026 con 6 € de portes: 7 m de UV a 16 €/m que la subcontrata
+  // cobra a 15 €/m y envía ella, por lo mismo que pagó el cliente.
+  const uv = (cambios: Partial<PedidoParaResumen> = {}) =>
+    web("uv", {
+      subtotal: 118,
+      iva: 24.78,
+      envio: 6,
+      total: 142.78,
+      metros_total: 0,
+      metros_uv: 7,
+      coste_uv_snapshot: 15,
+      ...cambios,
+    });
+
+  it("DTF UV: cuesta lo que cobra la subcontrata y el envío no deja ni quita", () => {
+    const m = margenes([uv()], AJUSTES);
+    expect(m.bruta).toBe(112);
+    expect(m.costeProduccion).toBe(105);
+    expect(m.margenSinEnvios).toBe(7);
+    expect(m.costeEnvios).toBe(6);
+    expect(m.resultadoEnvios).toBe(0);
+    expect(m.margenConEnvios).toBe(7);
+    expect(m.enviosEstimados).toBe(0);
+  });
+
+  it("DTF UV con otro coste de envío apuntado: manda el apuntado", () => {
+    expect(margenes([uv({ coste_envio_real: 8 })], AJUSTES).resultadoEnvios).toBe(-2);
+  });
 });
 
 describe("resumenPeriodo: lo pedido y lo realizado, por separado", () => {

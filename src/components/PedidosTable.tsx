@@ -57,6 +57,9 @@ import {
 import { toast } from "sonner";
 import { eur, metros, numero } from "@/lib/format";
 import { esEstimado, pedidoConMetrosEstimados } from "@/dominio/metros-woo";
+import { lineasDelPedido, type LineasDelPedido } from "@/dominio/linea-producto";
+import { cn } from "@/lib/utils";
+import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { HORA_CORTE_POR_DEFECTO } from "@/dominio/realizado";
 import { HoraPedido, RealizadoEn } from "@/components/pedidos/Realizado";
@@ -135,6 +138,8 @@ export type PedidoFila = {
   numero: string;
   estado: string;
   metros_total: number;
+  /** Metros de DTF UV, subcontratado (20261110100000). Falta sin la migración. */
+  metros_uv?: number | null;
   subtotal: number;
   iva: number;
   total: number;
@@ -169,6 +174,8 @@ export type PedidoFila = {
     /** De dónde salen los metros (20261020100000). Falta en líneas antiguas. */
     metros_origen?: string | null;
     precio_metro_usado?: number | null;
+    /** 'dtf' o 'uv' (20261110100000). Falta en líneas antiguas: son DTF. */
+    linea?: string | null;
   }[];
   tracking: {
     id: string;
@@ -182,6 +189,14 @@ export type PedidoFila = {
   documento?: DocumentoDeLista | null;
 };
 
+/** La línea de un pedido en la exportación. */
+const ETIQUETA_LINEAS: Record<LineasDelPedido, string> = {
+  dtf: "DTF",
+  uv: "DTF UV",
+  mixto: "DTF + UV",
+  ninguna: "",
+};
+
 // Nombre y color de cada estado: src/dominio/estados.ts, el mismo en toda la app.
 const ESTADOS = estadosDe("pedido");
 
@@ -191,6 +206,8 @@ const FILTROS_PEDIDOS = {
   cobro: "todos",
   origen: "todos",
   tienda: "todas",
+  /** DTF, DTF UV o los dos: ver linea-producto.ts. */
+  linea: "todas",
 };
 
 /**
@@ -369,6 +386,9 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       if (estadoFiltro !== "todos" && p.estado !== estadoFiltro) return false;
       if (f.origen === "web" && p.origen !== "woocommerce") return false;
       if (f.origen === "manual" && p.origen === "woocommerce") return false;
+      // Un pedido mixto (DTF + UV) sale con los dos filtros.
+      if (f.linea === "uv" && !["uv", "mixto"].includes(lineasDelPedido(p))) return false;
+      if (f.linea === "dtf" && lineasDelPedido(p) === "uv") return false;
       if (f.cobro !== "todos") {
         // «Pendiente» incluye lo cobrado en parte: es lo que falta por cobrar.
         const e = cobroDe(p).estado;
@@ -383,7 +403,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         p.numero.toLowerCase().includes(q)
       );
     });
-  }, [pedidos, f.q, f.origen, f.cobro, estadoFiltro]);
+  }, [pedidos, f.q, f.origen, f.linea, f.cobro, estadoFiltro]);
 
   // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
   // más antiguo al más nuevo. Como mucho 500 de una vez.
@@ -435,6 +455,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         "Email",
         "Estado",
         "Origen",
+        "Línea",
         "Pago",
         "Total",
         "Cobrado",
@@ -450,6 +471,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           p.cliente_email ?? "",
           infoEstado("pedido", p.estado).etiqueta,
           p.origen ?? "",
+          ETIQUETA_LINEAS[lineasDelPedido(p)],
           p.metodo_pago ?? "",
           p.total,
           cobro.cobrado,
@@ -601,6 +623,16 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               <SelectItem value="todos">Web y manuales</SelectItem>
               <SelectItem value="web">Solo web</SelectItem>
               <SelectItem value="manual">Solo manuales</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={f.linea} onValueChange={(linea) => cambiar({ linea })}>
+            <SelectTrigger className="w-[150px] max-md:w-[calc(50%-0.25rem)]" aria-label="Línea">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">DTF y UV</SelectItem>
+              <SelectItem value="dtf">Con DTF</SelectItem>
+              <SelectItem value="uv">Con DTF UV</SelectItem>
             </SelectContent>
           </Select>
           {hay() && (
@@ -1148,7 +1180,10 @@ const FilaPedido = memo(function FilaPedido({
         </TableCell>
         <TableCell>
           {/* El número entero, como siempre; la hora va debajo, junto al ticket. */}
-          <div className="font-mono text-sm truncate">{numeroLabel}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="font-mono text-sm truncate">{numeroLabel}</div>
+            <EtiquetaLineasPedido pedido={pedido} />
+          </div>
           {mostrarTienda && (
             <div
               className="text-xs text-muted-foreground truncate"
@@ -1296,6 +1331,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
           >
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-mono">{numeroVisible(pedido)}</span>
+              <EtiquetaLineasPedido pedido={pedido} />
               <HoraPedido pedido={pedido} horaCorte={horaCorte} />
               {mostrarTienda && pedido.tienda_nombre && (
                 <span className="truncate">· {pedido.tienda_nombre}</span>
@@ -1308,7 +1344,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
           </button>
           <div className="text-right shrink-0">
             <div className="font-semibold tabular-nums">{eur(pedido.total)}</div>
-            {Number(pedido.metros_total ?? 0) > 0 && (
+            {(Number(pedido.metros_total ?? 0) > 0 || Number(pedido.metros_uv ?? 0) > 0) && (
               <div className="text-xs tabular-nums text-muted-foreground">
                 <MetrosPedido pedido={pedido} enLinea />
               </div>
@@ -1491,7 +1527,10 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
         <TableBody>
           {pedido.items.map((l) => (
             <TableRow key={l.id}>
-              <TableCell>{l.descripcion}</TableCell>
+              <TableCell>
+                {l.descripcion}
+                {l.linea === "uv" && <EtiquetaUv className="ml-1.5 align-middle" />}
+              </TableCell>
               <TableCell className="text-right">
                 <CantidadLinea linea={l} />
               </TableCell>
@@ -1633,22 +1672,59 @@ const Metros = ({ m }: { m: number }) => <span className="whitespace-nowrap">{me
  */
 function MetrosPedido({ pedido, enLinea }: { pedido: PedidoFila; enLinea?: boolean }) {
   const m = Number(pedido.metros_total ?? 0);
-  if (!(m > 0)) return <span className="text-muted-foreground">—</span>;
-  if (!pedidoConMetrosEstimados(pedido.items)) return <Metros m={m} />;
+  const uv = Number(pedido.metros_uv ?? 0);
+  if (!(m > 0) && !(uv > 0)) return <span className="text-muted-foreground">—</span>;
+  // Los de UV aparte: no salen de la máquina (los imprime la subcontrata).
+  const deUv = uv > 0 && <MetrosUv m={uv} enLinea={enLinea} />;
+  if (!(m > 0)) return <>{deUv}</>;
+  if (!pedidoConMetrosEstimados(pedido.items)) {
+    return (
+      <>
+        <Metros m={m} />
+        {deUv}
+      </>
+    );
+  }
   return (
     <span title={TITULO_ESTIMADO}>
       ≈ <Metros m={m} />
       {!enLinea && <span className="block text-xs text-muted-foreground">estimado</span>}
+      {deUv}
+    </span>
+  );
+}
+
+/** Los metros de DTF UV de un pedido o de un pie, marcados como UV. */
+function MetrosUv({ m, enLinea }: { m: number; enLinea?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "whitespace-nowrap text-violet-700 dark:text-violet-300",
+        enLinea ? "ml-1" : "block text-xs",
+      )}
+      title="Metros de DTF UV (subcontratado)"
+    >
+      {enLinea ? "+ " : ""}
+      {metros(m)} UV
     </span>
   );
 }
 
 /** Los metros de un pie de pedidos (sin los cancelados), con «≈» si alguno es estimado. */
 function MetrosSuma({ totales }: { totales: TotalesPedidos }) {
-  if (!totales.metrosEstimados) return <Metros m={totales.metros} />;
+  const uv = totales.metrosUv > 0 && <MetrosUv m={totales.metrosUv} enLinea />;
+  if (!totales.metrosEstimados) {
+    return (
+      <>
+        <Metros m={totales.metros} />
+        {uv}
+      </>
+    );
+  }
   return (
     <span title={TITULO_ESTIMADO}>
       ≈ <Metros m={totales.metros} />
+      {uv}
     </span>
   );
 }

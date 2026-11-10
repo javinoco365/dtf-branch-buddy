@@ -30,11 +30,21 @@
  *
  * Nunca se toma la cantidad como metros: era el fallo («1 m a 12,27 €»).
  *
+ * La excepción es el DTF UV (ver linea-producto.ts), que se vende por metros
+ * con su propio precio:
+ *
+ *   - Con el montador, la longitud se lee igual, pero se comprueba contra el
+ *     precio del UV (el de la línea o el del producto en el catálogo), no
+ *     contra el del DTF: si no, se descartaba una lectura buena.
+ *   - Sin el montador («DTF UV por Metros Manual»), la cantidad SON los
+ *     metros: 7 a 16 €/m son 7 m, no 112 € ÷ 7 €/m = 16 m.
+ *
  * Lógica pura: sin Supabase ni red.
  */
 
 import { normalizarTexto } from "./clientes";
 import { redondear } from "./importes";
+import { lineaDeLineaPedido, type LineaProducto } from "./linea-producto";
 
 export type MetaWoo = {
   key?: string | null;
@@ -51,7 +61,7 @@ export type LineaWoo = {
 };
 
 /** De dónde salen los metros de una línea. */
-export type OrigenMetros = "montador" | "precio_linea" | "precio_ajustes";
+export type OrigenMetros = "montador" | "precio_linea" | "precio_ajustes" | "cantidad";
 
 export type MedidaLinea = {
   metros: number;
@@ -233,11 +243,23 @@ export function esLineaDeMetros(
   );
 }
 
+/** De qué línea es y, si es UV, el precio por metro de su producto. */
+export type OpcionesMedida = {
+  linea?: LineaProducto;
+  /** Precio por metro del producto UV en el catálogo, sin IVA, si se sabe. */
+  precioUv?: number | null;
+};
+
 /**
  * Los metros de la línea, de dónde salen y con qué precio, o `null` si la
  * línea no es de metros o no hay forma honrada de saberlos.
  */
-export function medirLineaWoo(li: LineaWoo, precioAjustes: number | null): MedidaLinea | null {
+export function medirLineaWoo(
+  li: LineaWoo,
+  precioAjustes: number | null,
+  opciones: OpcionesMedida = {},
+): MedidaLinea | null {
+  if (opciones.linea === "uv") return medirLineaUv(li, opciones.precioUv ?? null);
   const cantidad = numeroDeTexto(li.quantity ?? 0) ?? 0;
   const subtotal = numeroDeTexto(li.subtotal ?? 0) ?? 0;
   const hallazgos = datosDeMetas(li.meta_data ?? []);
@@ -267,6 +289,55 @@ export function medirLineaWoo(li: LineaWoo, precioAjustes: number | null): Medid
   return null;
 }
 
+/**
+ * Los metros de una línea de DTF UV. Siempre es de metros: con el montador,
+ * la longitud leída si cuadra con el precio del UV; sin él, la cantidad.
+ */
+function medirLineaUv(li: LineaWoo, precioUv: number | null): MedidaLinea | null {
+  const cantidad = numeroDeTexto(li.quantity ?? 0) ?? 0;
+  const subtotal = numeroDeTexto(li.subtotal ?? 0) ?? 0;
+  const hallazgos = datosDeMetas(li.meta_data ?? []);
+  const precioLinea = primero(hallazgos, "precio");
+  const precioRef = precioLinea ?? (precioUv && precioUv > 0 ? precioUv : null);
+
+  const facturada = primero(hallazgos, "facturada");
+  const hoja = primero(hallazgos, "hoja");
+  const porTrabajo =
+    facturada ?? (hoja !== null ? hoja * (primero(hallazgos, "hojas") ?? 1) : null);
+  if (porTrabajo !== null && cantidad > 0) {
+    const metros = redondear(porTrabajo * cantidad, 3);
+    if (metros > 0 && cuadra(subtotal, metros, precioLinea, precioRef)) {
+      return { metros, origen: "montador", precio_metro: precioLinea };
+    }
+  }
+
+  // Un trabajo del montador sin longitud que valga: la cantidad es el número
+  // de copias, no los metros. Se estima con el precio del UV, si se sabe.
+  const delMontador =
+    hallazgos.length > 0 ||
+    (li.meta_data ?? []).some((m) => CLAVE_MONTADOR.test(`${m.key ?? ""} ${m.display_key ?? ""}`));
+  if (delMontador) {
+    if (subtotal > 0 && precioRef) {
+      return {
+        metros: redondear(subtotal / precioRef, 3),
+        origen: precioLinea !== null ? "precio_linea" : "precio_ajustes",
+        precio_metro: precioRef,
+      };
+    }
+    return null;
+  }
+
+  // Sin el montador: se venden metros sueltos y la cantidad son los metros.
+  if (cantidad > 0) {
+    return {
+      metros: redondear(cantidad, 3),
+      origen: "cantidad",
+      precio_metro: subtotal > 0 ? redondear(subtotal / cantidad, 4) : null,
+    };
+  }
+  return null;
+}
+
 /** ¿Cuadra la longitud leída con lo cobrado? */
 function cuadra(
   subtotal: number,
@@ -285,6 +356,7 @@ function cuadra(
 export function lineaPedidoWoo(
   li: LineaWoo,
   precioAjustes: number | null,
+  opciones: OpcionesMedida = {},
 ): {
   cantidad: number;
   unidad: "m" | "ud";
@@ -293,7 +365,7 @@ export function lineaPedidoWoo(
   precio_metro_usado: number | null;
 } {
   const subtotal = numeroDeTexto(li.subtotal ?? 0) ?? 0;
-  const medida = medirLineaWoo(li, precioAjustes);
+  const medida = medirLineaWoo(li, precioAjustes, opciones);
   const cantidad = medida?.metros ?? numeroDeTexto(li.quantity ?? 0) ?? 0;
   return {
     cantidad,
@@ -313,6 +385,45 @@ export function metrosPedidoWoo(
     (lineas ?? []).reduce((s, li) => s + (medirLineaWoo(li, precioAjustes)?.metros ?? 0), 0),
     3,
   );
+}
+
+/** Lo que el catálogo del CRM sabe de un producto de WooCommerce. */
+export type ProductoDelCatalogo = {
+  linea: LineaProducto | null;
+  /** Precio sin IVA del producto en la tienda. */
+  precio: number | null;
+};
+
+/**
+ * De qué línea es una línea de pedido de WooCommerce y con qué precio se
+ * comprueban sus metros si es de UV: lo que sepa el catálogo de su producto
+ * y, si no sabe nada, lo que diga su nombre.
+ */
+export function opcionesDeLineaWoo(
+  li: LineaWoo,
+  producto: ProductoDelCatalogo | null | undefined,
+): OpcionesMedida & { linea: LineaProducto } {
+  const linea = lineaDeLineaPedido(li.name, producto?.linea);
+  const precio = producto?.precio;
+  return { linea, precioUv: linea === "uv" && precio != null && precio > 0 ? precio : null };
+}
+
+/**
+ * Metros del pedido por línea de producto: los del DTF propio (`dtf`, que es
+ * `metros_total`) y los del UV subcontratado (`uv`, `metros_uv`).
+ */
+export function metrosPedidoWooPorLinea(
+  lineas: readonly LineaWoo[] | null | undefined,
+  precioAjustes: number | null,
+  opcionesDe: (li: LineaWoo) => OpcionesMedida,
+): Record<LineaProducto, number> {
+  const suma: Record<LineaProducto, number> = { dtf: 0, uv: 0 };
+  for (const li of lineas ?? []) {
+    const opciones = opcionesDe(li);
+    const metros = medirLineaWoo(li, precioAjustes, opciones)?.metros ?? 0;
+    suma[opciones.linea ?? "dtf"] += metros;
+  }
+  return { dtf: redondear(suma.dtf, 3), uv: redondear(suma.uv, 3) };
 }
 
 /** ¿Es un metro estimado (no leído del montador)? */

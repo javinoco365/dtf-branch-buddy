@@ -5,7 +5,9 @@ import {
   lineaPedidoWoo,
   medirLineaWoo,
   metrosPedidoWoo,
+  metrosPedidoWooPorLinea,
   numeroDeTexto,
+  opcionesDeLineaWoo,
   pedidoConMetrosEstimados,
   primerNumero,
   type LineaWoo,
@@ -249,5 +251,114 @@ describe("pedidoConMetrosEstimados", () => {
     expect(pedidoConMetrosEstimados([{ metros_origen: null }])).toBe(false);
     expect(pedidoConMetrosEstimados([])).toBe(false);
     expect(pedidoConMetrosEstimados(null)).toBe(false);
+  });
+});
+
+describe("metros del DTF UV", () => {
+  // DCUL-146-2026: «DTF UV por Metros Manual», 7 a 16 €/m, sin el montador.
+  const uvManual: LineaWoo = {
+    name: "DTF UV por Metros Manual",
+    quantity: 7,
+    subtotal: "112.00",
+    meta_data: [],
+  };
+
+  it("sin el montador, la cantidad son los metros (no 112 ÷ 7 €/m)", () => {
+    expect(medirLineaWoo(uvManual, PRECIO)).toEqual({
+      metros: 16,
+      origen: "precio_ajustes",
+      precio_metro: PRECIO,
+    });
+    expect(medirLineaWoo(uvManual, PRECIO, { linea: "uv" })).toEqual({
+      metros: 7,
+      origen: "cantidad",
+      precio_metro: 16,
+    });
+  });
+
+  it("la línea se guarda en metros, con su precio por metro", () => {
+    expect(lineaPedidoWoo(uvManual, PRECIO, { linea: "uv" })).toEqual({
+      cantidad: 7,
+      unidad: "m",
+      precio_unitario: 16,
+      metros_origen: "cantidad",
+      precio_metro_usado: 16,
+    });
+  });
+
+  // «DTF UV por metros» con el montador: 2 m a 17,50 €/m.
+  const uvMontador = (precio: string | null): LineaWoo => ({
+    name: "DTF UV por metros",
+    quantity: 1,
+    subtotal: "35.00",
+    meta_data: [
+      { key: "Ancho de hoja (cm)", value: "56" },
+      { key: "Longitud facturada por trabajo (m)", value: "2" },
+      ...(precio ? [{ key: "Precio por metro", value: precio }] : []),
+    ],
+  });
+
+  it("con el montador lee la longitud aunque el precio no sea el del DTF", () => {
+    // Contra los 7 € del DTF, 17,50 €/m no cuadra y se estimaba (5 m).
+    expect(medirLineaWoo(uvMontador(null), PRECIO)?.metros).toBe(5);
+    expect(medirLineaWoo(uvMontador(null), PRECIO, { linea: "uv", precioUv: 17.5 })).toEqual({
+      metros: 2,
+      origen: "montador",
+      precio_metro: null,
+    });
+    expect(medirLineaWoo(uvMontador("17,50 €"), PRECIO, { linea: "uv" })).toEqual({
+      metros: 2,
+      origen: "montador",
+      precio_metro: 17.5,
+    });
+  });
+
+  it("un trabajo del montador sin longitud se estima con el precio del UV", () => {
+    const sinLongitud: LineaWoo = {
+      name: "DTF UV por metros",
+      quantity: 1,
+      subtotal: "35.00",
+      meta_data: [{ key: "_dtfbuild_project", value: "X1" }],
+    };
+    expect(medirLineaWoo(sinLongitud, PRECIO, { linea: "uv", precioUv: 17.5 })).toEqual({
+      metros: 2,
+      origen: "precio_ajustes",
+      precio_metro: 17.5,
+    });
+    // Sin precio del UV no hay forma honrada de saberlo: no se inventa.
+    expect(medirLineaWoo(sinLongitud, PRECIO, { linea: "uv" })).toBeNull();
+  });
+
+  it("los metros del pedido, separados por línea", () => {
+    const opcionesDe = (li: LineaWoo) =>
+      li.name?.includes("UV")
+        ? { linea: "uv" as const, precioUv: 17.5 }
+        : { linea: "dtf" as const };
+    expect(metrosPedidoWooPorLinea([montador(), uvManual], PRECIO, opcionesDe)).toEqual({
+      dtf: 4.4,
+      uv: 7,
+    });
+    expect(metrosPedidoWooPorLinea(null, PRECIO, opcionesDe)).toEqual({ dtf: 0, uv: 0 });
+  });
+
+  it("los metros por cantidad no cuentan como estimados", () => {
+    expect(esEstimado("cantidad")).toBe(false);
+  });
+});
+
+describe("opcionesDeLineaWoo", () => {
+  it("el catálogo manda; sin él, el nombre", () => {
+    expect(opcionesDeLineaWoo({ name: "Metros" }, { linea: "uv", precio: 17.5 })).toEqual({
+      linea: "uv",
+      precioUv: 17.5,
+    });
+    expect(opcionesDeLineaWoo({ name: "DTF UV por Metros Manual" }, null)).toEqual({
+      linea: "uv",
+      precioUv: null,
+    });
+    expect(opcionesDeLineaWoo({ name: "DTF por Metros" }, { linea: null, precio: 7 })).toEqual({
+      linea: "dtf",
+      precioUv: null,
+    });
   });
 });
