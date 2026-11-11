@@ -68,7 +68,9 @@ export const hayLector = createServerFn({ method: "GET" })
  * generaría no se pueden borrar después.
  */
 export const leerFacturaCompra = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  // Gasta en la API de IA y solo sirve para registrar una compra: quien no
+  // puede escribir (visor, sin nivel, desactivado) no la usa.
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => {
     if (!(d instanceof FormData)) throw new Error("Falta el fichero");
     const fichero = d.get("fichero");
