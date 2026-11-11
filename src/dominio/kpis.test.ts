@@ -299,6 +299,15 @@ describe("agruparPorTienda", () => {
 });
 
 describe("topPorMetros", () => {
+  it("los metros de DTF UV no cuentan", () => {
+    expect(
+      topPorMetros([
+        { descripcion: "DTF por Metros", cantidad: 3, unidad: "m" },
+        { descripcion: "DTF UV por Metros Manual", cantidad: 7, unidad: "m", linea: "uv" },
+      ]),
+    ).toEqual([{ producto: "DTF por Metros", metros: 3 }]);
+  });
+
   it("agrupa por descripción y ordena por metros", () => {
     expect(
       topPorMetros([

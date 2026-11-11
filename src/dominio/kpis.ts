@@ -55,6 +55,8 @@ export type LineaResumen = {
   descripcion: string | null;
   cantidad: number | string | null;
   unidad?: string | null;
+  /** 'dtf' o 'uv' (20261110100000). Falta en líneas antiguas: son DTF. */
+  linea?: string | null;
 };
 
 /** El único estado que se excluye de la facturación. */
@@ -337,6 +339,8 @@ export function topPorMetros(
   const porProducto = new Map<string, number>();
   for (const l of lineas) {
     if ((l.unidad ?? "m").toLowerCase() !== "m") continue;
+    // Los metros de DTF UV no son metros vendidos de DTF (ver ventas-uv.ts).
+    if (l.linea === "uv") continue;
     const nombre = (l.descripcion ?? "").trim() || "Sin descripción";
     porProducto.set(nombre, (porProducto.get(nombre) ?? 0) + num(l.cantidad));
   }
