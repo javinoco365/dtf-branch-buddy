@@ -191,8 +191,13 @@ export function facturadoSinPedido(
 export type ColumnaResultados = {
   /** Sin IVA. */
   ingresos: number;
+  /** Producción del DTF propio: metros × coste por metro. */
   produccion: number;
+  /** Lo que cobra la subcontrata por el DTF UV (sin el envío). */
+  subcontrata: number;
   envios: number;
+  /** De `envios`, los de pedidos solo de UV: los cobra la subcontrata. */
+  enviosSubcontrata: number;
   ropa: number;
   margen: number;
   costesFijos: number;
@@ -250,7 +255,9 @@ export function resultadosPorGrupo(d: {
     return {
       ingresos,
       produccion: c.costeDtf,
+      subcontrata: c.costeUv,
       envios: c.costeEnvios,
+      enviosSubcontrata: c.enviosUv,
       ropa: c.costeTextil,
       margen,
       costesFijos: redondear(fijos),
@@ -284,7 +291,9 @@ export function resultadosPorGrupo(d: {
   const total: ColumnaResultados = {
     ingresos: suma("ingresos"),
     produccion: suma("produccion"),
+    subcontrata: suma("subcontrata"),
     envios: suma("envios"),
+    enviosSubcontrata: suma("enviosSubcontrata"),
     ropa: suma("ropa"),
     margen: suma("margen"),
     costesFijos: suma("costesFijos"),

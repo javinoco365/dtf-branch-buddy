@@ -656,6 +656,24 @@ describe("cifrasGerenciaPorLinea", () => {
     expect(dtf.euroMetro).toBe(9.14);
   });
 
+  it("el coste separa la producción de DTF y la subcontrata del UV, y los suma", () => {
+    const c = cifrasGerencia(ventas, 2);
+    expect(c.costeDtf).toBe(14 * 2);
+    expect(c.costeUv).toBe(9 * 15);
+    expect(c.costeTextil).toBe(30);
+    expect(c.coste).toBe(28 + 135 + 30);
+    expect(c.metrosUv).toBe(9);
+    expect(c.metros).toBe(14);
+    // Ningún pedido solo de UV lleva portes aquí; el mixto los deja en el DTF.
+    expect(c.enviosUv).toBe(0);
+    expect(cifrasGerencia([{ ...ventas[1], envio: 6 }], 2).enviosUv).toBe(6);
+    const filas = cifrasGerenciaPorLinea(ventas, 2);
+    const uv = filas.find((f) => f.clave === "uv")!.cifras;
+    const dtf = filas.find((f) => f.clave === "dtf")!.cifras;
+    expect(uv).toMatchObject({ costeDtf: 0, costeUv: 135 });
+    expect(dtf).toMatchObject({ costeDtf: 28, costeUv: 0, coste: 28 });
+  });
+
   it("cuadran al céntimo aunque el redondeo de cada línea no lo haga", () => {
     // Importes con tres decimales de IVA y devoluciones que no se reparten exactas.
     const raras = Array.from({ length: 40 }, (_, i) => {

@@ -140,8 +140,34 @@ describe("compras que cuestan como un gasto", () => {
 
   it("lo comprado de tinta y mensajería, para comparar con lo de los pedidos", () => {
     expect(comprasParaComparar(compras, { desde: d(2026, 3, 1), hasta: fin(2026, 3, 31) })).toEqual(
-      { consumibles: 500, envios: 40 },
+      { consumibles: 500, envios: 40, subcontrataUv: 0 },
     );
+  });
+
+  it("la factura de la subcontrata del UV se compara con lo que cuentan los pedidos de UV", () => {
+    const filas = comparacionCompras(
+      { consumibles: 0, envios: 40, subcontrataUv: 420 },
+      // 26 m de UV a 15 €/m y 6 € de portes de un pedido solo de UV.
+      { produccion: 100, envios: 46, subcontrata: 390, enviosSubcontrata: 6 },
+    );
+    expect(filas.map((f) => f.concepto)).toEqual([
+      "Consumibles DTF",
+      "Mensajería",
+      "DTF UV subcontratado",
+    ]);
+    // La mensajería, sin el envío que cobra la subcontrata.
+    expect(filas[1]).toMatchObject({ comprado: 40, estimado: 40, diferencia: 0 });
+    expect(filas[2]).toMatchObject({ comprado: 420, estimado: 396, diferencia: 24 });
+  });
+
+  it("sin UV, no sale la fila de la subcontrata", () => {
+    expect(
+      comparacionCompras({ consumibles: 1, envios: 1 }, { produccion: 1, envios: 1 }),
+    ).toHaveLength(2);
+  });
+
+  it("la categoría de la subcontrata compara: no cuesta otra vez como gasto", () => {
+    expect(categoriaCompra("subcontrata_uv").trato).toBe("comparar");
   });
 
   it("la comparación dice cuánto se compra de más", () => {

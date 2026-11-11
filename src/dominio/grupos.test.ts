@@ -194,6 +194,37 @@ describe("cuenta de resultados en tres columnas", () => {
     });
   });
 
+  it("el DTF UV, en su fila: lo que cobra la subcontrata, aparte de la producción", () => {
+    // DCUL-146: 7 m de UV a 16 €/m + 6 € de portes; y un pedido de DTF de 10 m.
+    const uv = pedido("uv", 118, {
+      envio: 6,
+      metros_total: 0,
+      metros_uv: 7,
+      coste_uv_snapshot: 15,
+      bruta_uv: 112,
+      iva_uv: 0,
+    });
+    const dtf = pedido("dtf", 100, { metros_total: 10, coste_metro_snapshot: 2 });
+    const r = resultadosPorGrupo({
+      ventas: [uv, dtf],
+      documentados: new Set(["uv", "dtf"]),
+      costeActual: 2,
+      facturadoSinPedido: 0,
+      costesFijos: { a: 0, b: 0 },
+      tipoIs: 0,
+    });
+    expect(r.a).toMatchObject({
+      ingresos: 218,
+      produccion: 20,
+      subcontrata: 105,
+      envios: 6,
+      enviosSubcontrata: 6,
+      // 218 − 20 − 105 − 6: el envío no deja margen.
+      margen: 87,
+    });
+    expect(r.total.subcontrata).toBe(105);
+  });
+
   it("en la cuenta de resultados el envío cobrado es ingreso y lo de la agencia, gasto", () => {
     const r = resultadosPorGrupo({
       ventas: [pedido("a", 110, { envio: 10 })],

@@ -14,6 +14,7 @@ import { partirPedidos, ventasDeLinea, type FiltroLinea } from "./por-linea";
 import { redondear } from "./importes";
 import {
   calcularKpis,
+  costeProduccion,
   costeVariable,
   ESTADO_CANCELADO,
   type KpisPeriodo,
@@ -180,6 +181,18 @@ export type CifrasGerencia = KpisPeriodo & {
   costeEnvios: number;
   /** Coste de producción DTF: metros × coste por metro congelado. */
   costeDtf: number;
+  /**
+   * Lo que cobra la subcontrata por el DTF UV: metros de UV × su coste
+   * congelado (15 €/m por defecto). Sin el envío, que va en `costeEnvios`.
+   */
+  costeUv: number;
+  /** Metros de DTF UV. No se suman nunca a `metros` (los de DTF). */
+  metrosUv: number;
+  /**
+   * La parte de `costeEnvios` de los pedidos solo de UV: la envía la
+   * subcontrata y la cobra en su factura, no la agencia.
+   */
+  enviosUv: number;
   /** Coste de la ropa que salió del almacén para los pedidos textil. */
   costeTextil: number;
   /** Pedidos textil no cancelados sin salida de almacén todavía: su margen va sin coste. */
@@ -193,20 +206,30 @@ export type CifrasGerencia = KpisPeriodo & {
 export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): CifrasGerencia {
   const k = calcularKpis(ventas);
   const variable = costeVariable(ventas, costeActual);
-  const costeDtf = variable.produccion;
+  // La parte de UV de cada pedido (por-linea.ts): su coste es la subcontrata.
+  const partes = partirPedidos(ventas);
+  const uvValidas = partes.uv.filter((v) => v.estado !== ESTADO_CANCELADO);
+  const costeUv = costeProduccion(uvValidas, costeActual);
+  const costeDtf = redondear(variable.produccion - costeUv);
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
-  const coste = redondear(costeDtf + costeTextil);
+  const coste = redondear(costeDtf + costeUv + costeTextil);
   // El precio del metro: la bruta ya va sin el envío, lo que se cobra por
   // imprimir. Solo la parte de DTF: en un pedido mixto, lo del UV no se
   // reparte entre los metros de DTF (ver por-linea.ts).
-  const conMetros = calcularKpis(partirPedidos(ventas).dtf.filter((v) => num(v.metros_total) > 0));
+  const conMetros = calcularKpis(partes.dtf.filter((v) => num(v.metros_total) > 0));
   const brutaMetros = conMetros.bruta;
   return {
     ...k,
     coste,
     costeEnvios: variable.envios,
     costeDtf,
+    costeUv,
+    metrosUv: redondear(
+      uvValidas.reduce((s, v) => s + num(v.metros_uv), 0),
+      3,
+    ),
+    enviosUv: calcularKpis(partes.uv).envios,
     costeTextil,
     textilSinCoste: textil.filter((v) => v.coste_textil == null).length,
     margen: redondear(k.bruta - coste),
@@ -901,6 +924,12 @@ export function beneficioEstimado(
 // Por línea de producto
 // ---------------------------------------------------------------------------
 
+/**
+ * Una fila de la tabla por línea. Ojo: en la fila «uv», `metros` y
+ * `euroMetro` son los del DTF UV (la tabla enseña los metros de cada línea en
+ * la misma columna) y `metrosUv` repite esos metros. No se suman `metros`
+ * entre filas: son productos distintos.
+ */
 export type FilaLinea = {
   clave: "dtf" | "uv" | "textil";
   etiqueta: string;
@@ -915,7 +944,16 @@ export type FilaLinea = {
  */
 export function cifrasGerenciaPorLinea(ventas: readonly Venta[], costeActual: number): FilaLinea[] {
   const todo = cifrasGerencia(ventas, costeActual);
-  const uv = cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual);
+  // La parte de UV llega como única línea (ventasDeLinea): su coste sale en
+  // `costeDtf` y sus envíos en `costeEnvios`. Aquí se ponen en su sitio.
+  const comoUnica = cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual);
+  const uv: CifrasGerencia = {
+    ...comoUnica,
+    costeDtf: 0,
+    costeUv: comoUnica.costeDtf,
+    metrosUv: comoUnica.metros,
+    enviosUv: comoUnica.costeEnvios,
+  };
   const textil = cifrasGerencia(
     ventas.filter((v) => v.canal === "textil"),
     costeActual,
@@ -931,6 +969,9 @@ export function cifrasGerenciaPorLinea(ventas: readonly Venta[], costeActual: nu
   const dtf: CifrasGerencia = {
     ...deDtf,
     ...dinero,
+    costeDtf: todo.costeDtf,
+    costeUv: 0,
+    enviosUv: 0,
     ticket: deDtf.pedidos > 0 ? redondear(dinero.total / deDtf.pedidos) : 0,
   };
   const filas: FilaLinea[] = [
@@ -950,7 +991,6 @@ const DINERO_GERENCIA = [
   "devuelto",
   "coste",
   "costeEnvios",
-  "costeDtf",
   "costeTextil",
   "margen",
 ] as const;

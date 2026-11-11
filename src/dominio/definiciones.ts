@@ -126,7 +126,7 @@ export const DEFINICIONES = {
   g_margen: {
     que: "Lo que queda de lo vendido después de lo que cuesta producirlo.",
     calculo:
-      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. El envío no entra ni en la bruta ni en el coste: se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
+      "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. En DTF UV, metros de UV × lo que cobra la subcontrata por metro (congelado en cada pedido, 15 € por defecto). El envío no entra ni en la bruta ni en el coste: se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_beneficio: {
@@ -288,7 +288,7 @@ export const DEFINICIONES = {
   g_coste: {
     que: "Lo que ha costado producir lo vendido.",
     calculo:
-      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
+      "DTF: metros × coste por metro (consumibles, embalaje y electricidad) congelado en cada pedido. DTF UV: metros de UV × lo que cobra la subcontrata por metro, congelado en cada pedido (15 € por defecto). Textil: la ropa que salió del almacén para cada pedido, al coste medio del momento, menos lo que devolvió el cliente.",
     fuente:
       "Pedidos del periodo y salidas del almacén textil. No incluye gastos fijos ni sueldos, ni el envío: lo que se paga a la agencia es lo que se cobra al cliente, y tampoco está en la bruta.",
   },
@@ -298,9 +298,9 @@ export const DEFINICIONES = {
     fuente: GERENCIA_PEDIDOS,
   },
   g_margen_metro: {
-    que: "Cuánto queda de cada metro de DTF.",
+    que: "Cuánto queda de cada metro de DTF (o de DTF UV).",
     calculo:
-      "Precio medio del metro (facturación bruta, ya sin el envío, ÷ metros) − coste medio del metro (coste DTF ÷ metros), solo de los pedidos que llevan metros.",
+      "Precio medio del metro (facturación bruta, ya sin el envío, ÷ metros) − coste medio del metro (coste ÷ metros), solo de los pedidos que llevan metros. Cada línea con lo suyo: en un pedido mixto, lo del DTF UV no entra en el metro de DTF. En DTF UV, el coste es lo que cobra la subcontrata.",
     fuente: GERENCIA_PEDIDOS,
   },
 
@@ -391,7 +391,7 @@ export const DEFINICIONES = {
   g_resultado: {
     que: "De lo vendido a lo que queda limpio después de costes e impuestos.",
     calculo:
-      "Ingresos sin IVA (con el envío cobrado) − costes variables (producción DTF, envíos pagados a la agencia y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones − mermas y ajustes de almacén = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film y mensajería no restan aquí (ya cuestan por metro y por envío): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
+      "Ingresos sin IVA (con el envío cobrado) − costes variables (producción DTF, lo que cobra la subcontrata del DTF UV, envíos pagados y ropa) = margen. Margen − costes fijos (gastos de Ajustes repartidos por días, hasta hoy) − otras compras − amortizaciones − mermas y ajustes de almacén = beneficio antes de impuestos. Menos Sociedades estimado = beneficio neto. Los gastos con justificante restan en A y los que no lo tienen, en B: un gasto sin justificante no rebaja Sociedades. Si un gasto fijo tiene su factura subida, ese mes cuenta la factura. Las compras de tinta, film, mensajería y las facturas de la subcontrata del DTF UV no restan aquí (ya cuestan por metro y por envío en cada pedido): se comparan aparte. Las máquinas y los ordenadores se amortizan: 12 % y 25 % al año.",
     fuente:
       "Pedidos de tiendas y textil del periodo y gastos de Gerencia › Ajustes. Toda la empresa: sin filtros de tienda ni canal.",
   },
@@ -402,9 +402,9 @@ export const DEFINICIONES = {
     fuente: "Cuenta de resultados del periodo y Gerencia › Ajustes.",
   },
   g_compras_comparadas: {
-    que: "Lo que dicen las facturas de tinta, film, polvo y mensajería frente a lo que Gerencia les cuenta a los pedidos.",
+    que: "Lo que dicen las facturas de tinta, film, polvo, mensajería y de la subcontrata del DTF UV frente a lo que Gerencia les cuenta a los pedidos.",
     calculo:
-      "Base de las facturas de compra de consumibles DTF y de mensajería con fecha en el periodo, frente a la producción DTF (metros × coste por metro) y los envíos de los pedidos. No es exacto mes a mes (se compra por adelantado), pero si a lo largo de varios meses lo comprado es bastante más que lo estimado, el coste por metro está bajo.",
+      "Base de las facturas de compra de consumibles DTF, de mensajería y de «DTF UV subcontratado» con fecha en el periodo, frente a la producción DTF (metros × coste por metro), los envíos de los pedidos (sin los de pedidos solo de DTF UV, que los cobra la subcontrata) y lo que cobra la subcontrata (metros de UV × su coste por metro, más esos envíos). No es exacto mes a mes (se compra por adelantado), pero si a lo largo de varios meses lo comprado es bastante más que lo estimado, el coste por metro está bajo.",
     fuente: "Facturas de compra registradas y pedidos del periodo.",
   },
   g_impuestos_trimestre: {
