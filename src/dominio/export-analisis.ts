@@ -26,6 +26,8 @@ import { diaDelPedido } from "./dia-pedido";
 import { redondear } from "./importes";
 import { esEstimado } from "./metros-woo";
 import { documentoVigente } from "./tickets";
+import { lineasDelPedido } from "./linea-producto";
+import { partirPedido } from "./por-linea";
 
 export const FORMATO_EXPORT_ANALISIS = "dtf-crm/analisis-pedidos/1";
 
@@ -59,6 +61,8 @@ export type LineaExport = {
   metros_origen?: string | null;
   precio_metro_usado?: number | string | null;
   coste_unit_snapshot?: number | string | null;
+  /** 'dtf' o 'uv' (migración 20261110100000); sin ella, no viene. */
+  linea?: string | null;
 };
 
 export type CobroExport = {
@@ -99,7 +103,7 @@ export type AjustesExport = {
 /** Lo que el fichero explica de sí mismo. Se lee antes que los datos. */
 export const LEEME_ANALISIS = {
   proposito:
-    "Pedidos de DTF por metros de las tiendas de DTI S.L. (RONOCA DESARROLLOS S.L.), exportados del CRM para comprobaciones económicas: precio real del metro, márgenes, envíos, devoluciones, cobros y documentos fiscales. Todos los pedidos de todas las fechas del alcance indicado; no lleva el textil, las facturas de compra ni los gastos fijos.",
+    "Pedidos de DTF y de DTF UV (subcontratado) por metros de las tiendas de DTI S.L. (RONOCA DESARROLLOS S.L.), exportados del CRM para comprobaciones económicas: precio real del metro, márgenes, envíos, devoluciones, cobros y documentos fiscales. Todos los pedidos de todas las fechas del alcance indicado; no lleva el textil, las facturas de compra ni los gastos fijos.",
   moneda: "EUR. Importes redondeados al céntimo; metros con 3 decimales.",
   fechas:
     "`fecha` es el día del pedido: en los de WooCommerce, el de la hora de la web; en los manuales, el de la hora de España. `mes` (yyyy-mm) sale de esa fecha. Desde el 8-10-2026 el ticket o la factura se proponen con esta fecha; los anteriores, los canjes, las anulaciones, los que se cambiaron a mano y los tickets en bloque que no cabían en la serie llevan otra. Para periodos fiscales, usar documentos[].fecha.",
@@ -133,7 +137,7 @@ export const LEEME_ANALISIS = {
     netos:
       "base_neta, envio_neto, iva_neto y total_neto son los importes × parte_vendida, redondeados por pedido; bruta_neta = base_neta − envio_neto. La «Facturación bruta» de las pantallas es la suma de bruta_neta. En los cancelados son 0: no cuentan como venta. base_neta + iva_neto puede diferir de total_neto en 0,01 por el redondeo.",
     metros:
-      "Metros lineales del pedido (pedidos.metros_total). Los cancelados también lo traen, pero no suman en el resumen. Las devoluciones no los descuentan: lo impreso, impreso está. Ver `metros_de`.",
+      "Metros lineales de DTF del pedido (pedidos.metros_total); los de DTF UV van aparte, en metros_uv, y no se suman nunca. Los cancelados también lo traen, pero no suman en el resumen. Las devoluciones no los descuentan: lo impreso, impreso está. Ver `metros_de`.",
     metros_de:
       "De dónde salen los metros del pedido. 'lineas_medidas': pedido web cuyas líneas en metros (unidad 'm') dicen de dónde salen (metros_origen). 'lineas_en_metros': pedido manual hecho desde un presupuesto, que conserva la unidad de cada línea y solo suma las de 'm'. 'sin_origen': pedido web sincronizado antes del 7-10-2026 y no vuelto a sincronizar (o sin la migración de metros_origen): todas sus líneas van en 'm' con la cantidad de WooCommerce, que son unidades, no metros. 'suma_de_cantidades': pedido manual hecho con el formulario: todas sus líneas van en 'ud' aunque sean metros, y se suman las cantidades de TODAS. En 'sin_origen' y 'suma_de_cantidades', si el pedido lleva algo que no es metros, sus metros, su coste y su €/m están mal (ver metros_dudosos en el resumen).",
     metros_estimados:
@@ -143,13 +147,21 @@ export const LEEME_ANALISIS = {
     metros_origen:
       "En cada línea: 'montador' (longitud leída del montador), 'precio_linea' o 'precio_ajustes' (estimada), o null (sin dato: líneas que no van en metros o anteriores a guardar el origen; null no garantiza que se midiera).",
     venta_metros:
-      "La parte de la bruta que corresponde a las líneas en metros (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos con metros pero sin líneas en 'm' (manuales del formulario), la bruta entera; en los que no tienen metros, 0 (y eur_metro null).",
+      "La parte de la bruta que corresponde a las líneas en metros de DTF, sin las de DTF UV (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos con metros pero sin líneas en 'm' (manuales del formulario), la bruta entera; en los que no tienen metros, 0 (y eur_metro null).",
     eur_metro:
       "Precio de venta del metro del pedido: venta_metros ÷ metros, sin IVA, sin envío y sin descontar devoluciones. null en los cancelados y en los que no tienen metros.",
     coste_metro:
       "Coste estándar de producción por metro (consumibles + embalaje + electricidad, configurado en Ajustes; no es un coste medido) que se guardó con el pedido. Los pedidos que ya estaban en el CRM antes del 7-10-2026 llevan el del día en que se aplicó esa migración, no el de su fecha. Si no hay ninguno guardado, el de hoy (coste_metro_es_actual = true).",
+    linea:
+      "Qué lleva el pedido: 'dtf', 'uv' (solo DTF UV), 'mixto' (los dos) o 'ninguna' (sin metros).",
+    metros_uv:
+      "Metros de DTF UV (pedidos.metros_uv): los imprime una subcontrata. No se suman a `metros`.",
+    venta_uv:
+      "La parte de la bruta que es de DTF UV (pedidos.bruta_uv; en un pedido solo de UV, la bruta entera), sin descontar devoluciones. venta_uv_neta, con ellas.",
+    coste_uv:
+      "Lo que cobra la subcontrata por el DTF UV: metros_uv × su coste congelado (15 €/m por defecto). Va incluido en coste_produccion; 0 en los cancelados.",
     coste_produccion:
-      "metros × coste_metro; 0 en los cancelados. No incluye el envío ni el coste de lo que no va en metros.",
+      "metros × coste_metro, más coste_uv; 0 en los cancelados. No incluye el envío ni el coste de lo que no va en metros.",
     margen_estimado:
       "bruta_neta − coste_produccion. Estimación: no incluye gastos fijos, sueldos, comisiones de cobro, el coste de lo que no va en metros ni el de enviar por agencia un pedido sin cobrar envío (el CRM no lo conoce).",
     cobros:
@@ -163,7 +175,7 @@ export const LEEME_ANALISIS = {
     lineas:
       "subtotal es sin IVA (en WooCommerce, antes de cupones; el pedido ya los descuenta). iva es el IVA real de la línea; iva_pct es el tipo guardado, que en los pedidos web siempre es 21 aunque el IVA real sea otro. coste_unit es el coste congelado por unidad de la línea (0 en las que no van en 'm').",
     resumen_mensual:
-      "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web cuyas líneas en metros traen todas la longitud del montador (metros_origen 'montador'), que es el precio real más fiable (null si no hay ninguno); `metros_dudosos` y `pedidos_metros_dudosos`, los de metros_de 'sin_origen' o 'suma_de_cantidades'; `eur_metro_neto` = bruta_neta ÷ metros de los pedidos con metros, la cifra «€/metro» de Gerencia.",
+      "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web cuyas líneas en metros traen todas la longitud del montador (metros_origen 'montador'), que es el precio real más fiable (null si no hay ninguno); `metros_dudosos` y `pedidos_metros_dudosos`, los de metros_de 'sin_origen' o 'suma_de_cantidades'; `eur_metro_neto` = (bruta_neta − venta_uv_neta) ÷ metros de los pedidos con metros de DTF, la cifra «€/metro» de Gerencia; `metros_uv`, `venta_uv_neta` y `coste_uv`, el DTF UV aparte.",
     totales: "Lo mismo que una fila del resumen, para todo el fichero.",
     empresa:
       "coste_metro_hoy: coste estándar por metro de hoy, por partidas; es el que se usa en los pedidos sin coste guardado. ajustes.precio_metro: precio sin IVA con el que la sincronización estima los metros de las líneas sin longitud; no es una tarifa de venta. ajustes.web_sin_pagar_cuenta: ver diferencias_con_las_pantallas. ajustes.de_fabrica: true si no hay Ajustes de Gerencia guardados; con false, precio_metro puede seguir siendo el 7 por defecto si nunca se cambió.",
@@ -269,10 +281,18 @@ export function construirExportAnalisis(d: {
         coste_unit: l.coste_unit_snapshot == null ? null : redondear(num(l.coste_unit_snapshot), 4),
       }));
 
-      // La parte de la bruta que es de metros: en proporción a los subtotales
-      // de las líneas, que en WooCommerce van antes de cupones.
+      // El DTF UV del pedido (por-linea.ts): su venta sin IVA ni envío y lo
+      // que cobra la subcontrata. Sus metros van aparte, nunca en `metros`.
+      const parteUv = partirPedido(p as PedidoResumen).uv;
+      const metros_uv = redondear(num(p.metros_uv), 3);
+      const venta_uv = redondear(num(parteUv.subtotal) - num(parteUv.envio));
+      const coste_uv = cancelado ? 0 : redondear(costeProduccion([parteUv], costeHoy));
+
+      // La parte de la bruta que es de metros de DTF: en proporción a los
+      // subtotales de las líneas, que en WooCommerce van antes de cupones.
+      // Las líneas de DTF UV no son metros de DTF.
       const metros = redondear(num(p.metros_total), 3);
-      const enMetros = filas.filter((l) => l.unidad === "m");
+      const enMetros = filas.filter((l) => l.unidad === "m" && l.linea !== "uv");
       const subLineas = filas.reduce((s, l) => s + num(l.subtotal), 0);
       const subMetros = enMetros.reduce((s, l) => s + num(l.subtotal), 0);
       const venta_metros =
@@ -363,6 +383,11 @@ export function construirExportAnalisis(d: {
         metros_de_lineas_estimadas: metrosEstimados,
         venta_metros,
         eur_metro: !cancelado && metros > 0 ? redondear(venta_metros / metros) : null,
+        linea: lineasDelPedido(p),
+        metros_uv,
+        venta_uv,
+        venta_uv_neta: redondear(venta_uv * queda),
+        coste_uv,
         coste_metro: sinCongelar ? costeHoy : redondear(num(congelado), 4),
         coste_metro_es_actual: sinCongelar,
         coste_produccion: coste,
@@ -442,7 +467,13 @@ export function construirExportAnalisis(d: {
       venta_metros: sumar(validos, (p) => p.venta_metros),
       eur_metro: precio(conMetros, (p) => p.venta_metros),
       eur_metro_medido: precio(medidos, (p) => p.venta_metros),
-      eur_metro_neto: precio(conMetros, (p) => p.importes.bruta_neta),
+      eur_metro_neto: precio(conMetros, (p) => p.importes.bruta_neta - p.venta_uv_neta),
+      metros_uv: redondear(
+        validos.reduce((s, p) => s + p.metros_uv, 0),
+        3,
+      ),
+      venta_uv_neta: sumar(validos, (p) => p.venta_uv_neta),
+      coste_uv: sumar(validos, (p) => p.coste_uv),
       metros_de_lineas_estimadas: redondear(
         validos.reduce((s, p) => s + p.metros_de_lineas_estimadas, 0),
         3,
