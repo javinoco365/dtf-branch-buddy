@@ -383,8 +383,9 @@ function cifrasDe(
   const realizadosValidos = realizados.filter((p) => p.estado !== ESTADO_CANCELADO);
   const sinCobrar = realizadosValidos.filter((p) => totalNeto(p) - num(p.cobrado) > 0.01);
 
+  // La cola del taller: los pedidos solo de DTF UV los imprime la subcontrata.
   const cola = pedidos.filter((p) => {
-    if (p.estado === ESTADO_CANCELADO) return false;
+    if (p.estado === ESTADO_CANCELADO || esSoloUv(p)) return false;
     const dia = diaDelPedido(p);
     if (dia > hasta) return false;
     const r = diaRealizado(p.realizado_en);

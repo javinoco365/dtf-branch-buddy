@@ -186,7 +186,10 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                   </TableCell>
                   <TableCell className="text-right text-xs">
                     {f.pedidos > 0 && (
-                      <VerDetalle destino={destinoPedidosEstado(d.filtro, f.estado)} texto="Ver" />
+                      <VerDetalle
+                        destino={destinoPedidosEstado(d.filtro, f.estado, "dtf")}
+                        texto="Ver"
+                      />
                     )}
                   </TableCell>
                 </TableRow>

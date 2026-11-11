@@ -264,7 +264,8 @@ export const DEFINICIONES = {
   g_espera: {
     que: "El pedido abierto que más lleva esperando.",
     calculo: "Días desde la fecha del pedido hasta hoy, del más antiguo de los que no han salido.",
-    fuente: "Los mismos pedidos que «En el taller».",
+    fuente:
+      "Los mismos pedidos que «En el taller»: sin los pedidos solo de DTF UV, que espera la subcontrata.",
   },
   g_dias_envio: {
     que: "Cuánto se tarda de media desde que entra un pedido hasta que se envía.",

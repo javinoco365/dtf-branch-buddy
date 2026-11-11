@@ -172,10 +172,12 @@ type FilaComparada = {
 
 const FILAS: FilaComparada[] = [
   { etiqueta: "Pedidos", valor: (m) => String(m.pedidos) },
-  { etiqueta: "Metros", valor: (m) => metros(m.metros) },
+  { etiqueta: "Metros de DTF", valor: (m) => metros(m.metros) },
+  { etiqueta: "Metros de DTF UV (aparte)", valor: (m) => metros(m.metrosUv) },
   { etiqueta: "Vendido (con IVA)", valor: (m) => eur(m.vendido) },
   { etiqueta: "Facturación bruta (sin IVA ni envío)", valor: (m) => eur(m.bruta) },
-  { etiqueta: "− Producción", valor: (m) => resta(m.costeProduccion) },
+  { etiqueta: "− Producción", valor: (m) => resta(produccionPropia(m)) },
+  { etiqueta: "− Subcontrata DTF UV", valor: (m) => resta(m.costeSubcontrata) },
   {
     etiqueta: "Margen sin envíos",
     valor: (m) => eur(m.margenSinEnvios),
@@ -256,7 +258,10 @@ const DETALLE: { titulo: string; valor: (n: CifrasNegocio) => string; rojo?: boo
   { titulo: "Envíos", valor: (n) => eurConSigno(n.pedido.resultadoEnvios), rojo: true },
   { titulo: "Margen neto", valor: (n) => eur(n.pedido.margenConEnvios), rojo: true },
   { titulo: "Margen neto hecho", valor: (n) => eur(n.realizado.margenConEnvios), rojo: true },
-  { titulo: "€/m", valor: (n) => (n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro)) },
+  {
+    titulo: "€/m de DTF",
+    valor: (n) => (n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro)),
+  },
   { titulo: "Facturado", valor: (n) => eur(n.facturado) },
   { titulo: "Cobrado", valor: (n) => eur(n.cobrado) },
   { titulo: "Por cobrar", valor: (n) => eur(n.pedido.pendiente) },
@@ -395,7 +400,7 @@ function Gastos({ r, gastos }: { r: Resumen; gastos: readonly GastoDelRango[] | 
   const partidas: [string, number][] = [
     ["Producción", c.produccion],
     ...(c.subcontrata !== 0 ? [["Subcontrata DTF UV", c.subcontrata] as [string, number]] : []),
-    ["Envíos (agencia)", c.envios],
+    ["Envíos (agencia y subcontrata)", c.envios],
     ["Gastos fijos", c.fijos],
   ];
   return (

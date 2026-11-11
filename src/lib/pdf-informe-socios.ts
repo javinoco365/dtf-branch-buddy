@@ -631,22 +631,33 @@ type Concepto = {
   valor: (m: Margenes) => number;
   formato?: (n: number) => string;
   tipo?: "suma" | "resultado" | "clave";
+  /** Solo si hay DTF UV en el periodo o en el que se compara. */
+  soloConUv?: true;
 };
 
 const CONCEPTOS: Concepto[] = [
   { etiqueta: "Pedidos", valor: (m) => m.pedidos, formato: (n) => String(n) },
   { etiqueta: "Metros de DTF", valor: (m) => m.metros, formato: metros },
-  { etiqueta: "Metros de DTF UV (aparte)", valor: (m) => m.metrosUv, formato: metros },
+  {
+    etiqueta: "Metros de DTF UV (aparte)",
+    valor: (m) => m.metrosUv,
+    formato: metros,
+    soloConUv: true,
+  },
   { etiqueta: "Vendido (con IVA y envío)", valor: (m) => m.vendido },
   { etiqueta: "Facturación bruta (sin IVA ni envío)", valor: (m) => m.bruta, tipo: "clave" },
   {
     etiqueta: "− Coste de producción",
     valor: (m) => menos(produccionPropia(m)),
   },
-  { etiqueta: "− Subcontrata del DTF UV", valor: (m) => menos(m.costeSubcontrata) },
+  {
+    etiqueta: "− Subcontrata del DTF UV",
+    valor: (m) => menos(m.costeSubcontrata),
+    soloConUv: true,
+  },
   { etiqueta: "= Margen sin envíos", valor: (m) => m.margenSinEnvios, tipo: "suma" },
   { etiqueta: "+ Envíos cobrados al cliente", valor: (m) => m.enviosCobrados },
-  { etiqueta: "− Lo que cobra la agencia", valor: (m) => menos(m.costeEnvios) },
+  { etiqueta: "− Coste de los envíos", valor: (m) => menos(m.costeEnvios) },
   { etiqueta: "= Margen neto", valor: (m) => m.margenConEnvios, tipo: "resultado" },
 ];
 
@@ -660,7 +671,11 @@ async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
     "«Pedido»: lo que entró en el periodo · «Realizado»: lo que se terminó en él",
   );
   const formatoDe = (k: Concepto) => k.formato ?? ((n: number) => eur(n));
-  const cuerpo = CONCEPTOS.map((k) => {
+  const conUv = [t.pedido, t.realizado, a?.pedido, a?.realizado].some(
+    (m) => (m?.metrosUv ?? 0) > 0,
+  );
+  const conceptos = CONCEPTOS.filter((k) => !k.soloConUv || conUv);
+  const cuerpo = conceptos.map((k) => {
     const actual = k.valor(t.pedido);
     const previo = a ? k.valor(a.pedido) : null;
     const v = previo === null ? null : variacionResumen(actual, previo);
@@ -694,7 +709,7 @@ async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
         : "—",
     ],
   );
-  const tipos = [...CONCEPTOS.map((k) => k.tipo), undefined, "resultado"];
+  const tipos = [...conceptos.map((k) => k.tipo), undefined, "resultado"];
   autoTable(doc, {
     startY: c.y,
     margin: { left: M, right: M },
@@ -838,7 +853,7 @@ function maquinaYCobros(c: Lienzo) {
   );
   fila(
     c,
-    "Precio medio del metro",
+    "Precio medio del metro de DTF",
     t.pedido.euroMetro == null ? "—" : eur(t.pedido.euroMetro),
     x + 5,
     w,
@@ -1002,19 +1017,19 @@ function gastosDelPeriodo(c: Lienzo, autoTable: AutoTable, inicio: number) {
   // Las partidas en una barra, y cada una con su parte. La subcontrata del
   // DTF UV, solo si la hay.
   const partidas: [string, number, RGB, string][] = [
-    ["Producción", costes.produccion, CIELO, "Metros de DTF × coste por metro; ropa del textil"],
+    ["Producción", costes.produccion, CIELO, "m de DTF × €/m; ropa del textil"],
     ...(costes.subcontrata !== 0
       ? [
           [
             "Subcontrata DTF UV",
             costes.subcontrata,
             VIOLETA,
-            "Metros de UV × lo que cobra por metro",
+            "m de UV × lo que cobra por metro",
           ] as [string, number, RGB, string],
         ]
       : []),
-    ["Envíos", costes.envios, NARANJA, "Agencia; los de pedidos solo UV, la subcontrata"],
-    ["Gastos fijos", costes.fijos, MARINO, "Alquiler, sueldos, cuotas… (abajo, uno a uno)"],
+    ["Envíos", costes.envios, NARANJA, "Agencia (solo UV: subcontrata)"],
+    ["Gastos fijos", costes.fijos, MARINO, "Alquiler, sueldos… (abajo, uno a uno)"],
   ];
   const y0 = c.y;
   let x = M;
@@ -1452,7 +1467,7 @@ function ficha(c: Lienzo, n: CifrasNegocio, x: number, y: number, w: number, h: 
   });
   fila(
     c,
-    "Precio medio del metro",
+    "Precio medio del metro de DTF",
     n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro),
     x + 4,
     ww,

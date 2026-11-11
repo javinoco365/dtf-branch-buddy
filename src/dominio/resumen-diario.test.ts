@@ -185,6 +185,14 @@ describe("margenes", () => {
     expect(costesDelPeriodo(r)).toMatchObject({ produccion: 8, subcontrata: 30 });
   });
 
+  it("la cola del taller no cuenta los pedidos solo de UV (los hace la subcontrata)", () => {
+    const abierto = { estado: "en_produccion", realizado_en: null };
+    const r = resumenPeriodo(
+      entrada({ pedidos: [uv(abierto), web("d", { ...abierto, metros_total: 3 })] }),
+    );
+    expect(r.total.cola.pedidos).toBe(1);
+  });
+
   it("DTF UV con otro coste de envío apuntado: manda el apuntado", () => {
     expect(margenes([uv({ coste_envio_real: 8 })], AJUSTES).resultadoEnvios).toBe(-2);
   });
