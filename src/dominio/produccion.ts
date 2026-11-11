@@ -12,6 +12,7 @@ import { redondear } from "./importes";
 import { diaLocal } from "./facturacion";
 import { diasDesde } from "./pendientes";
 import type { Canal } from "./gerencia";
+import { esSoloUv } from "./linea-producto";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -45,8 +46,31 @@ export type PedidoTaller = {
   tienda_id: string;
   canal: Canal;
   metros_total: Numerico;
+  /** Metros de DTF UV (migración 20261110100000): los imprime la subcontrata. */
+  metros_uv?: Numerico;
   total: Numerico;
 };
+
+/**
+ * Lo abierto, separado: lo que pasa por el taller (DTF y textil, y los
+ * mixtos, que llevan DTF) y lo que hace solo la subcontrata (los pedidos solo
+ * de DTF UV, con sus metros).
+ */
+export function separarSubcontrata(pedidos: readonly PedidoTaller[]): {
+  taller: PedidoTaller[];
+  subcontrata: { pedidos: number; metros: number };
+} {
+  const taller: PedidoTaller[] = [];
+  let pedidosUv = 0;
+  let metrosUv = 0;
+  for (const p of pedidos) {
+    if (esSoloUv(p)) {
+      pedidosUv++;
+      metrosUv += Number(p.metros_uv ?? 0) || 0;
+    } else taller.push(p);
+  }
+  return { taller, subcontrata: { pedidos: pedidosUv, metros: redondear(metrosUv, 2) } };
+}
 
 export type FilaEstado = {
   estado: string;

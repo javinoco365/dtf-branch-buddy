@@ -23,7 +23,7 @@ import {
   textoCargo,
   textoVigencia,
 } from "@/lib/resumen-diario-textos";
-import { costesDelPeriodo, proporcion } from "@/dominio/resumen-diario";
+import { costesDelPeriodo, produccionPropia, proporcion } from "@/dominio/resumen-diario";
 
 /**
  * Página 2: todo desglosado. Lo pedido frente a lo realizado, la producción,
@@ -106,15 +106,22 @@ export function Desglose({
             />
             <Linea etiqueta="Ticket medio" valor={eur(t.pedido.ticket)} />
             <Linea
-              etiqueta="Precio medio del metro"
+              etiqueta="Precio medio del metro de DTF"
               valor={t.pedido.euroMetro == null ? "—" : eur(t.pedido.euroMetro)}
               nota="sin IVA ni envío"
             />
             <Linea
-              etiqueta="Margen por metro"
+              etiqueta="Margen por metro de DTF"
               valor={t.pedido.margenMetro == null ? "—" : eur(t.pedido.margenMetro)}
               nota="sin envíos"
             />
+            {t.pedido.metrosUv > 0 && (
+              <Linea
+                etiqueta="DTF UV"
+                valor={`${metros(t.pedido.metrosUv)} · subcontrata ${eur(t.pedido.costeSubcontrata)}`}
+                nota="aparte del DTF"
+              />
+            )}
           </div>
         </Seccion>
       </div>
@@ -236,10 +243,15 @@ const DETALLE: { titulo: string; valor: (n: CifrasNegocio) => string; rojo?: boo
   { titulo: "Pedidos", valor: (n) => String(n.pedido.pedidos) },
   { titulo: "Cancelados", valor: (n) => String(n.pedido.cancelados) },
   { titulo: "Metros pedidos", valor: (n) => metros(n.pedido.metros) },
+  { titulo: "Metros DTF UV", valor: (n) => metros(n.pedido.metrosUv) },
   { titulo: "Metros hechos", valor: (n) => metros(n.realizado.metrosImpresos) },
   { titulo: "Vendido", valor: (n) => eur(n.pedido.vendido) },
   { titulo: "Bruta", valor: (n) => eur(n.pedido.bruta) },
-  { titulo: "Producción", valor: (n) => eur(n.pedido.costeProduccion) },
+  {
+    titulo: "Producción",
+    valor: (n) => eur(produccionPropia(n.pedido)),
+  },
+  { titulo: "Subcontrata UV", valor: (n) => eur(n.pedido.costeSubcontrata) },
   { titulo: "Margen sin envíos", valor: (n) => eur(n.pedido.margenSinEnvios), rojo: true },
   { titulo: "Envíos", valor: (n) => eurConSigno(n.pedido.resultadoEnvios), rojo: true },
   { titulo: "Margen neto", valor: (n) => eur(n.pedido.margenConEnvios), rojo: true },
@@ -382,12 +394,15 @@ function Gastos({ r, gastos }: { r: Resumen; gastos: readonly GastoDelRango[] | 
   const c = costesDelPeriodo(r);
   const partidas: [string, number][] = [
     ["Producción", c.produccion],
+    ...(c.subcontrata !== 0 ? [["Subcontrata DTF UV", c.subcontrata] as [string, number]] : []),
     ["Envíos (agencia)", c.envios],
     ["Gastos fijos", c.fijos],
   ];
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div
+        className={`grid gap-2 ${partidas.length > 3 ? "sm:grid-cols-3 lg:grid-cols-5" : "sm:grid-cols-4"}`}
+      >
         {partidas.map(([nombre, importe]) => (
           <div key={nombre} className="rounded-lg bg-muted/50 p-3">
             <div className="text-xs text-muted-foreground">{nombre}</div>

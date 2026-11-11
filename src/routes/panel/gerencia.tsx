@@ -82,7 +82,8 @@ const NOTA_LINEA: Partial<Record<string, string>> = {
   tesoreria:
     "Los cobros y pendientes van por pedido: los de un pedido mixto (DTF y DTF UV), con el DTF. La caja y el banco son de toda la empresa.",
   comercial: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
-  produccion: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  produccion:
+    "El taller es del DTF: los pedidos solo de DTF UV salen aparte, en la subcontrata. El resto de la pestaña no se separa por línea.",
   fiscal: "Los impuestos son de toda la empresa: no se separan por línea.",
   textil: "El textil es otro negocio: no tiene DTF ni DTF UV.",
 };

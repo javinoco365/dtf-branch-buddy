@@ -156,6 +156,33 @@ describe("margenes", () => {
     expect(m.resultadoEnvios).toBe(0);
     expect(m.margenConEnvios).toBe(7);
     expect(m.enviosEstimados).toBe(0);
+    // La subcontrata, aparte (dentro de la producción); sus metros, aparte.
+    expect(m.costeSubcontrata).toBe(105);
+    expect(m.metrosUv).toBe(7);
+    expect(m.metros).toBe(0);
+  });
+
+  it("un mixto: el metro de DTF sin lo del UV; los costes, cada uno en su sitio", () => {
+    // 4 m de DTF a 10 €/m (40 €) + 2 m de UV a 17,50 €/m (35 €).
+    const mixto = web("mx", {
+      subtotal: 75,
+      iva: 15.75,
+      envio: 0,
+      total: 90.75,
+      metros_total: 4,
+      coste_metro_snapshot: 2,
+      metros_uv: 2,
+      coste_uv_snapshot: 15,
+      bruta_uv: 35,
+      iva_uv: 7.35,
+    });
+    const m = margenes([mixto], AJUSTES);
+    expect(m.costeProduccion).toBe(8 + 30);
+    expect(m.costeSubcontrata).toBe(30);
+    const r = resumenPeriodo(entrada({ pedidos: [mixto] }));
+    expect(r.total.pedido.euroMetro).toBe(10);
+    expect(r.total.pedido.margenMetro).toBe(8);
+    expect(costesDelPeriodo(r)).toMatchObject({ produccion: 8, subcontrata: 30 });
   });
 
   it("DTF UV con otro coste de envío apuntado: manda el apuntado", () => {
@@ -366,7 +393,13 @@ describe("informe de los socios", () => {
 describe("costesDelPeriodo", () => {
   it("producción, envíos y gastos fijos", () => {
     const r = resumenPeriodo(entrada({ pedidos: [web("a")], gastosFijos: 40 }));
-    expect(costesDelPeriodo(r)).toEqual({ produccion: 20, envios: 5, fijos: 40, total: 65 });
+    expect(costesDelPeriodo(r)).toEqual({
+      produccion: 20,
+      subcontrata: 0,
+      envios: 5,
+      fijos: 40,
+      total: 65,
+    });
     expect(costesDelPeriodo(resumenPeriodo(entrada({}))).fijos).toBe(0);
   });
 });

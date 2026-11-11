@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  separarSubcontrata,
   diasHastaEnvio,
   pedidosPorEstado,
   tiemposEnvio,
@@ -71,5 +72,23 @@ describe("tiempos de envío", () => {
     expect(t).toMatchObject({ envios: 4, media: 3.8, mediana: 2.5 });
     expect(t!.tramos.map((x) => x.envios)).toEqual([1, 2, 0, 1]);
     expect(tiemposEnvio([])).toBeNull();
+  });
+});
+
+describe("separarSubcontrata", () => {
+  const p = (metros_total: number, metros_uv: number) => ({
+    fecha_pedido: "2026-11-10T10:00:00Z",
+    estado: "en_produccion",
+    tienda_id: "t",
+    canal: "web" as const,
+    metros_total,
+    metros_uv,
+    total: 100,
+  });
+
+  it("los pedidos solo de UV, a la subcontrata; los mixtos y el DTF, al taller", () => {
+    const { taller, subcontrata } = separarSubcontrata([p(10, 0), p(0, 7), p(4, 2), p(0, 6)]);
+    expect(taller).toHaveLength(2);
+    expect(subcontrata).toEqual({ pedidos: 2, metros: 13 });
   });
 });
