@@ -115,6 +115,8 @@ export type LineaPresupuesto = {
   unidad: string;
   precio_unitario: number;
   iva_rate: number;
+  /** DTF (por defecto) o DTF UV, que imprime la subcontrata. Pasa al pedido. */
+  linea?: "dtf" | "uv";
 };
 
 export type LineaPresupuestoCalculada = LineaPresupuesto & {

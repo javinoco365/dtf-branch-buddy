@@ -129,3 +129,47 @@ END $$;
 SELECT CASE WHEN NOT has_function_privilege('anon', 'public.confirmar_presupuesto(uuid)', 'EXECUTE')
             THEN 'BIEN 10. anon no puede confirmar presupuestos'
             ELSE 'MAL  10. anon puede confirmar presupuestos' END;
+
+-- 11. DTF UV (20261113100000): cada línea con su línea de producto; el pedido
+--     lleva en metros_total solo el DTF y el UV aparte, con su base y su IVA.
+INSERT INTO public.presupuestos
+  (id, tienda_id, numero, cliente_nombre, envio, subtotal, iva, total, estado)
+VALUES
+  ('b2b2b2b2-0000-4000-8000-000000000011', 'b1b1b1b1-0000-4000-8000-0000000000a1',
+   'PRES-DTFC-2026-0111', 'Mixto UV', 0, 63, 13.23, 76.23, 'enviado');
+INSERT INTO public.presupuesto_items
+  (presupuesto_id, orden, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total, linea)
+VALUES
+  ('b2b2b2b2-0000-4000-8000-000000000011', 0, 'Metro DTF', 4, 'm', 7, 21, 28, 5.88, 33.88, 'dtf'),
+  ('b2b2b2b2-0000-4000-8000-000000000011', 1, 'DTF UV por metros', 2, 'm', 17.5, 21, 35, 7.35, 42.35, 'uv');
+SELECT set_config('prueba.pedido_uv',
+  public.confirmar_presupuesto('b2b2b2b2-0000-4000-8000-000000000011')::TEXT, false) \g /dev/null
+SELECT CASE WHEN p.metros_total = 4 AND p.metros_uv = 2 AND p.bruta_uv = 35 AND p.iva_uv = 7.35
+            THEN 'BIEN 11. el pedido de un presupuesto mixto separa el DTF y el DTF UV'
+            ELSE 'MAL  11. metros ' || p.metros_total || ' / uv ' || p.metros_uv
+                 || ' / bruta_uv ' || p.bruta_uv || ' / iva_uv ' || p.iva_uv END
+FROM public.pedidos p
+WHERE p.id = current_setting('prueba.pedido_uv')::UUID;
+SELECT CASE WHEN count(*) FILTER (WHERE linea = 'uv') = 1 AND count(*) = 2
+            THEN 'BIEN 12. las lineas del pedido conservan su linea de producto'
+            ELSE 'MAL  12. lineas uv: ' || count(*) FILTER (WHERE linea = 'uv') END
+FROM public.pedido_items
+WHERE pedido_id = current_setting('prueba.pedido_uv')::UUID;
+
+-- 13. Una línea de DTF UV en 'ud' también suma metros de UV (se vende por metros).
+INSERT INTO public.presupuestos
+  (id, tienda_id, numero, cliente_nombre, envio, subtotal, iva, total, estado)
+VALUES
+  ('b2b2b2b2-0000-4000-8000-000000000013', 'b1b1b1b1-0000-4000-8000-0000000000a1',
+   'PRES-DTFC-2026-0113', 'Solo UV en ud', 0, 32, 6.72, 38.72, 'enviado');
+INSERT INTO public.presupuesto_items
+  (presupuesto_id, orden, descripcion, cantidad, unidad, precio_unitario, iva_rate, subtotal, iva, total, linea)
+VALUES
+  ('b2b2b2b2-0000-4000-8000-000000000013', 0, 'DTF UV por Metros Manual', 2, 'ud', 16, 21, 32, 6.72, 38.72, 'uv');
+SELECT set_config('prueba.pedido_uv2',
+  public.confirmar_presupuesto('b2b2b2b2-0000-4000-8000-000000000013')::TEXT, false) \g /dev/null
+SELECT CASE WHEN p.metros_total = 0 AND p.metros_uv = 2 AND p.bruta_uv = 32
+            THEN 'BIEN 13. una linea de DTF UV en ud suma sus metros de UV'
+            ELSE 'MAL  13. metros ' || p.metros_total || ' / uv ' || p.metros_uv END
+FROM public.pedidos p
+WHERE p.id = current_setting('prueba.pedido_uv2')::UUID;

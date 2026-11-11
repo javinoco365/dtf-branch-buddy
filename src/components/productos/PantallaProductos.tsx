@@ -35,7 +35,8 @@ import { Plus, Search, Pencil, Ruler, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { eur } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { tabla } from "@/lib/rpc";
+import { faltaLaColumna, tabla } from "@/lib/rpc";
+import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
@@ -52,6 +53,11 @@ export type Producto = {
   precio_unitario: number;
   iva_rate: number;
   activo: boolean;
+  /**
+   * 'dtf' o 'uv' (20261110100000): los de WooCommerce, por su categoría;
+   * nulo, sin decidir (cuenta como DTF). Sin la migración no viene.
+   */
+  linea?: string | null;
 };
 
 const UNIDADES = [
@@ -91,7 +97,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
   // Los filtros viven en la dirección.
   const { valores: filtros, cambiar } = useFiltrosUrl({ q: "", tipo: "todos", ambito: "todos" });
   const [search, setSearch] = useTextoDiferido(filtros.q, (q) => cambiar({ q }));
-  const filtro = filtros.tipo as "todos" | "dtf" | "otros" | "inactivos";
+  const filtro = filtros.tipo as "todos" | "dtf" | "uv" | "otros" | "inactivos";
   const setFiltro = (tipo: string) => cambiar({ tipo });
   const ambito = filtros.ambito as Ambito;
   const setAmbito = (a: Ambito) => cambiar({ ambito: a });
@@ -113,7 +119,8 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
   const filtered = useMemo(() => {
     const q = filtros.q.toLowerCase().trim();
     return productos.filter((p) => {
-      if (filtro === "dtf" && p.unidad !== "m") return false;
+      if (filtro === "dtf" && (p.unidad !== "m" || p.linea === "uv")) return false;
+      if (filtro === "uv" && p.linea !== "uv") return false;
       if (filtro === "otros" && p.unidad === "m") return false;
       if (filtro === "inactivos" ? p.activo : !p.activo) return false;
       if (ambito === "tienda" && p.tienda_id === null) return false;
@@ -140,14 +147,21 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
         precio_unitario: Number(p.precio_unitario) || 0,
         iva_rate: Number(p.iva_rate) || 21,
         activo: p.activo ?? true,
+        // Uno de WooCommerce la toma de su categoría en cada sincronización.
+        ...(p.woo_product_id ? {} : { linea: p.linea === "uv" ? "uv" : "dtf" }),
       };
-      if (p.id) {
-        const { error } = await tabla(supabase, "productos").update(payload).eq("id", p.id);
-        if (error) throw error;
-      } else {
-        const { error } = await tabla(supabase, "productos").insert(payload);
-        if (error) throw error;
+      const guardarFila = (fila: Record<string, unknown>) =>
+        p.id
+          ? tabla(supabase, "productos").update(fila).eq("id", p.id)
+          : tabla(supabase, "productos").insert(fila);
+      let { error } = await guardarFila(payload);
+      // Sin la migración del DTF UV no hay columna de línea: se guarda sin ella.
+      if (faltaLaColumna(error)) {
+        const sinLinea: Record<string, unknown> = { ...payload };
+        delete sinLinea.linea;
+        ({ error } = await guardarFila(sinLinea));
       }
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Producto guardado");
@@ -219,6 +233,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
           <SelectContent>
             <SelectItem value="todos">Activos · Todos</SelectItem>
             <SelectItem value="dtf">Activos · DTF (€/m)</SelectItem>
+            <SelectItem value="uv">Activos · DTF UV</SelectItem>
             <SelectItem value="otros">Activos · Otros</SelectItem>
             <SelectItem value="inactivos">Inactivos</SelectItem>
           </SelectContent>
@@ -278,6 +293,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                         {isDtf ? <Ruler className="h-3 w-3" /> : <Package className="h-3 w-3" />}
                         {unidadLabel}
                       </Badge>
+                      {p.linea === "uv" && <EtiquetaUv className="ml-1.5" />}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {eur(p.precio_unitario)}
@@ -397,6 +413,27 @@ function ProductoForm({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Línea</Label>
+            <Select
+              value={producto.linea === "uv" ? "uv" : "dtf"}
+              onValueChange={(v) => set("linea", v)}
+              disabled={!!producto.woo_product_id}
+            >
+              <SelectTrigger aria-label="Línea de producto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dtf">DTF</SelectItem>
+                <SelectItem value="uv">DTF UV (subcontratado)</SelectItem>
+              </SelectContent>
+            </Select>
+            {producto.woo_product_id ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Viene de WooCommerce: la línea sale de su categoría.
+              </p>
+            ) : null}
           </div>
           {tiendaId && (
             <div className="col-span-2">

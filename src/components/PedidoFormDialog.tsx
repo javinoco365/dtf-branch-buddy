@@ -46,6 +46,8 @@ type Linea = {
   cantidad: number;
   precio_unitario: number;
   iva_rate: number;
+  /** DTF o DTF UV (lo imprime la subcontrata): sus metros y su coste van aparte. */
+  linea: "dtf" | "uv";
 };
 
 /** El tipo con el que nace una línea nueva. El DTF va todo al 21 %. */
@@ -124,7 +126,7 @@ export function PedidoFormDialog({
   const [entrega, setEntrega] = useState<DireccionForm>(DIRECCION_VACIA);
   const [envioIgual, setEnvioIgual] = useState(true);
   const [lineas, setLineas] = useState<Linea[]>([
-    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL },
+    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
   ]);
   // Para exportación y para operaciones intracomunitarias con inversión del
   // sujeto pasivo (arts. 21 y 25 LIVA): el pedido no lleva IVA. Un interruptor
@@ -151,7 +153,7 @@ export function PedidoFormDialog({
         mismaDireccion(pedido.direccion_envio, pedido.direccion_facturacion) ||
           !pedido.direccion_envio,
       );
-      const lineasIniciales = pedido.items.length
+      const lineasIniciales: Linea[] = pedido.items.length
         ? pedido.items.map((it) => ({
             descripcion: it.descripcion,
             cantidad: Number(it.cantidad),
@@ -160,8 +162,17 @@ export function PedidoFormDialog({
             // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
             // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
             iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
+            linea: it.linea === "uv" ? ("uv" as const) : ("dtf" as const),
           }))
-        : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }];
+        : [
+            {
+              descripcion: "",
+              cantidad: 1,
+              precio_unitario: 0,
+              iva_rate: IVA_GENERAL,
+              linea: "dtf",
+            },
+          ];
       setLineas(lineasIniciales);
       // Si el pedido ya estaba entero sin IVA, el interruptor nace apagado:
       // si no, reabrirlo y guardarlo sin tocar nada le habría puesto el 21 %.
@@ -177,7 +188,9 @@ export function PedidoFormDialog({
       setFacturacion(DIRECCION_VACIA);
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
-      setLineas([{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL }]);
+      setLineas([
+        { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
+      ]);
       setAplicaIva(true);
     }
   }, [open, pedido]);
@@ -413,6 +426,7 @@ export function PedidoFormDialog({
                       cantidad: 1,
                       precio_unitario: 0,
                       iva_rate: aplicaIva ? IVA_GENERAL : 0,
+                      linea: "dtf",
                     },
                   ])
                 }
@@ -441,12 +455,27 @@ export function PedidoFormDialog({
             <div className="space-y-2">
               {lineas.map((l, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-5 space-y-1">
+                  <div className="col-span-4 space-y-1">
                     <Label className="text-xs">Producto</Label>
                     <Input
                       value={l.descripcion}
                       onChange={(e) => setLinea(i, { descripcion: e.target.value })}
                     />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Línea</Label>
+                    <Select
+                      value={l.linea}
+                      onValueChange={(v) => setLinea(i, { linea: v === "uv" ? "uv" : "dtf" })}
+                    >
+                      <SelectTrigger aria-label="Línea de producto">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dtf">DTF</SelectItem>
+                        <SelectItem value="uv">DTF UV</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs">Cantidad</Label>
@@ -468,7 +497,7 @@ export function PedidoFormDialog({
                       }
                     />
                   </div>
-                  <div className="col-span-2 space-y-1">
+                  <div className="col-span-1 space-y-1">
                     <Label className="text-xs">IVA %</Label>
                     <Input
                       type="number"

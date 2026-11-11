@@ -8,6 +8,7 @@ import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
+import { lineasDeUnPedido } from "@/dominio/por-linea";
 import { normalizarDireccion } from "@/dominio/direcciones";
 import { urlSeguimientoValida } from "@/dominio/transportistas";
 
@@ -155,7 +156,39 @@ const itemSchema = z.object({
   cantidad: z.number().nonnegative(),
   precio_unitario: z.number().nonnegative(),
   iva_rate: z.number().nonnegative().default(21),
+  /** DTF (por defecto) o DTF UV, que imprime la subcontrata (ver por-linea.ts). */
+  linea: z.enum(["dtf", "uv"]).default("dtf"),
 });
+
+/**
+ * Las columnas del DTF UV (migraciones 20261110100000 y 20261111100000): sin
+ * ellas, el pedido se guarda como antes, con todo en DTF.
+ */
+const COLUMNAS_UV_PEDIDO = ["metros_uv", "bruta_uv", "iva_uv"] as const;
+const sinImportesUv = <T extends Record<string, unknown>>(fila: T) => {
+  const copia: Record<string, unknown> = { ...fila };
+  delete copia.bruta_uv;
+  delete copia.iva_uv;
+  return copia;
+};
+const sinColumnasUv = <T extends Record<string, unknown>>(fila: T) => {
+  const copia: Record<string, unknown> = { ...fila };
+  for (const c of COLUMNAS_UV_PEDIDO) delete copia[c];
+  return copia;
+};
+
+/** Las líneas de un pedido manual con su línea de producto; sin la columna, sin ella. */
+async function insertarLineasPedido(sb: unknown, filas: Record<string, unknown>[]) {
+  const r = await tabla(sb, "pedido_items").insert(filas);
+  if (!faltaLaColumna(r.error)) return r;
+  return tabla(sb, "pedido_items").insert(
+    filas.map((f) => {
+      const copia = { ...f };
+      delete copia.linea;
+      return copia;
+    }),
+  );
+}
 
 /**
  * Una dirección tal como llega del formulario: todo opcional y todo texto.
@@ -210,7 +243,8 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     // Mismo módulo que la pantalla, para que lo que se ve y lo que se guarda
     // coincidan. El envío va dentro, en la base imponible: artículo 78 LIVA.
     const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
-    const metros_total = data.items.reduce((s, it) => s + it.cantidad, 0);
+    // Los metros de DTF y lo del DTF UV, cada uno en su sitio (por-linea.ts).
+    const porLinea = lineasDeUnPedido(data.items, totales.iva_total);
     const total = totales.total;
 
     const numero = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
@@ -219,28 +253,39 @@ export const createPedidoManual = createServerFn({ method: "POST" })
 
     // tabla(): types.ts está generado y todavía no conoce cliente_telefono ni
     // las dos columnas de dirección, que las añadió 20260903360000.
-    const { data: pedido, error: pErr } = await tabla(supabaseAdmin, "pedidos")
-      .insert({
-        tienda_id: data.tiendaId,
-        numero,
-        estado: "pendiente",
-        origen: "manual",
-        metodo_pago: data.metodo_pago ?? null,
-        envio: data.envio ?? 0,
-        cliente_id: data.cliente_id ?? null,
-        cliente_nombre: data.cliente_nombre,
-        cliente_email: data.cliente_email ?? null,
-        cliente_telefono: data.cliente_telefono?.trim() || null,
-        direccion_facturacion: normalizarDireccion(data.direccion_facturacion),
-        direccion_envio: normalizarDireccion(data.direccion_envio),
-        notas: data.notas ?? null,
-        metros_total,
-        subtotal: totales.base_imponible,
-        iva: totales.iva_total,
-        total,
-      })
-      .select("id")
-      .single();
+    const filaPedido = {
+      tienda_id: data.tiendaId,
+      numero,
+      estado: "pendiente",
+      origen: "manual",
+      metodo_pago: data.metodo_pago ?? null,
+      envio: data.envio ?? 0,
+      cliente_id: data.cliente_id ?? null,
+      cliente_nombre: data.cliente_nombre,
+      cliente_email: data.cliente_email ?? null,
+      cliente_telefono: data.cliente_telefono?.trim() || null,
+      direccion_facturacion: normalizarDireccion(data.direccion_facturacion),
+      direccion_envio: normalizarDireccion(data.direccion_envio),
+      notas: data.notas ?? null,
+      ...porLinea,
+      subtotal: totales.base_imponible,
+      iva: totales.iva_total,
+      total,
+    };
+    const insertar = (fila: Record<string, unknown>) =>
+      tabla(supabaseAdmin, "pedidos").insert(fila).select("id").single();
+    let { data: pedido, error: pErr } = await insertar(filaPedido);
+    // Sin los importes del UV (20261111100000): con sus metros aparte igual.
+    if (faltaLaColumna(pErr)) {
+      ({ data: pedido, error: pErr } = await insertar(sinImportesUv(filaPedido)));
+    }
+    if (faltaLaColumna(pErr)) {
+      // Sin ninguna columna del UV: sus metros, con los de DTF, como antes.
+      ({ data: pedido, error: pErr } = await insertar({
+        ...sinColumnasUv(filaPedido),
+        metros_total: porLinea.metros_total + porLinea.metros_uv,
+      }));
+    }
     if (pErr || !pedido) throw new Error(pErr?.message || "Error creando pedido");
 
     const itemRows = data.items.map((it) => {
@@ -255,9 +300,10 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         subtotal: linea.base,
         iva: linea.cuota,
         total: linea.total,
+        linea: it.linea,
       };
     });
-    await supabaseAdmin.from("pedido_items").insert(itemRows);
+    await insertarLineasPedido(supabaseAdmin, itemRows);
     return { id: pedido.id };
   });
 
@@ -376,10 +422,9 @@ export const updatePedido = createServerFn({ method: "POST" })
       // miraba el descuento. Crear un pedido y editarlo daban totales
       // distintos. Ahora las dos vías pasan por el mismo módulo.
       const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
-      const metros_total = data.items.reduce((s, it) => s + it.cantidad, 0);
       patch.subtotal = totales.base_imponible;
       patch.iva = totales.iva_total;
-      patch.metros_total = metros_total;
+      Object.assign(patch, lineasDeUnPedido(data.items, totales.iva_total));
       patch.total = totales.total;
 
       await supabaseAdmin.from("pedido_items").delete().eq("pedido_id", data.id);
@@ -395,13 +440,26 @@ export const updatePedido = createServerFn({ method: "POST" })
           subtotal: linea.base,
           iva: linea.cuota,
           total: linea.total,
+          linea: it.linea,
         };
       });
-      await supabaseAdmin.from("pedido_items").insert(itemRows);
+      await insertarLineasPedido(supabaseAdmin, itemRows);
     }
 
     // tabla(): mismo motivo que en createPedidoManual.
-    const { error } = await tabla(supabaseAdmin, "pedidos").update(patch).eq("id", data.id);
+    const actualizar = (fila: Record<string, unknown>) =>
+      tabla(supabaseAdmin, "pedidos").update(fila).eq("id", data.id);
+    let { error } = await actualizar(patch);
+    if (faltaLaColumna(error) && data.items?.length) {
+      ({ error } = await actualizar(sinImportesUv(patch)));
+    }
+    if (faltaLaColumna(error) && data.items?.length) {
+      // Sin las columnas del UV: sus metros, con los de DTF, como antes.
+      const metrosUv = Number(patch.metros_uv) || 0;
+      ({ error } = await tabla(supabaseAdmin, "pedidos")
+        .update({ ...sinColumnasUv(patch), metros_total: Number(patch.metros_total) + metrosUv })
+        .eq("id", data.id));
+    }
     if (error) throw error;
     return { ok: true };
   });

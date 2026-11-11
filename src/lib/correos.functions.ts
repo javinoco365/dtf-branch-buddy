@@ -3,7 +3,8 @@ import { z } from "zod";
 import { exigeEscribir } from "./permisos-middleware";
 import { renderizarPlantilla } from "@/dominio/plantillas";
 import { eur } from "@/lib/format";
-import { tabla } from "./rpc";
+import { faltaLaColumna, tabla } from "./rpc";
+import { metrosDelPedidoParaElCliente } from "@/dominio/por-linea";
 
 /** El cliente de servicio. Sin tipar de más: types.ts no conoce estas tablas. */
 type SupabaseAdmin = {
@@ -36,11 +37,27 @@ export async function avisarPedidoEnviado(
   {
     const data = { pedido_id: pedidoId };
 
-    const { data: pedido } = await supabaseAdmin
-      .from("pedidos")
-      .select("id, tienda_id, numero, cliente_nombre, cliente_email, total, metros_total")
-      .eq("id", data.pedido_id)
-      .maybeSingle();
+    // Con los metros de DTF UV: para el cliente son metros de su pedido igual.
+    // Sin la migración del DTF UV, como antes.
+    const leerPedido = (conUv: boolean) =>
+      tabla(supabaseAdmin, "pedidos")
+        .select(
+          `id, tienda_id, numero, cliente_nombre, cliente_email, total, metros_total${conUv ? ", metros_uv" : ""}`,
+        )
+        .eq("id", data.pedido_id)
+        .maybeSingle();
+    let lectura = await leerPedido(true);
+    if (faltaLaColumna(lectura.error)) lectura = await leerPedido(false);
+    const pedido = lectura.data as {
+      id: string;
+      tienda_id: string;
+      numero: string;
+      cliente_nombre: string | null;
+      cliente_email: string | null;
+      total: number | null;
+      metros_total: number | null;
+      metros_uv?: number | null;
+    } | null;
     if (!pedido) return { estado: "fallido", motivo: "El pedido no existe" };
 
     if (!pedido.cliente_email) {
@@ -93,7 +110,8 @@ export async function avisarPedidoEnviado(
       cliente_nombre: pedido.cliente_nombre,
       pedido_numero: pedido.numero,
       pedido_total: eur(Number(pedido.total ?? 0)),
-      pedido_metros: String(pedido.metros_total ?? 0),
+      // Para el cliente, todos los metros de su pedido: los de DTF y los de UV.
+      pedido_metros: String(metrosDelPedidoParaElCliente(pedido)),
       tienda_nombre: tienda.nombre,
       empresa_nombre: empresa?.razon_social ?? "",
       transportista: seguimiento?.transportista ?? null,
