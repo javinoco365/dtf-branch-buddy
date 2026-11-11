@@ -5,8 +5,8 @@ import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { faltaLaColumna, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
 import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
-import { camposUv, useClientesPorLinea, type NivelUv } from "@/lib/periodo";
-import { cifrasPorLinea, esFiltroLinea, type PedidoPartible } from "@/dominio/por-linea";
+import { camposUv, useClientesConUv, type NivelUv } from "@/lib/periodo";
+import { cifrasPorLinea, type PedidoPartible } from "@/dominio/por-linea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -55,7 +55,6 @@ import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { eur, fechaCorta, metros, referenciaFactura } from "@/lib/format";
 import {
-  coincideLinea,
   etiquetaOrigen,
   filtrarClientes,
   type FiltroOrigen,
@@ -136,7 +135,9 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const { valores: filtros, cambiar } = useFiltrosUrl({
     q: "",
     origen: filtroInicial(contexto),
-    linea: "todo",
+    // «uv»: solo los que han comprado DTF UV. No es la «línea» de los paneles
+    // (qué parte de cada pedido se cuenta): aquí filtra clientes.
+    compra: "todos",
   });
   const [texto, setTexto] = useTextoDiferido(filtros.q, (q) => cambiar({ q }));
   const origen = filtros.origen as FiltroOrigen;
@@ -166,14 +167,19 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const nombreTienda = (id: string) => tiendas.find((t) => t.id === id)?.nombre;
 
   // Quién ha comprado DTF y quién DTF UV: para el filtro y la etiqueta.
-  const porLinea = useClientesPorLinea();
-  const linea = esFiltroLinea(filtros.linea) ? filtros.linea : "todo";
+  // Quién ha comprado DTF UV, para la etiqueta y el filtro. En el textil no
+  // hay DTF; en una tienda, los pedidos de esa tienda.
+  const conFiltroUv = contexto.tipo !== "textil";
+  const conUv = useClientesConUv(contexto.tipo === "tienda" ? contexto.tiendaId : undefined, {
+    activo: conFiltroUv,
+  });
+  const soloUv = conFiltroUv && filtros.compra === "uv";
   const filtrados = useMemo(
     () =>
-      filtrarClientes(clientes, { texto: filtros.q, origen }).filter((c) =>
-        porLinea.data ? coincideLinea(c.id, linea, porLinea.data) : linea === "todo",
+      filtrarClientes(clientes, { texto: filtros.q, origen }).filter(
+        (c) => !soloUv || (conUv.data?.has(c.id) ?? false),
       ),
-    [clientes, filtros.q, origen, linea, porLinea.data],
+    [clientes, filtros.q, origen, soloUv, conUv.data],
   );
 
   function refrescar() {
@@ -286,16 +292,21 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={linea} onValueChange={(v) => cambiar({ linea: v })}>
-          <SelectTrigger className="w-56" aria-label="Línea de producto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todo">DTF y DTF UV</SelectItem>
-            <SelectItem value="dtf">Han comprado DTF</SelectItem>
-            <SelectItem value="uv">Han comprado DTF UV</SelectItem>
-          </SelectContent>
-        </Select>
+        {conFiltroUv && (
+          <Select value={soloUv ? "uv" : "todos"} onValueChange={(v) => cambiar({ compra: v })}>
+            <SelectTrigger className="w-56" aria-label="Qué han comprado">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Compren lo que compren</SelectItem>
+              <SelectItem value="uv">
+                {contexto.tipo === "tienda"
+                  ? "Han comprado DTF UV en esta tienda"
+                  : "Han comprado DTF UV"}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <span className="self-center text-sm text-muted-foreground">
           {filtrados.length} de {clientes.length}
         </span>
@@ -336,7 +347,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     <span className="inline-flex flex-wrap items-center gap-1">
                       <Badge variant="outline">{etiquetaOrigen(c, nombreTienda)}</Badge>
                       {c.woo_customer_id && <Badge variant="secondary">WooCommerce</Badge>}
-                      {porLinea.data?.uv.has(c.id) && <EtiquetaUv />}
+                      {conUv.data?.has(c.id) && <EtiquetaUv />}
                     </span>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -368,7 +379,11 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {clientes.length === 0
                       ? "Sin clientes"
-                      : "Ningún cliente con este filtro. Prueba con «Todos los clientes»."}
+                      : soloUv && conUv.isLoading
+                        ? "Buscando quién ha comprado DTF UV…"
+                        : soloUv && conUv.error
+                          ? "No se ha podido saber quién ha comprado DTF UV. Recarga la página."
+                          : "Ningún cliente con este filtro. Prueba con «Todos los clientes» y «Compren lo que compren»."}
                   </TableCell>
                 </TableRow>
               )}
@@ -622,22 +637,28 @@ function ClienteDetalle({
     queryFn: async (): Promise<PedidoDelCliente[]> => {
       // Con lo del DTF UV, para separar lo comprado de cada línea (camposUv):
       // sin sus migraciones, como antes.
+      // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
       const leer = (uv: NivelUv) =>
-        tabla(supabase, "pedidos")
-          .select(
-            `id, numero, estado, total, subtotal, iva, envio, metros_total, tienda_id, fecha_pedido${camposUv(uv)}`,
-          )
-          .eq("cliente_id", clienteId)
-          .order("fecha_pedido", { ascending: false });
+        leerTodas<PedidoDelCliente>((a, b) =>
+          tabla(supabase, "pedidos")
+            .select(
+              `id, numero, estado, total, subtotal, iva, envio, metros_total, tienda_id, fecha_pedido${camposUv(uv)}`,
+            )
+            .eq("cliente_id", clienteId)
+            .order("fecha_pedido", { ascending: false })
+            .order("id")
+            .range(a, b),
+        );
       let r = await leer(2);
       if (faltaLaColumna(r.error)) r = await leer(1);
       if (faltaLaColumna(r.error)) r = await leer(0);
       if (r.error) throw r.error;
-      return (r.data ?? []) as PedidoDelCliente[];
+      return r.data;
     },
   });
-  // Lo comprado de cada línea (por-linea.ts): sin cancelados, DTF + UV = todo.
-  const porLinea = cifrasPorLinea(pedidos);
+  // Lo comprado de cada línea (por-linea.ts): sin cancelados, DTF + UV = lo de
+  // las tiendas; con el textil, «Total pedidos».
+  const porLinea = useMemo(() => cifrasPorLinea(pedidos), [pedidos]);
 
   // El mismo cliente, sus pedidos del textil: es la razón de tener una sola ficha.
   const { data: pedidosTextil = [] } = useQuery({
@@ -790,7 +811,7 @@ function ClienteDetalle({
         </div>
 
         {porLinea.uv.pedidos > 0 && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${pedidosTextil.length > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
             <Resumen
               titulo={`DTF · ${metros(porLinea.dtf.metros)}`}
               valor={eur(porLinea.dtf.total)}
@@ -803,6 +824,9 @@ function ClienteDetalle({
               }
               valor={eur(porLinea.uv.total)}
             />
+            {pedidosTextil.length > 0 && (
+              <Resumen titulo="Textil" valor={eur(totales.textil.total)} />
+            )}
           </div>
         )}
 

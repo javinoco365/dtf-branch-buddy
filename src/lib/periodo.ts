@@ -23,7 +23,7 @@ import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
-import { clientesPorLinea } from "@/dominio/clientes";
+import { clientesConUv } from "@/dominio/clientes";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
 import { pedidoEnDias, tramoDeConsulta, type FechaPedido } from "@/dominio/dia-pedido";
 import { diasDelRango } from "@/dominio/periodos";
@@ -324,32 +324,32 @@ export function usePedidosSoloUv(tiendaId?: string, opciones: { enabled?: boolea
 }
 
 /**
- * Qué clientes han comprado DTF y cuáles DTF UV (clientesPorLinea). Sin la
- * migración del DTF UV, nadie ha comprado UV y todos los de tienda, DTF.
+ * Los clientes que han comprado DTF UV (clientesConUv): solo se leen los
+ * pedidos con UV, que son pocos. Con `tiendaId`, solo los de esa tienda. Sin
+ * la migración del DTF UV, nadie. `activo: false` no lee (el textil).
  */
-export function useClientesPorLinea() {
+export function useClientesConUv(tiendaId?: string, { activo = true }: OpcionesLectura = {}) {
   return useQuery({
     // Bajo «pedidos»: se refresca con todo lo que invalida los pedidos.
-    queryKey: ["pedidos", "clientes-por-linea"],
+    queryKey: ["pedidos", "clientes-con-uv", tiendaId ?? "todas"],
+    enabled: activo,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
-      const leer = (conUv: boolean) =>
-        leerTodas<{
-          cliente_id: string | null;
-          metros_total: number | null;
-          metros_uv?: number | null;
-        }>((a, b) =>
-          tabla(supabase, "pedidos")
-            .select(
-              conUv ? "id, cliente_id, metros_total, metros_uv" : "id, cliente_id, metros_total",
-            )
-            .not("cliente_id", "is", null)
-            .order("id")
-            .range(a, b),
-        );
-      let r = await leer(true);
-      if (faltaLaColumna(r.error)) r = await leer(false);
-      if (r.error) throw r.error;
-      return clientesPorLinea(r.data);
+      const { data, error } = await leerTodas<{
+        cliente_id: string | null;
+        estado: string | null;
+        metros_uv: number | null;
+      }>((a, b) => {
+        let consulta = tabla(supabase, "pedidos")
+          .select("id, cliente_id, estado, metros_uv")
+          .gt("metros_uv", 0)
+          .not("cliente_id", "is", null);
+        if (tiendaId) consulta = consulta.eq("tienda_id", tiendaId);
+        return consulta.order("id").range(a, b);
+      });
+      if (faltaLaColumna(error)) return new Set<string>();
+      if (error) throw error;
+      return clientesConUv(data);
     },
   });
 }

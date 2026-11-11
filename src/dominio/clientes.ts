@@ -9,6 +9,8 @@
  * Lógica pura: no consulta nada y se prueba sin base de datos.
  */
 
+import { ESTADO_CANCELADO } from "./kpis";
+
 export type OrigenCliente = "tienda" | "textil" | "general";
 
 export type ClienteFiltrable = {
@@ -86,34 +88,21 @@ export function etiquetaOrigen(
 }
 
 /**
- * Qué clientes han comprado de cada línea de producto, por sus pedidos de
- * tienda: DTF UV si algún pedido lleva metros de UV; DTF si alguno lleva
- * metros de DTF o no lleva UV (un pedido de tienda sin metros es de DTF). Un
- * cliente puede estar en las dos.
+ * Los clientes que han comprado DTF UV: los que tienen algún pedido no
+ * cancelado con metros o importe de UV (ver por-linea.ts).
  */
-export function clientesPorLinea(
+export function clientesConUv(
   pedidos: readonly {
     cliente_id: string | null;
-    metros_total?: number | string | null;
+    estado?: string | null;
     metros_uv?: number | string | null;
+    bruta_uv?: number | string | null;
   }[],
-): { dtf: Set<string>; uv: Set<string> } {
-  const dtf = new Set<string>();
+): Set<string> {
   const uv = new Set<string>();
   for (const p of pedidos) {
-    if (!p.cliente_id) continue;
-    const conUv = Number(p.metros_uv ?? 0) > 0;
-    if (conUv) uv.add(p.cliente_id);
-    if (!conUv || Number(p.metros_total ?? 0) > 0) dtf.add(p.cliente_id);
+    if (!p.cliente_id || p.estado === ESTADO_CANCELADO) continue;
+    if (Number(p.metros_uv ?? 0) > 0 || Number(p.bruta_uv ?? 0) > 0) uv.add(p.cliente_id);
   }
-  return { dtf, uv };
-}
-
-/** ¿Pasa el cliente el filtro de línea? «todo», siempre. */
-export function coincideLinea(
-  clienteId: string,
-  linea: "todo" | "dtf" | "uv",
-  porLinea: { dtf: ReadonlySet<string>; uv: ReadonlySet<string> },
-): boolean {
-  return linea === "todo" || porLinea[linea].has(clienteId);
+  return uv;
 }
