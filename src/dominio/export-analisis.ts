@@ -139,7 +139,7 @@ export const LEEME_ANALISIS = {
     metros:
       "Metros lineales de DTF del pedido (pedidos.metros_total); los de DTF UV van aparte, en metros_uv, y no se suman nunca. Los cancelados también lo traen, pero no suman en el resumen. Las devoluciones no los descuentan: lo impreso, impreso está. Ver `metros_de`.",
     metros_de:
-      "De dónde salen los metros del pedido. 'lineas_medidas': pedido web cuyas líneas en metros (unidad 'm') dicen de dónde salen (metros_origen). 'lineas_en_metros': pedido manual hecho desde un presupuesto, que conserva la unidad de cada línea y solo suma las de 'm'. 'sin_origen': pedido web sincronizado antes del 7-10-2026 y no vuelto a sincronizar (o sin la migración de metros_origen): todas sus líneas van en 'm' con la cantidad de WooCommerce, que son unidades, no metros. 'suma_de_cantidades': pedido manual hecho con el formulario: todas sus líneas van en 'ud' aunque sean metros, y se suman las cantidades de TODAS. En 'sin_origen' y 'suma_de_cantidades', si el pedido lleva algo que no es metros, sus metros, su coste y su €/m están mal (ver metros_dudosos en el resumen).",
+      "De dónde salen los metros del pedido. 'sin_metros_dtf': no lleva metros de DTF (solo DTF UV, o nada en metros). 'lineas_medidas': pedido web cuyas líneas en metros (unidad 'm') dicen de dónde salen (metros_origen). 'lineas_en_metros': pedido manual hecho desde un presupuesto, que conserva la unidad de cada línea y solo suma las de 'm'. 'sin_origen': pedido web sincronizado antes del 7-10-2026 y no vuelto a sincronizar (o sin la migración de metros_origen): todas sus líneas van en 'm' con la cantidad de WooCommerce, que son unidades, no metros. 'suma_de_cantidades': pedido manual hecho con el formulario: todas sus líneas van en 'ud' aunque sean metros, y se suman las cantidades de TODAS. En 'sin_origen' y 'suma_de_cantidades', si el pedido lleva algo que no es metros, sus metros, su coste y su €/m están mal (ver metros_dudosos en el resumen).",
     metros_estimados:
       "true si alguna línea no trae la longitud del montador de DTFBuild y sus metros se estimaron como subtotal ÷ precio por metro (metros_origen 'precio_ajustes' o 'precio_linea'); metros_de_lineas_estimadas dice cuántos. En esas líneas el €/m es el precio usado por construcción, y la longitud del montador también se descarta y se estima si da un precio fuera de 0,5–1,5 veces el de Ajustes. Por eso los metros mal leídos aparecen como estimados, no como un €/m extremo.",
     metros_medidos:
@@ -147,7 +147,7 @@ export const LEEME_ANALISIS = {
     metros_origen:
       "En cada línea: 'montador' (longitud leída del montador), 'precio_linea' o 'precio_ajustes' (estimada), o null (sin dato: líneas que no van en metros o anteriores a guardar el origen; null no garantiza que se midiera).",
     venta_metros:
-      "La parte de la bruta que corresponde a las líneas en metros de DTF, sin las de DTF UV (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos con metros pero sin líneas en 'm' (manuales del formulario), la bruta entera; en los que no tienen metros, 0 (y eur_metro null).",
+      "La parte de la bruta que corresponde a las líneas en metros de DTF: si el pedido lleva venta_uv, se reparte solo bruta − venta_uv entre sus líneas que no son de DTF UV (en proporción a los subtotales de las líneas, para repartir cupones). En los pedidos con metros pero sin líneas en 'm' (manuales del formulario), la bruta entera; en los que no tienen metros, 0 (y eur_metro null).",
     eur_metro:
       "Precio de venta del metro del pedido: venta_metros ÷ metros, sin IVA, sin envío y sin descontar devoluciones. null en los cancelados y en los que no tienen metros.",
     coste_metro:
@@ -173,7 +173,7 @@ export const LEEME_ANALISIS = {
     documento_vigente:
       "La referencia del documento que cuenta para el pedido, con la regla del CRM: la factura o el ticket que no esté anulado ni rectificado; en un canje, la factura (si se anula la factura del canje, vuelve a contar el ticket). null si no tiene ninguno.",
     lineas:
-      "subtotal es sin IVA (en WooCommerce, antes de cupones; el pedido ya los descuenta). iva es el IVA real de la línea; iva_pct es el tipo guardado, que en los pedidos web siempre es 21 aunque el IVA real sea otro. coste_unit es el coste congelado por unidad de la línea (0 en las que no van en 'm').",
+      "subtotal es sin IVA (en WooCommerce, antes de cupones; el pedido ya los descuenta). iva es el IVA real de la línea; iva_pct es el tipo guardado, que en los pedidos web siempre es 21 aunque el IVA real sea otro. coste_unit es el coste congelado por unidad de la línea (0 en las que no van en 'm'). linea: 'dtf' o 'uv' (null antes de la migración del DTF UV).",
     resumen_mensual:
       "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web cuyas líneas en metros traen todas la longitud del montador (metros_origen 'montador'), que es el precio real más fiable (null si no hay ninguno); `metros_dudosos` y `pedidos_metros_dudosos`, los de metros_de 'sin_origen' o 'suma_de_cantidades'; `eur_metro_neto` = (bruta_neta − venta_uv_neta) ÷ metros de los pedidos con metros de DTF, la cifra «€/metro» de Gerencia; `metros_uv`, `venta_uv_neta` y `coste_uv`, el DTF UV aparte.",
     totales: "Lo mismo que una fila del resumen, para todo el fichero.",
@@ -279,11 +279,12 @@ export function construirExportAnalisis(d: {
         metros_origen: l.metros_origen ?? null,
         precio_metro_usado: l.precio_metro_usado == null ? null : num(l.precio_metro_usado),
         coste_unit: l.coste_unit_snapshot == null ? null : redondear(num(l.coste_unit_snapshot), 4),
+        linea: l.linea ?? null,
       }));
 
       // El DTF UV del pedido (por-linea.ts): su venta sin IVA ni envío y lo
       // que cobra la subcontrata. Sus metros van aparte, nunca en `metros`.
-      const parteUv = partirPedido(p as PedidoResumen).uv;
+      const parteUv = partirPedido(p).uv;
       const metros_uv = redondear(num(p.metros_uv), 3);
       const venta_uv = redondear(num(parteUv.subtotal) - num(parteUv.envio));
       const coste_uv = cancelado ? 0 : redondear(costeProduccion([parteUv], costeHoy));
@@ -291,25 +292,34 @@ export function construirExportAnalisis(d: {
       // La parte de la bruta que es de metros de DTF: en proporción a los
       // subtotales de las líneas, que en WooCommerce van antes de cupones.
       // Las líneas de DTF UV no son metros de DTF.
+      // Con `bruta_uv` (ya con su cupón), se reparte solo la bruta de DTF
+      // entre las líneas que no son de UV; sin él (pedidos de antes), como
+      // siempre, entre todas.
       const metros = redondear(num(p.metros_total), 3);
+      const conImporteUv = num(p.bruta_uv) > 0;
+      const repartibles = conImporteUv ? filas.filter((l) => l.linea !== "uv") : filas;
+      const brutaReparto = conImporteUv ? redondear(bruta - venta_uv) : bruta;
       const enMetros = filas.filter((l) => l.unidad === "m" && l.linea !== "uv");
-      const subLineas = filas.reduce((s, l) => s + num(l.subtotal), 0);
+      const subLineas = repartibles.reduce((s, l) => s + num(l.subtotal), 0);
       const subMetros = enMetros.reduce((s, l) => s + num(l.subtotal), 0);
       const venta_metros =
         metros <= 0
           ? 0
           : subMetros > 0 && subLineas > 0
-            ? redondear((bruta * subMetros) / subLineas)
-            : bruta;
+            ? redondear((brutaReparto * subMetros) / subLineas)
+            : brutaReparto;
       // Medido: todas sus líneas en metros traen la longitud del montador.
       const medido = enMetros.length > 0 && enMetros.every((l) => l.metros_origen === "montador");
-      const metros_de = web
-        ? enMetros.some((l) => l.metros_origen == null)
-          ? "sin_origen"
-          : "lineas_medidas"
-        : enMetros.length > 0
-          ? "lineas_en_metros"
-          : "suma_de_cantidades";
+      const metros_de =
+        metros <= 0
+          ? "sin_metros_dtf"
+          : web
+            ? enMetros.some((l) => l.metros_origen == null)
+              ? "sin_origen"
+              : "lineas_medidas"
+            : enMetros.length > 0
+              ? "lineas_en_metros"
+              : "suma_de_cantidades";
       const metrosEstimados = redondear(
         enMetros.filter(esLineaEstimada).reduce((s, l) => s + num(l.cantidad), 0),
         3,
