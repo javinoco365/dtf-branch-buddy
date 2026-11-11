@@ -380,4 +380,22 @@ describe("importesUvWoo", () => {
     ).toEqual({ bruta_uv: 51, iva_uv: 10.71 });
     expect(importesUvWoo(null, opcionesDe)).toEqual({ bruta_uv: 0, iva_uv: 0 });
   });
+
+  it("con un cupón, lo cobrado (total), no el precio antes del descuento", () => {
+    const opcionesDe = () => ({ linea: "uv" as const });
+    expect(
+      importesUvWoo(
+        [
+          {
+            name: "DTF UV por metros",
+            subtotal: "35.00",
+            subtotal_tax: "7.35",
+            total: "31.50",
+            total_tax: "6.62",
+          },
+        ],
+        opcionesDe,
+      ),
+    ).toEqual({ bruta_uv: 31.5, iva_uv: 6.62 });
+  });
 });

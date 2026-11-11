@@ -14,15 +14,24 @@ import { eur, metros } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { AvisoActualizando } from "@/components/AvisoActualizando";
 import { propsDatosDeAntes } from "@/lib/datos-de-antes";
-import { useCobrosPeriodo, usePedidosPeriodo, useLineasPeriodo } from "@/lib/periodo";
-import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import {
-  agruparPorRangos,
-  calcularKpis,
-  costeVariable,
-  topPorMetros,
-  variacion,
-} from "@/dominio/kpis";
+  useCobrosPeriodo,
+  usePedidosPeriodo,
+  useLineasPeriodo,
+  usePedidosSoloUv,
+} from "@/lib/periodo";
+import { useLineaUrl } from "@/lib/filtros-url";
+import {
+  cifrasPorLinea,
+  cobrosDeLinea,
+  ETIQUETA_FILTRO_LINEA,
+  pedidosDeLinea,
+} from "@/dominio/por-linea";
+import { TIENDA_TEXTIL } from "@/dominio/cobros";
+import { SelectorLinea } from "@/components/filtros/SelectorLinea";
+import { DesgloseLinea } from "@/components/DesgloseLinea";
+import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
+import { agruparPorRangos, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -85,32 +94,51 @@ function DashboardGlobal() {
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
   const pedidosAnt = useMemo(() => consultaAnterior.data ?? [], [consultaAnterior.data]);
 
-  const k = useMemo(() => calcularKpis(pedidos), [pedidos]);
-  const kPrev = useMemo(() => calcularKpis(pedidosAnt), [pedidosAnt]);
-  const cobrosDisponibles = consultaCobros.data?.disponible ?? false;
-  const cobrado = totalizar(cobrosDeTiendas(consultaCobros.data?.cobros ?? [])).cobrado;
-  const cobradoPrev = totalizar(cobrosDeTiendas(consultaCobrosAnt.data?.cobros ?? [])).cobrado;
+  // La línea de producto: las dos, DTF o DTF UV (por-linea.ts). Las cifras de
+  // cada una suman las de «Todo»; los metros van siempre separados.
+  const [linea, cambiarLinea] = useLineaUrl();
+  const lineas = useMemo(() => cifrasPorLinea(pedidos, costeMetro), [pedidos, costeMetro]);
+  const lineasPrev = useMemo(
+    () => cifrasPorLinea(pedidosAnt, costeMetro),
+    [pedidosAnt, costeMetro],
+  );
+  const k = lineas[linea];
+  const kPrev = lineasPrev[linea];
+  // Los metros de la línea: con «Todo», los de DTF (los del UV, debajo).
+  const metrosDe = (c: typeof k) => (linea === "uv" ? c.metrosUv : c.metros);
+
+  // Lo cobrado, por pedido: los de pedidos solo de UV, al UV.
+  // Solo hace falta con una línea elegida: con «Todo» van todos.
+  const soloUv = usePedidosSoloUv(undefined, { enabled: linea !== "todo" });
+  const cobrosDisponibles =
+    (consultaCobros.data?.disponible ?? false) && (linea === "todo" || !!soloUv.data);
+  const cobradoDe = (cobros: Parameters<typeof cobrosDeTiendas>[0]) =>
+    totalizar(
+      cobrosDeLinea(cobrosDeTiendas(cobros), linea, soloUv.data ?? new Set(), TIENDA_TEXTIL.id),
+    ).cobrado;
+  const cobrado = cobradoDe(consultaCobros.data?.cobros ?? []);
+  const cobradoPrev = cobradoDe(consultaCobrosAnt.data?.cobros ?? []);
 
   // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
-  // con el de hoy. El envío no entra: la bruta ya va sin él, y lo que se
-  // cobra al cliente es lo que se paga a la agencia.
-  const costePer = costeVariable(pedidos, costeMetro);
-  const margenPer = k.bruta - costePer.produccion;
-  const margenPrev = kPrev.bruta - costeVariable(pedidosAnt, costeMetro).produccion;
+  // con el de hoy. El DTF UV, con lo que cobra la subcontrata. El envío no
+  // entra: la bruta ya va sin él, y lo que se cobra al cliente es lo que se
+  // paga a la agencia.
+  const margenPer = k.ganancia;
+  const margenPrev = kPrev.ganancia;
   // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
-  const sinCostes = costeMetro === 0 && costePer.produccion === 0;
+  const sinCostes = costeMetro === 0 && k.coste === 0;
 
   const grafica = useMemo(() => {
     const { por, tramos: todos } = tramosGrafica({ desde, hasta });
     // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
     const tramos = tramosHastaHoy(todos, new Date());
-    const totales = agruparPorRangos(pedidos, tramos);
+    const totales = agruparPorRangos(pedidosDeLinea(pedidos, linea), tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
-  }, [pedidos, desde, hasta]);
+  }, [pedidos, linea, desde, hasta]);
 
   const topProductos = useMemo(
-    () => topPorMetros(consultaLineas.data ?? []),
-    [consultaLineas.data],
+    () => topPorMetros(consultaLineas.data ?? [], 6, linea),
+    [consultaLineas.data, linea],
   );
 
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
@@ -126,13 +154,14 @@ function DashboardGlobal() {
 
   function exportar() {
     const filas: (string | number)[][] = [
-      ["Fecha", "Tienda", "Estado", "Metros", "Base", "IVA", "Envío", "Total"],
+      ["Fecha", "Tienda", "Estado", "Metros DTF", "Metros UV", "Base", "IVA", "Envío", "Total"],
       // El día del pedido, el de su ticket y el de la lista de pedidos.
       ...pedidos.map((p) => [
         diaDelPedido(p),
         p.tienda_id,
         p.estado,
         Number(p.metros_total ?? 0),
+        Number(p.metros_uv ?? 0),
         Number(p.subtotal ?? 0),
         Number(p.iva ?? 0),
         Number(p.envio ?? 0),
@@ -149,11 +178,15 @@ function DashboardGlobal() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Inicio</h1>
-          <p className="text-muted-foreground">Las cifras del periodo, de todas las tiendas</p>
+          <p className="text-muted-foreground">
+            Las cifras del periodo, de todas las tiendas
+            {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
+          <SelectorLinea valor={linea} alCambiar={cambiarLinea} />
 
           <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
             <Download className="h-4 w-4 mr-2" />
@@ -198,6 +231,11 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={variacion(k.total, kPrev.total)}
               icon={Euro}
+              pie={
+                linea === "todo" && lineas.uv.pedidos > 0 ? (
+                  <DesgloseLinea dtf={eur(lineas.dtf.total)} uv={eur(lineas.uv.total)} />
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo="Facturación bruta"
@@ -207,7 +245,9 @@ function DashboardGlobal() {
               delta={variacion(k.bruta, kPrev.bruta)}
               icon={Receipt}
               pie={
-                k.envios > 0 ? (
+                linea === "todo" && lineas.uv.pedidos > 0 ? (
+                  <DesgloseLinea dtf={eur(lineas.dtf.bruta)} uv={eur(lineas.uv.bruta)} />
+                ) : k.envios > 0 ? (
                   <span className="text-muted-foreground">
                     Aparte, {eur(k.envios)} de envíos cobrados
                   </span>
@@ -221,6 +261,13 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
               icon={Wallet}
+              pie={
+                linea !== "todo" ? (
+                  <span className="text-muted-foreground">
+                    Por pedido: los de pedidos mixtos (DTF y DTF UV), con el DTF.
+                  </span>
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo={sinCostes ? "Margen" : "Margen estimado"}
@@ -229,6 +276,11 @@ function DashboardGlobal() {
               delta={sinCostes ? null : variacion(margenPer, margenPrev)}
               frente={comparacion?.etiqueta}
               icon={Percent}
+              pie={
+                !sinCostes && linea === "todo" && lineas.uv.pedidos > 0 ? (
+                  <DesgloseLinea dtf={eur(lineas.dtf.ganancia)} uv={eur(lineas.uv.ganancia)} />
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo="Ticket medio"
@@ -239,12 +291,22 @@ function DashboardGlobal() {
               icon={ShoppingCart}
             />
             <TarjetaKpi
-              titulo="Metros vendidos"
+              titulo={linea === "uv" ? "Metros de DTF UV" : "Metros vendidos"}
               explicacion="metros"
-              valor={metros(k.metros)}
+              valor={metros(metrosDe(k))}
               frente={comparacion?.etiqueta}
-              delta={variacion(k.metros, kPrev.metros)}
+              delta={variacion(metrosDe(k), metrosDe(kPrev))}
               icon={Ruler}
+              pie={
+                linea === "todo" && k.metrosUv > 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    De DTF. Aparte,{" "}
+                    <span className="font-medium text-violet-700 dark:text-violet-300">
+                      {metros(k.metrosUv)} de DTF UV
+                    </span>
+                  </span>
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo="Devoluciones"

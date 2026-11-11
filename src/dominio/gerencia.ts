@@ -10,6 +10,7 @@
  * de datos.
  */
 
+import { partirPedidos, ventasDeLinea, type FiltroLinea } from "./por-linea";
 import { redondear } from "./importes";
 import {
   calcularKpis,
@@ -109,9 +110,18 @@ export type FiltroGerencia = {
   /** Una tienda, el textil (TIENDA_TEXTIL.id) o «todas». */
   tienda: string;
   canal: Canal | "todos";
+  /**
+   * La línea de producto: las dos («todo», por defecto), DTF o DTF UV. Se
+   * aplica en gerencia-datos.ts con ventasDeLinea y cobrosDeLinea.
+   */
+  linea?: FiltroLinea;
 };
 
-export const FILTRO_GERENCIA_TODO: FiltroGerencia = { tienda: "todas", canal: "todos" };
+export const FILTRO_GERENCIA_TODO: FiltroGerencia = {
+  tienda: "todas",
+  canal: "todos",
+  linea: "todo",
+};
 
 export function filtrarVentas<T extends Pick<Venta, "tienda_id" | "canal">>(
   ventas: readonly T[],
@@ -187,8 +197,10 @@ export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): C
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
   const coste = redondear(costeDtf + costeTextil);
-  const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
-  // El precio del metro: la bruta ya va sin el envío, lo que se cobra por imprimir.
+  // El precio del metro: la bruta ya va sin el envío, lo que se cobra por
+  // imprimir. Solo la parte de DTF: en un pedido mixto, lo del UV no se
+  // reparte entre los metros de DTF (ver por-linea.ts).
+  const conMetros = calcularKpis(partirPedidos(ventas).dtf.filter((v) => num(v.metros_total) > 0));
   const brutaMetros = conMetros.bruta;
   return {
     ...k,
@@ -884,3 +896,62 @@ export function beneficioEstimado(
       : gastosFijosDelRango(gastos, { desde: r.desde, hasta: hastaHoy ? finHoy : r.hasta });
   return { gastos: g, beneficio: redondear(margen - g), hastaHoy };
 }
+
+// ---------------------------------------------------------------------------
+// Por línea de producto
+// ---------------------------------------------------------------------------
+
+export type FilaLinea = {
+  clave: "dtf" | "uv" | "textil";
+  etiqueta: string;
+  cifras: CifrasGerencia;
+};
+
+/**
+ * Las cifras de Gerencia de cada línea: DTF (impresión propia), DTF UV
+ * (subcontratado, con su coste) y Textil (ropa). Las tres suman exactamente
+ * las de «Todo»: cada pedido de tienda se parte en su DTF y su UV (ver
+ * por-linea.ts) y el textil va aparte. Sin pedidos de una línea, no sale.
+ */
+export function cifrasGerenciaPorLinea(ventas: readonly Venta[], costeActual: number): FilaLinea[] {
+  const todo = cifrasGerencia(ventas, costeActual);
+  const uv = cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual);
+  const textil = cifrasGerencia(
+    ventas.filter((v) => v.canal === "textil"),
+    costeActual,
+  );
+  const deDtf = cifrasGerencia(ventasDeLinea(ventas, "dtf"), costeActual);
+  // El DTF, por diferencia: así las tres filas suman «Todo» al céntimo, sin
+  // que el redondeo de cada una descuadre la suma (como en cifrasPorLinea).
+  const resto = (k: DineroGerencia) => redondear(todo[k] - uv[k] - textil[k]);
+  const dinero = Object.fromEntries(DINERO_GERENCIA.map((k) => [k, resto(k)])) as Pick<
+    CifrasGerencia,
+    DineroGerencia
+  >;
+  const dtf: CifrasGerencia = {
+    ...deDtf,
+    ...dinero,
+    ticket: deDtf.pedidos > 0 ? redondear(dinero.total / deDtf.pedidos) : 0,
+  };
+  const filas: FilaLinea[] = [
+    { clave: "dtf", etiqueta: "DTF", cifras: dtf },
+    { clave: "uv", etiqueta: "DTF UV", cifras: uv },
+    { clave: "textil", etiqueta: "Textil", cifras: textil },
+  ];
+  return filas.filter((f) => f.cifras.pedidos > 0 || f.cifras.cancelados > 0);
+}
+
+const DINERO_GERENCIA = [
+  "base",
+  "bruta",
+  "iva",
+  "envios",
+  "total",
+  "devuelto",
+  "coste",
+  "costeEnvios",
+  "costeDtf",
+  "costeTextil",
+  "margen",
+] as const;
+type DineroGerencia = (typeof DINERO_GERENCIA)[number];

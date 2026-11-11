@@ -27,6 +27,8 @@ export function destinoPedidos(f: FiltroGerencia, sel: Seleccion): Destino {
       ...periodo,
       ...(f.tienda !== "todas" ? { tienda: f.tienda } : {}),
       ...(f.canal === "web" || f.canal === "manual" ? { origen: f.canal } : {}),
+      // La misma línea en Pedidos («Con DTF» / «Con DTF UV»).
+      ...(f.linea === "dtf" || f.linea === "uv" ? { linea: f.linea } : {}),
     },
   };
 }

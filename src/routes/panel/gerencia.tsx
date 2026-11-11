@@ -5,6 +5,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FiltrosPlegables, SelectFiltro } from "@/components/filtros/Filtros";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { SelectorLinea } from "@/components/filtros/SelectorLinea";
+import { esFiltroLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
+import { usePedidosSoloUv } from "@/lib/periodo";
 import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
 import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/BotonResumenDiario";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
@@ -71,6 +74,20 @@ const Ajustes = lazy(() => CARGAR_PESTANA.ajustes().then((m) => ({ default: m.Aj
 if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => undefined);
 
 /** Mientras llega el código de una pestaña: lo mismo que mientras llegan los datos. */
+/**
+ * Lo que la línea elegida (DTF o DTF UV) no separa todavía en cada pestaña.
+ * Resultados y Margen lo dicen dentro; las que no salen aquí, la separan entera.
+ */
+const NOTA_LINEA: Partial<Record<string, string>> = {
+  tesoreria:
+    "Los cobros y pendientes van por pedido: los de un pedido mixto (DTF y DTF UV), con el DTF. La caja y el banco son de toda la empresa.",
+  clientes: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  comercial: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  produccion: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  fiscal: "Los impuestos son de toda la empresa: no se separan por línea.",
+  textil: "El textil es otro negocio: no tiene DTF ni DTF UV.",
+};
+
 function EsqueletoPestana() {
   return (
     <div className="mt-4 grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
@@ -86,7 +103,13 @@ export const Route = createFileRoute("/panel/gerencia")({
   component: Gerencia,
 });
 
-const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos", grupo: "total" };
+const FILTROS_GERENCIA = {
+  pestana: "resumen",
+  tienda: "todas",
+  canal: "todos",
+  grupo: "total",
+  linea: "todo",
+};
 
 const SIN_COBROS = { disponible: false, cobros: [] };
 const SIN_PENDIENTES = { disponible: false, pedidos: [] };
@@ -108,9 +131,16 @@ function Gerencia() {
     void cargar?.().catch(() => undefined);
   }, [f.pestana]);
   const filtro: FiltroGerencia = useMemo(
-    () => ({ tienda: f.tienda, canal: esCanal(f.canal) ? f.canal : "todos" }),
-    [f.tienda, f.canal],
+    () => ({
+      tienda: f.tienda,
+      canal: esCanal(f.canal) ? f.canal : "todos",
+      linea: esFiltroLinea(f.linea) ? f.linea : "todo",
+    }),
+    [f.tienda, f.canal, f.linea],
   );
+  // Los pedidos solo de DTF UV, para repartir cobros y pendientes por línea.
+  // Solo con una línea elegida: con «Todo» no se reparten.
+  const soloUv = usePedidosSoloUv(undefined, { enabled: (f.linea ?? "todo") !== "todo" });
   const grupo: Grupo = esGrupo(f.grupo) ? f.grupo : "total";
 
   // Sin «todo» en la lista, siempre hay rango. Sin comparación, un rango
@@ -191,6 +221,7 @@ function Gerencia() {
           pendientes: pendientesLeidos,
           caja: cajaLeida,
           banco: bancoLeido,
+          soloUv: soloUv.data,
         },
         fuentes,
       ),
@@ -210,6 +241,7 @@ function Gerencia() {
       pendientesLeidos,
       cajaLeida,
       bancoLeido,
+      soloUv.data,
       filtro,
       periodo.seleccion,
       periodo.comparacion,
@@ -253,12 +285,14 @@ function Gerencia() {
     etiquetaPeriodo(periodo.seleccion),
     opcionesTienda.find((o) => o.valor === filtro.tienda)?.etiqueta,
     filtro.canal !== "todos" ? opcionesCanal.find((o) => o.valor === filtro.canal)?.etiqueta : null,
+    filtro.linea && filtro.linea !== "todo" ? ETIQUETA_FILTRO_LINEA[filtro.linea] : null,
     grupo !== "total" ? GRUPOS.find((g) => g.valor === grupo)?.etiqueta : null,
   ]
     .filter(Boolean)
     .join(" · ");
   // Los ajustes no dependen del periodo ni de los filtros.
   const enAjustes = f.pestana === "ajustes";
+  const lineaElegida = (filtro.linea ?? "todo") !== "todo";
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
   // se atenúan y no se puede actuar sobre ellas.
   const deAntes =
@@ -286,8 +320,13 @@ function Gerencia() {
           </div>
         </div>
         <p className="text-muted-foreground max-md:hidden">
-          Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
-          (con el ratón encima, o tocándolo en el móvil).
+          {filtro.linea === "dtf"
+            ? "Solo DTF: la impresión propia de las tiendas, sin DTF UV ni textil."
+            : filtro.linea === "uv"
+              ? "Solo DTF UV: lo subcontratado, con su coste de la subcontrata."
+              : "Toda la empresa: tiendas y textil."}{" "}
+          El ⓘ de cada cifra explica qué es y cómo se calcula (con el ratón encima, o tocándolo en
+          el móvil).
         </p>
       </div>
 
@@ -309,6 +348,11 @@ function Gerencia() {
               opciones={opcionesCanal}
               ancho="w-[170px] max-md:w-[calc(50%-0.25rem)]"
             />
+            <SelectorLinea
+              valor={filtro.linea ?? "todo"}
+              alCambiar={(linea) => cambiar({ linea })}
+              className="max-md:w-full"
+            />
             <SelectFiltro
               etiqueta="Números"
               valor={grupo}
@@ -321,6 +365,22 @@ function Gerencia() {
       </FiltrosPlegables>
 
       <AvisoActualizando activo={deAntes && !enAjustes} />
+
+      {soloUv.error && !enAjustes && (
+        <Card>
+          <CardContent className="py-6 text-sm text-destructive">
+            No se han podido separar los cobros por línea: {mensajeDeError(soloUv.error)}
+          </CardContent>
+        </Card>
+      )}
+
+      {lineaElegida && !enAjustes && NOTA_LINEA[f.pestana] && (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">
+            {NOTA_LINEA[f.pestana]}
+          </CardContent>
+        </Card>
+      )}
 
       {ventas.error && !enAjustes && (
         <Card>

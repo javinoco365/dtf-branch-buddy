@@ -8,6 +8,8 @@
  * Lógica pura: recibe filas ya leídas y devuelve los datos de las pestañas.
  */
 
+import { TIENDA_TEXTIL } from "./cobros";
+import { cobrosDeLinea, pendientesDeLinea, ventasDeLinea } from "./por-linea";
 import type { CobroConsolidado } from "./facturacion";
 import type { CompraResumen, DocumentoDePedido } from "./fiscal";
 import { gastosConCompras } from "./compras";
@@ -115,6 +117,11 @@ export type EntradasGerencia<TCaja = unknown> = {
   pendientes: { disponible: boolean; pedidos: PedidoPendiente[] } | undefined;
   caja: { movimientos: TCaja[] } | undefined;
   banco: MovimientoBancoResumen[] | undefined;
+  /**
+   * Ids de los pedidos solo de DTF UV (usePedidosSoloUv), para repartir los
+   * cobros y los pendientes por línea. Hace falta con una línea elegida.
+   */
+  soloUv?: ReadonlySet<string>;
 };
 
 const SIN_AJUSTES = { ajustes: AJUSTES_POR_DEFECTO, gastos: [], objetivos: [] };
@@ -238,7 +245,16 @@ export function montarDatosGerencia<TCaja>(
 ): DatosGerencia<TCaja> | null {
   const { grupo, filtro, ventas, ventasPrevias, docs, docsPrevios, ajustes, compras } = e;
   const { cobros, cobrosPrevios, pendientes, caja, banco } = e;
+  // La línea de producto (por-linea.ts). Con una elegida, los cobros y los
+  // pendientes se reparten por pedido: hace falta saber cuáles son de UV.
+  const linea = filtro.linea ?? "todo";
   const pide = (f: FuenteGerencia) => fuentes.includes(f);
+  // Solo lo esperan las pestañas que enseñan cobros o pendientes.
+  const repartePorPedido = pide("cobros") || pide("cobrosPrevios") || pide("pendientes");
+  if (linea !== "todo" && repartePorPedido && !e.soloUv) return null;
+  const soloUv = e.soloUv ?? new Set<string>();
+  const deLinea = <V extends Venta>(v: readonly V[]) =>
+    ventasDeLinea(filtrarVentas(v, filtro), linea);
   // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
   const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
   if (pide("ventas") && !ventas) return null;
@@ -255,7 +271,7 @@ export function montarDatosGerencia<TCaja>(
   // Lo que la pestaña no pide y no ha llegado sale vacío: no lo lee.
   const { ajustes: a, gastos: gastosAjustes, objetivos } = aj ?? SIN_AJUSTES;
   const gastos = gastosConCompras(gastosAjustes, compras.data ?? []);
-  const delPeriodo = filtrarVentas(ventas ?? [], filtro);
+  const delPeriodo = deLinea(ventas ?? []);
   const todas = aplicarAjustesVentas(delPeriodo, a);
   const documentados = pedidosDocumentados(docs ?? []);
   const documentadosPrevios = pedidosDocumentados(docsPrevios ?? []);
@@ -272,7 +288,7 @@ export function montarDatosGerencia<TCaja>(
     tiendas: e.tiendas,
     ventas: ventasDelGrupo(todas, documentados, grupo),
     ventasPrevias: ventasDelGrupo(
-      aplicarAjustesVentas(filtrarVentas(ventasPrevias ?? [], filtro), a),
+      aplicarAjustesVentas(deLinea(ventasPrevias ?? []), a),
       documentadosPrevios,
       grupo,
     ),
@@ -281,11 +297,25 @@ export function montarDatosGerencia<TCaja>(
     gastos,
     gastosDelGrupo: gastosDelGrupo(gastos, grupo),
     objetivos,
-    cobros: filtrarCobrosGerencia(cobros?.cobros ?? [], filtro),
-    cobrosPrevios: filtrarCobrosGerencia(cobrosPrevios?.cobros ?? [], filtro),
+    cobros: cobrosDeLinea(
+      filtrarCobrosGerencia(cobros?.cobros ?? [], filtro),
+      linea,
+      soloUv,
+      TIENDA_TEXTIL.id,
+    ),
+    cobrosPrevios: cobrosDeLinea(
+      filtrarCobrosGerencia(cobrosPrevios?.cobros ?? [], filtro),
+      linea,
+      soloUv,
+      TIENDA_TEXTIL.id,
+    ),
     cobrosLeidos: cobros !== undefined,
     cobrosDisponibles: cobros?.disponible ?? false,
-    pendientes: filtrarPendientesGerencia(pendientes?.pedidos ?? [], filtro),
+    pendientes: pendientesDeLinea(
+      filtrarPendientesGerencia(pendientes?.pedidos ?? [], filtro),
+      linea,
+      soloUv,
+    ),
     pendientesLeidos: pendientes !== undefined,
     pendientesDisponibles: pendientes?.disponible ?? false,
     caja: caja?.movimientos,

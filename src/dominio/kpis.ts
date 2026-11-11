@@ -339,12 +339,18 @@ export function agruparPorTienda(
 export function topPorMetros(
   lineas: readonly LineaResumen[],
   limite = 6,
+  /**
+   * De qué línea: «dtf» (por defecto, lo de siempre), «uv» o «todo». Cada
+   * barra es un producto, así que con «todo» no se mezclan metros distintos.
+   */
+  linea: "dtf" | "uv" | "todo" = "dtf",
 ): { producto: string; metros: number }[] {
   const porProducto = new Map<string, number>();
   for (const l of lineas) {
     if ((l.unidad ?? "m").toLowerCase() !== "m") continue;
     // Los metros de DTF UV no son metros vendidos de DTF (ver por-linea.ts).
-    if (l.linea === "uv") continue;
+    const esUv = l.linea === "uv";
+    if ((linea === "dtf" && esUv) || (linea === "uv" && !esUv)) continue;
     const nombre = (l.descripcion ?? "").trim() || "Sin descripción";
     porProducto.set(nombre, (porProducto.get(nombre) ?? 0) + num(l.cantidad));
   }

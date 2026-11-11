@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { tabla } from "@/lib/rpc";
+import { faltaLaColumna, tabla } from "@/lib/rpc";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { eur, metros, numero } from "@/lib/format";
 import { usePedidosPeriodo } from "@/lib/periodo";
-import { calcularKpis, costeVariable, variacion } from "@/dominio/kpis";
+import { variacion } from "@/dominio/kpis";
+import { cifrasPorLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
+import { useLineaUrl } from "@/lib/filtros-url";
+import { SelectorLinea } from "@/components/filtros/SelectorLinea";
+import { DesgloseLinea } from "@/components/DesgloseLinea";
 import { compararCon, rangoDe } from "@/dominio/periodos";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
@@ -22,11 +26,18 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
-      const [pedidos, facturas, empresa] = await Promise.all([
-        supabase
-          .from("pedidos")
+      // metros_uv viene de 20261110100000: sin ella, se lee como antes.
+      const leerPedidos = async () => {
+        const r = await tabla(supabase, "pedidos")
+          .select("total, metros_total, metros_uv, fecha_pedido, estado")
+          .eq("tienda_id", tiendaId);
+        if (!faltaLaColumna(r.error)) return r;
+        return tabla(supabase, "pedidos")
           .select("total, metros_total, fecha_pedido, estado")
-          .eq("tienda_id", tiendaId),
+          .eq("tienda_id", tiendaId);
+      };
+      const [pedidos, facturas, empresa] = await Promise.all([
+        leerPedidos(),
         supabase.from("facturas").select("total, estado").eq("tienda_id", tiendaId),
         tabla(supabase, "empresas")
           .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
@@ -35,7 +46,12 @@ function Dashboard() {
           .limit(1)
           .maybeSingle(),
       ]);
-      return { pedidos: pedidos.data ?? [], facturas: facturas.data ?? [], empresa: empresa.data };
+      const filas = (pedidos.data ?? []) as {
+        total: number | null;
+        metros_total: number | null;
+        metros_uv?: number | null;
+      }[];
+      return { pedidos: filas, facturas: facturas.data ?? [], empresa: empresa.data };
     },
   });
   const pedidos = data?.pedidos ?? [];
@@ -48,7 +64,9 @@ function Dashboard() {
   const fact = facturas
     .filter((f) => f.estado !== "anulada" && f.estado !== "borrador")
     .reduce((s, f) => s + Number(f.total), 0);
+  // Los metros de cada línea, por separado: no se suman entre sí.
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
+  const mtsUv = pedidos.reduce((s, p) => s + Number(p.metros_uv ?? 0), 0);
 
   // El mes en curso con las mismas cuentas que el dashboard (devoluciones
   // restadas, coste congelado por pedido) y comparado con el mismo trozo del
@@ -62,16 +80,23 @@ function Dashboard() {
   const consultaMes = usePedidosPeriodo({ ...mes, tiendaId });
   const consultaAnt = usePedidosPeriodo({ ...comparacion.previo, tiendaId });
   const pedidosMes = useMemo(() => consultaMes.data ?? [], [consultaMes.data]);
-  const k = useMemo(() => calcularKpis(pedidosMes), [pedidosMes]);
-  const kAnt = useMemo(() => calcularKpis(consultaAnt.data ?? []), [consultaAnt.data]);
+  // La línea de producto (por-linea.ts): las dos, DTF o DTF UV.
+  const [linea, cambiarLinea] = useLineaUrl();
+  const lineas = useMemo(() => cifrasPorLinea(pedidosMes, costeMetro), [pedidosMes, costeMetro]);
+  const lineasAnt = useMemo(
+    () => cifrasPorLinea(consultaAnt.data ?? [], costeMetro),
+    [consultaAnt.data, costeMetro],
+  );
+  const k = lineas[linea];
+  const kAnt = lineasAnt[linea];
+  const hayUv = lineas.uv.pedidos > 0;
 
   const delta = variacion(k.total, kAnt.total);
   // El envío no entra: la bruta ya va sin él, y lo que se cobra al cliente es
-  // lo que se paga a la agencia.
-  const costeMes = costeVariable(pedidosMes, costeMetro);
-  const margenMes = k.bruta - costeMes.produccion;
+  // lo que se paga a la agencia. El DTF UV, con lo que cobra la subcontrata.
+  const margenMes = k.ganancia;
   const margenPct = k.bruta > 0 ? (margenMes / k.bruta) * 100 : null;
-  const sinCostes = costeMetro === 0 && costeMes.produccion === 0;
+  const sinCostes = costeMetro === 0 && k.coste === 0;
 
   return (
     <div className="space-y-6">
@@ -81,7 +106,11 @@ function Dashboard() {
         </h1>
         <p className="text-sm text-muted-foreground">
           El mes en curso, frente al mismo trozo del mes anterior, y los totales de la tienda.
+          {linea !== "todo"
+            ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
+            : ""}
         </p>
+        <SelectorLinea valor={linea} alCambiar={cambiarLinea} className="mt-2" />
       </div>
 
       <section className="space-y-3">
@@ -94,6 +123,11 @@ function Dashboard() {
             frente={comparacion.etiqueta}
             delta={delta}
             icon={Euro}
+            pie={
+              linea === "todo" && hayUv ? (
+                <DesgloseLinea dtf={eur(lineas.dtf.total)} uv={eur(lineas.uv.total)} />
+              ) : undefined
+            }
           />
           <TarjetaKpi
             titulo="Pedidos"
@@ -104,11 +138,21 @@ function Dashboard() {
             pie={<span className="text-muted-foreground">Ticket medio {eur(k.ticket)}</span>}
           />
           <TarjetaKpi
-            titulo="Metros"
+            titulo={linea === "uv" ? "Metros de DTF UV" : "Metros"}
             explicacion="metros"
-            valor={metros(k.metros)}
+            valor={metros(linea === "uv" ? k.metrosUv : k.metros)}
             delta={null}
             icon={Package}
+            pie={
+              linea === "todo" && k.metrosUv > 0 ? (
+                <span className="text-muted-foreground">
+                  De DTF. Aparte,{" "}
+                  <span className="font-medium text-violet-700 dark:text-violet-300">
+                    {metros(k.metrosUv)} de DTF UV
+                  </span>
+                </span>
+              ) : undefined
+            }
           />
           <TarjetaKpi
             titulo="Margen estimado"
@@ -121,7 +165,7 @@ function Dashboard() {
               <span className="text-muted-foreground">
                 {sinCostes
                   ? "Configura los costes en Ajustes › Datos de la empresa"
-                  : `Bruta ${eur(k.bruta)} − producción ${eur(costeMes.produccion)}${
+                  : `Bruta ${eur(k.bruta)} − ${linea === "uv" ? "subcontrata" : linea === "dtf" ? "producción" : "coste"} ${eur(k.coste)}${
                       margenPct !== null ? ` · ${numero(margenPct, 1)}\u00A0% de la bruta` : ""
                     }`}
               </span>
@@ -139,7 +183,22 @@ function Dashboard() {
             delta={null}
             icon={ShoppingCart}
           />
-          <TarjetaKpi titulo="Metros" valor={metros(mts)} delta={null} icon={Ruler} />
+          <TarjetaKpi
+            titulo="Metros"
+            valor={metros(mts)}
+            delta={null}
+            icon={Ruler}
+            pie={
+              mtsUv > 0 ? (
+                <span className="text-muted-foreground">
+                  De DTF. Aparte,{" "}
+                  <span className="font-medium text-violet-700 dark:text-violet-300">
+                    {metros(mtsUv)} de DTF UV
+                  </span>
+                </span>
+              ) : undefined
+            }
+          />
           <TarjetaKpi titulo="Facturado" valor={eur(fact)} delta={null} icon={Euro} />
           <TarjetaKpi
             titulo="Facturas"

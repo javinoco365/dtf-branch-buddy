@@ -11,6 +11,7 @@
 import { redondear } from "./importes";
 import { diaDelPedido } from "./dia-pedido";
 import { diasDelRango, type Tramo } from "./periodos";
+import { partirPedidos } from "./por-linea";
 import { cifrasGerencia, gastosFijosDelRango, type GastoFijo, type Venta } from "./gerencia";
 
 export type FilaMargen = {
@@ -118,7 +119,9 @@ export type MargenMetro = {
 
 /** Precio, coste y margen medios del metro, solo de los pedidos que llevan metros. */
 export function margenPorMetro(ventas: readonly Venta[], costeActual: number): MargenMetro | null {
-  const conMetros = ventas.filter((v) => Number(v.metros_total ?? 0) > 0);
+  // Solo la parte de DTF: lo del UV de un pedido mixto (su importe y lo que
+  // cobra la subcontrata) no va en el metro de DTF (ver por-linea.ts).
+  const conMetros = partirPedidos(ventas).dtf.filter((v) => Number(v.metros_total ?? 0) > 0);
   const k = cifrasGerencia(conMetros, costeActual);
   if (k.metros <= 0) return null;
   const precio = k.euroMetro;

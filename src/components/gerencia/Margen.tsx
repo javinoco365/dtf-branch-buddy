@@ -74,7 +74,10 @@ export function Margen({ d }: { d: DatosGerencia }) {
   const sinCosteMetro = d.costeMetro === 0 && c.costeDtf === 0 && c.metros > 0;
   const porcentaje = porcentajeMargen(c.margen, c.bruta);
   const porcentajePrevio = porcentajeMargen(p.margen, p.bruta);
-  const conGastos = d.gastosDelGrupo.length > 0;
+  // Con una línea elegida, sin gastos fijos: son de toda la empresa, y
+  // restados al margen de una sola línea darían un beneficio que no es.
+  const linea = d.filtro.linea ?? "todo";
+  const conGastos = d.gastosDelGrupo.length > 0 && linea === "todo";
 
   return (
     <div className="space-y-4">
@@ -97,7 +100,9 @@ export function Margen({ d }: { d: DatosGerencia }) {
           icon={Wrench}
           pie={
             <span className="text-muted-foreground">
-              DTF {eur(c.costeDtf)} · Textil {eur(c.costeTextil)}
+              {linea === "uv"
+                ? `Lo que cobra la subcontrata ${eur(c.costeDtf)}`
+                : `DTF ${eur(c.costeDtf)} · Textil ${eur(c.costeTextil)}`}
               {c.envios > 0 &&
                 ` · Envíos cobrados ${eur(c.envios)}, aparte de la bruta y del coste`}
             </span>
@@ -167,9 +172,11 @@ export function Margen({ d }: { d: DatosGerencia }) {
             Sin IVA.
             {conGastos
               ? " Los gastos fijos, repartidos por días y solo hasta hoy."
-              : d.grupo === "b"
-                ? " No hay gastos sin justificante."
-                : " Pon los gastos fijos en Ajustes para ver el beneficio."}
+              : linea !== "todo"
+                ? " Sin gastos fijos: son de toda la empresa, no de una línea."
+                : d.grupo === "b"
+                  ? " No hay gastos sin justificante."
+                  : " Pon los gastos fijos en Ajustes para ver el beneficio."}
           </p>
         </CardHeader>
         <CardContent>

@@ -163,11 +163,15 @@ export function Resultados({ d }: { d: DatosGerencia }) {
     [sinPrimeraVenta, primeraVenta.data, d.rango, rangoLectura.desde],
   );
 
-  if (d.filtro.tienda !== "todas" || d.filtro.canal !== "todos") {
+  if (
+    d.filtro.tienda !== "todas" ||
+    d.filtro.canal !== "todos" ||
+    (d.filtro.linea ?? "todo") !== "todo"
+  ) {
     return (
       <Nota>
         La cuenta de resultados y los impuestos son de toda la empresa: se ven con «Todas las
-        tiendas» y «Todos los canales».
+        tiendas», «Todos los canales» y la línea «Todo».
       </Nota>
     );
   }

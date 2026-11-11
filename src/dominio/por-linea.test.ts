@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { calcularKpis } from "./kpis";
 import { redondear } from "./importes";
+import { calcularKpis as kpis, costeProduccion } from "./kpis";
 import {
   cifrasPorLinea,
+  cobrosDeLinea,
+  pendientesDeLinea,
+  ventasDeLinea,
   esFiltroLinea,
   partirPedido,
   pedidosDeLinea,
@@ -161,5 +165,71 @@ describe("esFiltroLinea", () => {
   it("solo los tres valores", () => {
     expect(["todo", "dtf", "uv"].every(esFiltroLinea)).toBe(true);
     expect(esFiltroLinea("textil")).toBe(false);
+  });
+});
+
+describe("ventasDeLinea (Gerencia)", () => {
+  const textil = { ...pedido({ metros_total: 0 }), canal: "textil" };
+  const ventas = [
+    { ...soloDtf, canal: "web" },
+    { ...soloUv, canal: "web" },
+    { ...mixto, canal: "web" },
+    textil,
+  ];
+
+  it("«Todo», tal cual, con el textil", () => {
+    expect(ventasDeLinea(ventas, "todo")).toHaveLength(4);
+  });
+
+  it("«DTF»: la parte de DTF de los pedidos de tienda, sin el textil", () => {
+    const dtf = ventasDeLinea(ventas, "dtf");
+    expect(dtf).toHaveLength(2);
+    expect(dtf.every((v) => v.canal !== "textil")).toBe(true);
+    expect(kpis(dtf).metros).toBe(14);
+  });
+
+  it("«DTF UV»: sus metros y su coste salen con las funciones de siempre", () => {
+    const uv = ventasDeLinea(ventas, "uv");
+    expect(uv).toHaveLength(2);
+    // 7 m + 2 m de UV, como si fueran los metros del pedido.
+    expect(kpis(uv).metros).toBe(9);
+    expect(kpis(uv).bruta).toBe(112 + 35);
+    // A 15 €/m de la subcontrata, aunque el coste de hoy del DTF sea otro.
+    expect(costeProduccion(uv, 2)).toBe(9 * 15);
+  });
+
+  it("un UV sin coste congelado toma el de la subcontrata por defecto, no el del DTF", () => {
+    const uv = ventasDeLinea([{ ...soloUv, coste_uv_snapshot: null, canal: "web" }], "uv");
+    expect(costeProduccion(uv, 2)).toBe(7 * 15);
+  });
+});
+
+describe("cobrosDeLinea y pendientesDeLinea", () => {
+  const soloUvIds = new Set(["p-uv"]);
+  const cobros = [
+    { pedido_id: "p-dtf", tienda_id: "t" },
+    { pedido_id: "p-uv", tienda_id: "t" },
+    { pedido_id: "p-tx", tienda_id: "textil" },
+  ];
+
+  it("los de pedidos solo de UV al UV; el resto de tienda al DTF; el textil, solo en todo", () => {
+    expect(cobrosDeLinea(cobros, "todo", soloUvIds, "textil")).toHaveLength(3);
+    expect(cobrosDeLinea(cobros, "uv", soloUvIds, "textil").map((c) => c.pedido_id)).toEqual([
+      "p-uv",
+    ]);
+    expect(cobrosDeLinea(cobros, "dtf", soloUvIds, "textil").map((c) => c.pedido_id)).toEqual([
+      "p-dtf",
+    ]);
+  });
+
+  it("los pendientes, con la misma regla", () => {
+    const pendientes = [
+      { id: "p-dtf", tipo: "tienda" },
+      { id: "p-uv", tipo: "tienda" },
+      { id: "x", tipo: "textil" },
+    ];
+    expect(pendientesDeLinea(pendientes, "uv", soloUvIds).map((p) => p.id)).toEqual(["p-uv"]);
+    expect(pendientesDeLinea(pendientes, "dtf", soloUvIds).map((p) => p.id)).toEqual(["p-dtf"]);
+    expect(pendientesDeLinea(pendientes, "todo", soloUvIds)).toHaveLength(3);
   });
 });

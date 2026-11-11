@@ -429,17 +429,29 @@ export function metrosPedidoWooPorLinea(
 /**
  * Lo que es de DTF UV en el importe de un pedido: la base (sin IVA ni envío)
  * y el IVA de sus líneas de UV. Va a `bruta_uv` e `iva_uv` (ver por-linea.ts).
+ *
+ * Con el descuento ya restado (`total`, `total_tax` de la línea): la base del
+ * pedido (`importesPedidoWoo`) también va con él, y si no el cupón de una
+ * línea de UV se cargaría entero al DTF. Sin esos campos, `subtotal`.
  */
 export function importesUvWoo(
-  lineas: readonly (LineaWoo & { subtotal_tax?: number | string | null })[] | null | undefined,
+  lineas:
+    | readonly (LineaWoo & {
+        subtotal_tax?: number | string | null;
+        total?: number | string | null;
+        total_tax?: number | string | null;
+      })[]
+    | null
+    | undefined,
   opcionesDe: (li: LineaWoo) => OpcionesMedida,
 ): { bruta_uv: number; iva_uv: number } {
   let bruta = 0;
   let iva = 0;
+  const dato = (v: number | string | null | undefined) => (v == null || v === "" ? null : v);
   for (const li of lineas ?? []) {
     if (opcionesDe(li).linea !== "uv") continue;
-    bruta += numeroDeTexto(li.subtotal ?? 0) ?? 0;
-    iva += numeroDeTexto(li.subtotal_tax ?? 0) ?? 0;
+    bruta += numeroDeTexto(dato(li.total) ?? li.subtotal ?? 0) ?? 0;
+    iva += numeroDeTexto(dato(li.total_tax) ?? li.subtotal_tax ?? 0) ?? 0;
   }
   return { bruta_uv: redondear(bruta, 2), iva_uv: redondear(iva, 2) };
 }

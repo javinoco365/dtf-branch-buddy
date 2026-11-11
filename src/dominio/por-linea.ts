@@ -27,6 +27,7 @@
 import { redondear } from "./importes";
 import {
   calcularKpis,
+  COSTE_UV_POR_DEFECTO,
   costeProduccion,
   ESTADO_CANCELADO,
   type KpisPeriodo,
@@ -66,6 +67,8 @@ function vacia<P extends PedidoResumen>(p: P): P {
     devuelto: 0,
     metros_total: 0,
     metros_uv: 0,
+    bruta_uv: 0,
+    iva_uv: 0,
   };
 }
 
@@ -80,7 +83,8 @@ export function partirPedido<P extends PedidoPartible>(p: P): Record<LineaProduc
   const metrosUv = num(p.metros_uv);
   const brutaUv = num(p.bruta_uv);
   const ivaUv = num(p.iva_uv);
-  if (metrosUv <= 0 && brutaUv <= 0) return { dtf: { ...p, metros_uv: 0 }, uv: vacia(p) };
+  if (metrosUv <= 0 && brutaUv <= 0)
+    return { dtf: { ...p, metros_uv: 0, bruta_uv: 0, iva_uv: 0 }, uv: vacia(p) };
 
   // Mixto: el UV, sus líneas; el DTF, el resto. Sin importes de UV guardados,
   // el UV se queda solo con sus metros.
@@ -99,6 +103,9 @@ export function partirPedido<P extends PedidoPartible>(p: P): Record<LineaProduc
       total: redondear(total - totalUv),
       devuelto: devuelto - devueltoUv,
       metros_uv: 0,
+      // La parte de DTF ya no lleva UV: partirla otra vez no cambia nada.
+      bruta_uv: 0,
+      iva_uv: 0,
     },
     uv: {
       ...p,
@@ -233,4 +240,72 @@ export function pedidosDeLinea<P extends PedidoPartible>(
 ): P[] {
   if (linea === "todo") return [...pedidos];
   return partirPedidos(pedidos)[linea].filter(parteConAlgo);
+}
+
+// ---------------------------------------------------------------------------
+// Gerencia: las ventas, los cobros y los pendientes de una línea
+// ---------------------------------------------------------------------------
+
+/**
+ * La parte de DTF UV de un pedido, presentada como si fuera la única línea:
+ * sus metros en `metros_total` y lo que cobra la subcontrata como coste por
+ * metro. Así todo lo que en Gerencia lee metros, €/m, coste y margen de un
+ * pedido (kpis.ts, gerencia.ts) da las cifras del UV sin tocar cada pantalla.
+ */
+function uvComoUnicaLinea<P extends PedidoPartible>(p: P): P {
+  const coste = p.coste_uv_snapshot;
+  return {
+    ...p,
+    metros_total: p.metros_uv ?? 0,
+    metros_uv: 0,
+    coste_metro_snapshot: coste == null || coste === "" ? COSTE_UV_POR_DEFECTO : coste,
+    coste_uv_snapshot: null,
+    // Ya es una sola línea: partirla otra vez no le quita nada.
+    bruta_uv: 0,
+    iva_uv: 0,
+  };
+}
+
+/**
+ * Las ventas de Gerencia de una línea. «Todo», tal cual. «DTF», la parte de
+ * DTF de los pedidos de tienda: el textil (ropa) es otro negocio y solo sale
+ * en «Todo». «DTF UV», la parte de UV, presentada como única línea (ver
+ * uvComoUnicaLinea).
+ */
+export function ventasDeLinea<P extends PedidoPartible & { canal?: string }>(
+  ventas: readonly P[],
+  linea: FiltroLinea,
+): P[] {
+  if (linea === "todo") return [...ventas];
+  const deTienda = ventas.filter((v) => v.canal !== "textil");
+  const partes = pedidosDeLinea(deTienda, linea);
+  return linea === "uv" ? partes.map(uvComoUnicaLinea) : partes;
+}
+
+/**
+ * Los cobros de una línea. Un cobro es de un pedido entero, así que va con
+ * la línea del pedido: los de pedidos solo de UV (`soloUv`, sus ids) al UV y
+ * el resto de tienda al DTF; los de un pedido mixto, con el DTF. El textil,
+ * solo en «Todo».
+ */
+export function cobrosDeLinea<C extends { pedido_id: string; tienda_id: string }>(
+  cobros: readonly C[],
+  linea: FiltroLinea,
+  soloUv: ReadonlySet<string>,
+  tiendaTextil: string,
+): C[] {
+  if (linea === "todo") return [...cobros];
+  if (linea === "uv") return cobros.filter((c) => soloUv.has(c.pedido_id));
+  return cobros.filter((c) => c.tienda_id !== tiendaTextil && !soloUv.has(c.pedido_id));
+}
+
+/** Los pedidos pendientes de cobro de una línea, con la misma regla que los cobros. */
+export function pendientesDeLinea<P extends { id: string; tipo: string }>(
+  pendientes: readonly P[],
+  linea: FiltroLinea,
+  soloUv: ReadonlySet<string>,
+): P[] {
+  if (linea === "todo") return [...pendientes];
+  if (linea === "uv") return pendientes.filter((p) => p.tipo !== "textil" && soloUv.has(p.id));
+  return pendientes.filter((p) => p.tipo !== "textil" && !soloUv.has(p.id));
 }
