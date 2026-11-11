@@ -19,11 +19,11 @@ import {
   usePedidosPeriodo,
   usePedidosSoloUv,
 } from "@/lib/periodo";
-import { cifrasUv, separarPorLinea } from "@/dominio/ventas-uv";
+import { cifrasPorLinea, pedidosDeLinea } from "@/dominio/por-linea";
 import { lineasDelPedido } from "@/dominio/linea-producto";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
-import { agruparPorRangos, calcularKpis, topPorMetros, variacion } from "@/dominio/kpis";
+import { agruparPorRangos, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -82,18 +82,19 @@ function FacturacionTienda() {
   const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro", tiendaId);
   const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro", tiendaId);
 
-  // Todos los pedidos del periodo, para la exportación; las cifras van sin
-  // los de DTF UV, que tienen su tarjeta aparte (ver ventas-uv.ts).
+  // Todos los pedidos del periodo, para la exportación; las cifras van por
+  // línea: arriba el DTF, y el DTF UV en su tarjeta (ver por-linea.ts). Un
+  // pedido mixto se reparte entre las dos.
   const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
-  const porLinea = useMemo(() => separarPorLinea(pedidos), [pedidos]);
-  const porLineaPrev = useMemo(
-    () => separarPorLinea(consultaAnterior.data ?? []),
+  const lineas = useMemo(() => cifrasPorLinea(pedidos), [pedidos]);
+  const lineasPrev = useMemo(
+    () => cifrasPorLinea(consultaAnterior.data ?? []),
     [consultaAnterior.data],
   );
-  const k = useMemo(() => calcularKpis(porLinea.dtf), [porLinea]);
-  const kPrev = useMemo(() => calcularKpis(porLineaPrev.dtf), [porLineaPrev]);
-  const uv = useMemo(() => cifrasUv(porLinea.uv), [porLinea]);
-  const uvPrev = useMemo(() => cifrasUv(porLineaPrev.uv), [porLineaPrev]);
+  const k = lineas.dtf;
+  const kPrev = lineasPrev.dtf;
+  const uv = lineas.uv;
+  const uvPrev = lineasPrev.uv;
   // Lo cobrado de los pedidos de DTF UV va con el UV, no con el DTF.
   const consultaSoloUv = usePedidosSoloUv(tiendaId);
   const soloUv = consultaSoloUv.data;
@@ -110,9 +111,9 @@ function FacturacionTienda() {
     const { por, tramos: todos } = tramosGrafica({ desde, hasta });
     // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
     const tramos = tramosHastaHoy(todos, new Date());
-    const totales = agruparPorRangos(porLinea.dtf, tramos);
+    const totales = agruparPorRangos(pedidosDeLinea(pedidos, "dtf"), tramos);
     return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
-  }, [porLinea, desde, hasta]);
+  }, [pedidos, desde, hasta]);
 
   const topProductos = useMemo(
     () => topPorMetros(consultaLineas.data ?? []),
@@ -326,9 +327,9 @@ function FacturacionTienda() {
                 <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
                   <TarjetaKpi
                     titulo="Vendido UV"
-                    valor={eur(uv.vendido)}
+                    valor={eur(uv.total)}
                     frente={comparacion?.etiqueta}
-                    delta={variacion(uv.vendido, uvPrev.vendido)}
+                    delta={variacion(uv.total, uvPrev.total)}
                     icon={Euro}
                   />
                   <TarjetaKpi
@@ -340,9 +341,9 @@ function FacturacionTienda() {
                   />
                   <TarjetaKpi
                     titulo="Metros UV"
-                    valor={metros(uv.metros)}
+                    valor={metros(uv.metrosUv)}
                     frente={comparacion?.etiqueta}
-                    delta={variacion(uv.metros, uvPrev.metros)}
+                    delta={variacion(uv.metrosUv, uvPrev.metrosUv)}
                     icon={Ruler}
                   />
                   <TarjetaKpi
@@ -372,13 +373,6 @@ function FacturacionTienda() {
                     </span>
                   )}
                 </div>
-                {porLinea.mixtos > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {porLinea.mixtos === 1
-                      ? "1 pedido lleva DTF y UV juntos: su importe cuenta arriba, con el DTF, porque no se puede partir; sus metros de UV no."
-                      : `${porLinea.mixtos} pedidos llevan DTF y UV juntos: su importe cuenta arriba, con el DTF, porque no se puede partir; sus metros de UV no.`}
-                  </p>
-                )}
               </CardContent>
             </Card>
           )}

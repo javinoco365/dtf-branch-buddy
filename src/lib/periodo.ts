@@ -32,6 +32,17 @@ const CAMPOS_PEDIDO =
   "id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id";
 /** Los metros y el coste del DTF UV (migración 20261110100000). */
 export const CAMPOS_UV = "metros_uv, coste_uv_snapshot";
+/** Lo que es de DTF UV en el importe del pedido (migración 20261111100000). */
+export const CAMPOS_UV_IMPORTES = "bruta_uv, iva_uv";
+
+/**
+ * Hasta dónde se puede leer el DTF UV: 2 con los importes por línea, 1 solo
+ * metros y coste, 0 nada (sin sus migraciones). Las lecturas prueban de más a
+ * menos, y la pantalla funciona en cualquiera.
+ */
+export type NivelUv = 0 | 1 | 2;
+export const camposUv = (nivel: NivelUv) =>
+  nivel === 2 ? `, ${CAMPOS_UV}, ${CAMPOS_UV_IMPORTES}` : nivel === 1 ? `, ${CAMPOS_UV}` : "";
 
 export type RangoFechas = { desde: Date; hasta: Date };
 
@@ -65,12 +76,12 @@ export function usePedidosPeriodo(filtro: Filtro, { activo = true }: OpcionesLec
       // Con sus devoluciones, para restarlas de lo vendido, y con el coste
       // por metro congelado al crear el pedido (ver kpis.ts).
       // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
-      // `conUv`: los metros y el coste del DTF UV (20261110100000).
-      const leer = (conCoste: boolean, conUv = false) =>
+      // `uv`: cuánto del DTF UV se puede leer (ver camposUv).
+      const leer = (conCoste: boolean, uv: NivelUv = 0) =>
         leerTodas<unknown>((a, b) => {
           let consulta = tabla(supabase, "pedidos")
             .select(
-              `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}${conUv ? `, ${CAMPOS_UV}` : ""}, devoluciones:pedido_devoluciones(importe)`,
+              `${CAMPOS_PEDIDO}${conCoste ? ", coste_metro_snapshot" : ""}${camposUv(uv)}, devoluciones:pedido_devoluciones(importe)`,
             )
             .gte("fecha_pedido", tramo.desde)
             .lt("fecha_pedido", tramo.hasta);
@@ -78,7 +89,9 @@ export function usePedidosPeriodo(filtro: Filtro, { activo = true }: OpcionesLec
           return consulta.order("id").range(a, b);
         });
 
-      let { data, error } = await leer(true, true);
+      let { data, error } = await leer(true, 2);
+      // Sin los importes por línea: los mixtos van enteros al DTF.
+      if (faltaLaColumna(error)) ({ data, error } = await leer(true, 1));
       // Sin la migración del DTF UV, como antes: el UV no se separa.
       if (faltaLaColumna(error)) ({ data, error } = await leer(true));
       // Sin la migración 20261007100000_cifras_fiables la columna no existe:

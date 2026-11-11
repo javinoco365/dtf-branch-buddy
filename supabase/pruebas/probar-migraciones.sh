@@ -170,6 +170,7 @@ seccion "Stock textil: unir los productos que son el mismo modelo" D4_textil_pro
 seccion "Primer pedido de un cliente" D5_primer_pedido.sql
 seccion "Método de pago de cada factura y ticket" D6_factura_metodo_pago.sql
 seccion "Línea de producto: DTF y DTF UV" D7_linea_dtf_uv.sql
+seccion "Importes del pedido por línea (DTF y DTF UV)" D8_importes_por_linea.sql
 seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
   'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 

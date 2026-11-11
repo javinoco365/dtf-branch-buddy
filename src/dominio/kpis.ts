@@ -45,6 +45,10 @@ export type PedidoResumen = {
   metros_uv?: number | string | null;
   /** Coste por metro de UV congelado al crear el pedido (ver metros_uv). */
   coste_uv_snapshot?: number | string | null;
+  /** Base sin IVA ni envío de sus líneas de UV (20261111100000, ver por-linea.ts). */
+  bruta_uv?: number | string | null;
+  /** IVA de sus líneas de UV. */
+  iva_uv?: number | string | null;
   /** `manual` o `woocommerce`. Solo lo traen las consultas que lo necesitan. */
   origen?: string | null;
   cliente_id?: string | null;
@@ -339,7 +343,7 @@ export function topPorMetros(
   const porProducto = new Map<string, number>();
   for (const l of lineas) {
     if ((l.unidad ?? "m").toLowerCase() !== "m") continue;
-    // Los metros de DTF UV no son metros vendidos de DTF (ver ventas-uv.ts).
+    // Los metros de DTF UV no son metros vendidos de DTF (ver por-linea.ts).
     if (l.linea === "uv") continue;
     const nombre = (l.descripcion ?? "").trim() || "Sin descripción";
     porProducto.set(nombre, (porProducto.get(nombre) ?? 0) + num(l.cantidad));

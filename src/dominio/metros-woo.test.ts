@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   claseDeNombre,
   esEstimado,
+  importesUvWoo,
   lineaPedidoWoo,
   medirLineaWoo,
   metrosPedidoWoo,
@@ -360,5 +361,23 @@ describe("opcionesDeLineaWoo", () => {
       linea: "dtf",
       precioUv: null,
     });
+  });
+});
+
+describe("importesUvWoo", () => {
+  it("la base y el IVA de las líneas de UV, nada del resto", () => {
+    const opcionesDe = (li: LineaWoo) =>
+      li.name?.includes("UV") ? { linea: "uv" as const } : { linea: "dtf" as const };
+    expect(
+      importesUvWoo(
+        [
+          { name: "DTF por Metros", subtotal: "28.00", subtotal_tax: "5.88" },
+          { name: "DTF UV por metros", subtotal: "35.00", subtotal_tax: "7.35" },
+          { name: "DTF UV por Metros Manual", subtotal: "16", subtotal_tax: "3.36" },
+        ],
+        opcionesDe,
+      ),
+    ).toEqual({ bruta_uv: 51, iva_uv: 10.71 });
+    expect(importesUvWoo(null, opcionesDe)).toEqual({ bruta_uv: 0, iva_uv: 0 });
   });
 });

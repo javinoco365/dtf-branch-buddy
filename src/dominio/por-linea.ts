@@ -1,0 +1,236 @@
+/**
+ * Las cifras de cada línea de producto: DTF (impresión propia) y DTF UV
+ * (subcontratado). Ver linea-producto.ts.
+ *
+ * Todas las pantallas que separan DTF y UV salen de aquí, así que cuadran
+ * entre sí. La regla de fondo: cada pedido se parte en dos pedidos «virtuales»
+ * —su parte de DTF y su parte de UV— que suman exactamente el pedido. Con
+ * ellos, las funciones de siempre (`calcularKpis`, `costeProduccion`) sirven
+ * tal cual para cada línea.
+ *
+ * Cómo se parte un pedido:
+ *
+ *   - Solo de UV: entero al UV, envío incluido (lo envía la subcontrata).
+ *   - Con UV y algo más (mixto): al UV, la base y el IVA de sus líneas de UV
+ *     (`bruta_uv`, `iva_uv`, migración 20261111100000) y sus metros; al DTF,
+ *     el resto, con el envío. Las devoluciones se reparten en proporción.
+ *   - Mixto sin `bruta_uv` (pedido de antes, o la migración sin aplicar):
+ *     entero al DTF salvo los metros de UV, que van al UV sin importe. Es lo
+ *     que se hacía antes; no se inventa un reparto.
+ *   - Sin UV: entero al DTF.
+ *
+ * Los metros no se suman nunca entre líneas: son productos distintos.
+ *
+ * Lógica pura: sin Supabase ni red.
+ */
+
+import { redondear } from "./importes";
+import {
+  calcularKpis,
+  costeProduccion,
+  ESTADO_CANCELADO,
+  type KpisPeriodo,
+  type PedidoResumen,
+} from "./kpis";
+import { esSoloUv, type LineaProducto } from "./linea-producto";
+
+type Valor = number | string | null | undefined;
+const num = (v: Valor) => Number(v ?? 0) || 0;
+
+/** Lo que hace falta del pedido para partirlo: `bruta_uv` e `iva_uv` (ver kpis.ts). */
+export type PedidoPartible = PedidoResumen;
+
+/** La selección de las pantallas: las dos líneas juntas o una sola. */
+export type FiltroLinea = "todo" | LineaProducto;
+
+export const FILTROS_LINEA: readonly FiltroLinea[] = ["todo", "dtf", "uv"];
+
+export const ETIQUETA_FILTRO_LINEA: Record<FiltroLinea, string> = {
+  todo: "Todo",
+  dtf: "DTF",
+  uv: "DTF UV",
+};
+
+/** ¿Es un filtro de línea válido? Para leerlo de la dirección. */
+export const esFiltroLinea = (v: unknown): v is FiltroLinea =>
+  v === "todo" || v === "dtf" || v === "uv";
+
+/** Una parte vacía con las fechas y el estado del pedido. */
+function vacia<P extends PedidoResumen>(p: P): P {
+  return {
+    ...p,
+    subtotal: 0,
+    iva: 0,
+    envio: 0,
+    total: 0,
+    devuelto: 0,
+    metros_total: 0,
+    metros_uv: 0,
+  };
+}
+
+/**
+ * Un pedido partido en su parte de DTF y su parte de UV. Las dos conservan
+ * el resto de campos del pedido (fecha, tienda, estado, cliente…), así que se
+ * pueden agrupar por día o por tienda como el pedido entero.
+ */
+export function partirPedido<P extends PedidoPartible>(p: P): Record<LineaProducto, P> {
+  if (esSoloUv(p)) return { dtf: vacia(p), uv: { ...p, metros_total: 0 } };
+
+  const metrosUv = num(p.metros_uv);
+  const brutaUv = num(p.bruta_uv);
+  const ivaUv = num(p.iva_uv);
+  if (metrosUv <= 0 && brutaUv <= 0) return { dtf: { ...p, metros_uv: 0 }, uv: vacia(p) };
+
+  // Mixto: el UV, sus líneas; el DTF, el resto. Sin importes de UV guardados,
+  // el UV se queda solo con sus metros.
+  const totalUv = redondear(brutaUv + ivaUv);
+  const total = num(p.total);
+  const parteUv = total > 0 ? Math.min(1, totalUv / total) : 0;
+  const devuelto = num(p.devuelto);
+  // Sin redondear: cada parte devuelve la misma proporción que el pedido, y
+  // redondear aquí descuadraba un céntimo las sumas.
+  const devueltoUv = devuelto * parteUv;
+  return {
+    dtf: {
+      ...p,
+      subtotal: redondear(num(p.subtotal) - brutaUv),
+      iva: redondear(num(p.iva) - ivaUv),
+      total: redondear(total - totalUv),
+      devuelto: devuelto - devueltoUv,
+      metros_uv: 0,
+    },
+    uv: {
+      ...p,
+      subtotal: brutaUv,
+      iva: ivaUv,
+      envio: 0,
+      total: totalUv,
+      devuelto: devueltoUv,
+      metros_total: 0,
+      metros_uv: metrosUv,
+    },
+  };
+}
+
+/** Los pedidos partidos, cada parte en su lista. */
+export function partirPedidos<P extends PedidoPartible>(
+  pedidos: readonly P[],
+): Record<LineaProducto, P[]> {
+  const dtf: P[] = [];
+  const uv: P[] = [];
+  for (const p of pedidos) {
+    const partes = partirPedido(p);
+    dtf.push(partes.dtf);
+    uv.push(partes.uv);
+  }
+  return { dtf, uv };
+}
+
+/** ¿Lleva algo esta parte? Un pedido sin UV deja una parte de UV vacía. */
+export const parteConAlgo = (p: PedidoResumen) =>
+  num(p.total) !== 0 || num(p.metros_total) > 0 || num(p.metros_uv) > 0;
+
+/** Las cifras de una línea (o de las dos juntas). */
+export type CifrasLinea = KpisPeriodo & {
+  /** Pedidos con algo de esta línea (no cancelados). Un mixto cuenta en las dos. */
+  pedidos: number;
+  /** Metros de DTF (`metros_total`). 0 en la línea UV. */
+  metros: number;
+  /** Metros de DTF UV. 0 en la línea DTF. */
+  metrosUv: number;
+  /** Producción del DTF propio y lo que cobra la subcontrata por el UV. */
+  coste: number;
+  /** Bruta − coste. El envío no deja ni quita: se paga lo que se cobra. */
+  ganancia: number;
+  /** Bruta por metro de su línea, o 0 sin metros. En «todo», sin sentido: 0. */
+  euroMetro: number;
+  /** Ganancia por metro de su línea, o 0 sin metros. En «todo», 0. */
+  gananciaMetro: number;
+};
+
+function cifras(
+  partes: readonly PedidoResumen[],
+  costeDtf: number,
+  costeUv: number | undefined,
+  linea: FiltroLinea,
+): CifrasLinea {
+  // En «todo» van todos los pedidos, como siempre; en una línea, solo los
+  // que llevan algo de ella (un pedido sin UV deja una parte de UV vacía).
+  const conAlgo = linea === "todo" ? partes : partes.filter(parteConAlgo);
+  const k = calcularKpis(conAlgo);
+  const validos = conAlgo.filter((p) => p.estado !== ESTADO_CANCELADO);
+  const metrosUv = redondear(
+    validos.reduce((s, p) => s + num(p.metros_uv), 0),
+    3,
+  );
+  const coste = costeProduccion(validos, costeDtf, costeUv);
+  const metrosDeLinea = linea === "dtf" ? k.metros : linea === "uv" ? metrosUv : 0;
+  const ganancia = redondear(k.bruta - coste);
+  return {
+    ...k,
+    metrosUv,
+    coste,
+    ganancia,
+    euroMetro: metrosDeLinea > 0 ? redondear(k.bruta / metrosDeLinea) : 0,
+    gananciaMetro: metrosDeLinea > 0 ? redondear(ganancia / metrosDeLinea) : 0,
+  };
+}
+
+/**
+ * Las cifras de unos pedidos: las dos líneas juntas (`todo`) y cada una.
+ * `todo` es la suma exacta de `dtf` y `uv` en importes; los metros van
+ * siempre separados (`metros` el DTF, `metrosUv` el UV).
+ *
+ * `costeDtf`: el coste por metro de hoy para los pedidos sin coste congelado.
+ * `costeUv`: lo mismo para el UV (por defecto, el de kpis.ts).
+ */
+export function cifrasPorLinea(
+  pedidos: readonly PedidoPartible[],
+  costeDtf = 0,
+  costeUv?: number,
+): Record<FiltroLinea, CifrasLinea> {
+  const { dtf, uv } = partirPedidos(pedidos);
+  const todo = cifras(pedidos, costeDtf, costeUv, "todo");
+  const deUv = cifras(uv, costeDtf, costeUv, "uv");
+  const deDtf = cifras(dtf, costeDtf, costeUv, "dtf");
+  // Los euros del DTF, por diferencia: redondear cada línea por su lado podía
+  // descuadrar un céntimo, y DTF + UV tiene que dar el total exacto.
+  const resto = (k: (typeof DINERO)[number]) => redondear(todo[k] - deUv[k]);
+  const dinero = Object.fromEntries(DINERO.map((k) => [k, resto(k)])) as Pick<
+    CifrasLinea,
+    (typeof DINERO)[number]
+  >;
+  return {
+    todo,
+    dtf: {
+      ...deDtf,
+      ...dinero,
+      ticket: deDtf.pedidos ? redondear(dinero.total / deDtf.pedidos) : 0,
+      euroMetro: deDtf.metros > 0 ? redondear(dinero.bruta / deDtf.metros) : 0,
+      gananciaMetro: deDtf.metros > 0 ? redondear(dinero.ganancia / deDtf.metros) : 0,
+    },
+    uv: deUv,
+  };
+}
+
+/** Los importes que se cuadran por diferencia entre líneas. */
+const DINERO = [
+  "base",
+  "bruta",
+  "iva",
+  "envios",
+  "total",
+  "devuelto",
+  "coste",
+  "ganancia",
+] as const;
+
+/** Los pedidos de una línea (sus partes), o todos con `todo`. */
+export function pedidosDeLinea<P extends PedidoPartible>(
+  pedidos: readonly P[],
+  linea: FiltroLinea,
+): P[] {
+  if (linea === "todo") return [...pedidos];
+  return partirPedidos(pedidos)[linea].filter(parteConAlgo);
+}
