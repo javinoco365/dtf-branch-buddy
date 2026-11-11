@@ -17,6 +17,7 @@ import { eur, fechaCorta, numero } from "@/lib/format";
 import { useHistorialClientes } from "@/lib/gerencia";
 import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
+import { ETIQUETA_FILTRO_LINEA, ventasDeLinea } from "@/dominio/por-linea";
 import { aplicarAjustesVentas, etiquetaCanal, filtrarVentas } from "@/dominio/gerencia";
 import { clientesDormidos, DIAS_DORMIDO, PARTE_PARETO, resumenClientes } from "@/dominio/clientela";
 import { totalDormidos, totalRankingClientes } from "@/dominio/sumatorios-gerencia-a";
@@ -28,8 +29,14 @@ const FILAS = 15;
 
 export function Clientes({ d }: { d: DatosGerencia }) {
   const historial = useHistorialClientes();
+  // Con una línea elegida, solo la parte de esa línea de cada pedido: un
+  // cliente «nuevo» de DTF UV es el que hace su primer pedido de UV.
   const ventas = useMemo(
-    () => aplicarAjustesVentas(filtrarVentas(historial.data ?? [], d.filtro), d.ajustes),
+    () =>
+      aplicarAjustesVentas(
+        ventasDeLinea(filtrarVentas(historial.data ?? [], d.filtro), d.filtro.linea ?? "todo"),
+        d.ajustes,
+      ),
     [historial.data, d.filtro, d.ajustes],
   );
   const r = useMemo(() => resumenClientes(ventas, d.rango), [ventas, d.rango]);
@@ -46,6 +53,9 @@ export function Clientes({ d }: { d: DatosGerencia }) {
   if (!historial.data) return <CargandoPestana />;
 
   const frente = d.comparacion?.etiqueta;
+  // Con una línea elegida, los dormidos y lo comprado son de esa línea.
+  const linea = d.filtro.linea ?? "todo";
+  const deLinea = linea === "todo" ? "" : ` ${ETIQUETA_FILTRO_LINEA[linea]}`;
   const delta = (a: number, b: number | undefined) => (b === undefined ? null : variacion(a, b));
 
   return (
@@ -181,7 +191,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-1.5 text-base">
-            Llevan más de {DIAS_DORMIDO} días sin pedir
+            Llevan más de {DIAS_DORMIDO} días sin pedir{deLinea}
             <Explicacion titulo="Clientes dormidos" definicion={DEFINICIONES.g_dormidos} />
           </CardTitle>
           <p className="text-xs text-muted-foreground">
@@ -192,7 +202,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
         <CardContent>
           {dormidos.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Ningún cliente lleva más de {DIAS_DORMIDO} días sin pedir.
+              Ningún cliente lleva más de {DIAS_DORMIDO} días sin pedir{deLinea}.
             </p>
           ) : (
             <Table movil="tarjetas">
@@ -202,7 +212,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
                   <TableHead>Último pedido</TableHead>
                   <TableHead className="text-right">Días</TableHead>
                   <TableHead className="text-right">Pedidos</TableHead>
-                  <TableHead className="text-right">Comprado en total</TableHead>
+                  <TableHead className="text-right">Comprado en total{deLinea}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

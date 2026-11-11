@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientesConUv,
   coincideBusqueda,
   coincideOrigen,
   etiquetaOrigen,
@@ -114,5 +115,19 @@ describe("etiquetaOrigen", () => {
     expect(etiquetaOrigen({ nombre: "X", origen: "tienda", tienda_id: null }, nombre)).toBe(
       "Tienda borrada",
     );
+  });
+});
+
+describe("clientesConUv", () => {
+  it("los que tienen algún pedido de UV no cancelado; mixtos incluidos", () => {
+    const uv = clientesConUv([
+      { cliente_id: "a", metros_uv: 0 },
+      { cliente_id: "b", metros_uv: 7 },
+      { cliente_id: "c", metros_uv: 2, estado: "entregado" },
+      { cliente_id: "f", metros_uv: 3, estado: "cancelado" },
+      { cliente_id: "g", metros_uv: 0, bruta_uv: 16 },
+      { cliente_id: null, metros_uv: 3 },
+    ]);
+    expect([...uv].sort()).toEqual(["b", "c", "g"]);
   });
 });

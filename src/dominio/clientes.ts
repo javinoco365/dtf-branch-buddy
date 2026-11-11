@@ -9,6 +9,8 @@
  * Lógica pura: no consulta nada y se prueba sin base de datos.
  */
 
+import { ESTADO_CANCELADO } from "./kpis";
+
 export type OrigenCliente = "tienda" | "textil" | "general";
 
 export type ClienteFiltrable = {
@@ -83,4 +85,24 @@ export function etiquetaOrigen(
   if (c.origen === "general") return "General";
   if (c.tienda_id) return nombreTienda(c.tienda_id) ?? "Tienda";
   return "Tienda borrada";
+}
+
+/**
+ * Los clientes que han comprado DTF UV: los que tienen algún pedido no
+ * cancelado con metros o importe de UV (ver por-linea.ts).
+ */
+export function clientesConUv(
+  pedidos: readonly {
+    cliente_id: string | null;
+    estado?: string | null;
+    metros_uv?: number | string | null;
+    bruta_uv?: number | string | null;
+  }[],
+): Set<string> {
+  const uv = new Set<string>();
+  for (const p of pedidos) {
+    if (!p.cliente_id || p.estado === ESTADO_CANCELADO) continue;
+    if (Number(p.metros_uv ?? 0) > 0 || Number(p.bruta_uv ?? 0) > 0) uv.add(p.cliente_id);
+  }
+  return uv;
 }
