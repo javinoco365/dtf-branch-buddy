@@ -12,6 +12,7 @@ import { importesPedidoWoo, numeroPedidoWoo } from "@/dominio/pedido-woo";
 import {
   lineaPedidoWoo,
   medirLineaWoo,
+  importesUvWoo,
   metrosPedidoWooPorLinea,
   opcionesDeLineaWoo,
   type LineaWoo,
@@ -753,6 +754,8 @@ async function guardarPedidosWoo(
       direccion_envio: envio ?? facturacion,
       metros_total: metros.dtf,
       metros_uv: metros.uv,
+      // Lo que es de DTF UV en el importe (ver por-linea.ts).
+      ...importesUvWoo(o.line_items, opcionesDe),
       // Base con el envío dentro y el envío aparte (ver importesPedidoWoo).
       ...importesPedidoWoo(o),
       fecha_pedido: o.date_created,
@@ -792,7 +795,7 @@ async function guardarPedidosWoo(
   // la sincronización parada. Puede faltar más de una: se quitan de una en una.
   // Sin la del DTF UV (20261110100000), los metros de UV vuelven a sumarse
   // a metros_total, como antes de separarlos.
-  const opcionales = ["realizado_en", "cliente_nif", "metros_uv"];
+  const opcionales = ["realizado_en", "cliente_nif", "bruta_uv", "iva_uv", "metros_uv"];
   let filasAGuardar: Record<string, unknown>[] = filasPedidos;
   for (let intento = 0; intento < opcionales.length && res.error; intento++) {
     const mensaje = res.error.message;

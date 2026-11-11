@@ -173,6 +173,8 @@ export async function exportarPedidosParaAnalisis({
     // margen. Sin la migración 20261110100000, select("*") no las trae.
     metros_uv: p.metros_uv ?? null,
     coste_uv_snapshot: p.coste_uv_snapshot ?? null,
+    bruta_uv: p.bruta_uv ?? null,
+    iva_uv: p.iva_uv ?? null,
     devuelto: ((p.devoluciones ?? []) as { importe: number | string }[]).reduce(
       (s, x) => s + (Number(x.importe) || 0),
       0,

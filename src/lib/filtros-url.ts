@@ -1,3 +1,4 @@
+import { esFiltroLinea, type FiltroLinea } from "@/dominio/por-linea";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -170,3 +171,14 @@ export function usePeriodoUrl(
 }
 
 export type PeriodoUrl = ReturnType<typeof usePeriodoUrl>;
+
+/**
+ * La línea de producto que se está viendo: «Todo · DTF · DTF UV». Va en la
+ * dirección (`?linea=`), como el periodo: sobrevive a recargar y se comparte.
+ * Un valor que no es de la lista se lee como «todo».
+ */
+export function useLineaUrl(): [FiltroLinea, (linea: FiltroLinea) => void] {
+  const { valores, cambiar } = useFiltrosUrl({ linea: "todo" });
+  const linea = esFiltroLinea(valores.linea) ? valores.linea : "todo";
+  return [linea, (l) => cambiar({ linea: l })];
+}
