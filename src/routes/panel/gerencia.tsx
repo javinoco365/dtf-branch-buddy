@@ -81,7 +81,6 @@ if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => und
 const NOTA_LINEA: Partial<Record<string, string>> = {
   tesoreria:
     "Los cobros y pendientes van por pedido: los de un pedido mixto (DTF y DTF UV), con el DTF. La caja y el banco son de toda la empresa.",
-  clientes: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
   comercial: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
   produccion: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
   fiscal: "Los impuestos son de toda la empresa: no se separan por línea.",

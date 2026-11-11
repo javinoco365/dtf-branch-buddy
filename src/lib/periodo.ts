@@ -23,6 +23,7 @@ import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
+import { clientesPorLinea } from "@/dominio/clientes";
 import { consolidarCobro, type CobroConsolidado, type CriterioFecha } from "@/dominio/facturacion";
 import { pedidoEnDias, tramoDeConsulta, type FechaPedido } from "@/dominio/dia-pedido";
 import { diasDelRango } from "@/dominio/periodos";
@@ -318,6 +319,37 @@ export function usePedidosSoloUv(tiendaId?: string, opciones: { enabled?: boolea
       if (faltaLaColumna(error)) return new Set();
       if (error) throw error;
       return new Set(data.map((p) => p.id));
+    },
+  });
+}
+
+/**
+ * Qué clientes han comprado DTF y cuáles DTF UV (clientesPorLinea). Sin la
+ * migración del DTF UV, nadie ha comprado UV y todos los de tienda, DTF.
+ */
+export function useClientesPorLinea() {
+  return useQuery({
+    // Bajo «pedidos»: se refresca con todo lo que invalida los pedidos.
+    queryKey: ["pedidos", "clientes-por-linea"],
+    queryFn: async () => {
+      const leer = (conUv: boolean) =>
+        leerTodas<{
+          cliente_id: string | null;
+          metros_total: number | null;
+          metros_uv?: number | null;
+        }>((a, b) =>
+          tabla(supabase, "pedidos")
+            .select(
+              conUv ? "id, cliente_id, metros_total, metros_uv" : "id, cliente_id, metros_total",
+            )
+            .not("cliente_id", "is", null)
+            .order("id")
+            .range(a, b),
+        );
+      let r = await leer(true);
+      if (faltaLaColumna(r.error)) r = await leer(false);
+      if (r.error) throw r.error;
+      return clientesPorLinea(r.data);
     },
   });
 }

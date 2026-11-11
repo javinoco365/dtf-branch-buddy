@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientesPorLinea,
+  coincideLinea,
   coincideBusqueda,
   coincideOrigen,
   etiquetaOrigen,
@@ -114,5 +116,27 @@ describe("etiquetaOrigen", () => {
     expect(etiquetaOrigen({ nombre: "X", origen: "tienda", tienda_id: null }, nombre)).toBe(
       "Tienda borrada",
     );
+  });
+});
+
+describe("clientesPorLinea", () => {
+  const porLinea = clientesPorLinea([
+    { cliente_id: "a", metros_total: 10, metros_uv: 0 },
+    { cliente_id: "b", metros_total: 0, metros_uv: 7 },
+    { cliente_id: "c", metros_total: 4, metros_uv: 2 },
+    { cliente_id: "d", metros_total: 0, metros_uv: null },
+    { cliente_id: null, metros_total: 0, metros_uv: 3 },
+  ]);
+
+  it("UV, quien tiene algún pedido con metros de UV; DTF, el resto de pedidos de tienda", () => {
+    expect([...porLinea.uv].sort()).toEqual(["b", "c"]);
+    expect([...porLinea.dtf].sort()).toEqual(["a", "c", "d"]);
+  });
+
+  it("el filtro: con «todo», todos; con una línea, los que compraron de ella", () => {
+    expect(coincideLinea("a", "todo", porLinea)).toBe(true);
+    expect(coincideLinea("a", "uv", porLinea)).toBe(false);
+    expect(coincideLinea("c", "uv", porLinea)).toBe(true);
+    expect(coincideLinea("b", "dtf", porLinea)).toBe(false);
   });
 });

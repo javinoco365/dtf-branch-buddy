@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
-import { tabla } from "@/lib/rpc";
+import { faltaLaColumna, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
+import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
+import { camposUv, useClientesPorLinea, type NivelUv } from "@/lib/periodo";
+import { cifrasPorLinea, esFiltroLinea, type PedidoPartible } from "@/dominio/por-linea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -50,8 +53,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
-import { eur, fechaCorta, referenciaFactura } from "@/lib/format";
+import { eur, fechaCorta, metros, referenciaFactura } from "@/lib/format";
 import {
+  coincideLinea,
   etiquetaOrigen,
   filtrarClientes,
   type FiltroOrigen,
@@ -64,6 +68,9 @@ import {
 } from "@/dominio/sumatorios-pedidos";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+
+/** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
+type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
 
 type Cliente = {
   id: string;
@@ -126,7 +133,11 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const qc = useQueryClient();
   // Los filtros viven en la dirección. El origen por defecto depende de desde
   // dónde se entra: la tienda, el textil o todos.
-  const { valores: filtros, cambiar } = useFiltrosUrl({ q: "", origen: filtroInicial(contexto) });
+  const { valores: filtros, cambiar } = useFiltrosUrl({
+    q: "",
+    origen: filtroInicial(contexto),
+    linea: "todo",
+  });
   const [texto, setTexto] = useTextoDiferido(filtros.q, (q) => cambiar({ q }));
   const origen = filtros.origen as FiltroOrigen;
   const setOrigen = (o: FiltroOrigen) => cambiar({ origen: o });
@@ -154,9 +165,15 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   });
   const nombreTienda = (id: string) => tiendas.find((t) => t.id === id)?.nombre;
 
+  // Quién ha comprado DTF y quién DTF UV: para el filtro y la etiqueta.
+  const porLinea = useClientesPorLinea();
+  const linea = esFiltroLinea(filtros.linea) ? filtros.linea : "todo";
   const filtrados = useMemo(
-    () => filtrarClientes(clientes, { texto: filtros.q, origen }),
-    [clientes, filtros.q, origen],
+    () =>
+      filtrarClientes(clientes, { texto: filtros.q, origen }).filter((c) =>
+        porLinea.data ? coincideLinea(c.id, linea, porLinea.data) : linea === "todo",
+      ),
+    [clientes, filtros.q, origen, linea, porLinea.data],
   );
 
   function refrescar() {
@@ -269,6 +286,16 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
             ))}
           </SelectContent>
         </Select>
+        <Select value={linea} onValueChange={(v) => cambiar({ linea: v })}>
+          <SelectTrigger className="w-56" aria-label="Línea de producto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todo">DTF y DTF UV</SelectItem>
+            <SelectItem value="dtf">Han comprado DTF</SelectItem>
+            <SelectItem value="uv">Han comprado DTF UV</SelectItem>
+          </SelectContent>
+        </Select>
         <span className="self-center text-sm text-muted-foreground">
           {filtrados.length} de {clientes.length}
         </span>
@@ -309,6 +336,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     <span className="inline-flex flex-wrap items-center gap-1">
                       <Badge variant="outline">{etiquetaOrigen(c, nombreTienda)}</Badge>
                       {c.woo_customer_id && <Badge variant="secondary">WooCommerce</Badge>}
+                      {porLinea.data?.uv.has(c.id) && <EtiquetaUv />}
                     </span>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -591,16 +619,25 @@ function ClienteDetalle({
 
   const { data: pedidos = [] } = useQuery({
     queryKey: ["cliente-pedidos", clienteId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pedidos")
-        .select("id, numero, estado, total, fecha_pedido")
-        .eq("cliente_id", clienteId)
-        .order("fecha_pedido", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+    queryFn: async (): Promise<PedidoDelCliente[]> => {
+      // Con lo del DTF UV, para separar lo comprado de cada línea (camposUv):
+      // sin sus migraciones, como antes.
+      const leer = (uv: NivelUv) =>
+        tabla(supabase, "pedidos")
+          .select(
+            `id, numero, estado, total, subtotal, iva, envio, metros_total, tienda_id, fecha_pedido${camposUv(uv)}`,
+          )
+          .eq("cliente_id", clienteId)
+          .order("fecha_pedido", { ascending: false });
+      let r = await leer(2);
+      if (faltaLaColumna(r.error)) r = await leer(1);
+      if (faltaLaColumna(r.error)) r = await leer(0);
+      if (r.error) throw r.error;
+      return (r.data ?? []) as PedidoDelCliente[];
     },
   });
+  // Lo comprado de cada línea (por-linea.ts): sin cancelados, DTF + UV = todo.
+  const porLinea = cifrasPorLinea(pedidos);
 
   // El mismo cliente, sus pedidos del textil: es la razón de tener una sola ficha.
   const { data: pedidosTextil = [] } = useQuery({
@@ -752,6 +789,23 @@ function ClienteDetalle({
           <Resumen titulo="Total pedidos" valor={eur(totales.totalPedidos)} />
         </div>
 
+        {porLinea.uv.pedidos > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <Resumen
+              titulo={`DTF · ${metros(porLinea.dtf.metros)}`}
+              valor={eur(porLinea.dtf.total)}
+            />
+            <Resumen
+              titulo={
+                <>
+                  <EtiquetaUv texto="DTF UV" /> {metros(porLinea.uv.metrosUv)}
+                </>
+              }
+              valor={eur(porLinea.uv.total)}
+            />
+          </div>
+        )}
+
         <Historial
           titulo="Pedidos de las tiendas"
           icono={<ShoppingCart className="h-4 w-4" />}
@@ -766,6 +820,7 @@ function ClienteDetalle({
             fecha: p.fecha_pedido,
             estado: p.estado,
             total: Number(p.total),
+            etiqueta: <EtiquetaLineasPedido pedido={p} className="ml-2" />,
           }))}
         />
         <Historial
@@ -808,7 +863,7 @@ function ClienteDetalle({
   );
 }
 
-function Resumen({ titulo, valor }: { titulo: string; valor: string }) {
+function Resumen({ titulo, valor }: { titulo: React.ReactNode; valor: string }) {
   return (
     <Card>
       <CardContent className="p-4">
@@ -835,7 +890,15 @@ function Historial({
    * suman).
    */
   pie: { texto: string; total: number };
-  filas: { id: string; ref: string; fecha: string; estado: string; total: number }[];
+  filas: {
+    id: string;
+    ref: string;
+    fecha: string;
+    estado: string;
+    total: number;
+    /** La línea del pedido (UV, mixto), junto al número. */
+    etiqueta?: React.ReactNode;
+  }[];
 }) {
   return (
     <div>
@@ -856,7 +919,10 @@ function Historial({
             <TableBody>
               {filas.map((f) => (
                 <TableRow key={f.id}>
-                  <TableCell className="font-mono text-xs">{f.ref}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {f.ref}
+                    {f.etiqueta}
+                  </TableCell>
                   <TableCell>{fechaCorta(f.fecha)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{f.estado}</Badge>

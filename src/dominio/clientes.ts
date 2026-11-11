@@ -84,3 +84,36 @@ export function etiquetaOrigen(
   if (c.tienda_id) return nombreTienda(c.tienda_id) ?? "Tienda";
   return "Tienda borrada";
 }
+
+/**
+ * Qué clientes han comprado de cada línea de producto, por sus pedidos de
+ * tienda: DTF UV si algún pedido lleva metros de UV; DTF si alguno lleva
+ * metros de DTF o no lleva UV (un pedido de tienda sin metros es de DTF). Un
+ * cliente puede estar en las dos.
+ */
+export function clientesPorLinea(
+  pedidos: readonly {
+    cliente_id: string | null;
+    metros_total?: number | string | null;
+    metros_uv?: number | string | null;
+  }[],
+): { dtf: Set<string>; uv: Set<string> } {
+  const dtf = new Set<string>();
+  const uv = new Set<string>();
+  for (const p of pedidos) {
+    if (!p.cliente_id) continue;
+    const conUv = Number(p.metros_uv ?? 0) > 0;
+    if (conUv) uv.add(p.cliente_id);
+    if (!conUv || Number(p.metros_total ?? 0) > 0) dtf.add(p.cliente_id);
+  }
+  return { dtf, uv };
+}
+
+/** ¿Pasa el cliente el filtro de línea? «todo», siempre. */
+export function coincideLinea(
+  clienteId: string,
+  linea: "todo" | "dtf" | "uv",
+  porLinea: { dtf: ReadonlySet<string>; uv: ReadonlySet<string> },
+): boolean {
+  return linea === "todo" || porLinea[linea].has(clienteId);
+}

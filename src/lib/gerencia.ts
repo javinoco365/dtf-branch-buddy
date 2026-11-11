@@ -22,7 +22,13 @@ import {
 } from "@/lib/rpc";
 import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
 import { leerPorIds } from "@/lib/leer-por-ids";
-import { usePedidosPeriodo, type OpcionesLectura, type RangoFechas } from "@/lib/periodo";
+import {
+  camposUv,
+  usePedidosPeriodo,
+  type NivelUv,
+  type OpcionesLectura,
+  type RangoFechas,
+} from "@/lib/periodo";
 import { listarMovimientosCaja } from "@/lib/caja.functions";
 import { listMovimientosBancoRango } from "@/lib/banco.functions";
 import { leerAjustesGerencia } from "@/lib/gerencia.functions";
@@ -247,15 +253,25 @@ export function useHistorialClientes() {
     queryKey: ["gerencia-historial-clientes"],
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<VentaCliente[]> => {
-      const [t, x] = await Promise.all([
+      // Con lo del DTF UV, para separar los clientes por línea (camposUv):
+      // sin sus migraciones, como antes.
+      const leerTienda = (uv: NivelUv) =>
         leerTodas<FilaHistorialTienda>((a, b) =>
           tabla(supabase, "pedidos")
             .select(
-              "id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id, cliente_nombre, devoluciones:pedido_devoluciones(importe)",
+              `id, fecha_pedido, tienda_id, estado, subtotal, iva, envio, total, metros_total, origen, cliente_id, cliente_nombre${camposUv(uv)}, devoluciones:pedido_devoluciones(importe)`,
             )
             .order("id")
             .range(a, b),
-        ),
+        );
+      const tienda = async () => {
+        let r = await leerTienda(2);
+        if (faltaLaColumna(r.error)) r = await leerTienda(1);
+        if (faltaLaColumna(r.error)) r = await leerTienda(0);
+        return r;
+      };
+      const [t, x] = await Promise.all([
+        tienda(),
         leerTodas<PedidoTextilResumen & { cliente_nombre: string | null }>((a, b) =>
           tabla(supabase, "textil_pedidos")
             .select("id, fecha, estado, subtotal, iva, envio, total, cliente_id, cliente_nombre")
