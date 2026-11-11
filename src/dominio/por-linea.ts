@@ -67,6 +67,8 @@ function vacia<P extends PedidoResumen>(p: P): P {
     devuelto: 0,
     metros_total: 0,
     metros_uv: 0,
+    bruta_uv: 0,
+    iva_uv: 0,
   };
 }
 
@@ -81,7 +83,8 @@ export function partirPedido<P extends PedidoPartible>(p: P): Record<LineaProduc
   const metrosUv = num(p.metros_uv);
   const brutaUv = num(p.bruta_uv);
   const ivaUv = num(p.iva_uv);
-  if (metrosUv <= 0 && brutaUv <= 0) return { dtf: { ...p, metros_uv: 0 }, uv: vacia(p) };
+  if (metrosUv <= 0 && brutaUv <= 0)
+    return { dtf: { ...p, metros_uv: 0, bruta_uv: 0, iva_uv: 0 }, uv: vacia(p) };
 
   // Mixto: el UV, sus líneas; el DTF, el resto. Sin importes de UV guardados,
   // el UV se queda solo con sus metros.
@@ -100,6 +103,9 @@ export function partirPedido<P extends PedidoPartible>(p: P): Record<LineaProduc
       total: redondear(total - totalUv),
       devuelto: devuelto - devueltoUv,
       metros_uv: 0,
+      // La parte de DTF ya no lleva UV: partirla otra vez no cambia nada.
+      bruta_uv: 0,
+      iva_uv: 0,
     },
     uv: {
       ...p,
@@ -254,6 +260,9 @@ function uvComoUnicaLinea<P extends PedidoPartible>(p: P): P {
     metros_uv: 0,
     coste_metro_snapshot: coste == null || coste === "" ? COSTE_UV_POR_DEFECTO : coste,
     coste_uv_snapshot: null,
+    // Ya es una sola línea: partirla otra vez no le quita nada.
+    bruta_uv: 0,
+    iva_uv: 0,
   };
 }
 

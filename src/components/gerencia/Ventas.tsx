@@ -13,6 +13,7 @@ import {
 import { eur, metros, numero } from "@/lib/format";
 import { useLineasPeriodo } from "@/lib/periodo";
 import { calcularKpis, topPorMetros, type KpisPeriodo } from "@/dominio/kpis";
+import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { sumarCantidades } from "@/dominio/sumatorios";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { CANALES, desglose, porDiaSemana, type FilaDesglose } from "@/dominio/gerencia";
@@ -64,8 +65,32 @@ export function Ventas({ d }: { d: DatosGerencia }) {
   // Con «Todo», cada producto en su barra (DTF y UV son productos distintos).
   const linea = d.filtro.linea ?? "todo";
   const productos = useMemo(() => topPorMetros(lineas.data ?? [], 10, linea), [lineas.data, linea]);
-  // Solo los productos que se ven: topPorMetros ya llega recortada a 10.
-  const metrosProductos = useMemo(() => sumarCantidades(productos, (p) => p.metros), [productos]);
+  // Los productos de DTF UV, para marcarlos y no sumar sus metros a los de DTF.
+  const productosUv = useMemo(
+    () =>
+      new Set(
+        topPorMetros(lineas.data ?? [], Number.MAX_SAFE_INTEGER, "uv").map((p) => p.producto),
+      ),
+    [lineas.data],
+  );
+  // Solo los productos que se ven: topPorMetros ya llega recortada a 10. Los
+  // metros de cada línea, por separado: no se suman entre sí.
+  const metrosProductos = useMemo(
+    () =>
+      sumarCantidades(
+        productos.filter((p) => !productosUv.has(p.producto)),
+        (p) => p.metros,
+      ),
+    [productos, productosUv],
+  );
+  const metrosProductosUv = useMemo(
+    () =>
+      sumarCantidades(
+        productos.filter((p) => productosUv.has(p.producto)),
+        (p) => p.metros,
+      ),
+    [productos, productosUv],
+  );
 
   return (
     <div className="space-y-4">
@@ -141,7 +166,10 @@ export function Ventas({ d }: { d: DatosGerencia }) {
                 <TableBody>
                   {productos.map((p) => (
                     <TableRow key={p.producto}>
-                      <TableCell>{p.producto}</TableCell>
+                      <TableCell>
+                        {p.producto}
+                        {productosUv.has(p.producto) && <EtiquetaUv className="ml-2" />}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{metros(p.metros)}</TableCell>
                     </TableRow>
                   ))}
@@ -155,7 +183,12 @@ export function Ventas({ d }: { d: DatosGerencia }) {
                         : "Total de los 10 primeros"}
                     </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">
-                      {metros(metrosProductos)}
+                      {linea === "uv" ? metros(metrosProductosUv) : metros(metrosProductos)}
+                      {linea === "todo" && metrosProductosUv > 0 && (
+                        <span className="block text-xs font-medium text-violet-700 dark:text-violet-300">
+                          Aparte, {metros(metrosProductosUv)} de DTF UV
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 </TableFooter>

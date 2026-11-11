@@ -10,7 +10,7 @@
  * de datos.
  */
 
-import { ventasDeLinea, type FiltroLinea } from "./por-linea";
+import { partirPedidos, ventasDeLinea, type FiltroLinea } from "./por-linea";
 import { redondear } from "./importes";
 import {
   calcularKpis,
@@ -197,8 +197,10 @@ export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): C
   const textil = ventas.filter((v) => v.canal === "textil" && v.estado !== ESTADO_CANCELADO);
   const costeTextil = redondear(textil.reduce((s, v) => s + num(v.coste_textil), 0));
   const coste = redondear(costeDtf + costeTextil);
-  const conMetros = calcularKpis(ventas.filter((v) => num(v.metros_total) > 0));
-  // El precio del metro: la bruta ya va sin el envío, lo que se cobra por imprimir.
+  // El precio del metro: la bruta ya va sin el envío, lo que se cobra por
+  // imprimir. Solo la parte de DTF: en un pedido mixto, lo del UV no se
+  // reparte entre los metros de DTF (ver por-linea.ts).
+  const conMetros = calcularKpis(partirPedidos(ventas).dtf.filter((v) => num(v.metros_total) > 0));
   const brutaMetros = conMetros.bruta;
   return {
     ...k,
@@ -912,25 +914,44 @@ export type FilaLinea = {
  * por-linea.ts) y el textil va aparte. Sin pedidos de una línea, no sale.
  */
 export function cifrasGerenciaPorLinea(ventas: readonly Venta[], costeActual: number): FilaLinea[] {
+  const todo = cifrasGerencia(ventas, costeActual);
+  const uv = cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual);
+  const textil = cifrasGerencia(
+    ventas.filter((v) => v.canal === "textil"),
+    costeActual,
+  );
+  const deDtf = cifrasGerencia(ventasDeLinea(ventas, "dtf"), costeActual);
+  // El DTF, por diferencia: así las tres filas suman «Todo» al céntimo, sin
+  // que el redondeo de cada una descuadre la suma (como en cifrasPorLinea).
+  const resto = (k: DineroGerencia) => redondear(todo[k] - uv[k] - textil[k]);
+  const dinero = Object.fromEntries(DINERO_GERENCIA.map((k) => [k, resto(k)])) as Pick<
+    CifrasGerencia,
+    DineroGerencia
+  >;
+  const dtf: CifrasGerencia = {
+    ...deDtf,
+    ...dinero,
+    ticket: deDtf.pedidos > 0 ? redondear(dinero.total / deDtf.pedidos) : 0,
+  };
   const filas: FilaLinea[] = [
-    {
-      clave: "dtf",
-      etiqueta: "DTF",
-      cifras: cifrasGerencia(ventasDeLinea(ventas, "dtf"), costeActual),
-    },
-    {
-      clave: "uv",
-      etiqueta: "DTF UV",
-      cifras: cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual),
-    },
-    {
-      clave: "textil",
-      etiqueta: "Textil",
-      cifras: cifrasGerencia(
-        ventas.filter((v) => v.canal === "textil"),
-        costeActual,
-      ),
-    },
+    { clave: "dtf", etiqueta: "DTF", cifras: dtf },
+    { clave: "uv", etiqueta: "DTF UV", cifras: uv },
+    { clave: "textil", etiqueta: "Textil", cifras: textil },
   ];
   return filas.filter((f) => f.cifras.pedidos > 0 || f.cifras.cancelados > 0);
 }
+
+const DINERO_GERENCIA = [
+  "base",
+  "bruta",
+  "iva",
+  "envios",
+  "total",
+  "devuelto",
+  "coste",
+  "costeEnvios",
+  "costeDtf",
+  "costeTextil",
+  "margen",
+] as const;
+type DineroGerencia = (typeof DINERO_GERENCIA)[number];

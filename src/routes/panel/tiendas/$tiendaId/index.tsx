@@ -106,7 +106,9 @@ function Dashboard() {
         </h1>
         <p className="text-sm text-muted-foreground">
           El mes en curso, frente al mismo trozo del mes anterior, y los totales de la tienda.
-          {linea !== "todo" ? ` Solo ${ETIQUETA_FILTRO_LINEA[linea]}.` : ""}
+          {linea !== "todo"
+            ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
+            : ""}
         </p>
         <SelectorLinea valor={linea} alCambiar={cambiarLinea} className="mt-2" />
       </div>
@@ -163,7 +165,7 @@ function Dashboard() {
               <span className="text-muted-foreground">
                 {sinCostes
                   ? "Configura los costes en Ajustes › Datos de la empresa"
-                  : `Bruta ${eur(k.bruta)} − ${linea === "uv" ? "subcontrata" : "producción"} ${eur(k.coste)}${
+                  : `Bruta ${eur(k.bruta)} − ${linea === "uv" ? "subcontrata" : linea === "dtf" ? "producción" : "coste"} ${eur(k.coste)}${
                       margenPct !== null ? ` · ${numero(margenPct, 1)}\u00A0% de la bruta` : ""
                     }`}
               </span>

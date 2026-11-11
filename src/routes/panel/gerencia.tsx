@@ -74,6 +74,20 @@ const Ajustes = lazy(() => CARGAR_PESTANA.ajustes().then((m) => ({ default: m.Aj
 if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => undefined);
 
 /** Mientras llega el código de una pestaña: lo mismo que mientras llegan los datos. */
+/**
+ * Lo que la línea elegida (DTF o DTF UV) no separa todavía en cada pestaña.
+ * Resultados y Margen lo dicen dentro; las que no salen aquí, la separan entera.
+ */
+const NOTA_LINEA: Partial<Record<string, string>> = {
+  tesoreria:
+    "Los cobros y pendientes van por pedido: los de un pedido mixto (DTF y DTF UV), con el DTF. La caja y el banco son de toda la empresa.",
+  clientes: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  comercial: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  produccion: "Esta pestaña todavía no separa DTF y DTF UV: enseña las dos líneas juntas.",
+  fiscal: "Los impuestos son de toda la empresa: no se separan por línea.",
+  textil: "El textil es otro negocio: no tiene DTF ni DTF UV.",
+};
+
 function EsqueletoPestana() {
   return (
     <div className="mt-4 grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
@@ -125,7 +139,8 @@ function Gerencia() {
     [f.tienda, f.canal, f.linea],
   );
   // Los pedidos solo de DTF UV, para repartir cobros y pendientes por línea.
-  const soloUv = usePedidosSoloUv();
+  // Solo con una línea elegida: con «Todo» no se reparten.
+  const soloUv = usePedidosSoloUv(undefined, { enabled: (f.linea ?? "todo") !== "todo" });
   const grupo: Grupo = esGrupo(f.grupo) ? f.grupo : "total";
 
   // Sin «todo» en la lista, siempre hay rango. Sin comparación, un rango
@@ -277,6 +292,7 @@ function Gerencia() {
     .join(" · ");
   // Los ajustes no dependen del periodo ni de los filtros.
   const enAjustes = f.pestana === "ajustes";
+  const lineaElegida = (filtro.linea ?? "todo") !== "todo";
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
   // se atenúan y no se puede actuar sobre ellas.
   const deAntes =
@@ -349,6 +365,22 @@ function Gerencia() {
       </FiltrosPlegables>
 
       <AvisoActualizando activo={deAntes && !enAjustes} />
+
+      {soloUv.error && !enAjustes && (
+        <Card>
+          <CardContent className="py-6 text-sm text-destructive">
+            No se han podido separar los cobros por línea: {mensajeDeError(soloUv.error)}
+          </CardContent>
+        </Card>
+      )}
+
+      {lineaElegida && !enAjustes && NOTA_LINEA[f.pestana] && (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">
+            {NOTA_LINEA[f.pestana]}
+          </CardContent>
+        </Card>
+      )}
 
       {ventas.error && !enAjustes && (
         <Card>

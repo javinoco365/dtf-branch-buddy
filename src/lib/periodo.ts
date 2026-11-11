@@ -301,9 +301,11 @@ export function useLineasPeriodo(filtro: Filtro) {
  * un cobro puede ser de un pedido de otro periodo. Sin la migración del DTF
  * UV, ninguno.
  */
-export function usePedidosSoloUv(tiendaId?: string) {
+export function usePedidosSoloUv(tiendaId?: string, opciones: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: ["pedidos-solo-uv", tiendaId ?? "todas"],
+    enabled: opciones.enabled ?? true,
+    // Bajo «pedidos»: se refresca con todo lo que invalida los pedidos.
+    queryKey: ["pedidos", "solo-uv", tiendaId ?? "todas"],
     queryFn: async (): Promise<Set<string>> => {
       const { data, error } = await leerTodas<{ id: string }>((a, b) => {
         let consulta = tabla(supabase, "pedidos")

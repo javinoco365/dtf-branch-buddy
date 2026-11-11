@@ -108,7 +108,8 @@ function DashboardGlobal() {
   const metrosDe = (c: typeof k) => (linea === "uv" ? c.metrosUv : c.metros);
 
   // Lo cobrado, por pedido: los de pedidos solo de UV, al UV.
-  const soloUv = usePedidosSoloUv();
+  // Solo hace falta con una línea elegida: con «Todo» van todos.
+  const soloUv = usePedidosSoloUv(undefined, { enabled: linea !== "todo" });
   const cobrosDisponibles =
     (consultaCobros.data?.disponible ?? false) && (linea === "todo" || !!soloUv.data);
   const cobradoDe = (cobros: Parameters<typeof cobrosDeTiendas>[0]) =>
@@ -260,6 +261,13 @@ function DashboardGlobal() {
               frente={comparacion?.etiqueta}
               delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
               icon={Wallet}
+              pie={
+                linea !== "todo" ? (
+                  <span className="text-muted-foreground">
+                    Por pedido: los de pedidos mixtos (DTF y DTF UV), con el DTF.
+                  </span>
+                ) : undefined
+              }
             />
             <TarjetaKpi
               titulo={sinCostes ? "Margen" : "Margen estimado"}

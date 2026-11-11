@@ -647,4 +647,49 @@ describe("cifrasGerenciaPorLinea", () => {
   it("una línea sin pedidos no sale", () => {
     expect(cifrasGerenciaPorLinea([venta({})], 2).map((f) => f.clave)).toEqual(["dtf"]);
   });
+
+  it("el €/m de «Todo» es el del DTF: lo del UV de un mixto no se reparte entre sus metros", () => {
+    const todo = cifrasGerencia(ventas, 2);
+    const dtf = cifrasGerenciaPorLinea(ventas, 2).find((f) => f.clave === "dtf")!.cifras;
+    // (100 + 28) / 14: la bruta del DTF del mixto (33 − 5 de portes), no la del pedido entero.
+    expect(todo.euroMetro).toBe(9.14);
+    expect(dtf.euroMetro).toBe(9.14);
+  });
+
+  it("cuadran al céntimo aunque el redondeo de cada línea no lo haga", () => {
+    // Importes con tres decimales de IVA y devoluciones que no se reparten exactas.
+    const raras = Array.from({ length: 40 }, (_, i) => {
+      const brutaUv = 16 + (i % 7) * 0.33;
+      const ivaUv = Math.round(brutaUv * 21) / 100;
+      const sub = 30.07 + i * 1.13 + brutaUv;
+      const iva = Math.round(sub * 21) / 100;
+      return venta({
+        subtotal: sub,
+        iva,
+        envio: i % 3 === 0 ? 4.99 : 0,
+        total: Math.round((sub + iva) * 100) / 100,
+        metros_total: 1 + (i % 5),
+        metros_uv: 1 + (i % 2),
+        coste_uv_snapshot: 15,
+        bruta_uv: brutaUv,
+        iva_uv: ivaUv,
+        devuelto: i % 4 === 0 ? 7.77 : 0,
+      });
+    });
+    const todas = [...raras, ...ventas];
+    const todo = cifrasGerencia(todas, 2.13);
+    const filas = cifrasGerenciaPorLinea(todas, 2.13);
+    for (const k of [
+      "base",
+      "bruta",
+      "iva",
+      "envios",
+      "total",
+      "devuelto",
+      "coste",
+      "margen",
+    ] as const) {
+      expect(redondear(filas.reduce((s, f) => s + f.cifras[k], 0))).toBe(todo[k]);
+    }
+  });
 });

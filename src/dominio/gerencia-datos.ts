@@ -248,11 +248,13 @@ export function montarDatosGerencia<TCaja>(
   // La línea de producto (por-linea.ts). Con una elegida, los cobros y los
   // pendientes se reparten por pedido: hace falta saber cuáles son de UV.
   const linea = filtro.linea ?? "todo";
-  if (linea !== "todo" && !e.soloUv) return null;
+  const pide = (f: FuenteGerencia) => fuentes.includes(f);
+  // Solo lo esperan las pestañas que enseñan cobros o pendientes.
+  const repartePorPedido = pide("cobros") || pide("cobrosPrevios") || pide("pendientes");
+  if (linea !== "todo" && repartePorPedido && !e.soloUv) return null;
   const soloUv = e.soloUv ?? new Set<string>();
   const deLinea = <V extends Venta>(v: readonly V[]) =>
     ventasDeLinea(filtrarVentas(v, filtro), linea);
-  const pide = (f: FuenteGerencia) => fuentes.includes(f);
   // Si los ajustes no se pueden leer, Gerencia sigue con los de siempre.
   const aj = ajustes.data ?? (ajustes.isError ? SIN_AJUSTES : null);
   if (pide("ventas") && !ventas) return null;
