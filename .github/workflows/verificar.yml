@@ -20,6 +20,11 @@ on:
   push:
     branches: [main]
 
+# El token de GitHub solo lee: ningún paso publica, comenta ni escribe en el
+# repositorio. Sin esto hereda los permisos por defecto del repositorio.
+permissions:
+  contents: read
+
 concurrency:
   group: verificar-${{ github.ref }}
   cancel-in-progress: true
