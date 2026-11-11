@@ -271,6 +271,11 @@ function uvComoUnicaLinea<P extends PedidoPartible>(p: P): P {
  * DTF de los pedidos de tienda: el textil (ropa) es otro negocio y solo sale
  * en «Todo». «DTF UV», la parte de UV, presentada como única línea (ver
  * uvComoUnicaLinea).
+ *
+ * Ojo con «DTF UV»: como va de única línea, `cifrasGerencia` da su coste en
+ * `costeDtf` (no en `costeUv`), sus metros en `metros` y sus portes en
+ * `costeEnvios`. Las pantallas lo rotulan según la línea elegida;
+ * cifrasGerenciaPorLinea sí los pone en su sitio.
  */
 export function ventasDeLinea<P extends PedidoPartible & { canal?: string }>(
   ventas: readonly P[],

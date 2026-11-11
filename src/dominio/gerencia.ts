@@ -924,6 +924,12 @@ export function beneficioEstimado(
 // Por línea de producto
 // ---------------------------------------------------------------------------
 
+/**
+ * Una fila de la tabla por línea. Ojo: en la fila «uv», `metros` y
+ * `euroMetro` son los del DTF UV (la tabla enseña los metros de cada línea en
+ * la misma columna) y `metrosUv` repite esos metros. No se suman `metros`
+ * entre filas: son productos distintos.
+ */
 export type FilaLinea = {
   clave: "dtf" | "uv" | "textil";
   etiqueta: string;

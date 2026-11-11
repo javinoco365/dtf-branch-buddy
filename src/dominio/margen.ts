@@ -141,15 +141,17 @@ export function margenPorMetro(ventas: readonly Venta[], costeActual: number): M
  * cifrasGerenciaPorLinea). Sin pedidos de una línea, no sale.
  */
 export function margenPorLinea(ventas: readonly Venta[], costeActual: number): FilaMargen[] {
-  return cifrasGerenciaPorLinea(ventas, costeActual).map((f) => ({
-    clave: f.clave,
-    nombre: f.etiqueta,
-    pedidos: f.cifras.pedidos,
-    bruta: f.cifras.bruta,
-    coste: f.cifras.coste,
-    margen: f.cifras.margen,
-    porcentaje: porcentajeMargen(f.cifras.margen, f.cifras.bruta),
-  }));
+  return cifrasGerenciaPorLinea(ventas, costeActual)
+    .map((f) => ({
+      clave: f.clave,
+      nombre: f.etiqueta,
+      pedidos: f.cifras.pedidos,
+      bruta: f.cifras.bruta,
+      coste: f.cifras.coste,
+      margen: f.cifras.margen,
+      porcentaje: porcentajeMargen(f.cifras.margen, f.cifras.bruta),
+    }))
+    .sort((a, b) => b.margen - a.margen);
 }
 
 /**

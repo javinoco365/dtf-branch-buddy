@@ -116,7 +116,8 @@ export function Resultados({ d }: { d: DatosGerencia }) {
       d.ajustes.tipo_is,
     ],
   );
-  // Tinta, film y mensajería: ya cuestan en cada pedido; aquí solo se comparan.
+  // Tinta, film, mensajería y la subcontrata del DTF UV: ya cuestan en cada
+  // pedido; aquí solo se comparan.
   const comparadas = useMemo(
     () => (fiscal.data?.compras ? comprasParaComparar(fiscal.data.compras, d.rango) : null),
     [fiscal.data, d.rango],
@@ -359,63 +360,65 @@ export function Resultados({ d }: { d: DatosGerencia }) {
           </CardContent>
         </Card>
 
-        {comparadas && (comparadas.consumibles > 0 || comparadas.envios > 0) && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-1.5 text-base">
-                Compras frente a lo estimado
-                <Explicacion
-                  titulo="Compras frente a lo estimado"
-                  definicion={DEFINICIONES.g_compras_comparadas}
-                />
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Sin IVA. Lo facturado por tus proveedores frente a lo que Gerencia cuenta en los
-                pedidos. Si lo comprado sale siempre por encima, sube el coste por metro.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <Table movil="tarjetas">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Concepto</TableHead>
-                    <TableHead className="text-right">Facturas de compra</TableHead>
-                    <TableHead className="text-right">Estimado en pedidos</TableHead>
-                    <TableHead className="text-right">Diferencia</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filasCompras.map((f) => (
-                    <TableRow key={f.concepto}>
-                      <TableCell className="font-medium">{f.concepto}</TableCell>
-                      <TableCell className="text-right tabular-nums">{eur(f.comprado)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{eur(f.estimado)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {f.diferencia > 0 ? "+" : ""}
-                        {eur(f.diferencia)}
+        {comparadas &&
+          (comparadas.consumibles > 0 || comparadas.envios > 0 || comparadas.subcontrataUv > 0) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  Compras frente a lo estimado
+                  <Explicacion
+                    titulo="Compras frente a lo estimado"
+                    definicion={DEFINICIONES.g_compras_comparadas}
+                  />
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Sin IVA. Lo facturado por tus proveedores frente a lo que Gerencia cuenta en los
+                  pedidos. Si lo comprado de tinta sale siempre por encima, sube el coste por metro;
+                  si lo es lo de la subcontrata, revisa lo que cobra por metro de DTF UV.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <Table movil="tarjetas">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Concepto</TableHead>
+                      <TableHead className="text-right">Facturas de compra</TableHead>
+                      <TableHead className="text-right">Estimado en pedidos</TableHead>
+                      <TableHead className="text-right">Diferencia</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filasCompras.map((f) => (
+                      <TableRow key={f.concepto}>
+                        <TableCell className="font-medium">{f.concepto}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.comprado)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.estimado)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {f.diferencia > 0 ? "+" : ""}
+                          {eur(f.diferencia)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-bold">Total</TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totalCompras.comprado)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {eur(totalCompras.estimado)}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {totalCompras.diferencia > 0 ? "+" : ""}
+                        {eur(totalCompras.diferencia)}
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell className="font-bold">Total</TableCell>
-                    <TableCell className="text-right font-bold tabular-nums">
-                      {eur(totalCompras.comprado)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold tabular-nums">
-                      {eur(totalCompras.estimado)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold tabular-nums">
-                      {totalCompras.diferencia > 0 ? "+" : ""}
-                      {eur(totalCompras.diferencia)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+                  </TableFooter>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
         <Card>
           <CardHeader className="pb-2">

@@ -402,9 +402,9 @@ export const DEFINICIONES = {
     fuente: "Cuenta de resultados del periodo y Gerencia › Ajustes.",
   },
   g_compras_comparadas: {
-    que: "Lo que dicen las facturas de tinta, film, polvo y mensajería frente a lo que Gerencia les cuenta a los pedidos.",
+    que: "Lo que dicen las facturas de tinta, film, polvo, mensajería y de la subcontrata del DTF UV frente a lo que Gerencia les cuenta a los pedidos.",
     calculo:
-      "Base de las facturas de compra de consumibles DTF y de mensajería con fecha en el periodo, frente a la producción DTF (metros × coste por metro) y los envíos de los pedidos. No es exacto mes a mes (se compra por adelantado), pero si a lo largo de varios meses lo comprado es bastante más que lo estimado, el coste por metro está bajo.",
+      "Base de las facturas de compra de consumibles DTF, de mensajería y de «DTF UV subcontratado» con fecha en el periodo, frente a la producción DTF (metros × coste por metro), los envíos de los pedidos (sin los de pedidos solo de DTF UV, que los cobra la subcontrata) y lo que cobra la subcontrata (metros de UV × su coste por metro, más esos envíos). No es exacto mes a mes (se compra por adelantado), pero si a lo largo de varios meses lo comprado es bastante más que lo estimado, el coste por metro está bajo.",
     fuente: "Facturas de compra registradas y pedidos del periodo.",
   },
   g_impuestos_trimestre: {
