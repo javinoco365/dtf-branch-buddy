@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { usePermisos } from "@/hooks/use-permisos";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -50,6 +50,8 @@ type ProductoCatalogo = {
   unidad: string;
   precio_unitario: number;
   iva_rate: number;
+  /** 'dtf' o 'uv' (20261110100000); sin la migración no viene. */
+  linea?: string | null;
 };
 
 /** La línea como la edita el formulario: los números, como texto. */
@@ -59,6 +61,8 @@ type LineaForm = {
   cantidad: string;
   unidad: string;
   precio_unitario: string;
+  /** DTF o DTF UV (lo imprime la subcontrata): sus metros y su coste van aparte. */
+  linea: "dtf" | "uv";
 };
 
 const LINEA_VACIA: LineaForm = {
@@ -67,7 +71,10 @@ const LINEA_VACIA: LineaForm = {
   cantidad: "1",
   unidad: "ud",
   precio_unitario: "0",
+  linea: "dtf",
 };
+
+const aLinea = (v: unknown): "dtf" | "uv" => (v === "uv" ? "uv" : "dtf");
 
 const aNumero = (t: string) => Number(String(t).trim().replace(",", ".")) || 0;
 const aTexto = (n: number) => String(n).replace(".", ",");
@@ -147,7 +154,8 @@ export function PresupuestoFormDialog({
     enabled: open,
     queryFn: async () => {
       const { data, error } = await tabla(supabase, "productos")
-        .select("id, tienda_id, nombre, descripcion, unidad, precio_unitario, iva_rate")
+        // Con "*": la línea (DTF o DTF UV) puede no existir todavía.
+        .select("*")
         .eq("activo", true)
         .or(`tienda_id.eq.${tiendaId},tienda_id.is.null`)
         .order("nombre");
@@ -155,6 +163,11 @@ export function PresupuestoFormDialog({
       return (data ?? []) as ProductoCatalogo[];
     },
   });
+
+  // El catálogo, para la línea (DTF o DTF UV) de las líneas del borrador de
+  // la IA: por referencia, para no volver a rellenar el formulario al llegar.
+  const productosRef = useRef(productos);
+  productosRef.current = productos;
 
   useEffect(() => {
     if (!open) return;
@@ -175,6 +188,7 @@ export function PresupuestoFormDialog({
               cantidad: aTexto(Number(l.cantidad)),
               unidad: l.unidad,
               precio_unitario: aTexto(Number(l.precio_unitario)),
+              linea: aLinea(l.linea),
             }))
           : [LINEA_VACIA],
       );
@@ -197,6 +211,8 @@ export function PresupuestoFormDialog({
               cantidad: l.cantidad === null ? "" : aTexto(l.cantidad),
               unidad: l.unidad,
               precio_unitario: l.precio_unitario === null ? "" : aTexto(l.precio_unitario),
+              // Del producto del catálogo, si lo es; si no, DTF.
+              linea: aLinea(productosRef.current.find((p) => p.id === l.producto_id)?.linea),
             }))
           : [LINEA_VACIA],
       );
@@ -224,6 +240,7 @@ export function PresupuestoFormDialog({
         unidad: l.unidad,
         precio_unitario: aNumero(l.precio_unitario),
         iva_rate: aplicaIva ? IVA_GENERAL : 0,
+        linea: l.linea,
       })),
     [lineas, aplicaIva],
   );
@@ -245,6 +262,7 @@ export function PresupuestoFormDialog({
       descripcion: p.nombre,
       unidad: p.unidad,
       precio_unitario: aTexto(Number(p.precio_unitario)),
+      linea: aLinea(p.linea),
     });
   }
 
@@ -398,12 +416,27 @@ export function PresupuestoFormDialog({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-12 md:col-span-4 space-y-1">
+                    <div className="col-span-12 md:col-span-3 space-y-1">
                       <Label className="text-xs">Descripción</Label>
                       <Input
                         value={l.descripcion}
                         onChange={(e) => cambiarLinea(i, { descripcion: e.target.value })}
                       />
+                    </div>
+                    <div className="col-span-12 md:col-span-1 space-y-1">
+                      <Label className="text-xs">Línea</Label>
+                      <Select
+                        value={l.linea}
+                        onValueChange={(v) => cambiarLinea(i, { linea: aLinea(v) })}
+                      >
+                        <SelectTrigger aria-label="Línea de producto">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dtf">DTF</SelectItem>
+                          <SelectItem value="uv">DTF UV</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="col-span-3 md:col-span-1 space-y-1">
                       <Label className="text-xs">Cant.</Label>

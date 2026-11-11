@@ -24,7 +24,7 @@
  * Lógica pura: sin Supabase ni red.
  */
 
-import { redondear } from "./importes";
+import { calcularLinea, redondear } from "./importes";
 import {
   calcularKpis,
   COSTE_UV_POR_DEFECTO,
@@ -313,4 +313,51 @@ export function pendientesDeLinea<P extends { id: string; tipo: string }>(
   if (linea === "todo") return [...pendientes];
   if (linea === "uv") return pendientes.filter((p) => p.tipo !== "textil" && soloUv.has(p.id));
   return pendientes.filter((p) => p.tipo !== "textil" && !soloUv.has(p.id));
+}
+
+/**
+ * Lo de cada línea de producto en las líneas de un pedido hecho a mano (o de
+ * un presupuesto): los metros de DTF (`metros_total`, la suma de cantidades
+ * de las líneas de DTF, como hasta ahora), los de DTF UV y la base y el IVA
+ * de las líneas de UV (`bruta_uv`, `iva_uv`). Una línea sin `linea` es de DTF.
+ */
+export function lineasDeUnPedido(
+  items: readonly {
+    cantidad: number;
+    precio_unitario: number;
+    iva_rate: number;
+    descuento_pct?: number;
+    linea?: LineaProducto | null;
+  }[],
+): { metros_total: number; metros_uv: number; bruta_uv: number; iva_uv: number } {
+  let metros_total = 0;
+  let metros_uv = 0;
+  let bruta_uv = 0;
+  let iva_uv = 0;
+  for (const it of items) {
+    if (it.linea === "uv") {
+      const l = calcularLinea(it);
+      metros_uv += Number(it.cantidad) || 0;
+      bruta_uv += l.base;
+      iva_uv += l.cuota;
+    } else metros_total += Number(it.cantidad) || 0;
+  }
+  return {
+    metros_total: redondear(metros_total, 3),
+    metros_uv: redondear(metros_uv, 3),
+    bruta_uv: redondear(bruta_uv),
+    iva_uv: redondear(iva_uv),
+  };
+}
+
+/**
+ * Los metros de un pedido tal como los ve el cliente (correos): los de DTF y
+ * los de DTF UV juntos. Es lo único que los suma: en las cifras de la empresa
+ * van siempre separados.
+ */
+export function metrosDelPedidoParaElCliente(p: {
+  metros_total?: number | string | null;
+  metros_uv?: number | string | null;
+}): number {
+  return redondear(num(p.metros_total) + num(p.metros_uv), 3);
 }

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
-import { faltaLaTabla, llamarRpc, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaTabla, llamarRpc, tabla } from "./rpc";
 import { exigirFilas } from "./acceso";
 import { leerTodas } from "./paginar";
 import {
@@ -51,6 +51,8 @@ export type LineaPresupuestoGuardada = {
   subtotal: number;
   iva: number;
   total: number;
+  /** 'dtf' o 'uv' (20261113100000). Sin la migración no viene: es DTF. */
+  linea?: string | null;
 };
 
 export type Presupuesto = {
@@ -109,6 +111,7 @@ const lineaSchema = z.object({
   unidad: z.string().trim().min(1).max(8),
   precio_unitario: z.number().nonnegative("El precio no puede ser negativo"),
   iva_rate: z.number().min(0).max(100),
+  linea: z.enum(["dtf", "uv"]).default("dtf"),
 });
 
 export const guardarPresupuesto = createServerFn({ method: "POST" })
@@ -196,21 +199,31 @@ export const guardarPresupuesto = createServerFn({ method: "POST" })
       presupuestoId = creado.id as string;
     }
 
-    const { error: errLineas } = await tabla(sb, "presupuesto_items").insert(
-      t.lineas.map((l, i) => ({
-        presupuesto_id: presupuestoId,
-        producto_id: l.producto_id ?? null,
-        orden: i,
-        descripcion: l.descripcion,
-        cantidad: l.cantidad,
-        unidad: l.unidad,
-        precio_unitario: l.precio_unitario,
-        iva_rate: l.iva_rate,
-        subtotal: l.subtotal,
-        iva: l.iva,
-        total: l.total,
-      })),
-    );
+    const filas = t.lineas.map((l, i) => ({
+      presupuesto_id: presupuestoId,
+      producto_id: l.producto_id ?? null,
+      orden: i,
+      descripcion: l.descripcion,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precio_unitario: l.precio_unitario,
+      iva_rate: l.iva_rate,
+      subtotal: l.subtotal,
+      iva: l.iva,
+      total: l.total,
+      linea: l.linea ?? "dtf",
+    }));
+    let { error: errLineas } = await tabla(sb, "presupuesto_items").insert(filas);
+    // Sin la migración 20261113100000 no hay columna de línea: todo, DTF.
+    if (faltaLaColumna(errLineas)) {
+      ({ error: errLineas } = await tabla(sb, "presupuesto_items").insert(
+        filas.map((f) => {
+          const copia: Record<string, unknown> = { ...f };
+          delete copia.linea;
+          return copia;
+        }),
+      ));
+    }
     if (errLineas) throw new Error(errLineas.message);
     return { id: presupuestoId! };
   });

@@ -7,6 +7,7 @@ import {
   cobrosDeLinea,
   pendientesDeLinea,
   ventasDeLinea,
+  lineasDeUnPedido,
   esFiltroLinea,
   partirPedido,
   pedidosDeLinea,
@@ -231,5 +232,25 @@ describe("cobrosDeLinea y pendientesDeLinea", () => {
     expect(pendientesDeLinea(pendientes, "uv", soloUvIds).map((p) => p.id)).toEqual(["p-uv"]);
     expect(pendientesDeLinea(pendientes, "dtf", soloUvIds).map((p) => p.id)).toEqual(["p-dtf"]);
     expect(pendientesDeLinea(pendientes, "todo", soloUvIds)).toHaveLength(3);
+  });
+});
+
+describe("lineasDeUnPedido (pedidos manuales y presupuestos)", () => {
+  it("los metros de DTF y los de UV por separado, con la base y el IVA del UV", () => {
+    const r = lineasDeUnPedido([
+      { cantidad: 4, precio_unitario: 7, iva_rate: 21 },
+      { cantidad: 2, precio_unitario: 17.5, iva_rate: 21, linea: "uv" },
+      { cantidad: 1, precio_unitario: 16, iva_rate: 21, linea: "uv", descuento_pct: 10 },
+    ]);
+    expect(r).toEqual({ metros_total: 4, metros_uv: 3, bruta_uv: 35 + 14.4, iva_uv: 7.35 + 3.02 });
+  });
+
+  it("sin UV, como siempre", () => {
+    expect(lineasDeUnPedido([{ cantidad: 5, precio_unitario: 7, iva_rate: 21 }])).toEqual({
+      metros_total: 5,
+      metros_uv: 0,
+      bruta_uv: 0,
+      iva_uv: 0,
+    });
   });
 });
