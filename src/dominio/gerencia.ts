@@ -10,6 +10,7 @@
  * de datos.
  */
 
+import { ventasDeLinea, type FiltroLinea } from "./por-linea";
 import { redondear } from "./importes";
 import {
   calcularKpis,
@@ -109,9 +110,18 @@ export type FiltroGerencia = {
   /** Una tienda, el textil (TIENDA_TEXTIL.id) o «todas». */
   tienda: string;
   canal: Canal | "todos";
+  /**
+   * La línea de producto: las dos («todo», por defecto), DTF o DTF UV. Se
+   * aplica en gerencia-datos.ts con ventasDeLinea y cobrosDeLinea.
+   */
+  linea?: FiltroLinea;
 };
 
-export const FILTRO_GERENCIA_TODO: FiltroGerencia = { tienda: "todas", canal: "todos" };
+export const FILTRO_GERENCIA_TODO: FiltroGerencia = {
+  tienda: "todas",
+  canal: "todos",
+  linea: "todo",
+};
 
 export function filtrarVentas<T extends Pick<Venta, "tienda_id" | "canal">>(
   ventas: readonly T[],
@@ -883,4 +893,44 @@ export function beneficioEstimado(
       ? 0
       : gastosFijosDelRango(gastos, { desde: r.desde, hasta: hastaHoy ? finHoy : r.hasta });
   return { gastos: g, beneficio: redondear(margen - g), hastaHoy };
+}
+
+// ---------------------------------------------------------------------------
+// Por línea de producto
+// ---------------------------------------------------------------------------
+
+export type FilaLinea = {
+  clave: "dtf" | "uv" | "textil";
+  etiqueta: string;
+  cifras: CifrasGerencia;
+};
+
+/**
+ * Las cifras de Gerencia de cada línea: DTF (impresión propia), DTF UV
+ * (subcontratado, con su coste) y Textil (ropa). Las tres suman exactamente
+ * las de «Todo»: cada pedido de tienda se parte en su DTF y su UV (ver
+ * por-linea.ts) y el textil va aparte. Sin pedidos de una línea, no sale.
+ */
+export function cifrasGerenciaPorLinea(ventas: readonly Venta[], costeActual: number): FilaLinea[] {
+  const filas: FilaLinea[] = [
+    {
+      clave: "dtf",
+      etiqueta: "DTF",
+      cifras: cifrasGerencia(ventasDeLinea(ventas, "dtf"), costeActual),
+    },
+    {
+      clave: "uv",
+      etiqueta: "DTF UV",
+      cifras: cifrasGerencia(ventasDeLinea(ventas, "uv"), costeActual),
+    },
+    {
+      clave: "textil",
+      etiqueta: "Textil",
+      cifras: cifrasGerencia(
+        ventas.filter((v) => v.canal === "textil"),
+        costeActual,
+      ),
+    },
+  ];
+  return filas.filter((f) => f.cifras.pedidos > 0 || f.cifras.cancelados > 0);
 }

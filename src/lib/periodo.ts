@@ -296,23 +296,23 @@ export function useLineasPeriodo(filtro: Filtro) {
 }
 
 /**
- * Los pedidos de una tienda que son solo de DTF UV, de cualquier fecha. Para
- * quitar de lo cobrado los cobros de UV: un cobro puede ser de un pedido de
- * otro periodo. Sin la migración del DTF UV, ninguno.
+ * Los pedidos que son solo de DTF UV, de cualquier fecha: de una tienda, o de
+ * todas sin `tiendaId`. Para separar los cobros y los pendientes de cada línea:
+ * un cobro puede ser de un pedido de otro periodo. Sin la migración del DTF
+ * UV, ninguno.
  */
-export function usePedidosSoloUv(tiendaId: string) {
+export function usePedidosSoloUv(tiendaId?: string) {
   return useQuery({
-    queryKey: ["pedidos-solo-uv", tiendaId],
+    queryKey: ["pedidos-solo-uv", tiendaId ?? "todas"],
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await leerTodas<{ id: string }>((a, b) =>
-        tabla(supabase, "pedidos")
+      const { data, error } = await leerTodas<{ id: string }>((a, b) => {
+        let consulta = tabla(supabase, "pedidos")
           .select("id")
-          .eq("tienda_id", tiendaId)
           .gt("metros_uv", 0)
-          .eq("metros_total", 0)
-          .order("id")
-          .range(a, b),
-      );
+          .eq("metros_total", 0);
+        if (tiendaId) consulta = consulta.eq("tienda_id", tiendaId);
+        return consulta.order("id").range(a, b);
+      });
       if (faltaLaColumna(error)) return new Set();
       if (error) throw error;
       return new Set(data.map((p) => p.id));

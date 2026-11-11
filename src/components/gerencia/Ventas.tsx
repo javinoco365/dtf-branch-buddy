@@ -61,7 +61,9 @@ export function Ventas({ d }: { d: DatosGerencia }) {
     ...d.rango,
     tiendaId: d.filtro.tienda !== "todas" && !soloTextil ? d.filtro.tienda : undefined,
   });
-  const productos = useMemo(() => topPorMetros(lineas.data ?? [], 10), [lineas.data]);
+  // Con «Todo», cada producto en su barra (DTF y UV son productos distintos).
+  const linea = d.filtro.linea ?? "todo";
+  const productos = useMemo(() => topPorMetros(lineas.data ?? [], 10, linea), [lineas.data, linea]);
   // Solo los productos que se ven: topPorMetros ya llega recortada a 10.
   const metrosProductos = useMemo(() => sumarCantidades(productos, (p) => p.metros), [productos]);
 

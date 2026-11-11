@@ -25,6 +25,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { EtiquetaUv } from "@/components/EtiquetaLinea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Explicacion } from "@/components/Explicacion";
 import { eur, metros } from "@/lib/format";
 import { DEFINICIONES } from "@/dominio/definiciones";
@@ -39,6 +48,7 @@ import {
   avisosGerencia,
   beneficioEstimado,
   cifrasGerencia,
+  cifrasGerenciaPorLinea,
   cobradoPorTramos,
   objetivoDelRango,
   parteTranscurrida,
@@ -225,6 +235,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
       </div>
 
+      {(d.filtro.linea ?? "todo") === "todo" && <PorLinea d={d} />}
+
       <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
 
       <Card>
@@ -263,6 +275,68 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 }
 
 /**
+ * De qué línea sale cada cifra: DTF, DTF UV y Textil, que suman lo de arriba
+ * (cifrasGerenciaPorLinea). Solo con «Todo» y si hay más de una línea. Los
+ * metros, cada uno en la suya: no se suman entre líneas.
+ */
+function PorLinea({ d }: { d: DatosGerencia }) {
+  const filas = useMemo(
+    () => cifrasGerenciaPorLinea(d.ventas, d.costeMetro),
+    [d.ventas, d.costeMetro],
+  );
+  if (filas.length < 2) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Por línea</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Lo de arriba, línea a línea: suman lo mismo. Un pedido con DTF y UV se reparte entre las
+          dos.
+        </p>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Línea</TableHead>
+              <TableHead className="text-right">Pedidos</TableHead>
+              <TableHead className="text-right">Vendido</TableHead>
+              <TableHead className="text-right">Facturación bruta</TableHead>
+              <TableHead className="text-right">Metros</TableHead>
+              <TableHead className="text-right">€/m</TableHead>
+              <TableHead className="text-right">Coste</TableHead>
+              <TableHead className="text-right">Margen</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filas.map((f) => (
+              <TableRow key={f.clave}>
+                <TableCell className="font-medium">
+                  {f.clave === "uv" ? <EtiquetaUv texto="DTF UV" /> : f.etiqueta}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{f.cifras.pedidos}</TableCell>
+                <TableCell className="text-right tabular-nums">{eur(f.cifras.total)}</TableCell>
+                <TableCell className="text-right tabular-nums">{eur(f.cifras.bruta)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {f.clave === "textil" ? "—" : metros(f.cifras.metros)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {f.cifras.metros > 0 ? eur(f.cifras.euroMetro) : "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{eur(f.cifras.coste)}</TableCell>
+                <TableCell className="text-right tabular-nums font-medium">
+                  {eur(f.cifras.margen)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Lo que se configura en Ajustes: el beneficio tras los gastos fijos y cómo
  * se va frente al objetivo. Son cifras de toda la empresa, así que con un
  * filtro de tienda o canal no se enseñan: compararían una parte con el todo.
@@ -285,7 +359,10 @@ function BeneficioYObjetivos({
     d.grupo === "b" ? { vendido: null, metros: null } : objetivoDelRango(d.objetivos, d.rango);
   const hayGastos = d.gastosDelGrupo.length > 0;
   const hayObjetivo = objetivo.vendido !== null || objetivo.metros !== null;
-  const sinFiltros = d.filtro.tienda === "todas" && d.filtro.canal === "todos";
+  const sinFiltros =
+    d.filtro.tienda === "todas" &&
+    d.filtro.canal === "todos" &&
+    (d.filtro.linea ?? "todo") === "todo";
 
   // En B, sin gastos sin justificante no hay nada que enseñar ni que pedir.
   if (d.grupo === "b" && !hayGastos) return null;

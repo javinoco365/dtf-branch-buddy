@@ -15,6 +15,7 @@ import {
   canalDelCobro,
   cobradoPorTramos,
   cifrasGerencia,
+  cifrasGerenciaPorLinea,
   desglose,
   diasMediosCobro,
   filtrarCobrosGerencia,
@@ -573,5 +574,77 @@ describe("tonoObjetivo", () => {
 
   it("el primer día, sin nada esperado aún, no se pinta en rojo", () => {
     expect(tonoObjetivo(avanceObjetivo(0, 15000, 0)!)).toBe("bien");
+  });
+});
+
+describe("cifrasGerenciaPorLinea", () => {
+  const venta = (v: Partial<Venta>): Venta => ({
+    fecha_pedido: "2026-11-11T10:00:00Z",
+    tienda_id: "t",
+    estado: "pendiente",
+    subtotal: 100,
+    iva: 21,
+    envio: 0,
+    total: 121,
+    metros_total: 10,
+    coste_metro_snapshot: 2,
+    canal: "web",
+    cliente_id: null,
+    ...v,
+  });
+  const ventas = [
+    venta({}),
+    // DCUL-146-2026: solo UV.
+    venta({
+      subtotal: 112,
+      iva: 23.52,
+      total: 135.52,
+      metros_total: 0,
+      metros_uv: 7,
+      coste_uv_snapshot: 15,
+      bruta_uv: 112,
+      iva_uv: 23.52,
+    }),
+    // Mixto: 4 m de DTF (28 €) + 2 m de UV (35 €) + 5 € de portes.
+    venta({
+      subtotal: 68,
+      iva: 14.28,
+      envio: 5,
+      total: 82.28,
+      metros_total: 4,
+      metros_uv: 2,
+      coste_uv_snapshot: 15,
+      bruta_uv: 35,
+      iva_uv: 7.35,
+    }),
+    venta({
+      canal: "textil",
+      tienda_id: "textil-personalizado",
+      metros_total: 0,
+      coste_textil: 30,
+    }),
+  ];
+
+  it("DTF, DTF UV y Textil suman exactamente «Todo»", () => {
+    const todo = cifrasGerencia(ventas, 2);
+    const filas = cifrasGerenciaPorLinea(ventas, 2);
+    expect(filas.map((f) => f.clave)).toEqual(["dtf", "uv", "textil"]);
+    for (const k of ["total", "bruta", "iva", "envios", "coste", "margen"] as const) {
+      const suma = filas.reduce((s, f) => s + f.cifras[k], 0);
+      expect(Math.round(suma * 100) / 100).toBe(todo[k]);
+    }
+  });
+
+  it("el UV con sus metros, su €/m y lo que cobra la subcontrata", () => {
+    const uv = cifrasGerenciaPorLinea(ventas, 2).find((f) => f.clave === "uv")!.cifras;
+    expect(uv.metros).toBe(9);
+    expect(uv.bruta).toBe(147);
+    expect(uv.coste).toBe(135);
+    expect(uv.margen).toBe(12);
+    expect(uv.euroMetro).toBe(16.33);
+  });
+
+  it("una línea sin pedidos no sale", () => {
+    expect(cifrasGerenciaPorLinea([venta({})], 2).map((f) => f.clave)).toEqual(["dtf"]);
   });
 });

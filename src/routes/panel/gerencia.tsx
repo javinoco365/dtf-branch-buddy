@@ -5,6 +5,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FiltrosPlegables, SelectFiltro } from "@/components/filtros/Filtros";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
+import { SelectorLinea } from "@/components/filtros/SelectorLinea";
+import { esFiltroLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
+import { usePedidosSoloUv } from "@/lib/periodo";
 import { PendienteDocumentar } from "@/components/gerencia/PendienteDocumentar";
 import { BotonResumenDiario } from "@/components/gerencia/resumen-diario/BotonResumenDiario";
 import type { DatosGerencia } from "@/components/gerencia/destinos";
@@ -86,7 +89,13 @@ export const Route = createFileRoute("/panel/gerencia")({
   component: Gerencia,
 });
 
-const FILTROS_GERENCIA = { pestana: "resumen", tienda: "todas", canal: "todos", grupo: "total" };
+const FILTROS_GERENCIA = {
+  pestana: "resumen",
+  tienda: "todas",
+  canal: "todos",
+  grupo: "total",
+  linea: "todo",
+};
 
 const SIN_COBROS = { disponible: false, cobros: [] };
 const SIN_PENDIENTES = { disponible: false, pedidos: [] };
@@ -108,9 +117,15 @@ function Gerencia() {
     void cargar?.().catch(() => undefined);
   }, [f.pestana]);
   const filtro: FiltroGerencia = useMemo(
-    () => ({ tienda: f.tienda, canal: esCanal(f.canal) ? f.canal : "todos" }),
-    [f.tienda, f.canal],
+    () => ({
+      tienda: f.tienda,
+      canal: esCanal(f.canal) ? f.canal : "todos",
+      linea: esFiltroLinea(f.linea) ? f.linea : "todo",
+    }),
+    [f.tienda, f.canal, f.linea],
   );
+  // Los pedidos solo de DTF UV, para repartir cobros y pendientes por línea.
+  const soloUv = usePedidosSoloUv();
   const grupo: Grupo = esGrupo(f.grupo) ? f.grupo : "total";
 
   // Sin «todo» en la lista, siempre hay rango. Sin comparación, un rango
@@ -191,6 +206,7 @@ function Gerencia() {
           pendientes: pendientesLeidos,
           caja: cajaLeida,
           banco: bancoLeido,
+          soloUv: soloUv.data,
         },
         fuentes,
       ),
@@ -210,6 +226,7 @@ function Gerencia() {
       pendientesLeidos,
       cajaLeida,
       bancoLeido,
+      soloUv.data,
       filtro,
       periodo.seleccion,
       periodo.comparacion,
@@ -253,6 +270,7 @@ function Gerencia() {
     etiquetaPeriodo(periodo.seleccion),
     opcionesTienda.find((o) => o.valor === filtro.tienda)?.etiqueta,
     filtro.canal !== "todos" ? opcionesCanal.find((o) => o.valor === filtro.canal)?.etiqueta : null,
+    filtro.linea && filtro.linea !== "todo" ? ETIQUETA_FILTRO_LINEA[filtro.linea] : null,
     grupo !== "total" ? GRUPOS.find((g) => g.valor === grupo)?.etiqueta : null,
   ]
     .filter(Boolean)
@@ -286,8 +304,13 @@ function Gerencia() {
           </div>
         </div>
         <p className="text-muted-foreground max-md:hidden">
-          Toda la empresa: tiendas y textil. El ⓘ de cada cifra explica qué es y cómo se calcula
-          (con el ratón encima, o tocándolo en el móvil).
+          {filtro.linea === "dtf"
+            ? "Solo DTF: la impresión propia de las tiendas, sin DTF UV ni textil."
+            : filtro.linea === "uv"
+              ? "Solo DTF UV: lo subcontratado, con su coste de la subcontrata."
+              : "Toda la empresa: tiendas y textil."}{" "}
+          El ⓘ de cada cifra explica qué es y cómo se calcula (con el ratón encima, o tocándolo en
+          el móvil).
         </p>
       </div>
 
@@ -308,6 +331,11 @@ function Gerencia() {
               alCambiar={(canal) => cambiar({ canal })}
               opciones={opcionesCanal}
               ancho="w-[170px] max-md:w-[calc(50%-0.25rem)]"
+            />
+            <SelectorLinea
+              valor={filtro.linea ?? "todo"}
+              alCambiar={(linea) => cambiar({ linea })}
+              className="max-md:w-full"
             />
             <SelectFiltro
               etiqueta="Números"
