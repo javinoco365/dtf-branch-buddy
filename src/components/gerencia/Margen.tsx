@@ -20,7 +20,9 @@ import { tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { CANALES, cifrasGerencia } from "@/dominio/gerencia";
 import {
   margenPor,
+  margenPorLinea,
   margenPorMetro,
+  margenPorMetroUv,
   margenPorTramos,
   porcentajeMargen,
   type FilaMargen,
@@ -63,6 +65,15 @@ export function Margen({ d }: { d: DatosGerencia }) {
     return { por, filas: margenPorTramos(d.ventas, tramos, d.costeMetro, d.gastosDelGrupo, d.hoy) };
   }, [d.rango, d.ventas, d.costeMetro, d.gastosDelGrupo, d.hoy]);
   const metro = useMemo(() => margenPorMetro(d.ventas, d.costeMetro), [d.ventas, d.costeMetro]);
+  // Con «Todo», cada línea por separado; con una elegida ya es la suya.
+  const porLinea = useMemo(
+    () => ((d.filtro.linea ?? "todo") === "todo" ? margenPorLinea(d.ventas, d.costeMetro) : []),
+    [d.ventas, d.costeMetro, d.filtro.linea],
+  );
+  const metroUv = useMemo(
+    () => ((d.filtro.linea ?? "todo") === "todo" ? margenPorMetroUv(d.ventas, d.costeMetro) : null),
+    [d.ventas, d.costeMetro, d.filtro.linea],
+  );
   // Los pies dan las cifras de las tarjetas, no la suma de filas redondeadas:
   // así el pie y la tarjeta nunca se contradicen por un céntimo.
   const total = useMemo(() => totalMargen(c), [c]);
@@ -102,7 +113,7 @@ export function Margen({ d }: { d: DatosGerencia }) {
             <span className="text-muted-foreground">
               {linea === "uv"
                 ? `Lo que cobra la subcontrata ${eur(c.costeDtf)}`
-                : `DTF ${eur(c.costeDtf)} · Textil ${eur(c.costeTextil)}`}
+                : `DTF ${eur(c.costeDtf)}${c.costeUv > 0 ? ` · DTF UV (subcontrata) ${eur(c.costeUv)}` : ""} · Textil ${eur(c.costeTextil)}`}
               {c.envios > 0 &&
                 ` · Envíos cobrados ${eur(c.envios)}, aparte de la bruta y del coste`}
             </span>
@@ -144,6 +155,16 @@ export function Margen({ d }: { d: DatosGerencia }) {
             : "pedidos textil todavía no han salido del almacén y van"}{" "}
           sin coste: su margen sale más alto de lo que será.
         </Nota>
+      )}
+
+      {porLinea.length > 1 && (
+        <TablaMargen
+          titulo="Por línea"
+          columna="Línea"
+          unidad={["línea", "líneas"]}
+          filas={porLinea}
+          total={total}
+        />
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -256,35 +277,20 @@ export function Margen({ d }: { d: DatosGerencia }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            El metro de DTF
-            <Explicacion titulo="El metro de DTF" definicion={DEFINICIONES.g_margen_metro} />
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1.5 text-sm">
-          {!metro ? (
-            <p className="text-muted-foreground">Sin metros vendidos con estos filtros.</p>
-          ) : (
-            (
-              [
-                ["Precio medio del metro", metro.precio],
-                ["Coste medio del metro", metro.coste],
-                ["Queda de cada metro", metro.margen],
-              ] as const
-            ).map(([etiqueta, valor], i) => (
-              <div
-                key={etiqueta}
-                className={`flex justify-between gap-4 ${i === 2 ? "border-t pt-1.5 font-semibold" : ""}`}
-              >
-                <span className={i === 2 ? "" : "text-muted-foreground"}>{etiqueta}</span>
-                <span className="tabular-nums">{eur(valor)}</span>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TarjetaMetro
+          titulo={linea === "uv" ? "El metro de DTF UV" : "El metro de DTF"}
+          metro={metro}
+          coste={linea === "uv" ? "Lo que cobra la subcontrata" : "Coste medio del metro"}
+        />
+        {metroUv && (
+          <TarjetaMetro
+            titulo="El metro de DTF UV"
+            metro={metroUv}
+            coste="Lo que cobra la subcontrata"
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -356,6 +362,49 @@ function TablaMargen({
               </TableRow>
             </TableFooter>
           </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Precio, coste y lo que queda del metro de una línea. */
+function TarjetaMetro({
+  titulo,
+  metro,
+  coste,
+}: {
+  titulo: string;
+  metro: { precio: number; coste: number; margen: number } | null;
+  coste: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-base">
+          {titulo}
+          <Explicacion titulo={titulo} definicion={DEFINICIONES.g_margen_metro} />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5 text-sm">
+        {!metro ? (
+          <p className="text-muted-foreground">Sin metros vendidos con estos filtros.</p>
+        ) : (
+          (
+            [
+              ["Precio medio del metro", metro.precio],
+              [coste, metro.coste],
+              ["Queda de cada metro", metro.margen],
+            ] as const
+          ).map(([etiqueta, valor], i) => (
+            <div
+              key={etiqueta}
+              className={`flex justify-between gap-4 ${i === 2 ? "border-t pt-1.5 font-semibold" : ""}`}
+            >
+              <span className={i === 2 ? "" : "text-muted-foreground"}>{etiqueta}</span>
+              <span className="tabular-nums">{eur(valor)}</span>
+            </div>
+          ))
         )}
       </CardContent>
     </Card>

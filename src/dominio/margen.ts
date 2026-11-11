@@ -12,7 +12,13 @@ import { redondear } from "./importes";
 import { diaDelPedido } from "./dia-pedido";
 import { diasDelRango, type Tramo } from "./periodos";
 import { partirPedidos } from "./por-linea";
-import { cifrasGerencia, gastosFijosDelRango, type GastoFijo, type Venta } from "./gerencia";
+import {
+  cifrasGerencia,
+  cifrasGerenciaPorLinea,
+  gastosFijosDelRango,
+  type GastoFijo,
+  type Venta,
+} from "./gerencia";
 
 export type FilaMargen = {
   clave: string;
@@ -126,5 +132,37 @@ export function margenPorMetro(ventas: readonly Venta[], costeActual: number): M
   if (k.metros <= 0) return null;
   const precio = k.euroMetro;
   const coste = redondear(k.costeDtf / k.metros);
+  return { precio, coste, margen: redondear(precio - coste) };
+}
+
+/**
+ * El margen de cada línea de producto: DTF, DTF UV (lo que deja sobre lo que
+ * cobra la subcontrata) y Textil. Suman el margen de «Todo» al céntimo (ver
+ * cifrasGerenciaPorLinea). Sin pedidos de una línea, no sale.
+ */
+export function margenPorLinea(ventas: readonly Venta[], costeActual: number): FilaMargen[] {
+  return cifrasGerenciaPorLinea(ventas, costeActual).map((f) => ({
+    clave: f.clave,
+    nombre: f.etiqueta,
+    pedidos: f.cifras.pedidos,
+    bruta: f.cifras.bruta,
+    coste: f.cifras.coste,
+    margen: f.cifras.margen,
+    porcentaje: porcentajeMargen(f.cifras.margen, f.cifras.bruta),
+  }));
+}
+
+/**
+ * Precio, coste y margen medios del metro de DTF UV: lo que se cobra, lo que
+ * cobra la subcontrata y lo que queda. Nulo sin metros de UV.
+ */
+export function margenPorMetroUv(
+  ventas: readonly Venta[],
+  costeActual: number,
+): MargenMetro | null {
+  const uv = cifrasGerenciaPorLinea(ventas, costeActual).find((f) => f.clave === "uv")?.cifras;
+  if (!uv || uv.metrosUv <= 0) return null;
+  const precio = redondear(uv.bruta / uv.metrosUv);
+  const coste = redondear(uv.costeUv / uv.metrosUv);
   return { precio, coste, margen: redondear(precio - coste) };
 }

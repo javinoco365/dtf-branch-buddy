@@ -187,6 +187,9 @@ export function Resultados({ d }: { d: DatosGerencia }) {
   const filas: [string, keyof ColumnaResultados, "suma" | "resta" | "total"][] = [
     ["Ingresos (sin IVA)", "ingresos", "suma"],
     ["Producción DTF", "produccion", "resta"],
+    ...(cuentas.total.subcontrata !== 0
+      ? [["DTF UV subcontratado", "subcontrata", "resta"] as (typeof filas)[number]]
+      : []),
     ["Envíos", "envios", "resta"],
     ["Coste de la ropa", "ropa", "resta"],
     ["Margen", "margen", "total"],

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { cifrasGerencia, ventaDeTextil, ventaDeTienda, type Venta } from "./gerencia";
-import { margenPor, margenPorMetro, margenPorTramos } from "./margen";
+import {
+  margenPor,
+  margenPorLinea,
+  margenPorMetro,
+  margenPorMetroUv,
+  margenPorTramos,
+} from "./margen";
 
 const dtf = (fecha: string, bruta: number, metros: number, coste = 2): Venta =>
   ventaDeTienda({
@@ -104,5 +110,41 @@ describe("margen por grupo, por tramo y por metro", () => {
   it("precio, coste y margen del metro", () => {
     expect(margenPorMetro(ventas, 0)).toEqual({ precio: 10, coste: 2, margen: 8 });
     expect(margenPorMetro([textil("2026-10-03", 200, 1)], 0)).toBeNull();
+  });
+});
+
+describe("margen por línea (DTF y DTF UV)", () => {
+  // DCUL-143: 7 m de UV a 16 €/m; y un mixto: 4 m de DTF (40 €) + 2 m de UV a 17,50 €/m.
+  const soloUv: Venta = {
+    ...dtf("2026-11-10", 112, 0),
+    metros_uv: 7,
+    coste_uv_snapshot: 15,
+    bruta_uv: 112,
+    iva_uv: 23.52,
+  };
+  const mixto: Venta = {
+    ...dtf("2026-11-11", 75, 4),
+    metros_uv: 2,
+    coste_uv_snapshot: 15,
+    bruta_uv: 35,
+    iva_uv: 7.35,
+  };
+  const ventas = [soloUv, mixto, textil("2026-11-11", 50, 20)];
+
+  it("cada línea con su coste; suman el margen de «Todo»", () => {
+    const filas = margenPorLinea(ventas, 2);
+    const de = (c: string) => filas.find((f) => f.clave === c)!;
+    expect(de("dtf")).toMatchObject({ bruta: 40, coste: 8, margen: 32 });
+    expect(de("uv")).toMatchObject({ bruta: 147, coste: 135, margen: 12 });
+    expect(de("textil")).toMatchObject({ bruta: 50, coste: 20, margen: 30 });
+    const todo = cifrasGerencia(ventas, 2);
+    expect(filas.reduce((s, f) => s + f.margen, 0)).toBeCloseTo(todo.margen, 2);
+  });
+
+  it("el metro de DTF, sin lo del UV del mixto; el de UV, con lo que cobra la subcontrata", () => {
+    expect(margenPorMetro(ventas, 2)).toEqual({ precio: 10, coste: 2, margen: 8 });
+    // 147 € / 9 m = 16,33; coste 15; quedan 1,33 €/m.
+    expect(margenPorMetroUv(ventas, 2)).toEqual({ precio: 16.33, coste: 15, margen: 1.33 });
+    expect(margenPorMetroUv([dtf("2026-11-11", 10, 1)], 2)).toBeNull();
   });
 });

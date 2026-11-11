@@ -43,6 +43,9 @@ export const CATEGORIAS_COMPRA: readonly CategoriaCompra[] = [
   { valor: "textil", etiqueta: "Textil (entra en el stock)", trato: "stock" },
   { valor: "consumibles", etiqueta: "Consumibles DTF (tinta, film, polvo)", trato: "comparar" },
   { valor: "envios", etiqueta: "Mensajería y envíos", trato: "comparar" },
+  // La factura de la subcontrata del DTF UV: cada pedido ya cuenta su coste
+  // por metro (y su envío). Migración 20261112100000.
+  { valor: "subcontrata_uv", etiqueta: "DTF UV subcontratado", trato: "comparar" },
   { valor: "maquinaria", etiqueta: "Maquinaria", trato: "amortizar", amortizacion: 12 },
   { valor: "informatica", etiqueta: "Equipos informáticos", trato: "amortizar", amortizacion: 25 },
   { valor: "publicidad", etiqueta: "Publicidad", trato: "gasto" },
@@ -146,9 +149,10 @@ export function gastosConCompras(
 export function comprasParaComparar(
   compras: readonly CompraResumen[],
   r: { desde: Date; hasta: Date },
-): { consumibles: number; envios: number } {
+): { consumibles: number; envios: number; subcontrataUv: number } {
   let consumibles = 0;
   let envios = 0;
+  let subcontrataUv = 0;
   const desde = new Date(r.desde.getFullYear(), r.desde.getMonth(), r.desde.getDate());
   for (const c of compras) {
     if (c.estado !== "registrada" || !c.fecha) continue;
@@ -156,8 +160,13 @@ export function comprasParaComparar(
     if (f < desde || f > r.hasta) continue;
     if (c.categoria === "consumibles") consumibles += num(c.base);
     if (c.categoria === "envios") envios += num(c.base);
+    if (c.categoria === "subcontrata_uv") subcontrataUv += num(c.base);
   }
-  return { consumibles: redondear(consumibles), envios: redondear(envios) };
+  return {
+    consumibles: redondear(consumibles),
+    envios: redondear(envios),
+    subcontrataUv: redondear(subcontrataUv),
+  };
 }
 
 export type FilaComparada = {
@@ -170,10 +179,19 @@ export type FilaComparada = {
   diferencia: number;
 };
 
-/** Las compras de tinta y mensajería frente a lo que cuentan los pedidos. */
+/**
+ * Las compras de tinta, mensajería y subcontrata del DTF UV frente a lo que
+ * cuentan los pedidos. El envío de un pedido solo de UV lo cobra la
+ * subcontrata en su factura, no la agencia: va con ella.
+ */
 export function comparacionCompras(
-  compradas: { consumibles: number; envios: number },
-  estimado: { produccion: number; envios: number },
+  compradas: { consumibles: number; envios: number; subcontrataUv?: number },
+  estimado: {
+    produccion: number;
+    envios: number;
+    subcontrata?: number;
+    enviosSubcontrata?: number;
+  },
 ): FilaComparada[] {
   const fila = (concepto: string, comprado: number, est: number): FilaComparada => ({
     concepto,
@@ -181,9 +199,16 @@ export function comparacionCompras(
     estimado: est,
     diferencia: redondear(comprado - est),
   });
+  const enviosUv = estimado.enviosSubcontrata ?? 0;
+  const subcontrata = redondear((estimado.subcontrata ?? 0) + enviosUv);
+  const compradoUv = compradas.subcontrataUv ?? 0;
   return [
     fila("Consumibles DTF", compradas.consumibles, estimado.produccion),
-    fila("Mensajería", compradas.envios, estimado.envios),
+    fila("Mensajería", compradas.envios, redondear(estimado.envios - enviosUv)),
+    // Sin UV ni compras de la subcontrata, la fila no dice nada.
+    ...(subcontrata !== 0 || compradoUv !== 0
+      ? [fila("DTF UV subcontratado", compradoUv, subcontrata)]
+      : []),
   ];
 }
 
