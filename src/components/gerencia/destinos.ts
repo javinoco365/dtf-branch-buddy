@@ -80,13 +80,19 @@ export function destinoPresupuestos(tiendaId: string): Destino {
 }
 
 /** Los pedidos en un estado, de cualquier fecha, con los filtros de tienda y canal. */
-export function destinoPedidosEstado(f: FiltroGerencia, estado: string): Destino {
+export function destinoPedidosEstado(
+  f: FiltroGerencia,
+  estado: string,
+  /** «dtf»: sin los pedidos solo de DTF UV (los del taller, ver separarSubcontrata). */
+  linea?: "dtf",
+): Destino {
   if (esTextil(f)) return { to: "/panel/textil/pedidos", search: { estado } };
   return {
     to: "/panel/pedidos",
     search: {
       periodo: "todo",
       estado,
+      ...(linea ? { linea } : {}),
       ...(f.tienda !== "todas" ? { tienda: f.tienda } : {}),
       ...(f.canal === "web" || f.canal === "manual" ? { origen: f.canal } : {}),
     },

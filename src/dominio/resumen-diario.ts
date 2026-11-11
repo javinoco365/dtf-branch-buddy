@@ -38,6 +38,7 @@ import { diaDelPedido, momentoDelPedido } from "./dia-pedido";
 import { diaRealizado, fueraDeHora, horaCorta, momentoDeInstante } from "./realizado";
 import type { Venta } from "./gerencia";
 import { esSoloUv } from "./linea-producto";
+import { partirPedidos } from "./por-linea";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -113,7 +114,12 @@ export type Margenes = {
   /** Sin IVA y sin el envío. */
   bruta: number;
   enviosCobrados: number;
+  /** Producción DTF, lo que cobra la subcontrata del DTF UV y la ropa del textil. */
   costeProduccion: number;
+  /** De `costeProduccion`, lo que cobra la subcontrata por el DTF UV. */
+  costeSubcontrata: number;
+  /** Metros de DTF UV. No se suman nunca a `metros` (los de DTF). */
+  metrosUv: number;
   costeEnvios: number;
   /** Pedidos con envío cuyo coste se ha estimado (no tenían coste real). */
   enviosEstimados: number;
@@ -254,6 +260,16 @@ export function margenes(
     costeProduccion(dtf as readonly PedidoResumen[], ajustes.costeMetroActual) +
       textil.reduce((s, p) => s + num(p.coste_textil), 0),
   );
+  // La parte de DTF UV de cada pedido (por-linea.ts): la cobra la subcontrata.
+  const uv = partirPedidos(dtf).uv;
+  const costeSubcontrata = costeProduccion(
+    uv as readonly PedidoResumen[],
+    ajustes.costeMetroActual,
+  );
+  const metrosUv = redondear(
+    uv.reduce((s, p) => s + num(p.metros_uv), 0),
+    2,
+  );
   let costeEnvios = 0;
   let enviosEstimados = 0;
   for (const p of validos) {
@@ -272,6 +288,8 @@ export function margenes(
     bruta: k.bruta,
     enviosCobrados: k.envios,
     costeProduccion: prod,
+    costeSubcontrata,
+    metrosUv,
     costeEnvios,
     enviosEstimados,
     margenSinEnvios,
@@ -347,7 +365,9 @@ function cifrasDe(
   const pendiente = redondear(
     validosPeriodo.reduce((s, p) => s + Math.max(0, totalNeto(p) - num(p.cobrado)), 0),
   );
-  const conMetros = validosPeriodo.filter((p) => num(p.metros_total) > 0);
+  // El metro de DTF: solo la parte de DTF de cada pedido; lo del DTF UV de
+  // un mixto (su importe y su coste) no va en él.
+  const conMetros = partirPedidos(validosPeriodo).dtf.filter((p) => num(p.metros_total) > 0);
   const brutaMetros = calcularKpis(conMetros as readonly PedidoResumen[]).bruta;
   const metrosConMetros = conMetros.reduce((s, p) => s + num(p.metros_total), 0);
   const margenMetros = margenes(conMetros, ajustes).margenSinEnvios;
@@ -363,8 +383,9 @@ function cifrasDe(
   const realizadosValidos = realizados.filter((p) => p.estado !== ESTADO_CANCELADO);
   const sinCobrar = realizadosValidos.filter((p) => totalNeto(p) - num(p.cobrado) > 0.01);
 
+  // La cola del taller: los pedidos solo de DTF UV los imprime la subcontrata.
   const cola = pedidos.filter((p) => {
-    if (p.estado === ESTADO_CANCELADO) return false;
+    if (p.estado === ESTADO_CANCELADO || esSoloUv(p)) return false;
     const dia = diaDelPedido(p);
     if (dia > hasta) return false;
     const r = diaRealizado(p.realizado_en);
@@ -489,6 +510,8 @@ function sumar(id: string, nombre: string, lista: readonly CifrasNegocio[]): Cif
     bruta: s((c) => c[k].bruta),
     enviosCobrados: s((c) => c[k].enviosCobrados),
     costeProduccion: s((c) => c[k].costeProduccion),
+    costeSubcontrata: s((c) => c[k].costeSubcontrata),
+    metrosUv: s2((c) => c[k].metrosUv),
     costeEnvios: s((c) => c[k].costeEnvios),
     enviosEstimados: s((c) => c[k].enviosEstimados),
     margenSinEnvios: s((c) => c[k].margenSinEnvios),
@@ -681,10 +704,17 @@ export function serieDelResumen(r: Resumen): { por: "dia" | "mes"; tramos: DiaRe
   return { por: "mes", tramos: [...meses.values()] };
 }
 
+/** La producción propia: el DTF y la ropa, sin lo que cobra la subcontrata del UV. */
+export function produccionPropia(m: Pick<Margenes, "costeProduccion" | "costeSubcontrata">) {
+  return redondear(m.costeProduccion - m.costeSubcontrata);
+}
+
 /** Lo que costó el periodo, por partidas (de lo pedido). */
 export type CostesPeriodo = {
-  /** Metros × coste por metro, y la ropa del textil. */
+  /** Metros de DTF × coste por metro, y la ropa del textil. */
   produccion: number;
+  /** Lo que cobra la subcontrata por el DTF UV. */
+  subcontrata: number;
   /** Lo que cobra la agencia (real o estimado). */
   envios: number;
   /** Gastos fijos del periodo; 0 si no se saben. */
@@ -693,8 +723,15 @@ export type CostesPeriodo = {
 };
 
 export function costesDelPeriodo(r: Resumen): CostesPeriodo {
-  const produccion = r.total.pedido.costeProduccion;
+  const subcontrata = r.total.pedido.costeSubcontrata;
+  const produccion = produccionPropia(r.total.pedido);
   const envios = r.total.pedido.costeEnvios;
   const fijos = r.gastosFijos ?? 0;
-  return { produccion, envios, fijos, total: redondear(produccion + envios + fijos) };
+  return {
+    produccion,
+    subcontrata,
+    envios,
+    fijos,
+    total: redondear(produccion + subcontrata + envios + fijos),
+  };
 }

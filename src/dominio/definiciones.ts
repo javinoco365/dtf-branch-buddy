@@ -256,14 +256,16 @@ export const DEFINICIONES = {
   // --- Gerencia › Producción --------------------------------------------------
   g_taller: {
     que: "Pedidos que todavía no han salido: pendientes, procesando, imprimiendo o listos.",
-    calculo: "Número de pedidos en esos estados, sea cual sea su fecha, y sus metros.",
+    calculo:
+      "Número de pedidos en esos estados, sea cual sea su fecha, y sus metros. Los pedidos solo de DTF UV no pasan por el taller (los imprime la subcontrata): se cuentan aparte, con sus metros.",
     fuente:
       "Pedidos de tiendas y textil, con los filtros de tienda y canal. No depende del periodo: es la foto de hoy.",
   },
   g_espera: {
     que: "El pedido abierto que más lleva esperando.",
     calculo: "Días desde la fecha del pedido hasta hoy, del más antiguo de los que no han salido.",
-    fuente: "Los mismos pedidos que «En el taller».",
+    fuente:
+      "Los mismos pedidos que «En el taller»: sin los pedidos solo de DTF UV, que espera la subcontrata.",
   },
   g_dias_envio: {
     que: "Cuánto se tarda de media desde que entra un pedido hasta que se envía.",

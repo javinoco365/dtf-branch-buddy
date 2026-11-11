@@ -26,6 +26,7 @@ import {
 } from "@/dominio/maqueta-presupuesto";
 import {
   costesDelPeriodo,
+  produccionPropia,
   proporcion,
   ratiosDe,
   serieDelResumen,
@@ -92,6 +93,8 @@ const LIMITE = H - 18;
 const VERDE: RGB = [22, 140, 74];
 const ROJO: RGB = [205, 40, 40];
 const AMBAR: RGB = [214, 120, 0];
+/** El DTF UV, como su etiqueta en pantalla. */
+const VIOLETA: RGB = [124, 58, 237];
 const FONDO: RGB = [245, 246, 251];
 const FONDO_CIELO: RGB = [234, 246, 253];
 const FONDO_NARANJA: RGB = [255, 243, 230];
@@ -342,7 +345,10 @@ function frases(d: DatosInformeSocios): string[] {
   out.push(
     `Entraron ${t.pedido.pedidos} ${t.pedido.pedidos === 1 ? "pedido" : "pedidos"} por ${eur(t.pedido.vendido)} con IVA` +
       (v !== null && d.frente ? ` (${textoVariacion(v)} frente a ${d.frente})` : "") +
-      (t.pedido.metros > 0 ? `, con ${metros(t.pedido.metros)} de DTF.` : "."),
+      (t.pedido.metros > 0 ? `, con ${metros(t.pedido.metros)} de DTF` : "") +
+      (t.pedido.metrosUv > 0
+        ? `${t.pedido.metros > 0 ? " y" : ", con"} ${metros(t.pedido.metrosUv)} de DTF UV (subcontratado).`
+        : "."),
   );
   if (r.capacidad.dias > 0 || t.realizado.metrosImpresos > 0) {
     out.push(
@@ -625,17 +631,33 @@ type Concepto = {
   valor: (m: Margenes) => number;
   formato?: (n: number) => string;
   tipo?: "suma" | "resultado" | "clave";
+  /** Solo si hay DTF UV en el periodo o en el que se compara. */
+  soloConUv?: true;
 };
 
 const CONCEPTOS: Concepto[] = [
   { etiqueta: "Pedidos", valor: (m) => m.pedidos, formato: (n) => String(n) },
   { etiqueta: "Metros de DTF", valor: (m) => m.metros, formato: metros },
+  {
+    etiqueta: "Metros de DTF UV (aparte)",
+    valor: (m) => m.metrosUv,
+    formato: metros,
+    soloConUv: true,
+  },
   { etiqueta: "Vendido (con IVA y envío)", valor: (m) => m.vendido },
   { etiqueta: "Facturación bruta (sin IVA ni envío)", valor: (m) => m.bruta, tipo: "clave" },
-  { etiqueta: "− Coste de producción", valor: (m) => menos(m.costeProduccion) },
+  {
+    etiqueta: "− Coste de producción",
+    valor: (m) => menos(produccionPropia(m)),
+  },
+  {
+    etiqueta: "− Subcontrata del DTF UV",
+    valor: (m) => menos(m.costeSubcontrata),
+    soloConUv: true,
+  },
   { etiqueta: "= Margen sin envíos", valor: (m) => m.margenSinEnvios, tipo: "suma" },
   { etiqueta: "+ Envíos cobrados al cliente", valor: (m) => m.enviosCobrados },
-  { etiqueta: "− Lo que cobra la agencia", valor: (m) => menos(m.costeEnvios) },
+  { etiqueta: "− Coste de los envíos", valor: (m) => menos(m.costeEnvios) },
   { etiqueta: "= Margen neto", valor: (m) => m.margenConEnvios, tipo: "resultado" },
 ];
 
@@ -649,7 +671,11 @@ async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
     "«Pedido»: lo que entró en el periodo · «Realizado»: lo que se terminó en él",
   );
   const formatoDe = (k: Concepto) => k.formato ?? ((n: number) => eur(n));
-  const cuerpo = CONCEPTOS.map((k) => {
+  const conUv = [t.pedido, t.realizado, a?.pedido, a?.realizado].some(
+    (m) => (m?.metrosUv ?? 0) > 0,
+  );
+  const conceptos = CONCEPTOS.filter((k) => !k.soloConUv || conUv);
+  const cuerpo = conceptos.map((k) => {
     const actual = k.valor(t.pedido);
     const previo = a ? k.valor(a.pedido) : null;
     const v = previo === null ? null : variacionResumen(actual, previo);
@@ -683,7 +709,7 @@ async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
         : "—",
     ],
   );
-  const tipos = [...CONCEPTOS.map((k) => k.tipo), undefined, "resultado"];
+  const tipos = [...conceptos.map((k) => k.tipo), undefined, "resultado"];
   autoTable(doc, {
     startY: c.y,
     margin: { left: M, right: M },
@@ -827,7 +853,7 @@ function maquinaYCobros(c: Lienzo) {
   );
   fila(
     c,
-    "Precio medio del metro",
+    "Precio medio del metro de DTF",
     t.pedido.euroMetro == null ? "—" : eur(t.pedido.euroMetro),
     x + 5,
     w,
@@ -988,11 +1014,22 @@ function gastosDelPeriodo(c: Lienzo, autoTable: AutoTable, inicio: number) {
   const costes = costesDelPeriodo(d.resumen);
   c.seccion("En qué se fue el dinero", "Costes de lo pedido en el periodo, sin IVA");
 
-  // Las tres partidas en una barra, y cada una con su parte.
+  // Las partidas en una barra, y cada una con su parte. La subcontrata del
+  // DTF UV, solo si la hay.
   const partidas: [string, number, RGB, string][] = [
-    ["Producción", costes.produccion, CIELO, "Metros × coste por metro; ropa del textil"],
-    ["Envíos", costes.envios, NARANJA, "Lo que cobra la agencia"],
-    ["Gastos fijos", costes.fijos, MARINO, "Alquiler, sueldos, cuotas… (abajo, uno a uno)"],
+    ["Producción", costes.produccion, CIELO, "m de DTF × €/m; ropa del textil"],
+    ...(costes.subcontrata !== 0
+      ? [
+          [
+            "Subcontrata DTF UV",
+            costes.subcontrata,
+            VIOLETA,
+            "m de UV × lo que cobra por metro",
+          ] as [string, number, RGB, string],
+        ]
+      : []),
+    ["Envíos", costes.envios, NARANJA, "Agencia (solo UV: subcontrata)"],
+    ["Gastos fijos", costes.fijos, MARINO, "Alquiler, sueldos… (abajo, uno a uno)"],
   ];
   const y0 = c.y;
   let x = M;
@@ -1008,7 +1045,7 @@ function gastosDelPeriodo(c: Lienzo, autoTable: AutoTable, inicio: number) {
     doc.rect(M, y0, ANCHO, 6, "F");
   }
   c.y = y0 + 12;
-  const wCol = (ANCHO - 2 * 4) / 3;
+  const wCol = (ANCHO - (partidas.length - 1) * 4) / partidas.length;
   partidas.forEach(([nombre, importe, color, nota], i) => {
     const cx = M + i * (wCol + 4);
     c.relleno(color);
@@ -1430,7 +1467,7 @@ function ficha(c: Lienzo, n: CifrasNegocio, x: number, y: number, w: number, h: 
   });
   fila(
     c,
-    "Precio medio del metro",
+    "Precio medio del metro de DTF",
     n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro),
     x + 4,
     ww,

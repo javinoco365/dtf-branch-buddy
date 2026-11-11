@@ -395,21 +395,32 @@ export function useTaller() {
   return useQuery({
     queryKey: ["gerencia-taller"],
     queryFn: async (): Promise<PedidoTaller[]> => {
-      const [t, x] = await Promise.all([
+      // Con los metros de DTF UV, para separar lo de la subcontrata; sin la
+      // migración, como antes.
+      const leerTienda = (conUv: boolean) =>
         leerTodas<{
           fecha_pedido: string;
           estado: string;
           tienda_id: string;
           origen: string | null;
           metros_total: number | string | null;
+          metros_uv?: number | string | null;
           total: number | string | null;
         }>((a, b) =>
           tabla(supabase, "pedidos")
-            .select("id, fecha_pedido, estado, tienda_id, origen, metros_total, total")
+            .select(
+              `id, fecha_pedido, estado, tienda_id, origen, metros_total, total${conUv ? ", metros_uv" : ""}`,
+            )
             .in("estado", [...ESTADOS_ABIERTOS])
             .order("id")
             .range(a, b),
-        ),
+        );
+      const tienda = async () => {
+        const r = await leerTienda(true);
+        return faltaLaColumna(r.error) ? leerTienda(false) : r;
+      };
+      const [t, x] = await Promise.all([
+        tienda(),
         leerTodas<{ fecha: string; estado: string; total: number | string | null }>((a, b) =>
           tabla(supabase, "textil_pedidos")
             .select("id, fecha, estado, total")
@@ -427,6 +438,7 @@ export function useTaller() {
           tienda_id: p.tienda_id,
           canal: canalDeOrigen(p.origen),
           metros_total: p.metros_total,
+          metros_uv: p.metros_uv ?? 0,
           total: p.total,
         })),
         ...x.data.map((p) => ({

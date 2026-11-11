@@ -23,7 +23,7 @@ import {
   textoCargo,
   textoVigencia,
 } from "@/lib/resumen-diario-textos";
-import { costesDelPeriodo, proporcion } from "@/dominio/resumen-diario";
+import { costesDelPeriodo, produccionPropia, proporcion } from "@/dominio/resumen-diario";
 
 /**
  * Página 2: todo desglosado. Lo pedido frente a lo realizado, la producción,
@@ -106,15 +106,22 @@ export function Desglose({
             />
             <Linea etiqueta="Ticket medio" valor={eur(t.pedido.ticket)} />
             <Linea
-              etiqueta="Precio medio del metro"
+              etiqueta="Precio medio del metro de DTF"
               valor={t.pedido.euroMetro == null ? "—" : eur(t.pedido.euroMetro)}
               nota="sin IVA ni envío"
             />
             <Linea
-              etiqueta="Margen por metro"
+              etiqueta="Margen por metro de DTF"
               valor={t.pedido.margenMetro == null ? "—" : eur(t.pedido.margenMetro)}
               nota="sin envíos"
             />
+            {t.pedido.metrosUv > 0 && (
+              <Linea
+                etiqueta="DTF UV"
+                valor={`${metros(t.pedido.metrosUv)} · subcontrata ${eur(t.pedido.costeSubcontrata)}`}
+                nota="aparte del DTF"
+              />
+            )}
           </div>
         </Seccion>
       </div>
@@ -165,10 +172,12 @@ type FilaComparada = {
 
 const FILAS: FilaComparada[] = [
   { etiqueta: "Pedidos", valor: (m) => String(m.pedidos) },
-  { etiqueta: "Metros", valor: (m) => metros(m.metros) },
+  { etiqueta: "Metros de DTF", valor: (m) => metros(m.metros) },
+  { etiqueta: "Metros de DTF UV (aparte)", valor: (m) => metros(m.metrosUv) },
   { etiqueta: "Vendido (con IVA)", valor: (m) => eur(m.vendido) },
   { etiqueta: "Facturación bruta (sin IVA ni envío)", valor: (m) => eur(m.bruta) },
-  { etiqueta: "− Producción", valor: (m) => resta(m.costeProduccion) },
+  { etiqueta: "− Producción", valor: (m) => resta(produccionPropia(m)) },
+  { etiqueta: "− Subcontrata DTF UV", valor: (m) => resta(m.costeSubcontrata) },
   {
     etiqueta: "Margen sin envíos",
     valor: (m) => eur(m.margenSinEnvios),
@@ -236,15 +245,23 @@ const DETALLE: { titulo: string; valor: (n: CifrasNegocio) => string; rojo?: boo
   { titulo: "Pedidos", valor: (n) => String(n.pedido.pedidos) },
   { titulo: "Cancelados", valor: (n) => String(n.pedido.cancelados) },
   { titulo: "Metros pedidos", valor: (n) => metros(n.pedido.metros) },
+  { titulo: "Metros DTF UV", valor: (n) => metros(n.pedido.metrosUv) },
   { titulo: "Metros hechos", valor: (n) => metros(n.realizado.metrosImpresos) },
   { titulo: "Vendido", valor: (n) => eur(n.pedido.vendido) },
   { titulo: "Bruta", valor: (n) => eur(n.pedido.bruta) },
-  { titulo: "Producción", valor: (n) => eur(n.pedido.costeProduccion) },
+  {
+    titulo: "Producción",
+    valor: (n) => eur(produccionPropia(n.pedido)),
+  },
+  { titulo: "Subcontrata UV", valor: (n) => eur(n.pedido.costeSubcontrata) },
   { titulo: "Margen sin envíos", valor: (n) => eur(n.pedido.margenSinEnvios), rojo: true },
   { titulo: "Envíos", valor: (n) => eurConSigno(n.pedido.resultadoEnvios), rojo: true },
   { titulo: "Margen neto", valor: (n) => eur(n.pedido.margenConEnvios), rojo: true },
   { titulo: "Margen neto hecho", valor: (n) => eur(n.realizado.margenConEnvios), rojo: true },
-  { titulo: "€/m", valor: (n) => (n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro)) },
+  {
+    titulo: "€/m de DTF",
+    valor: (n) => (n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro)),
+  },
   { titulo: "Facturado", valor: (n) => eur(n.facturado) },
   { titulo: "Cobrado", valor: (n) => eur(n.cobrado) },
   { titulo: "Por cobrar", valor: (n) => eur(n.pedido.pendiente) },
@@ -382,12 +399,15 @@ function Gastos({ r, gastos }: { r: Resumen; gastos: readonly GastoDelRango[] | 
   const c = costesDelPeriodo(r);
   const partidas: [string, number][] = [
     ["Producción", c.produccion],
-    ["Envíos (agencia)", c.envios],
+    ...(c.subcontrata !== 0 ? [["Subcontrata DTF UV", c.subcontrata] as [string, number]] : []),
+    ["Envíos (agencia y subcontrata)", c.envios],
     ["Gastos fijos", c.fijos],
   ];
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div
+        className={`grid gap-2 ${partidas.length > 3 ? "sm:grid-cols-3 lg:grid-cols-5" : "sm:grid-cols-4"}`}
+      >
         {partidas.map(([nombre, importe]) => (
           <div key={nombre} className="rounded-lg bg-muted/50 p-3">
             <div className="text-xs text-muted-foreground">{nombre}</div>

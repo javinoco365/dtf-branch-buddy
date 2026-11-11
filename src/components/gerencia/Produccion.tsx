@@ -17,7 +17,12 @@ import { useEnvios, useTaller } from "@/lib/gerencia";
 import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { aplicarAjustesVentas, filtrarVentas } from "@/dominio/gerencia";
-import { pedidosPorEstado, tiemposEnvio, trabajoAbierto } from "@/dominio/produccion";
+import {
+  pedidosPorEstado,
+  separarSubcontrata,
+  tiemposEnvio,
+  trabajoAbierto,
+} from "@/dominio/produccion";
 import { totalPorEstado, totalTaller } from "@/dominio/sumatorios-gerencia-b";
 import { destinoPedidosEstado, type DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, NotaGrupo, VerDetalle } from "./comun";
@@ -27,10 +32,15 @@ export function Produccion({ d }: { d: DatosGerencia }) {
   const envios = useEnvios(d.rango);
   const enviosPrevios = useEnvios(d.comparacion?.previo ?? d.rango);
 
-  const enTallerHoy = useMemo(
-    () => aplicarAjustesVentas(filtrarVentas(taller.data ?? [], d.filtro), d.ajustes),
+  // Lo que hace la subcontrata (pedidos solo de DTF UV) no pasa por el taller.
+  const abiertos = useMemo(
+    () =>
+      separarSubcontrata(
+        aplicarAjustesVentas(filtrarVentas(taller.data ?? [], d.filtro), d.ajustes),
+      ),
     [taller.data, d.filtro, d.ajustes],
   );
+  const enTallerHoy = abiertos.taller;
   const abierto = useMemo(() => trabajoAbierto(enTallerHoy, d.hoy), [enTallerHoy, d.hoy]);
   // El pie sale de los mismos pedidos: la media de días, de todos y no de las filas.
   const totalAbierto = useMemo(() => totalTaller(enTallerHoy, d.hoy), [enTallerHoy, d.hoy]);
@@ -77,6 +87,12 @@ export function Produccion({ d }: { d: DatosGerencia }) {
           pie={
             <span className="text-muted-foreground">
               Hoy · {metros(metrosTaller)} por hacer o por enviar
+              {abiertos.subcontrata.pedidos > 0 && (
+                <span className="block font-medium text-violet-700 dark:text-violet-300">
+                  Aparte, {abiertos.subcontrata.pedidos} de DTF UV (
+                  {metros(abiertos.subcontrata.metros)}) en la subcontrata
+                </span>
+              )}
             </span>
           }
         />
@@ -170,7 +186,10 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                   </TableCell>
                   <TableCell className="text-right text-xs">
                     {f.pedidos > 0 && (
-                      <VerDetalle destino={destinoPedidosEstado(d.filtro, f.estado)} texto="Ver" />
+                      <VerDetalle
+                        destino={destinoPedidosEstado(d.filtro, f.estado, "dtf")}
+                        texto="Ver"
+                      />
                     )}
                   </TableCell>
                 </TableRow>
