@@ -254,3 +254,17 @@ describe("lineasDeUnPedido (pedidos manuales y presupuestos)", () => {
     });
   });
 });
+
+describe("lineasDeUnPedido: el IVA del UV no pasa del del pedido", () => {
+  it("con redondeos por línea, se limita al IVA del pedido entero", () => {
+    const items = [0.03, 0.03, 0.03].map((b) => ({
+      cantidad: 1,
+      precio_unitario: b,
+      iva_rate: 21,
+      linea: "uv" as const,
+    }));
+    // Cada línea: 0,03 × 21 % = 0,0063 → 0,01; las tres, 0,03. El pedido: 0,09 × 21 % = 0,02.
+    expect(lineasDeUnPedido(items).iva_uv).toBe(0.03);
+    expect(lineasDeUnPedido(items, 0.02).iva_uv).toBe(0.02);
+  });
+});

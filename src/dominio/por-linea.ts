@@ -329,6 +329,12 @@ export function lineasDeUnPedido(
     descuento_pct?: number;
     linea?: LineaProducto | null;
   }[],
+  /**
+   * El IVA del pedido entero (calcularTotales, sobre la base agregada). El
+   * del UV se suma línea a línea: por los redondeos podría pasarse por un
+   * céntimo, y el DTF (el resto) quedaría negativo. Se limita a él.
+   */
+  ivaDelPedido?: number,
 ): { metros_total: number; metros_uv: number; bruta_uv: number; iva_uv: number } {
   let metros_total = 0;
   let metros_uv = 0;
@@ -346,7 +352,7 @@ export function lineasDeUnPedido(
     metros_total: redondear(metros_total, 3),
     metros_uv: redondear(metros_uv, 3),
     bruta_uv: redondear(bruta_uv),
-    iva_uv: redondear(iva_uv),
+    iva_uv: redondear(ivaDelPedido === undefined ? iva_uv : Math.min(iva_uv, ivaDelPedido)),
   };
 }
 

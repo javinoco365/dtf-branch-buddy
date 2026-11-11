@@ -427,7 +427,13 @@ export function PresupuestoFormDialog({
                       <Label className="text-xs">Línea</Label>
                       <Select
                         value={l.linea}
-                        onValueChange={(v) => cambiarLinea(i, { linea: aLinea(v) })}
+                        onValueChange={(v) =>
+                          // El DTF UV se vende por metros.
+                          cambiarLinea(
+                            i,
+                            aLinea(v) === "uv" ? { linea: "uv", unidad: "m" } : { linea: "dtf" },
+                          )
+                        }
                       >
                         <SelectTrigger aria-label="Línea de producto">
                           <SelectValue />

@@ -26,6 +26,16 @@
 --   Se puede aplicar dos veces sin cambiar nada.
 -- ============================================================================
 
+-- Sin sus requisitos, la función se crearía igual y fallaría al confirmar.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'pedidos' AND column_name = 'bruta_uv')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'pedido_items' AND column_name = 'linea') THEN
+    RAISE EXCEPTION 'Faltan 20261110100000_linea_dtf_uv o 20261111100000_importes_por_linea: aplícalas antes';
+  END IF;
+END $$;
+
 ALTER TABLE public.presupuesto_items
   ADD COLUMN IF NOT EXISTS linea TEXT NOT NULL DEFAULT 'dtf';
 
@@ -85,12 +95,14 @@ BEGIN
     v_ejercicio,
     public.siguiente_numero(v_pres.empresa_id, 'pedido:' || v_pres.tienda_id::TEXT, v_ejercicio));
 
-  -- Solo lo medido en metros suma metros, cada línea de producto aparte. La
-  -- base y el IVA del DTF UV, de sus líneas (el DTF es el resto).
+  -- Del DTF, solo lo medido en metros suma metros. El DTF UV se vende por
+  -- metros: sus líneas suman metros en cualquier unidad (como en un pedido
+  -- manual, ver lineasDeUnPedido). La base y el IVA del UV, de sus líneas,
+  -- sin pasar del IVA del presupuesto (el DTF es el resto).
   SELECT COALESCE(sum(i.cantidad) FILTER (WHERE i.unidad = 'm' AND i.linea <> 'uv'), 0),
-         COALESCE(sum(i.cantidad) FILTER (WHERE i.unidad = 'm' AND i.linea = 'uv'), 0),
+         COALESCE(sum(i.cantidad) FILTER (WHERE i.linea = 'uv'), 0),
          COALESCE(sum(i.subtotal) FILTER (WHERE i.linea = 'uv'), 0),
-         COALESCE(sum(i.iva) FILTER (WHERE i.linea = 'uv'), 0)
+         LEAST(COALESCE(sum(i.iva) FILTER (WHERE i.linea = 'uv'), 0), v_pres.iva)
     INTO v_metros, v_metros_uv, v_bruta_uv, v_iva_uv
     FROM public.presupuesto_items i WHERE i.presupuesto_id = _presupuesto_id;
 

@@ -165,6 +165,12 @@ const itemSchema = z.object({
  * ellas, el pedido se guarda como antes, con todo en DTF.
  */
 const COLUMNAS_UV_PEDIDO = ["metros_uv", "bruta_uv", "iva_uv"] as const;
+const sinImportesUv = <T extends Record<string, unknown>>(fila: T) => {
+  const copia: Record<string, unknown> = { ...fila };
+  delete copia.bruta_uv;
+  delete copia.iva_uv;
+  return copia;
+};
 const sinColumnasUv = <T extends Record<string, unknown>>(fila: T) => {
   const copia: Record<string, unknown> = { ...fila };
   for (const c of COLUMNAS_UV_PEDIDO) delete copia[c];
@@ -238,7 +244,7 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     // coincidan. El envío va dentro, en la base imponible: artículo 78 LIVA.
     const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
     // Los metros de DTF y lo del DTF UV, cada uno en su sitio (por-linea.ts).
-    const porLinea = lineasDeUnPedido(data.items);
+    const porLinea = lineasDeUnPedido(data.items, totales.iva_total);
     const total = totales.total;
 
     const numero = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
@@ -269,8 +275,12 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     const insertar = (fila: Record<string, unknown>) =>
       tabla(supabaseAdmin, "pedidos").insert(fila).select("id").single();
     let { data: pedido, error: pErr } = await insertar(filaPedido);
+    // Sin los importes del UV (20261111100000): con sus metros aparte igual.
     if (faltaLaColumna(pErr)) {
-      // Sin las columnas del UV: sus metros, con los de DTF, como antes.
+      ({ data: pedido, error: pErr } = await insertar(sinImportesUv(filaPedido)));
+    }
+    if (faltaLaColumna(pErr)) {
+      // Sin ninguna columna del UV: sus metros, con los de DTF, como antes.
       ({ data: pedido, error: pErr } = await insertar({
         ...sinColumnasUv(filaPedido),
         metros_total: porLinea.metros_total + porLinea.metros_uv,
@@ -414,7 +424,7 @@ export const updatePedido = createServerFn({ method: "POST" })
       const totales = calcularTotales(data.items, { envio: data.envio ?? 0 });
       patch.subtotal = totales.base_imponible;
       patch.iva = totales.iva_total;
-      Object.assign(patch, lineasDeUnPedido(data.items));
+      Object.assign(patch, lineasDeUnPedido(data.items, totales.iva_total));
       patch.total = totales.total;
 
       await supabaseAdmin.from("pedido_items").delete().eq("pedido_id", data.id);
@@ -437,7 +447,12 @@ export const updatePedido = createServerFn({ method: "POST" })
     }
 
     // tabla(): mismo motivo que en createPedidoManual.
-    let { error } = await tabla(supabaseAdmin, "pedidos").update(patch).eq("id", data.id);
+    const actualizar = (fila: Record<string, unknown>) =>
+      tabla(supabaseAdmin, "pedidos").update(fila).eq("id", data.id);
+    let { error } = await actualizar(patch);
+    if (faltaLaColumna(error) && data.items?.length) {
+      ({ error } = await actualizar(sinImportesUv(patch)));
+    }
     if (faltaLaColumna(error) && data.items?.length) {
       // Sin las columnas del UV: sus metros, con los de DTF, como antes.
       const metrosUv = Number(patch.metros_uv) || 0;
