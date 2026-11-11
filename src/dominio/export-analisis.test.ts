@@ -562,3 +562,132 @@ describe("metros dudosos y canjes anulados", () => {
     expect(e.totales.pedidos_sin_documento).toBe(0);
   });
 });
+
+describe("DTF UV en la exportación", () => {
+  // DCUL-146: solo UV, 7 m a 16 €/m + 6 € de portes, coste de la subcontrata 15 €/m.
+  const soloUv = pedido({
+    id: "uv",
+    subtotal: 118,
+    iva: 24.78,
+    envio: 6,
+    total: 142.78,
+    metros_total: 0,
+    metros_uv: 7,
+    coste_uv_snapshot: 15,
+    bruta_uv: 112,
+    iva_uv: 23.52,
+  });
+  // Mixto: 4 m de DTF (40 €) + 2 m de UV (35 €), sin envío.
+  const mixto = pedido({
+    id: "mx",
+    subtotal: 75,
+    iva: 15.75,
+    envio: 0,
+    total: 90.75,
+    metros_total: 4,
+    metros_uv: 2,
+    coste_uv_snapshot: 15,
+    bruta_uv: 35,
+    iva_uv: 7.35,
+  });
+  const lineas: LineaExport[] = [
+    {
+      pedido_id: "mx",
+      unidad: "m",
+      cantidad: 4,
+      subtotal: 40,
+      linea: "dtf",
+      metros_origen: "montador",
+    },
+    {
+      pedido_id: "mx",
+      unidad: "m",
+      cantidad: 2,
+      subtotal: 35,
+      linea: "uv",
+      metros_origen: "montador",
+    },
+  ];
+  const e = exportar([soloUv, mixto], { lineas });
+  const de = (id: string) => e.pedidos.find((p) => p.id === id)!;
+
+  it("cada pedido dice su línea, sus metros de UV, su venta y lo que cobra la subcontrata", () => {
+    expect(de("uv")).toMatchObject({
+      linea: "uv",
+      metros: 0,
+      metros_uv: 7,
+      venta_uv: 112,
+      coste_uv: 105,
+      coste_produccion: 105,
+      eur_metro: null,
+    });
+    expect(de("mx")).toMatchObject({
+      linea: "mixto",
+      metros: 4,
+      metros_uv: 2,
+      venta_uv: 35,
+      coste_uv: 30,
+      // 4 m × 2 €/m + 2 m × 15 €/m.
+      coste_produccion: 38,
+    });
+  });
+
+  it("el €/m de DTF no lleva lo del UV de los mixtos", () => {
+    expect(de("mx").venta_metros).toBe(40);
+    expect(de("mx").eur_metro).toBe(10);
+    expect(e.totales.eur_metro_neto).toBe(10);
+  });
+
+  it("un mixto manual sin líneas en metros: la venta de DTF, sin la del UV", () => {
+    // 5 m de DTF (50 €) + 2 m de UV (32 €), todas las líneas en 'ud'.
+    const manual = pedido({
+      id: "man",
+      origen: "manual",
+      subtotal: 82,
+      iva: 17.22,
+      envio: 0,
+      total: 99.22,
+      metros_total: 5,
+      metros_uv: 2,
+      coste_uv_snapshot: 15,
+      bruta_uv: 32,
+      iva_uv: 6.72,
+    });
+    const m = exportar([manual]).pedidos[0];
+    expect(m.venta_metros).toBe(50);
+    expect(m.eur_metro).toBe(10);
+  });
+
+  it("un mixto con cupón solo en el DTF: la venta de DTF es bruta − venta_uv", () => {
+    // Líneas antes del cupón: 80 € de DTF y 32 € de UV; el cupón quita 10 € al DTF.
+    const cupon = pedido({
+      id: "cp",
+      subtotal: 102,
+      iva: 21.42,
+      envio: 0,
+      total: 123.42,
+      metros_total: 10,
+      metros_uv: 2,
+      coste_uv_snapshot: 15,
+      bruta_uv: 32,
+      iva_uv: 6.72,
+    });
+    const l: LineaExport[] = [
+      { pedido_id: "cp", unidad: "m", cantidad: 10, subtotal: 80, linea: "dtf" },
+      { pedido_id: "cp", unidad: "m", cantidad: 2, subtotal: 32, linea: "uv" },
+    ];
+    const c = exportar([cupon], { lineas: l }).pedidos[0];
+    expect(c.venta_metros).toBe(70);
+    expect(c.eur_metro).toBe(7);
+    expect(c.lineas.map((x) => x.linea)).toEqual(["dtf", "uv"]);
+  });
+
+  it("un pedido solo de UV no tiene metros de DTF ni cuenta como dudoso", () => {
+    expect(de("uv").metros_de).toBe("sin_metros_dtf");
+    expect(e.totales.pedidos_metros_dudosos).toBe(0);
+  });
+
+  it("el resumen lleva el UV aparte", () => {
+    expect(e.totales).toMatchObject({ metros: 4, metros_uv: 9, venta_uv_neta: 147, coste_uv: 135 });
+  });
+});

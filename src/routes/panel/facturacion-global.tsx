@@ -215,7 +215,7 @@ function FacturacionGlobal() {
         "Tienda",
         "Pedidos",
         "Cobros",
-        "Metros",
+        "Metros DTF",
         "Base",
         "IVA",
         "Envíos",
@@ -473,7 +473,7 @@ function FacturacionGlobal() {
                     <TableRow>
                       <TableHead>Tienda</TableHead>
                       <TableHead className="text-right">Pedidos</TableHead>
-                      <TableHead className="text-right">Metros</TableHead>
+                      <TableHead className="text-right">Metros DTF</TableHead>
                       <TableHead className="text-right">Base</TableHead>
                       <TableHead className="text-right">IVA</TableHead>
                       <TableHead className="text-right">Envíos</TableHead>
