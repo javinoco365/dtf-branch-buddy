@@ -68,6 +68,7 @@ export function ListaTareas({
   onOrden,
   onAbrir,
   onCambiarHecha,
+  cambiando,
   puedeEscribir,
 }: {
   tareas: Tarea[];
@@ -82,6 +83,8 @@ export function ListaTareas({
   onOrden: (o: Orden) => void;
   onAbrir: (id: string) => void;
   onCambiarHecha: (t: Tarea) => void;
+  /** Se está guardando un cambio de estado: los círculos esperan. */
+  cambiando: boolean;
   puedeEscribir: boolean;
 }) {
   const ctx = useMemo(() => ({ yo, hoy }), [yo, hoy]);
@@ -109,13 +112,16 @@ export function ListaTareas({
   const ordenarPor = (campo: Orden["campo"]) =>
     onOrden({ campo, dir: orden.campo === campo ? (orden.dir === 1 ? -1 : 1) : 1 });
   const Flecha = ({ campo }: { campo: Orden["campo"] }) =>
-    orden.campo === campo ? (
-      orden.dir === 1 ? (
-        <ArrowDown className="h-3 w-3" aria-hidden="true" />
-      ) : (
-        <ArrowUp className="h-3 w-3" aria-hidden="true" />
-      )
-    ) : null;
+    orden.campo === campo && orden.dir === -1 ? (
+      <ArrowUp className="h-3 w-3" aria-hidden="true" />
+    ) : (
+      <ArrowDown
+        className={cn("h-3 w-3", orden.campo !== campo && "opacity-30")}
+        aria-hidden="true"
+      />
+    );
+  const ariaSort = (campo: Orden["campo"]) =>
+    orden.campo === campo ? (orden.dir === 1 ? "ascending" : "descending") : "none";
   const totalPersona = tareas.filter((t) => pasaPersona(t, filtroPersona, yo)).length;
 
   return (
@@ -136,7 +142,7 @@ export function ListaTareas({
                 aria-pressed={activo}
                 onClick={() => set({ estado: p.id })}
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-md px-3 text-sm transition-colors",
+                  "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm transition-colors md:min-h-9",
                   activo
                     ? "bg-card font-semibold text-foreground shadow-sm"
                     : "text-secondary-foreground hover:text-foreground",
@@ -150,7 +156,7 @@ export function ListaTareas({
                   className={cn(
                     "rounded-md px-1.5 text-[11px] font-semibold tabular-nums",
                     p.id === "hecha"
-                      ? "bg-status-completado/15 text-status-completado"
+                      ? "bg-status-completado/10 text-status-completado"
                       : "bg-border/60",
                   )}
                 >
@@ -174,7 +180,7 @@ export function ListaTareas({
             onChange={(e) => set({ texto: e.target.value })}
             placeholder="Buscar por título, pedido o cliente"
             aria-label="Buscar tareas"
-            className="h-9 pl-8"
+            className="h-11 pl-8 md:h-9"
           />
         </div>
         <div role="group" aria-label="Prioridad" className="flex flex-wrap gap-1">
@@ -194,7 +200,7 @@ export function ListaTareas({
                   })
                 }
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors",
+                  "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors md:min-h-9",
                   activo
                     ? cn(c.suave, c.texto, c.anillo, "font-semibold ring-1 ring-inset")
                     : "hover:bg-accent",
@@ -210,7 +216,7 @@ export function ListaTareas({
           value={filtros.categoriaId ?? "todas"}
           onValueChange={(v) => set({ categoriaId: v === "todas" ? null : v })}
         >
-          <SelectTrigger className="h-9 w-[180px]" aria-label="Categoría">
+          <SelectTrigger className="h-11 w-[180px] md:h-9" aria-label="Categoría">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -225,7 +231,7 @@ export function ListaTareas({
           </SelectContent>
         </Select>
         <Select value={filtros.periodo} onValueChange={(v) => set({ periodo: v as Periodo })}>
-          <SelectTrigger className="h-9 w-[160px]" aria-label="Fechas">
+          <SelectTrigger className="h-11 w-[160px] md:h-9" aria-label="Fechas">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -288,13 +294,16 @@ export function ListaTareas({
           <p className="font-medium">
             {totalPersona === 0
               ? "Aún no hay tareas aquí"
-              : filtros.estado === "pendiente" && !hayFiltrosLista(filtros)
-                ? "Nada pendiente"
-                : filtros.estado === "hecha" && !hayFiltrosLista(filtros)
-                  ? "Aún no hay tareas realizadas"
-                  : "Ninguna tarea con estos filtros"}
+              : hayFiltrosLista(filtros)
+                ? "Ninguna tarea con estos filtros"
+                : {
+                    pendiente: "Nada pendiente",
+                    hecha: "Aún no hay tareas realizadas",
+                    cancelada: "No hay tareas canceladas",
+                    todas: "Aún no hay tareas",
+                  }[filtros.estado]}
           </p>
-          <p className="max-w-sm text-sm text-muted-foreground">
+          <p className="max-w-sm text-sm text-muted-foreground empty:hidden">
             {totalPersona === 0
               ? puedeEscribir
                 ? "Crea la primera con «Nueva tarea»."
@@ -303,7 +312,9 @@ export function ListaTareas({
                 ? "Prueba a quitar algún filtro."
                 : filtros.estado === "hecha"
                   ? "Cuando marques una como realizada, aparecerá aquí."
-                  : "Todo al día."}
+                  : filtros.estado === "pendiente"
+                    ? "Todo al día."
+                    : ""}
           </p>
           {hayFiltrosLista(filtros) && (
             <Button
@@ -319,27 +330,27 @@ export function ListaTareas({
         <div role="table" aria-label="Tareas">
           <div
             role="row"
-            className="hidden grid-cols-[44px_112px_minmax(0,1fr)_200px_170px] items-center gap-x-3 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid"
+            className="hidden grid-cols-[40px_96px_minmax(0,1fr)_160px_140px] items-center gap-x-3 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid"
           >
             <span role="columnheader">
               <span className="sr-only">Realizada</span>
             </span>
-            <span role="columnheader">
+            <span role="columnheader" aria-sort={ariaSort("prioridad")}>
               <button
                 type="button"
                 onClick={() => ordenarPor("prioridad")}
-                className="inline-flex items-center gap-1 uppercase"
+                className="inline-flex items-center gap-1 uppercase hover:text-foreground"
               >
                 Prioridad <Flecha campo="prioridad" />
               </button>
             </span>
             <span role="columnheader">Tarea</span>
             <span role="columnheader">Para</span>
-            <span role="columnheader">
+            <span role="columnheader" aria-sort={ariaSort("fecha")}>
               <button
                 type="button"
                 onClick={() => ordenarPor("fecha")}
-                className="inline-flex items-center gap-1 uppercase"
+                className="inline-flex items-center gap-1 uppercase hover:text-foreground"
               >
                 Fecha <Flecha campo="fecha" />
               </button>
@@ -357,18 +368,18 @@ export function ListaTareas({
                 key={t.id}
                 role="row"
                 className={cn(
-                  "grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 gap-y-1 border-b px-4 py-3 last:border-b-0 hover:bg-accent/50 md:grid-cols-[44px_112px_minmax(0,1fr)_200px_170px] md:items-center md:py-2.5",
+                  "grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 gap-y-1 border-b px-4 py-3 last:border-b-0 hover:bg-accent/50 md:grid-cols-[40px_96px_minmax(0,1fr)_160px_140px] xl:grid-cols-[44px_112px_minmax(0,1fr)_200px_170px] md:items-center md:py-2.5",
                   hecha && "bg-status-completado/5",
                 )}
               >
                 <div role="cell" className="row-span-3 md:row-span-1">
                   <button
                     type="button"
-                    disabled={!puedeEscribir || t.estado === "cancelada"}
+                    disabled={!puedeEscribir || t.estado === "cancelada" || cambiando}
                     onClick={() => onCambiarHecha(t)}
                     aria-label={`${hecha ? "Volver a pendiente" : "Marcar como realizada"}: ${t.titulo}`}
                     className={cn(
-                      "grid h-7 w-7 place-items-center rounded-full border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                      "relative grid h-8 w-8 place-items-center rounded-full border-2 transition-colors after:absolute after:-inset-2 after:content-[''] disabled:cursor-not-allowed disabled:opacity-40 md:h-7 md:w-7",
                       hecha
                         ? "border-status-completado bg-status-completado text-white"
                         : "border-input text-transparent hover:border-status-completado hover:text-status-completado",
@@ -381,12 +392,12 @@ export function ListaTareas({
                   <EtiquetaPrioridad prioridad={t.prioridad} />
                 </div>
                 <div role="cell" className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 items-baseline gap-2 md:items-center">
                     <button
                       type="button"
                       onClick={() => onAbrir(t.id)}
                       className={cn(
-                        "min-w-0 truncate text-left font-semibold hover:underline",
+                        "min-w-0 break-words text-left font-semibold hover:underline md:truncate",
                         hecha && "text-status-completado line-through",
                         t.estado === "cancelada" && "text-muted-foreground line-through",
                       )}
@@ -445,7 +456,7 @@ export function ListaTareas({
                 <div role="cell" className="text-sm tabular-nums">
                   {dia} · {t.todoElDia ? "todo el día" : horaDeMadrid(t.inicio)}
                   {vencida > 0 && (
-                    <span className="flex items-center gap-1 text-xs font-semibold text-prioridad-urgente">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
                       <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                       Vencida hace {vencida} {vencida === 1 ? "día" : "días"}
                     </span>

@@ -4,6 +4,10 @@
 //
 // Las reglas son las de src/dominio/agenda.ts y la base las vuelve a
 // comprobar. «Yo» es la persona de «¿Quién eres?»: la que firma cada cambio.
+//
+// Cambiar el estado o pasar la tarea lo hace la página (onCambiarEstado,
+// onPasar): así su «Deshacer» no depende de este panel, que ya se habrá
+// cerrado, y no cierra el panel de otra tarea que se haya abierto después.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -26,12 +30,10 @@ import {
 } from "@/dominio/agenda";
 import {
   buscarEnlaceAgenda,
-  cambiarEstadoTarea,
   crearTarea,
   editarTarea,
   historialTarea,
   marcarTareaVista,
-  pasarTarea,
   type LineaHistorial,
   type PersonaAgenda,
 } from "@/lib/agenda.functions";
@@ -74,6 +76,13 @@ export type QuePanel = { modo: "nueva"; dia?: string } | { modo: "ver"; id: stri
 
 type Datos = { tareas: Tarea[]; categorias: CategoriaAgenda[]; personas: PersonaAgenda[] };
 
+/** Las acciones que hace la página. `alTerminar` se llama solo si salen bien. */
+export type AccionesTarea = {
+  onCambiarEstado: (t: Tarea, nuevo: EstadoTarea, alTerminar: () => void) => void;
+  onPasar: (t: Tarea, para: string, alTerminar: () => void) => void;
+  ocupado: boolean;
+};
+
 const SIN_HORA = { horaInicio: "09:00", horaFin: "10:00" };
 
 function borradorNuevo(datos: Datos, yo: string | null, dia: string): BorradorTarea {
@@ -111,26 +120,51 @@ function borradorDe(t: Tarea): BorradorTarea {
   };
 }
 
+/** Qué error se quita al tocar cada campo. */
+const ERROR_DE_CAMPO: Partial<Record<keyof BorradorTarea, (keyof ErroresTarea)[]>> = {
+  titulo: ["titulo"],
+  paraSocioId: ["para"],
+  deSocioId: ["de"],
+  categoriaId: ["categoria", "enlace"],
+  pedidoId: ["enlace"],
+  clienteId: ["enlace"],
+  dia: ["dia"],
+  todoElDia: ["hora"],
+  horaInicio: ["hora"],
+  horaFin: ["hora"],
+};
+
 export function PanelTarea({
   que,
   datos,
   yo,
   hoy,
   puedeEscribir,
+  acciones,
   onCerrar,
+  devolverFoco,
 }: {
   que: QuePanel;
   datos: Datos;
   yo: string | null;
   hoy: string;
   puedeEscribir: boolean;
+  acciones: AccionesTarea;
   onCerrar: () => void;
+  /** A dónde vuelve el foco al cerrar (lo que se pulsó para abrir). */
+  devolverFoco: () => void;
 }) {
   const tarea = que?.modo === "ver" ? (datos.tareas.find((t) => t.id === que.id) ?? null) : null;
   // Una clave por apertura: al abrir otra tarea, el formulario empieza de cero.
   const clave = que ? (que.modo === "ver" ? que.id : `nueva-${que.dia ?? ""}`) : "cerrado";
+  // El formulario dice cómo cerrarse (preguntando si hay cambios). Lo usan la
+  // X, Escape y el clic fuera, que llegan todos por onOpenChange.
+  const pedirCierre = useRef<() => void>(onCerrar);
   return (
-    <Sheet open={!!que && (que.modo === "nueva" || !!tarea)} onOpenChange={(o) => !o && onCerrar()}>
+    <Sheet
+      open={!!que && (que.modo === "nueva" || !!tarea)}
+      onOpenChange={(o) => !o && pedirCierre.current()}
+    >
       {que && (que.modo === "nueva" || tarea) && (
         <Formulario
           key={clave}
@@ -140,7 +174,12 @@ export function PanelTarea({
           yo={yo}
           hoy={hoy}
           puedeEscribir={puedeEscribir}
+          acciones={acciones}
           onCerrar={onCerrar}
+          devolverFoco={devolverFoco}
+          registrarCierre={(f) => {
+            pedirCierre.current = f;
+          }}
         />
       )}
     </Sheet>
@@ -154,7 +193,10 @@ function Formulario({
   yo,
   hoy,
   puedeEscribir,
+  acciones,
   onCerrar,
+  devolverFoco,
+  registrarCierre,
 }: {
   tarea: Tarea | null;
   diaInicial: string;
@@ -162,7 +204,10 @@ function Formulario({
   yo: string | null;
   hoy: string;
   puedeEscribir: boolean;
+  acciones: AccionesTarea;
   onCerrar: () => void;
+  devolverFoco: () => void;
+  registrarCierre: (f: () => void) => void;
 }) {
   const inicial = useMemo(
     () => (tarea ? borradorDe(tarea) : borradorNuevo(datos, yo, diaInicial)),
@@ -180,8 +225,6 @@ function Formulario({
 
   const crear = useServerFn(crearTarea);
   const editar = useServerFn(editarTarea);
-  const estado = useServerFn(cambiarEstadoTarea);
-  const pasar = useServerFn(pasarTarea);
   const marcarVista = useServerFn(marcarTareaVista);
 
   const categoria = datos.categorias.find((c) => c.id === b.categoriaId) ?? null;
@@ -191,7 +234,23 @@ function Formulario({
   );
   const editable = puedeEscribir && (!tarea || (!!yo && tarea.estado !== "cancelada"));
   const cambiado = JSON.stringify(b) !== JSON.stringify(inicial);
-  const set = (c: Partial<BorradorTarea>) => setB((x) => ({ ...x, ...c }));
+  const set = (c: Partial<BorradorTarea>) => {
+    setB((x) => ({ ...x, ...c }));
+    const quitar = Object.keys(c).flatMap((k) => ERROR_DE_CAMPO[k as keyof BorradorTarea] ?? []);
+    if (quitar.length) {
+      setErrores((e) => {
+        const n = { ...e };
+        for (const k of quitar) delete n[k];
+        return n;
+      });
+    }
+  };
+
+  function cerrar() {
+    if (editable && cambiado) setDescartar(true);
+    else onCerrar();
+  }
+  registrarCierre(cerrar);
 
   // Al abrir una tarea que me han mandado, deja de salir como nueva.
   const vista = useMutation({
@@ -201,6 +260,9 @@ function Formulario({
     if (tarea && yo && puedeEscribir && tarea.paraSocioId === yo && !tarea.vistaEn) vista.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Para sí misma: la base la da por vista al crearla y no le sale como nueva.
+  const paraOtro = !!b.paraSocioId && b.paraSocioId !== b.deSocioId;
 
   const guardar = useMutation({
     mutationFn: async () => {
@@ -222,53 +284,7 @@ function Formulario({
       }
       return crear({ data: b });
     },
-    onSuccess: () => {
-      toast.success(
-        tarea
-          ? "Cambios guardados"
-          : b.paraSocioId === yo
-            ? "Tarea creada en tu Agenda"
-            : `Tarea mandada a ${nombre(b.paraSocioId)}. Le saldrá como nueva.`,
-      );
-      onCerrar();
-    },
     onError: (e: Error) => avisarError(e, "No se ha podido guardar la tarea"),
-  });
-
-  const cambiarEstado = useMutation({
-    mutationFn: (v: { nuevo: EstadoTarea; antes: EstadoTarea }) =>
-      estado({ data: { id: tarea!.id, socio: yo!, estado: v.nuevo } }),
-    onSuccess: (_r, v) => {
-      onCerrar();
-      const texto =
-        v.nuevo === "hecha"
-          ? "Realizada. La tienes en la pestaña «Realizadas»."
-          : v.nuevo === "cancelada"
-            ? "Tarea cancelada. La tienes en la pestaña «Canceladas»."
-            : "Vuelve a estar pendiente";
-      toast.success(texto, {
-        action: {
-          label: "Deshacer",
-          onClick: () => cambiarEstado.mutate({ nuevo: v.antes, antes: v.nuevo }),
-        },
-      });
-    },
-    onError: (e: Error) => avisarError(e, "No se ha podido cambiar la tarea"),
-  });
-
-  const pasarTareaM = useMutation({
-    mutationFn: (v: { para: string; antes: string }) =>
-      pasar({ data: { id: tarea!.id, socio: yo!, para: v.para } }),
-    onSuccess: (_r, v) => {
-      onCerrar();
-      toast.success(`Tarea pasada a ${nombre(v.para)}. Le saldrá como nueva.`, {
-        action: {
-          label: "Deshacer",
-          onClick: () => pasarTareaM.mutate({ para: v.antes, antes: v.para }),
-        },
-      });
-    },
-    onError: (e: Error) => avisarError(e, "No se ha podido pasar la tarea"),
   });
 
   function enviar(e: React.FormEvent) {
@@ -280,16 +296,26 @@ function Formulario({
       document.getElementById(`tarea-${primero}`)?.focus();
       return;
     }
-    guardar.mutate();
+    guardar.mutate(undefined, {
+      onSuccess: () => {
+        toast.success(
+          tarea
+            ? "Cambios guardados"
+            : paraOtro
+              ? `Tarea mandada a ${nombre(b.paraSocioId)}. Le saldrá como nueva.`
+              : `Tarea creada en la Agenda de ${b.paraSocioId === yo ? "ti" : nombre(b.paraSocioId)}`,
+        );
+        onCerrar();
+      },
+    });
   }
 
-  function cerrar() {
-    if (editable && cambiado) setDescartar(true);
-    else onCerrar();
-  }
-
-  const ocupado = guardar.isPending || cambiarEstado.isPending || pasarTareaM.isPending;
+  const ocupado = guardar.isPending || acciones.ocupado;
   const sinPersona = puedeEscribir && !yo && !!tarea;
+  // Con cambios a medias, las acciones de arriba los perderían: primero guardar o descartar.
+  const bloqueoAcciones = cambiado ? "Guarda o descarta los cambios primero" : undefined;
+  const activasPara = datos.personas.filter((p) => p.activo);
+  const categoriasVisibles = datos.categorias.filter((c) => c.activa || c.id === b.categoriaId);
 
   return (
     <SheetContent
@@ -301,17 +327,9 @@ function Formulario({
           tituloRef.current?.focus();
         }
       }}
-      onEscapeKeyDown={(e) => {
-        if (editable && cambiado) {
-          e.preventDefault();
-          setDescartar(true);
-        }
-      }}
-      onInteractOutside={(e) => {
-        if (editable && cambiado) {
-          e.preventDefault();
-          setDescartar(true);
-        }
+      onCloseAutoFocus={(e) => {
+        e.preventDefault();
+        devolverFoco();
       }}
     >
       <SheetHeader className="space-y-1.5 border-b px-5 pb-3 pt-5 text-left">
@@ -336,7 +354,7 @@ function Formulario({
                 </span>
               )}
               {esVencida(tarea, hoy) && (
-                <span className="inline-flex items-center gap-1 font-semibold text-prioridad-urgente">
+                <span className="inline-flex items-center gap-1 font-semibold text-foreground">
                   <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Vencida
                 </span>
               )}
@@ -360,7 +378,7 @@ function Formulario({
           </p>
         )}
 
-        {tarea && editable && (
+        {tarea && (
           <div className="space-y-3 rounded-lg border bg-muted/40 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <Avatar
@@ -375,15 +393,15 @@ function Formulario({
                   {tarea.paraSocioId === yo && " (tú)"}
                 </b>
               </div>
-              {tarea.estado === "pendiente" && (
+              {editable && tarea.estado === "pendiente" && (
                 <div className="flex gap-1.5">
-                  <Select value={pasarA} onValueChange={setPasarA}>
+                  <Select value={pasarA} onValueChange={setPasarA} disabled={!!bloqueoAcciones}>
                     <SelectTrigger className="h-9 w-[150px]" aria-label="Pasar a otra persona">
                       <SelectValue placeholder="Pasar a…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {datos.personas
-                        .filter((p) => p.activo && p.id !== tarea.paraSocioId)
+                      {activasPara
+                        .filter((p) => p.id !== tarea.paraSocioId)
                         .map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.nombre}
@@ -397,50 +415,57 @@ function Formulario({
                     size="sm"
                     variant="outline"
                     className="h-9"
-                    disabled={!pasarA || ocupado}
-                    onClick={() => pasarTareaM.mutate({ para: pasarA, antes: tarea.paraSocioId })}
+                    disabled={!pasarA || ocupado || !!bloqueoAcciones}
+                    onClick={() => acciones.onPasar(tarea, pasarA, onCerrar)}
                   >
                     <Send className="h-4 w-4" /> Pasar
                   </Button>
                 </div>
               )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {tarea.estado === "pendiente" ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-status-completado/50 text-status-completado hover:text-status-completado"
-                  disabled={ocupado}
-                  onClick={() => cambiarEstado.mutate({ nuevo: "hecha", antes: "pendiente" })}
-                >
-                  <Check className="h-4 w-4" /> Marcar como realizada
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={ocupado}
-                  onClick={() => cambiarEstado.mutate({ nuevo: "pendiente", antes: tarea.estado })}
-                >
-                  Volver a pendiente
-                </Button>
-              )}
-              {tarea.estado === "pendiente" && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-destructive/40 text-destructive hover:text-destructive"
-                  disabled={ocupado}
-                  onClick={() => setCancelar(true)}
-                >
-                  Cancelar tarea
-                </Button>
-              )}
-            </div>
+            {editable && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {tarea.estado === "pendiente" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-status-completado/50 text-status-completado hover:text-status-completado"
+                      disabled={ocupado || !!bloqueoAcciones}
+                      onClick={() => acciones.onCambiarEstado(tarea, "hecha", onCerrar)}
+                    >
+                      <Check className="h-4 w-4" /> Marcar como realizada
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={ocupado || !!bloqueoAcciones}
+                      onClick={() => acciones.onCambiarEstado(tarea, "pendiente", onCerrar)}
+                    >
+                      Volver a pendiente
+                    </Button>
+                  )}
+                  {tarea.estado === "pendiente" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:text-destructive"
+                      disabled={ocupado || !!bloqueoAcciones}
+                      onClick={() => setCancelar(true)}
+                    >
+                      Cancelar tarea
+                    </Button>
+                  )}
+                </div>
+                {bloqueoAcciones && (
+                  <p className="text-xs text-muted-foreground">{bloqueoAcciones}.</p>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -465,21 +490,20 @@ function Formulario({
               id="tarea-para"
               etiqueta="Para"
               error={errores.para}
-              opciones={datos.personas
-                .filter((p) => p.activo)
-                .map((p) => ({
-                  id: p.id,
-                  contenido: (
-                    <>
-                      <Avatar
-                        nombre={p.nombre}
-                        yo={b.paraSocioId === p.id}
-                        className="h-5 w-5 text-[9px]"
-                      />
-                      {p.id === yo ? "Para mí" : p.nombre}
-                    </>
-                  ),
-                }))}
+              vacio="No hay personas activas. Se activan en Ajustes › Caja."
+              opciones={activasPara.map((p) => ({
+                id: p.id,
+                contenido: (
+                  <>
+                    <Avatar
+                      nombre={p.nombre}
+                      yo={b.paraSocioId === p.id}
+                      className="h-5 w-5 text-[9px]"
+                    />
+                    {p.id === yo ? "Para mí" : p.nombre}
+                  </>
+                ),
+              }))}
               valor={b.paraSocioId}
               onCambio={(v) => set({ paraSocioId: v })}
             />
@@ -523,6 +547,7 @@ function Formulario({
                   value={b.dia}
                   onChange={(e) => set({ dia: e.target.value })}
                   aria-invalid={!!errores.dia}
+                  aria-describedby={errores.dia ? "err-dia" : undefined}
                 />
               </div>
               {!b.todoElDia && (
@@ -538,6 +563,7 @@ function Formulario({
                       value={b.horaInicio}
                       onChange={(e) => set({ horaInicio: e.target.value })}
                       aria-invalid={!!errores.hora}
+                      aria-describedby={errores.hora ? "err-hora" : undefined}
                     />
                   </div>
                   <div className="space-y-1">
@@ -574,25 +600,23 @@ function Formulario({
             id="tarea-categoria"
             etiqueta="Categoría"
             error={errores.categoria}
-            opciones={datos.categorias
-              .filter((c) => c.activa || c.id === b.categoriaId)
-              .map((c) => {
-                const Icono = iconoDeCategoria(c);
-                return {
-                  id: c.id,
-                  contenido: (
-                    <>
-                      <Icono className="h-4 w-4" aria-hidden="true" />
-                      {c.nombre}
-                    </>
-                  ),
-                };
-              })}
+            vacio="No hay categorías activas. Se activan en Ajustes › Agenda."
+            opciones={categoriasVisibles.map((c) => {
+              const Icono = iconoDeCategoria(c);
+              return {
+                id: c.id,
+                contenido: (
+                  <>
+                    <Icono className="h-4 w-4" aria-hidden="true" />
+                    {c.nombre}
+                  </>
+                ),
+              };
+            })}
             valor={b.categoriaId}
             onCambio={(v) => {
               set({ categoriaId: v, pedidoId: null, clienteId: null });
               setEnlaceTexto(null);
-              setErrores((e) => ({ ...e, enlace: undefined }));
             }}
           />
 
@@ -605,7 +629,6 @@ function Formulario({
               onElegir={(id, texto) => {
                 set(categoria.enlace === "pedido" ? { pedidoId: id } : { clienteId: id });
                 setEnlaceTexto(texto);
-                setErrores((e) => ({ ...e, enlace: undefined }));
               }}
             />
           )}
@@ -639,6 +662,7 @@ function Formulario({
                     id="tarea-de"
                     className="max-w-[260px]"
                     aria-invalid={!!errores.de}
+                    aria-describedby={errores.de ? "err-de" : undefined}
                   >
                     <SelectValue placeholder="Elige quién la crea" />
                   </SelectTrigger>
@@ -668,7 +692,7 @@ function Formulario({
         {tarea && <Historial id={tarea.id} nombre={nombre} />}
       </form>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 py-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <Button type="button" variant="outline" onClick={cerrar}>
           {tarea ? "Cerrar" : "Descartar"}
         </Button>
@@ -676,7 +700,7 @@ function Formulario({
           <Button type="submit" form="form-tarea" disabled={ocupado || (!!tarea && !cambiado)}>
             {tarea
               ? "Guardar cambios"
-              : b.paraSocioId && b.paraSocioId !== yo
+              : paraOtro
                 ? `Mandar a ${nombre(b.paraSocioId).split(" ")[0]}`
                 : "Crear tarea"}
           </Button>
@@ -700,32 +724,34 @@ function Formulario({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={cancelar} onOpenChange={setCancelar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cancelar esta tarea?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Desaparece del calendario, pero queda en la lista, en «Canceladas». No se borra.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>No, dejarla</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => cambiarEstado.mutate({ nuevo: "cancelada", antes: "pendiente" })}
-            >
-              Sí, cancelar tarea
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {tarea && (
+        <AlertDialog open={cancelar} onOpenChange={setCancelar}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Cancelar esta tarea?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deja de estar pendiente y queda en la pestaña «Canceladas». No se borra.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>No, dejarla</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => acciones.onCambiarEstado(tarea, "cancelada", onCerrar)}
+              >
+                Sí, cancelar tarea
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </SheetContent>
   );
 }
 
 function MensajeError({ id, texto }: { id: string; texto: string }) {
   return (
-    <p id={id} className="text-sm font-medium text-destructive">
+    <p id={id} role="alert" className="text-sm font-medium text-destructive">
       {texto}
     </p>
   );
@@ -739,6 +765,7 @@ function Opciones({
   valor,
   onCambio,
   error,
+  vacio,
 }: {
   id: string;
   etiqueta: string;
@@ -746,7 +773,10 @@ function Opciones({
   valor: string;
   onCambio: (v: string) => void;
   error?: string;
+  /** Qué decir si no hay ninguna opción. */
+  vacio?: string;
 }) {
+  const idDe = (i: number) => (i === 0 ? id : `${id}-${opciones[i]!.id}`);
   const mover = (e: React.KeyboardEvent, i: number) => {
     const n =
       e.key === "ArrowRight" || e.key === "ArrowDown"
@@ -758,41 +788,52 @@ function Opciones({
     e.preventDefault();
     const j = (i + n + opciones.length) % opciones.length;
     onCambio(opciones[j]!.id);
-    document.getElementById(j === 0 ? id : `${id}-${opciones[j]!.id}`)?.focus();
+    document.getElementById(idDe(j))?.focus();
   };
   return (
     <div className="space-y-1.5">
       <span id={`${id}-etiqueta`} className="text-sm font-medium">
         {etiqueta}
       </span>
-      <div role="radiogroup" aria-labelledby={`${id}-etiqueta`} className="flex flex-wrap gap-1.5">
-        {opciones.map((o, i) => {
-          const elegido = o.id === valor;
-          return (
-            <button
-              key={o.id}
-              id={i === 0 ? id : `${id}-${o.id}`}
-              type="button"
-              role="radio"
-              aria-checked={elegido}
-              tabIndex={elegido || (!valor && i === 0) ? 0 : -1}
-              onClick={() => onCambio(o.id)}
-              onKeyDown={(e) => mover(e, i)}
-              className={cn(
-                "inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors",
-                elegido
-                  ? cn(
-                      "font-semibold ring-1 ring-inset",
-                      o.activo ?? "border-foreground bg-muted ring-foreground",
-                    )
-                  : "hover:bg-accent",
-              )}
-            >
-              {o.contenido}
-            </button>
-          );
-        })}
-      </div>
+      {opciones.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{vacio}</p>
+      ) : (
+        <div
+          role="radiogroup"
+          aria-labelledby={`${id}-etiqueta`}
+          aria-invalid={!!error}
+          aria-describedby={error ? `err-${id}` : undefined}
+          className="flex flex-wrap gap-1.5"
+        >
+          {opciones.map((o, i) => {
+            const elegido = o.id === valor;
+            return (
+              <button
+                key={o.id}
+                id={idDe(i)}
+                type="button"
+                role="radio"
+                aria-checked={elegido}
+                aria-describedby={error ? `err-${id}` : undefined}
+                tabIndex={elegido || (!opciones.some((x) => x.id === valor) && i === 0) ? 0 : -1}
+                onClick={() => onCambio(o.id)}
+                onKeyDown={(e) => mover(e, i)}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors md:min-h-9",
+                  elegido
+                    ? cn(
+                        "font-semibold ring-1 ring-inset",
+                        o.activo ?? "border-foreground bg-muted ring-foreground",
+                      )
+                    : "hover:bg-accent",
+                )}
+              >
+                {o.contenido}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {error && <MensajeError id={`err-${id}`} texto={error} />}
     </div>
   );
@@ -871,7 +912,7 @@ function BuscadorEnlace({
               <button
                 type="button"
                 onClick={() => onElegir(r.id, r.texto)}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent"
+                className="flex min-h-11 w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent md:min-h-0"
               >
                 <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="truncate">{r.texto}</span>

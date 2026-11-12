@@ -72,6 +72,7 @@ function ConfiguracionAgenda() {
       >
         <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
       </Link>
+      <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -95,7 +96,17 @@ function ConfiguracionAgenda() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1 px-0 sm:px-6">
-            <ul className="divide-y border-y sm:rounded-md sm:border">
+            {categorias.length === 0 && (
+              <p className="px-4 pb-2 text-sm text-muted-foreground sm:px-0">
+                Todavía no hay categorías. Añade la primera aquí debajo.
+              </p>
+            )}
+            <ul
+              className={cn(
+                "divide-y border-y sm:rounded-md sm:border",
+                categorias.length === 0 && "hidden",
+              )}
+            >
               {categorias.map((c, i) => (
                 <Fila
                   key={c.id}
@@ -181,7 +192,7 @@ function Fila({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           disabled={!puedeEscribir || primera || ocupado}
           onClick={onSubir}
           aria-label={`Subir ${c.nombre}`}
@@ -191,7 +202,7 @@ function Fila({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-11 w-11 sm:h-8 sm:w-8"
           disabled={!puedeEscribir || ultima || ocupado}
           onClick={onBajar}
           aria-label={`Bajar ${c.nombre}`}
@@ -321,6 +332,7 @@ function Nueva({ categorias }: { categorias: CategoriaAgenda[] }) {
             onChange={(e) => setNombre(e.target.value)}
             placeholder="Por ejemplo, Proveedores"
             aria-invalid={!!aviso}
+            aria-describedby={aviso ? "cat-nueva-err" : undefined}
           />
         </div>
         <div className="space-y-1">
@@ -342,7 +354,11 @@ function Nueva({ categorias }: { categorias: CategoriaAgenda[] }) {
           <Plus className="h-4 w-4" /> Añadir
         </Button>
       </div>
-      {aviso && <p className="text-sm text-destructive">{aviso}</p>}
+      {aviso && (
+        <p id="cat-nueva-err" role="alert" className="text-sm text-destructive">
+          {aviso}
+        </p>
+      )}
     </form>
   );
 }
