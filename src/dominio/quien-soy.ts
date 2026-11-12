@@ -7,18 +7,17 @@
  *
  *   - Sin socios en la cuenta: el CRM funciona como siempre, sin preguntar.
  *   - Con uno: entra ya identificado y no hay nada que elegir.
- *   - Con varios: se pregunta en cada inicio de sesión y, hasta elegir, no se
- *     usa el CRM. La elección vale para esa sesión (en todas sus pestañas).
- *     El dispositivo recuerda la última persona y la pone la primera.
+ *   - Con varios: la persona se guarda en el DISPOSITIVO, no en la cuenta.
+ *     Un dispositivo que ya eligió entra directo con esa persona, aunque se
+ *     salga y se vuelva a entrar. Se pregunta (y, hasta elegir, no se usa el
+ *     CRM) en un dispositivo que no ha elegido nunca, o si la persona guardada
+ *     no es de la cuenta con la que se entra. Se cambia desde la cabecera.
  *
  * No es una contraseña: sirve para saber de quién es cada tarea, no para
  * limitar lo que se ve.
  */
 
 export type PersonaCuenta = { id: string; nombre: string };
-
-/** Lo que se guarda en el dispositivo al elegir: quién y en qué sesión. */
-export type EleccionGuardada = { socioId: string; sesion: string };
 
 export type EstadoQuienSoy =
   | { tipo: "sin-personas" }
@@ -28,59 +27,23 @@ export type EstadoQuienSoy =
       personas: PersonaCuenta[];
       puedeCambiar: boolean;
     }
-  | { tipo: "elegir"; personas: PersonaCuenta[]; ultimaId: string | null };
-
-/** La última persona elegida en el dispositivo, la primera; las demás, como vienen. */
-export function ordenarConUltima(
-  personas: PersonaCuenta[],
-  ultimaId: string | null,
-): PersonaCuenta[] {
-  const ultima = personas.find((p) => p.id === ultimaId);
-  return ultima ? [ultima, ...personas.filter((p) => p.id !== ultimaId)] : [...personas];
-}
+  | { tipo: "elegir"; personas: PersonaCuenta[] };
 
 /**
- * En qué punto está quien usa la cuenta.
- *
- * `sesion` identifica el inicio de sesión actual: una elección hecha en otro
- * inicio de sesión ya no vale y se vuelve a preguntar.
+ * En qué punto está quien usa la cuenta. `guardadaId` es la persona que tiene
+ * guardada el dispositivo (o null si no ha elegido nunca).
  */
 export function estadoQuienSoy(
   personas: PersonaCuenta[],
-  guardada: EleccionGuardada | null,
-  sesion: string | null,
-  ultimaId: string | null,
+  guardadaId: string | null,
 ): EstadoQuienSoy {
   if (personas.length === 0) return { tipo: "sin-personas" };
   if (personas.length === 1) {
     return { tipo: "identificado", persona: personas[0], personas, puedeCambiar: false };
   }
-  const elegida =
-    guardada && sesion && guardada.sesion === sesion
-      ? personas.find((p) => p.id === guardada.socioId)
-      : undefined;
-  if (elegida) return { tipo: "identificado", persona: elegida, personas, puedeCambiar: true };
-  const ultima = personas.some((p) => p.id === ultimaId) ? ultimaId : null;
-  return { tipo: "elegir", personas: ordenarConUltima(personas, ultima), ultimaId: ultima };
-}
-
-/** Lee la elección guardada; cualquier cosa que no tenga la forma esperada, null. */
-export function leerEleccion(texto: string | null | undefined): EleccionGuardada | null {
-  if (!texto) return null;
-  try {
-    const v = JSON.parse(texto) as unknown;
-    if (
-      v &&
-      typeof v === "object" &&
-      typeof (v as EleccionGuardada).socioId === "string" &&
-      typeof (v as EleccionGuardada).sesion === "string"
-    ) {
-      return { socioId: (v as EleccionGuardada).socioId, sesion: (v as EleccionGuardada).sesion };
-    }
-  } catch {
-    // Un valor roto en el dispositivo equivale a no haber elegido.
-  }
-  return null;
+  const guardada = personas.find((p) => p.id === guardadaId);
+  if (guardada) return { tipo: "identificado", persona: guardada, personas, puedeCambiar: true };
+  return { tipo: "elegir", personas };
 }
 
 /** Las iniciales para el avatar: «Javier Novoa» → «JN»; «Álvaro» → «Á». */

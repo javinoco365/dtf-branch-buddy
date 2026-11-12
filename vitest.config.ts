@@ -23,9 +23,6 @@ import { defineConfig } from "vitest/config";
 //
 // Y src/lib/cache.test.ts: la invalidación central de React Query tras
 // guardar, con consultas de mentira (sin red ni React).
-//
-// Y src/lib/sesion-jwt.test.ts: leer el id de sesión del token de Supabase
-// para «¿Quién eres?». Es de la sesión, no de negocio, pero es puro.
 
 export default defineConfig({
   resolve: {
@@ -41,7 +38,6 @@ export default defineConfig({
       "src/lib/paginar.test.ts",
       "src/lib/pedidos-lista.test.ts",
       "src/lib/cache.test.ts",
-      "src/lib/sesion-jwt.test.ts",
     ],
     reporters: "dot",
   },
