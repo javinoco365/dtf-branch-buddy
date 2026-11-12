@@ -63,6 +63,10 @@
   --color-status-completado: var(--status-completado);
   --color-status-cancelado: var(--status-cancelado);
   --color-status-pendiente: var(--status-pendiente);
+  --color-prioridad-urgente: var(--prioridad-urgente);
+  --color-prioridad-alta: var(--prioridad-alta);
+  --color-prioridad-normal: var(--prioridad-normal);
+  --color-prioridad-baja: var(--prioridad-baja);
 }
 
 :root {
@@ -136,6 +140,16 @@
   --status-completado: oklch(0.5433 0.132 153.84); /* Éxito        4,9:1 */
   --status-cancelado: oklch(0.5696 0.2068 22.57); /* Error        4,6:1 */
   --status-pendiente: oklch(0.5636 0.1372 56.49); /* Naranja tinta 4,8:1 */
+
+  /* Prioridad de las tareas de la Agenda. Es el único color de una tarea. El
+     rojo es solo Urgente. Normal va en índigo, lejos del cyan de marca y de los
+     enlaces, para no confundirse con ellos. Alta, en el naranja tinta: el
+     naranja puro sobre blanco no llega a 3:1. Como texto van sobre su propio
+     fondo suave y siempre con su nombre o su marca (!!, !) al lado. */
+  --prioridad-urgente: oklch(0.5696 0.2068 22.57); /* #D62839 */
+  --prioridad-alta: oklch(0.6305 0.1622 50.4); /* #E06F00 */
+  --prioridad-normal: oklch(0.5764 0.2187 270.3); /* #4C6FFF */
+  --prioridad-baja: oklch(0.6385 0.0213 272.6); /* #8A8E9C */
 }
 
 .dark {
@@ -195,6 +209,11 @@
   --status-completado: oklch(0.72 0.13 153.84);
   --status-cancelado: oklch(0.68 0.19 22.57);
   --status-pendiente: oklch(0.7339 0.1808 55.41);
+
+  --prioridad-urgente: oklch(0.6893 0.2054 6.98); /* #FF5C8A */
+  --prioridad-alta: oklch(0.7339 0.1808 55.41); /* #FC8400 */
+  --prioridad-normal: oklch(0.7353 0.1268 273.3); /* #8EA2FF */
+  --prioridad-baja: oklch(0.6385 0.0213 272.6); /* #8A8E9C */
 }
 
 @layer base {
