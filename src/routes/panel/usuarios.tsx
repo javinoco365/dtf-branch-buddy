@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Copy, KeyRound, Store, UserPlus } from "lucide-react";
+import { ArrowLeft, Copy, KeyRound, Store, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +68,11 @@ import {
   type UsuarioListado,
 } from "@/lib/usuarios.functions";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import {
+  fijarSociosDeCuenta,
+  sociosYCuentas,
+  type SocioConCuenta,
+} from "@/lib/quien-soy.functions";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -91,7 +96,14 @@ function Usuarios() {
   const [tiendasDe, setTiendasDe] = useState<UsuarioListado | null>(null);
   const [desactivar, setDesactivar] = useState<UsuarioListado | null>(null);
   const [enlace, setEnlace] = useState<Enlace | null>(null);
+  const [sociosDe, setSociosDe] = useState<UsuarioListado | null>(null);
+  const leerSocios = useServerFn(sociosYCuentas);
 
+  const socios = useQuery({
+    queryKey: ["socios-cuentas"],
+    queryFn: () => leerSocios(),
+    enabled: gestionarUsuarios,
+  });
   const usuarios = useQuery({
     queryKey: ["usuarios"],
     queryFn: () => listar(),
@@ -173,7 +185,15 @@ function Usuarios() {
               onTiendas={setTiendasDe}
               onDesactivar={setDesactivar}
               onEnlace={setEnlace}
+              socios={socios.data?.socios ?? []}
+              onSocios={setSociosDe}
             />
+          )}
+          {socios.data?.falta_migracion && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Para elegir quién usa cada cuenta falta aplicar la migración
+              20261115100000_socio_cuentas en la base.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -187,6 +207,12 @@ function Usuarios() {
       <TiendasUsuario usuario={tiendasDe} tiendas={tiendas} onCerrar={() => setTiendasDe(null)} />
       <ConfirmarDesactivar usuario={desactivar} onCerrar={() => setDesactivar(null)} />
       <EnlaceDialog enlace={enlace} onCerrar={() => setEnlace(null)} />
+      <SociosCuenta
+        usuario={sociosDe}
+        socios={socios.data?.socios ?? []}
+        usuarios={lista}
+        onCerrar={() => setSociosDe(null)}
+      />
     </div>
   );
 }
@@ -198,6 +224,8 @@ function ListaUsuarios({
   onTiendas,
   onDesactivar,
   onEnlace,
+  socios,
+  onSocios,
 }: {
   usuarios: UsuarioListado[];
   yo: string;
@@ -205,6 +233,8 @@ function ListaUsuarios({
   onTiendas: (u: UsuarioListado) => void;
   onDesactivar: (u: UsuarioListado) => void;
   onEnlace: (e: Enlace) => void;
+  socios: SocioConCuenta[];
+  onSocios: (u: UsuarioListado) => void;
 }) {
   const qc = useQueryClient();
   const cambiarNivel = useServerFn(cambiarNivelUsuario);
@@ -253,6 +283,12 @@ function ListaUsuarios({
             ? "Todas"
             : u.tienda_ids.map((id) => nombreTienda.get(id) ?? "—").join(", ");
 
+  // Quién usa la cuenta: con varios, el CRM pregunta «¿Quién eres?» al entrar.
+  const textoSocios = (u: UsuarioListado) => {
+    const suyos = socios.filter((s) => s.usuario_id === u.id && s.activo);
+    return suyos.length === 0 ? "Nadie" : suyos.map((s) => s.nombre).join(", ");
+  };
+
   const selectorNivel = (u: UsuarioListado) => (
     <Select
       value={u.nivel ?? undefined}
@@ -287,6 +323,10 @@ function ListaUsuarios({
 
   const botones = (u: UsuarioListado) => (
     <div className="flex gap-1 justify-end">
+      <Button variant="ghost" size="sm" onClick={() => onSocios(u)} title="Quién usa esta cuenta">
+        <Users className="h-4 w-4" />
+        <span className="sr-only">Quién usa esta cuenta</span>
+      </Button>
       {u.nivel !== "admin" && (
         <Button variant="ghost" size="sm" onClick={() => onTiendas(u)} title="Acceso a tiendas">
           <Store className="h-4 w-4" />
@@ -325,6 +365,7 @@ function ListaUsuarios({
               <TableHead>Usuario</TableHead>
               <TableHead>Nivel</TableHead>
               <TableHead>Tiendas</TableHead>
+              <TableHead>Quién la usa</TableHead>
               <TableHead>Último acceso</TableHead>
               <TableHead>Activo</TableHead>
               <TableHead />
@@ -342,6 +383,9 @@ function ListaUsuarios({
                 <TableCell>{selectorNivel(u)}</TableCell>
                 <TableCell className="text-sm max-w-[240px] truncate" title={textoTiendas(u)}>
                   {textoTiendas(u)}
+                </TableCell>
+                <TableCell className="text-sm max-w-[220px] truncate" title={textoSocios(u)}>
+                  {textoSocios(u)}
                 </TableCell>
                 <TableCell className="text-sm">
                   {u.ultimo_acceso ? fechaCorta(u.ultimo_acceso) : "Nunca"}
@@ -375,7 +419,7 @@ function ListaUsuarios({
               {botones(u)}
             </div>
             <div className="text-xs text-muted-foreground">
-              Tiendas: {textoTiendas(u)} · Último acceso:{" "}
+              Tiendas: {textoTiendas(u)} · La usa: {textoSocios(u)} · Último acceso:{" "}
               {u.ultimo_acceso ? fechaCorta(u.ultimo_acceso) : "nunca"}
             </div>
           </div>
@@ -677,6 +721,100 @@ function EnlaceDialog({ enlace, onCerrar }: { enlace: Enlace | null; onCerrar: (
             }}
           >
             <Copy className="h-4 w-4" /> Copiar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Qué socios entran con esta cuenta. Con varios, el CRM pregunta «¿Quién
+ * eres?» al entrar; con uno, entra ya identificado. Un socio entra con una sola
+ * cuenta: marcarlo aquí lo quita de la que tuviera.
+ */
+function SociosCuenta({
+  usuario,
+  socios,
+  usuarios,
+  onCerrar,
+}: {
+  usuario: UsuarioListado | null;
+  socios: SocioConCuenta[];
+  usuarios: UsuarioListado[];
+  onCerrar: () => void;
+}) {
+  const qc = useQueryClient();
+  const guardar = useServerFn(fijarSociosDeCuenta);
+  const [seleccion, setSeleccion] = useState<string[] | null>(null);
+  const actual = seleccion ?? socios.filter((s) => s.usuario_id === usuario?.id).map((s) => s.id);
+  const nombreCuenta = new Map(usuarios.map((u) => [u.id, u.nombre]));
+  const visibles = socios.filter((s) => s.activo || actual.includes(s.id));
+  const cerrar = () => {
+    setSeleccion(null);
+    onCerrar();
+  };
+  const m = useMutation({
+    mutationFn: () => guardar({ data: { cuenta: usuario!.id, socios: actual } }),
+    onSuccess: () => {
+      toast.success("Guardado quién usa la cuenta");
+      qc.invalidateQueries({ queryKey: ["socios-cuentas"] });
+      qc.invalidateQueries({ queryKey: ["quien-soy"] });
+      cerrar();
+    },
+    onError: (e: Error) => avisarError(e),
+  });
+  return (
+    <Dialog open={!!usuario} onOpenChange={(o) => !o && cerrar()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Quién usa la cuenta de {usuario?.nombre}</DialogTitle>
+          <DialogDescription>
+            Si la usan varias personas, al entrar se pregunta «¿Quién eres?». Si la usa una sola,
+            entra ya identificada. No es una contraseña: sirve para saber de quién es cada tarea, no
+            limita lo que se ve.
+          </DialogDescription>
+        </DialogHeader>
+        {visibles.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No hay socios. Se dan de alta en Ajustes &gt; Caja.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {visibles.map((s) => {
+              const otra = s.usuario_id && s.usuario_id !== usuario?.id ? s.usuario_id : null;
+              const marcado = actual.includes(s.id);
+              return (
+                <label key={s.id} className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={marcado}
+                    onCheckedChange={(c) =>
+                      setSeleccion(c ? [...actual, s.id] : actual.filter((x) => x !== s.id))
+                    }
+                  />
+                  <span>
+                    {s.nombre}
+                    {!s.activo && <span className="text-muted-foreground"> (desactivado)</span>}
+                    {otra && (
+                      <span className="block text-xs text-muted-foreground">
+                        {marcado
+                          ? `Dejará de usar la cuenta de ${nombreCuenta.get(otra) ?? "otro usuario"}`
+                          : `Ahora usa la cuenta de ${nombreCuenta.get(otra) ?? "otro usuario"}`}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={cerrar}>
+            Cancelar
+          </Button>
+          <Button onClick={() => m.mutate()} disabled={m.isPending}>
+            Guardar
           </Button>
         </DialogFooter>
       </DialogContent>

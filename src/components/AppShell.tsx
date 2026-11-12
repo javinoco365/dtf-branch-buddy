@@ -11,14 +11,31 @@ import { MedidorRendimiento } from "@/components/MedidorRendimiento";
 import { usePermisos } from "@/hooks/use-permisos";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
 import { pantallaActual } from "@/dominio/navegacion";
+import { PantallaQuienEres, QuienSoyProvider, SelectorPersona } from "@/components/QuienSoy";
+import { useQuienSoy } from "@/hooks/use-quien-soy";
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <QuienSoyProvider>
+      <Marco>{children}</Marco>
+    </QuienSoyProvider>
+  );
+}
+
+/**
+ * El marco del CRM. Si la cuenta la usan varios socios y aún no se ha elegido
+ * quién es, «¿Quién eres?» se pone delante y el marco queda inerte: hasta
+ * elegir no se usa el CRM (src/dominio/quien-soy.ts).
+ */
+function Marco({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { estado } = useQuienSoy();
+  const bloqueado = estado.tipo === "elegir";
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="min-h-screen flex w-full bg-background" inert={bloqueado}>
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center justify-between border-b bg-card px-4 sticky top-0 z-30">
@@ -27,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DondeEstoy />
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              <span className="text-sm text-muted-foreground hidden lg:inline">{user?.email}</span>
+              <SelectorPersona email={user?.email} />
               <BotonTema />
               <Button
                 variant="ghost"
@@ -46,6 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <main className="flex-1 p-4 md:p-6 max-w-full overflow-x-hidden">{children}</main>
         </div>
       </div>
+      <PantallaQuienEres />
       <MedidorRendimiento />
     </SidebarProvider>
   );
