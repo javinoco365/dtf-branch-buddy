@@ -77,8 +77,13 @@ export function QuienSoyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<QuienSoy>(
-    () => ({ estado, persona: estado.tipo === "identificado" ? estado.persona : null, elegir }),
-    [estado, elegir],
+    () => ({
+      estado,
+      persona: estado.tipo === "identificado" ? estado.persona : null,
+      elegir,
+      cargando: !!cuenta && data === undefined,
+    }),
+    [estado, elegir, cuenta, data],
   );
   return <QuienSoyContexto.Provider value={value}>{children}</QuienSoyContexto.Provider>;
 }

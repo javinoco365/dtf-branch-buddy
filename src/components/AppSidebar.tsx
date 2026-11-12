@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar,
@@ -117,6 +117,8 @@ export function AppSidebar() {
   }, [pathname]);
   const navigate = useNavigate();
   const { data: tiendas = [] } = useTiendasMenu();
+  // Mis tareas de hoy, vencidas o nuevas (src/dominio/agenda.ts, resumenDe).
+  const avisoAgenda = useAvisoAgenda();
 
   return (
     <Sidebar collapsible="icon">
@@ -137,7 +139,7 @@ export function AppSidebar() {
                     key={e.ruta}
                     entrada={e}
                     pathname={pathname}
-                    contador={e.ruta === "/panel/agenda" ? <ContadorAgenda /> : null}
+                    aviso={e.ruta === "/panel/agenda" ? avisoAgenda : 0}
                   />
                 ))}
               </SidebarMenu>
@@ -274,43 +276,47 @@ export function AppSidebar() {
 function Entrada({
   entrada,
   pathname,
-  contador,
+  aviso = 0,
 }: {
   entrada: EntradaMenu;
   pathname: string;
-  contador?: ReactNode;
+  /** Un número que pide atención (la Agenda). 0: nada. */
+  aviso?: number;
 }) {
   const Icono = ICONOS[entrada.icono];
+  const textoAviso = aviso
+    ? `${aviso} ${aviso === 1 ? "tarea tuya" : "tareas tuyas"} de hoy, vencidas o nuevas`
+    : "";
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         asChild
         isActive={entradaActiva(entrada, pathname)}
-        tooltip={entrada.etiqueta}
+        tooltip={aviso ? `${entrada.etiqueta} · ${textoAviso}` : entrada.etiqueta}
       >
-        <Link to={entrada.ruta as never}>
+        <Link to={entrada.ruta as never} className="relative">
           <Icono />
           <span>{entrada.etiqueta}</span>
+          {aviso > 0 && (
+            <>
+              <span className="sr-only">, {textoAviso}</span>
+              {/* Con el menú plegado no cabe el número: un punto sobre el icono. */}
+              <span
+                aria-hidden="true"
+                className="absolute left-5 top-1 hidden h-2 w-2 rounded-full bg-sidebar-primary group-data-[collapsible=icon]:block"
+              />
+            </>
+          )}
         </Link>
       </SidebarMenuButton>
-      {contador}
+      {aviso > 0 && (
+        <SidebarMenuBadge
+          aria-hidden="true"
+          className="rounded-full bg-sidebar-primary font-bold text-sidebar-primary-foreground peer-hover/menu-button:text-sidebar-primary-foreground peer-data-[active=true]/menu-button:text-sidebar-primary-foreground"
+        >
+          {aviso}
+        </SidebarMenuBadge>
+      )}
     </SidebarMenuItem>
-  );
-}
-
-/**
- * Mis tareas de hoy, vencidas o nuevas (src/dominio/agenda.ts, resumenDe). Sin
- * persona elegida o sin nada pendiente, no se pinta.
- */
-function ContadorAgenda() {
-  const n = useAvisoAgenda();
-  if (!n) return null;
-  return (
-    <SidebarMenuBadge
-      className="bg-sidebar-primary text-sidebar-primary-foreground"
-      aria-label={`${n} ${n === 1 ? "tarea tuya" : "tareas tuyas"} de hoy, vencidas o nuevas`}
-    >
-      {n}
-    </SidebarMenuBadge>
   );
 }

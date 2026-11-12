@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CalendarDays, Clock, Plus } from "lucide-react";
@@ -8,12 +8,13 @@ import {
   FILTRO_PERSONA_INICIAL,
   FILTROS_LISTA_INICIALES,
   resumenDe,
+  type EstadoTarea,
   type FiltroPersona,
   type FiltrosLista,
   type Orden,
   type Tarea,
 } from "@/dominio/agenda";
-import { cambiarEstadoTarea } from "@/lib/agenda.functions";
+import { cambiarEstadoTarea, pasarTarea } from "@/lib/agenda.functions";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { hoyEnMadrid, useAgenda } from "@/hooks/use-agenda";
 import { useQuienSoy } from "@/hooks/use-quien-soy";
@@ -29,23 +30,46 @@ export const Route = createFileRoute("/panel/agenda")({
   component: Agenda,
 });
 
+/** Lo que dura el aviso con «Deshacer»: hay que dar tiempo a leerlo. */
+const DURACION_DESHACER = 7000;
+
+const TEXTO_ESTADO: Record<EstadoTarea, string> = {
+  hecha: "Realizada. La tienes en la pestaña «Realizadas».",
+  cancelada: "Tarea cancelada. La tienes en la pestaña «Canceladas».",
+  pendiente: "Vuelve a estar pendiente",
+};
+
+function filtroInicial(yo: string | null): FiltroPersona {
+  // Por defecto cada uno ve lo suyo. Sin persona (cuenta sin socios), todo.
+  return yo ? FILTRO_PERSONA_INICIAL : { para: "todos", de: "todos" };
+}
+
 function Agenda() {
-  const { data, isLoading, error } = useAgenda();
-  const { persona } = useQuienSoy();
+  const { data, isLoading, error, refetch } = useAgenda();
+  const { persona, cargando: cargandoPersona } = useQuienSoy();
   const { escribir } = usePermisos();
   const yo = persona?.id ?? null;
   const hoy = hoyEnMadrid();
 
-  // Por defecto cada uno ve lo suyo. Sin persona (cuenta sin socios), todo.
-  const [filtroPersona, setFiltroPersona] = useState<FiltroPersona>(
-    yo ? FILTRO_PERSONA_INICIAL : { para: "todos", de: "todos" },
-  );
+  const [filtroPersona, setFiltroPersona] = useState<FiltroPersona>(filtroInicial(yo));
   useEffect(() => {
-    setFiltroPersona(yo ? FILTRO_PERSONA_INICIAL : { para: "todos", de: "todos" });
+    setFiltroPersona(filtroInicial(yo));
   }, [yo]);
   const [filtros, setFiltros] = useState<FiltrosLista>(FILTROS_LISTA_INICIALES);
   const [orden, setOrden] = useState<Orden>({ campo: "fecha", dir: 1 });
   const [panel, setPanel] = useState<QuePanel>(null);
+  // Lo que se pulsó para abrir el panel: al cerrarlo, el foco vuelve ahí.
+  const origen = useRef<HTMLElement | null>(null);
+  const abrir = (p: QuePanel) => {
+    origen.current = document.activeElement as HTMLElement | null;
+    setPanel(p);
+  };
+  const devolverFoco = () => {
+    const o = origen.current;
+    origen.current = null;
+    if (o && document.contains(o)) o.focus();
+    else document.getElementById("boton-nueva-tarea")?.focus();
+  };
 
   const tareas = useMemo(() => data?.tareas ?? [], [data]);
   const resumen = useMemo(() => resumenDe(tareas, yo, hoy), [tareas, yo, hoy]);
@@ -58,37 +82,58 @@ function Agenda() {
     }),
     [tareas, yo],
   );
+  const nombre = (id: string) => data?.personas.find((p) => p.id === id)?.nombre ?? "otra persona";
 
+  // Las acciones con «Deshacer» viven aquí y no en el panel: el panel se cierra
+  // al hacerlas, y su «Deshacer» no debe cerrar el de otra tarea abierta luego.
   const estado = useServerFn(cambiarEstadoTarea);
-  const marcar = useMutation({
-    mutationFn: (v: { tarea: Tarea; nuevo: Tarea["estado"]; antes: Tarea["estado"] }) =>
+  const pasar = useServerFn(pasarTarea);
+  const cambiar = useMutation({
+    mutationFn: (v: { tarea: Tarea; nuevo: EstadoTarea }) =>
       estado({ data: { id: v.tarea.id, socio: yo!, estado: v.nuevo } }),
-    onSuccess: (_r, v) => {
-      toast.success(
-        v.nuevo === "hecha"
-          ? "Realizada. La tienes en la pestaña «Realizadas»."
-          : `«${v.tarea.titulo}» vuelve a Pendientes`,
-        {
-          action: {
-            label: "Deshacer",
-            onClick: () => marcar.mutate({ tarea: v.tarea, nuevo: v.antes, antes: v.nuevo }),
-          },
-        },
-      );
-    },
     onError: (e: Error) => avisarError(e, "No se ha podido cambiar la tarea"),
   });
+  const pasarM = useMutation({
+    mutationFn: (v: { tarea: Tarea; para: string }) =>
+      pasar({ data: { id: v.tarea.id, socio: yo!, para: v.para } }),
+    onError: (e: Error) => avisarError(e, "No se ha podido pasar la tarea"),
+  });
 
-  function cambiarHecha(t: Tarea) {
+  function cambiarEstado(tarea: Tarea, nuevo: EstadoTarea, alTerminar?: () => void) {
     if (!yo) {
       toast.error("Tu cuenta no tiene una persona asignada: pídeselo a un administrador.");
       return;
     }
-    marcar.mutate({
-      tarea: t,
-      nuevo: t.estado === "hecha" ? "pendiente" : "hecha",
-      antes: t.estado,
-    });
+    const antes = tarea.estado;
+    cambiar.mutate(
+      { tarea, nuevo },
+      {
+        onSuccess: () => {
+          alTerminar?.();
+          toast.success(TEXTO_ESTADO[nuevo], {
+            duration: DURACION_DESHACER,
+            action: { label: "Deshacer", onClick: () => cambiar.mutate({ tarea, nuevo: antes }) },
+          });
+        },
+      },
+    );
+  }
+
+  function pasarA(tarea: Tarea, para: string, alTerminar?: () => void) {
+    if (!yo) return;
+    const antes = tarea.paraSocioId;
+    pasarM.mutate(
+      { tarea, para },
+      {
+        onSuccess: () => {
+          alTerminar?.();
+          toast.success(`Tarea pasada a ${nombre(para)}. Le saldrá como nueva.`, {
+            duration: DURACION_DESHACER,
+            action: { label: "Deshacer", onClick: () => pasarM.mutate({ tarea, para: antes }) },
+          });
+        },
+      },
+    );
   }
 
   function verEnLista(cambio: Partial<FiltrosLista>) {
@@ -97,9 +142,11 @@ function Agenda() {
     document.getElementById("lista-tareas")?.scrollIntoView({ block: "start" });
   }
 
-  // «N» abre una tarea nueva, si no se está escribiendo en otro sitio.
+  const listo = !isLoading && !cargandoPersona && !error && !data?.falta_migracion;
+
+  // «N» abre una tarea nueva, si no se está escribiendo ni eligiendo en otro sitio.
   useEffect(() => {
-    if (!escribir) return;
+    if (!escribir || !listo) return;
     const alPulsar = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (
@@ -107,19 +154,35 @@ function Agenda() {
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
+        !e.repeat &&
+        !e.defaultPrevented &&
         !panel &&
-        !el?.closest("input, textarea, select, [contenteditable], [role=dialog]")
+        !el?.closest(
+          "input, textarea, select, [contenteditable], [role=dialog], [role=combobox], [role=listbox], [role=option], [role=menu], [role=menuitem]",
+        )
       ) {
         e.preventDefault();
+        origen.current = document.activeElement as HTMLElement | null;
         setPanel({ modo: "nueva" });
       }
     };
     window.addEventListener("keydown", alPulsar);
     return () => window.removeEventListener("keydown", alPulsar);
-  }, [escribir, panel]);
+  }, [escribir, panel, listo]);
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Cargando la Agenda…</p>;
-  if (error) return <p className="text-sm text-destructive">{mensajeDeError(error)}</p>;
+  if (isLoading || cargandoPersona) {
+    return <p className="text-sm text-muted-foreground">Cargando la Agenda…</p>;
+  }
+  if (error) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-destructive">{mensajeDeError(error)}</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
   if (data?.falta_migracion) {
     return (
       <EstadoVacio
@@ -148,11 +211,11 @@ function Agenda() {
                 </button>
               </span>
               {resumen.vencidas > 0 && (
-                <span className="inline-flex items-center gap-1 text-prioridad-urgente">
-                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
                   <button
                     type="button"
-                    className="font-semibold underline underline-offset-2"
+                    className="font-semibold text-foreground underline underline-offset-2"
                     onClick={() => verEnLista({ periodo: "vencidas" })}
                   >
                     {resumen.vencidas} {resumen.vencidas === 1 ? "vencida" : "vencidas"}
@@ -181,7 +244,11 @@ function Agenda() {
           )}
         </div>
         {escribir && (
-          <Button onClick={() => setPanel({ modo: "nueva" })} className="w-full sm:w-auto">
+          <Button
+            id="boton-nueva-tarea"
+            onClick={() => abrir({ modo: "nueva" })}
+            className="h-11 w-full sm:h-10 sm:w-auto"
+          >
             <Plus className="h-4 w-4" /> Nueva tarea
             <kbd className="ml-1 hidden rounded border border-current px-1 text-[10px] font-semibold opacity-70 sm:inline">
               N
@@ -210,8 +277,9 @@ function Agenda() {
           onFiltros={setFiltros}
           orden={orden}
           onOrden={setOrden}
-          onAbrir={(id) => setPanel({ modo: "ver", id })}
-          onCambiarHecha={cambiarHecha}
+          onAbrir={(id) => abrir({ modo: "ver", id })}
+          onCambiarHecha={(t) => cambiarEstado(t, t.estado === "hecha" ? "pendiente" : "hecha")}
+          cambiando={cambiar.isPending}
           puedeEscribir={escribir}
         />
       </div>
@@ -226,7 +294,13 @@ function Agenda() {
         yo={yo}
         hoy={hoy}
         puedeEscribir={escribir}
+        acciones={{
+          onCambiarEstado: cambiarEstado,
+          onPasar: pasarA,
+          ocupado: cambiar.isPending || pasarM.isPending,
+        }}
         onCerrar={() => setPanel(null)}
+        devolverFoco={devolverFoco}
       />
     </div>
   );

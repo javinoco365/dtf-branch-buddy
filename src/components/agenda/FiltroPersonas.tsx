@@ -61,7 +61,7 @@ export function FiltroPersonas({
               aria-pressed={activo}
               onClick={() => onCambio(a.filtro)}
               className={cn(
-                "inline-flex min-h-9 items-center gap-1.5 rounded-md px-3 text-sm transition-colors",
+                "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm transition-colors md:min-h-9",
                 activo
                   ? "bg-card font-semibold text-foreground shadow-sm"
                   : "text-secondary-foreground hover:text-foreground",
@@ -90,8 +90,7 @@ export function FiltroPersonas({
         onCambio={(de) => onCambio({ ...valor, de })}
       />
       <p className="basis-full text-xs text-muted-foreground">
-        «Para» es quien tiene que hacerla; «De», quien la mandó. Mandan en el calendario y en la
-        lista.
+        «Para» es quien tiene que hacerla; «De», quien la mandó.
       </p>
     </div>
   );
@@ -112,7 +111,7 @@ function Desplegable({
     <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
       {etiqueta}
       <Select value={valor} onValueChange={onCambio}>
-        <SelectTrigger className="h-9 w-[170px] text-foreground" aria-label={etiqueta}>
+        <SelectTrigger className="h-11 w-[170px] text-foreground md:h-9" aria-label={etiqueta}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

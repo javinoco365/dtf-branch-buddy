@@ -67,6 +67,10 @@
   --color-prioridad-alta: var(--prioridad-alta);
   --color-prioridad-normal: var(--prioridad-normal);
   --color-prioridad-baja: var(--prioridad-baja);
+  --color-prioridad-urgente-texto: var(--prioridad-urgente-texto);
+  --color-prioridad-alta-texto: var(--prioridad-alta-texto);
+  --color-prioridad-normal-texto: var(--prioridad-normal-texto);
+  --color-prioridad-baja-texto: var(--prioridad-baja-texto);
 }
 
 :root {
@@ -143,13 +147,18 @@
 
   /* Prioridad de las tareas de la Agenda. Es el único color de una tarea. El
      rojo es solo Urgente. Normal va en índigo, lejos del cyan de marca y de los
-     enlaces, para no confundirse con ellos. Alta, en el naranja tinta: el
-     naranja puro sobre blanco no llega a 3:1. Como texto van sobre su propio
-     fondo suave y siempre con su nombre o su marca (!!, !) al lado. */
+     enlaces, para no confundirse con ellos. Estos colores son para puntos,
+     rayas y fondos; el texto va en su variante -texto (más oscura en claro,
+     más clara en oscuro), que pasa de 4,5:1 sobre su fondo suave. Y siempre
+     con su nombre o su marca (!!, !) al lado. */
   --prioridad-urgente: oklch(0.5696 0.2068 22.57); /* #D62839 */
   --prioridad-alta: oklch(0.6305 0.1622 50.4); /* #E06F00 */
   --prioridad-normal: oklch(0.5764 0.2187 270.3); /* #4C6FFF */
   --prioridad-baja: oklch(0.6385 0.0213 272.6); /* #8A8E9C */
+  --prioridad-urgente-texto: oklch(0.4497 0.1661 22.6); /* #9A1724 */
+  --prioridad-alta-texto: oklch(0.4628 0.1048 56.1); /* #7E4100 */
+  --prioridad-normal-texto: oklch(0.4285 0.1712 272.2); /* #2B3FB0 */
+  --prioridad-baja-texto: oklch(0.4278 0.0215 273); /* #4A4E5C */
 }
 
 .dark {
@@ -214,6 +223,10 @@
   --prioridad-alta: oklch(0.7339 0.1808 55.41); /* #FC8400 */
   --prioridad-normal: oklch(0.7353 0.1268 273.3); /* #8EA2FF */
   --prioridad-baja: oklch(0.6385 0.0213 272.6); /* #8A8E9C */
+  --prioridad-urgente-texto: oklch(0.82 0.09 0); /* #FFB3C8 */
+  --prioridad-alta-texto: oklch(0.85 0.1 70); /* #FFC47E */
+  --prioridad-normal-texto: oklch(0.85 0.07 275); /* #C3CEFF */
+  --prioridad-baja-texto: oklch(0.84 0.015 270); /* #C7CAD4 */
 }
 
 @layer base {
