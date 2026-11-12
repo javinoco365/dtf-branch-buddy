@@ -173,6 +173,7 @@ seccion "Línea de producto: DTF y DTF UV" D7_linea_dtf_uv.sql
 seccion "Importes del pedido por línea (DTF y DTF UV)" D8_importes_por_linea.sql
 seccion "Lectura de empresas por nivel" D9_empresas_lectura.sql
 seccion "Quién usa cada cuenta" E1_socio_cuentas.sql
+seccion "Agenda: categorías, tareas e historial" E2_agenda.sql
 seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
   'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 
