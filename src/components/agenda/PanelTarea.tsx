@@ -730,7 +730,8 @@ function Formulario({
             <AlertDialogHeader>
               <AlertDialogTitle>¿Cancelar esta tarea?</AlertDialogTitle>
               <AlertDialogDescription>
-                Deja de estar pendiente y queda en la pestaña «Canceladas». No se borra.
+                Desaparece del calendario y queda en la lista, en la pestaña «Canceladas». No se
+                borra.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
