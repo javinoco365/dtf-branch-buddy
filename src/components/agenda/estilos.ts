@@ -10,7 +10,15 @@ import { PRIORIDADES, type CategoriaAgenda, type Prioridad } from "@/dominio/age
  */
 export const CLASES_PRIORIDAD: Record<
   Prioridad,
-  { punto: string; borde: string; suave: string; texto: string; anillo: string }
+  {
+    punto: string;
+    borde: string;
+    suave: string;
+    texto: string;
+    anillo: string;
+    /** En el móvil, la pastilla del mes es solo una barra de su color. */
+    barra: string;
+  }
 > = {
   urgente: {
     punto: "bg-prioridad-urgente",
@@ -18,6 +26,7 @@ export const CLASES_PRIORIDAD: Record<
     suave: "bg-prioridad-urgente/10",
     texto: "text-prioridad-urgente-texto",
     anillo: "border-prioridad-urgente ring-prioridad-urgente",
+    barra: "max-sm:bg-prioridad-urgente",
   },
   alta: {
     punto: "bg-prioridad-alta",
@@ -25,6 +34,7 @@ export const CLASES_PRIORIDAD: Record<
     suave: "bg-prioridad-alta/12",
     texto: "text-prioridad-alta-texto",
     anillo: "border-prioridad-alta ring-prioridad-alta",
+    barra: "max-sm:bg-prioridad-alta",
   },
   normal: {
     punto: "bg-prioridad-normal",
@@ -32,6 +42,7 @@ export const CLASES_PRIORIDAD: Record<
     suave: "bg-prioridad-normal/10",
     texto: "text-prioridad-normal-texto",
     anillo: "border-prioridad-normal ring-prioridad-normal",
+    barra: "max-sm:bg-prioridad-normal",
   },
   baja: {
     punto: "bg-prioridad-baja",
@@ -39,6 +50,7 @@ export const CLASES_PRIORIDAD: Record<
     suave: "bg-prioridad-baja/12",
     texto: "text-prioridad-baja-texto",
     anillo: "border-prioridad-baja ring-prioridad-baja",
+    barra: "max-sm:bg-prioridad-baja",
   },
 };
 
@@ -47,6 +59,7 @@ export const CLASES_REALIZADA = {
   borde: "border-l-status-completado",
   suave: "bg-status-completado/10",
   texto: "text-status-completado",
+  barra: "max-sm:bg-status-completado",
 };
 
 export function prioridadDe(id: Prioridad) {

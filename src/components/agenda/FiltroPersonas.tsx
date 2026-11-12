@@ -90,7 +90,8 @@ export function FiltroPersonas({
         onCambio={(de) => onCambio({ ...valor, de })}
       />
       <p className="basis-full text-xs text-muted-foreground">
-        «Para» es quien tiene que hacerla; «De», quien la mandó.
+        «Para» es quien tiene que hacerla; «De», quien la mandó. Mandan en el calendario y en la
+        lista.
       </p>
     </div>
   );

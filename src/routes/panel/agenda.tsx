@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   FILTRO_PERSONA_INICIAL,
   FILTROS_LISTA_INICIALES,
+  pasaPersona,
   resumenDe,
   type EstadoTarea,
   type FiltroPersona,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { FiltroPersonas } from "@/components/agenda/FiltroPersonas";
 import { ListaTareas } from "@/components/agenda/ListaTareas";
+import { Calendario } from "@/components/agenda/Calendario";
 import { PanelTarea, type QuePanel } from "@/components/agenda/PanelTarea";
 
 export const Route = createFileRoute("/panel/agenda")({
@@ -73,6 +75,10 @@ function Agenda() {
 
   const tareas = useMemo(() => data?.tareas ?? [], [data]);
   const resumen = useMemo(() => resumenDe(tareas, yo, hoy), [tareas, yo, hoy]);
+  const tareasDePersona = useMemo(
+    () => tareas.filter((t) => pasaPersona(t, filtroPersona, yo)),
+    [tareas, filtroPersona, yo],
+  );
   const cuantas = useMemo(
     () => ({
       mias: tareas.filter((t) => t.estado === "pendiente" && t.paraSocioId === yo).length,
@@ -194,7 +200,7 @@ function Agenda() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
+    <div className="mx-auto max-w-7xl space-y-4 pb-20 sm:pb-0">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
@@ -247,7 +253,7 @@ function Agenda() {
           <Button
             id="boton-nueva-tarea"
             onClick={() => abrir({ modo: "nueva" })}
-            className="h-11 w-full sm:h-10 sm:w-auto"
+            className="hidden h-10 sm:inline-flex"
           >
             <Plus className="h-4 w-4" /> Nueva tarea
             <kbd className="ml-1 hidden rounded border border-current px-1 text-[10px] font-semibold opacity-70 sm:inline">
@@ -263,6 +269,20 @@ function Agenda() {
         personas={data?.personas ?? []}
         yo={yo}
         cuantas={cuantas}
+      />
+
+      <Calendario
+        tareas={tareasDePersona}
+        categorias={data?.categorias ?? []}
+        personas={data?.personas ?? []}
+        yo={yo}
+        hoy={hoy}
+        verIniciales={filtroPersona.para !== "yo"}
+        puedeEscribir={escribir}
+        cambiando={cambiar.isPending}
+        onAbrir={(id) => abrir({ modo: "ver", id })}
+        onNueva={(dia) => abrir({ modo: "nueva", dia })}
+        onCambiarHecha={(t) => cambiarEstado(t, t.estado === "hecha" ? "pendiente" : "hecha")}
       />
 
       <div id="lista-tareas" className="scroll-mt-20">
@@ -283,6 +303,15 @@ function Agenda() {
           puedeEscribir={escribir}
         />
       </div>
+
+      {escribir && (
+        <Button
+          onClick={() => abrir({ modo: "nueva" })}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 h-14 rounded-full px-5 text-base shadow-lg sm:hidden"
+        >
+          <Plus className="h-5 w-5" /> Nueva tarea
+        </Button>
+      )}
 
       <PanelTarea
         que={panel}
