@@ -2,10 +2,9 @@
 // usan varios socios, y el selector de persona de la cabecera.
 //
 // Las reglas están en src/dominio/quien-soy.ts. Aquí solo se lee la lista de
-// socios de la cuenta (misPersonas) y se guarda la elección en el dispositivo:
-//   - crm:quien-soy:<cuenta>         quién y en qué inicio de sesión (se vuelve
-//                                     a preguntar al entrar otra vez);
-//   - crm:quien-soy-ultima:<cuenta>  la última persona, que sale la primera.
+// socios de la cuenta (misPersonas) y se guarda la persona en el DISPOSITIVO,
+// en una sola clave (crm:quien-soy), no por cuenta: el dispositivo que ya
+// eligió entra directo aunque se salga y se vuelva a entrar.
 // No es una contraseña: no limita lo que se ve.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -15,8 +14,7 @@ import { Check, ChevronDown, ChevronRight, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { misPersonas } from "@/lib/quien-soy.functions";
-import { idDeSesion } from "@/lib/sesion-jwt";
-import { estadoQuienSoy, iniciales, leerEleccion } from "@/dominio/quien-soy";
+import { estadoQuienSoy, iniciales } from "@/dominio/quien-soy";
 import { QuienSoyContexto, useQuienSoy, type QuienSoy } from "@/hooks/use-quien-soy";
 import { MARCA_NOMBRE } from "@/components/Marca";
 import { Button } from "@/components/ui/button";
@@ -30,30 +28,28 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const clave = (cuenta: string) => `crm:quien-soy:${cuenta}`;
-const claveUltima = (cuenta: string) => `crm:quien-soy-ultima:${cuenta}`;
+const CLAVE = "crm:quien-soy";
 
 // El dispositivo puede no dejar guardar (ventana privada, datos bloqueados): en
 // ese caso se pregunta en cada carga, que es lo seguro.
-function leer(k: string): string | null {
+function leerGuardada(): string | null {
   try {
-    return localStorage.getItem(k);
+    return localStorage.getItem(CLAVE);
   } catch {
     return null;
   }
 }
-function escribir(k: string, v: string) {
+function guardar(id: string) {
   try {
-    localStorage.setItem(k, v);
+    localStorage.setItem(CLAVE, id);
   } catch {
     // Sin almacenamiento, la elección dura hasta recargar.
   }
 }
 
 export function QuienSoyProvider({ children }: { children: ReactNode }) {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const cuenta = user?.id ?? null;
-  const sesion = idDeSesion(session?.access_token) ?? user?.last_sign_in_at ?? null;
   const leerPersonas = useServerFn(misPersonas);
   const { data } = useQuery({
     queryKey: ["quien-soy", cuenta],
@@ -62,44 +58,23 @@ export function QuienSoyProvider({ children }: { children: ReactNode }) {
     staleTime: 5 * 60_000,
   });
 
-  // Lo guardado se lee al montar y al cambiar de cuenta; `version` fuerza
-  // releerlo tras elegir.
-  const [version, setVersion] = useState(0);
-  const guardada = useMemo(
-    () => (cuenta ? leerEleccion(leer(clave(cuenta))) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cuenta, version],
-  );
-  const ultima = useMemo(
-    () => (cuenta ? leer(claveUltima(cuenta)) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cuenta, version],
-  );
+  const [guardada, setGuardada] = useState<string | null>(() => leerGuardada());
 
   // Otra pestaña ha elegido: esta se entera sin recargar.
   useEffect(() => {
-    if (!cuenta) return;
     const alCambiar = (e: StorageEvent) => {
-      if (e.key === clave(cuenta)) setVersion((v) => v + 1);
+      if (e.key === CLAVE) setGuardada(leerGuardada());
     };
     window.addEventListener("storage", alCambiar);
     return () => window.removeEventListener("storage", alCambiar);
-  }, [cuenta]);
+  }, []);
 
-  const estado = useMemo(
-    () => estadoQuienSoy(data?.personas ?? [], guardada, sesion, ultima),
-    [data, guardada, sesion, ultima],
-  );
+  const estado = useMemo(() => estadoQuienSoy(data?.personas ?? [], guardada), [data, guardada]);
 
-  const elegir = useCallback(
-    (id: string) => {
-      if (!cuenta || !sesion) return;
-      escribir(clave(cuenta), JSON.stringify({ socioId: id, sesion }));
-      escribir(claveUltima(cuenta), id);
-      setVersion((v) => v + 1);
-    },
-    [cuenta, sesion],
-  );
+  const elegir = useCallback((id: string) => {
+    guardar(id);
+    setGuardada(id);
+  }, []);
 
   const value = useMemo<QuienSoy>(
     () => ({ estado, persona: estado.tipo === "identificado" ? estado.persona : null, elegir }),
@@ -160,35 +135,24 @@ export function PantallaQuienEres() {
         </p>
         <div className="mt-1 flex flex-col gap-2">
           {estado.personas.map((p, i) => {
-            const ultima = p.id === estado.ultimaId;
             return (
               <button
                 key={p.id}
                 type="button"
                 autoFocus={i === 0}
                 onClick={() => elegir(p.id)}
-                className={cn(
-                  "flex min-h-[60px] items-center gap-3 rounded-xl border bg-card px-3.5 py-3 text-left text-[15px] font-semibold transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  ultima && "border-primary ring-1 ring-inset ring-primary",
-                )}
+                className="flex min-h-[60px] items-center gap-3 rounded-xl border bg-card px-3.5 py-3 text-left text-[15px] font-semibold transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                <Avatar nombre={p.nombre} activo={ultima} grande />
-                <span className="min-w-0 flex-1">
-                  {p.nombre}
-                  {ultima && (
-                    <small className="block text-xs font-medium text-status-procesando">
-                      La última vez en este dispositivo
-                    </small>
-                  )}
-                </span>
+                <Avatar nombre={p.nombre} grande />
+                <span className="min-w-0 flex-1">{p.nombre}</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               </button>
             );
           })}
         </div>
         <p className="text-[12.5px] text-muted-foreground">
-          Lo recordamos en este dispositivo. Si te equivocas, pulsa tu nombre arriba a la derecha
-          para cambiarlo sin salir.
+          Este dispositivo lo recordará y no volverá a preguntar, aunque salgas y vuelvas a entrar.
+          Para cambiar de persona, pulsa tu nombre arriba a la derecha.
         </p>
         <Button
           variant="ghost"
