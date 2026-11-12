@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, faltaLaTabla, tabla } from "./rpc";
 import { leerTodas } from "./paginar";
 import { pdfEnBase64 } from "./pdf-presupuesto-datos";
@@ -116,7 +117,9 @@ async function leerVariantes(sb: unknown) {
  * para el documento) y, si lo hay, fichero (PDF, JPG, PNG o WEBP).
  */
 export const proponerPresupuesto = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  // Gasta en la API de IA y solo sirve para crear un presupuesto: quien no
+  // puede escribir (visor, sin nivel, desactivado) no la usa.
+  .middleware([exigeEscribir])
   .inputValidator((d: unknown) => {
     if (!(d instanceof FormData)) throw new Error("Faltan los datos del presupuesto");
     const fichero = d.get("fichero");

@@ -96,5 +96,9 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "seroval": "~1.6.12",
+    "seroval-plugins": "~1.6.12"
   }
 }

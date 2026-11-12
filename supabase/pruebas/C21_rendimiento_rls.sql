@@ -365,10 +365,11 @@ DROP POLICY "C21 lectura a mano" ON public.pedidos;
 -- 13-14. La reversión vuelve a las políticas de antes con el mismo acceso, y
 --        la migración se puede volver a aplicar después.
 -- ---------------------------------------------------------------------------
--- Las reversiones van de la más nueva a la más vieja: 20261031400100 y 400000 (niveles,
--- lectura total), 20261031300400 y 20261031300100 (seguridad, escritura y
+-- Las reversiones van de la más nueva a la más vieja: 20261114100000 (lectura
+-- de empresas), 20261031400100 y 400000 (niveles, lectura total), 20261031300400 y 20261031300100 (seguridad, escritura y
 -- lectura por empresa) usan mis_empresas() y se revierten antes.
 SET client_min_messages = warning;
+\ir ../reversiones/20261114100000_empresas_lectura_por_nivel.sql
 \ir ../reversiones/20261031400100_niveles_secretos.sql
 \ir ../reversiones/20261031400000_niveles_lectura_total.sql
 \ir ../reversiones/20261031300400_seguridad_escritura_por_empresa.sql
