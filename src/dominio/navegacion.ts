@@ -17,6 +17,7 @@
 export type ClaveIcono =
   | "inicio"
   | "gerencia"
+  | "agenda"
   | "pedidos"
   | "clientes"
   | "productos"
@@ -60,6 +61,7 @@ export const MENU_PRINCIPAL: SeccionMenu[] = [
     entradas: [
       { ruta: "/panel", etiqueta: "Inicio", icono: "inicio" },
       { ruta: "/panel/gerencia", etiqueta: "Gerencia", icono: "gerencia", prefijo: true },
+      { ruta: "/panel/agenda", etiqueta: "Agenda", icono: "agenda" },
     ],
   },
   {
@@ -131,6 +133,7 @@ export const MENU_SISTEMA: EntradaMenu[] = [
 const SUBPANTALLAS_AJUSTES: Record<string, string> = {
   "/panel/configuracion-empresa": "Datos de la empresa",
   "/panel/configuracion-caja": "Caja",
+  "/panel/configuracion-agenda": "Agenda",
   "/panel/configuracion-pdf": "PDF de presupuestos",
 };
 

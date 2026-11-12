@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar,
@@ -8,6 +8,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -19,6 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Boxes,
   Building2,
+  CalendarDays,
   ChevronRight,
   Coins,
   FilePen,
@@ -45,6 +47,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
+import { useAvisoAgenda } from "@/hooks/use-agenda";
 import {
   ENTRADA_GESTIONAR_TIENDAS,
   MENU_PRINCIPAL,
@@ -59,6 +62,7 @@ import {
 const ICONOS: Record<ClaveIcono, LucideIcon> = {
   inicio: LayoutDashboard,
   gerencia: Gauge,
+  agenda: CalendarDays,
   pedidos: ShoppingCart,
   clientes: Users,
   productos: Package,
@@ -129,7 +133,12 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {seccion.entradas.map((e) => (
-                  <Entrada key={e.ruta} entrada={e} pathname={pathname} />
+                  <Entrada
+                    key={e.ruta}
+                    entrada={e}
+                    pathname={pathname}
+                    contador={e.ruta === "/panel/agenda" ? <ContadorAgenda /> : null}
+                  />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -262,7 +271,15 @@ export function AppSidebar() {
   );
 }
 
-function Entrada({ entrada, pathname }: { entrada: EntradaMenu; pathname: string }) {
+function Entrada({
+  entrada,
+  pathname,
+  contador,
+}: {
+  entrada: EntradaMenu;
+  pathname: string;
+  contador?: ReactNode;
+}) {
   const Icono = ICONOS[entrada.icono];
   return (
     <SidebarMenuItem>
@@ -276,6 +293,24 @@ function Entrada({ entrada, pathname }: { entrada: EntradaMenu; pathname: string
           <span>{entrada.etiqueta}</span>
         </Link>
       </SidebarMenuButton>
+      {contador}
     </SidebarMenuItem>
+  );
+}
+
+/**
+ * Mis tareas de hoy, vencidas o nuevas (src/dominio/agenda.ts, resumenDe). Sin
+ * persona elegida o sin nada pendiente, no se pinta.
+ */
+function ContadorAgenda() {
+  const n = useAvisoAgenda();
+  if (!n) return null;
+  return (
+    <SidebarMenuBadge
+      className="bg-sidebar-primary text-sidebar-primary-foreground"
+      aria-label={`${n} ${n === 1 ? "tarea tuya" : "tareas tuyas"} de hoy, vencidas o nuevas`}
+    >
+      {n}
+    </SidebarMenuBadge>
   );
 }

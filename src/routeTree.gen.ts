@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ClaveRouteImport } from './routes/clave'
 import { Route as PanelRouteRouteImport } from './routes/panel/route'
 import { Route as PanelIndexRouteImport } from './routes/panel/index'
+import { Route as PanelAgendaRouteImport } from './routes/panel/agenda'
 import { Route as PanelArchivoRouteImport } from './routes/panel/archivo'
 import { Route as PanelCajaRouteImport } from './routes/panel/caja'
 import { Route as PanelClientesRouteImport } from './routes/panel/clientes'
@@ -21,6 +22,7 @@ import { Route as PanelCobrosRouteImport } from './routes/panel/cobros'
 import { Route as PanelComprasRouteImport } from './routes/panel/compras'
 import { Route as PanelConciliacionRouteImport } from './routes/panel/conciliacion'
 import { Route as PanelConfiguracionRouteImport } from './routes/panel/configuracion'
+import { Route as PanelConfiguracionAgendaRouteImport } from './routes/panel/configuracion-agenda'
 import { Route as PanelConfiguracionCajaRouteImport } from './routes/panel/configuracion-caja'
 import { Route as PanelConfiguracionEmpresaRouteImport } from './routes/panel/configuracion-empresa'
 import { Route as PanelConfiguracionPdfRouteImport } from './routes/panel/configuracion-pdf'
@@ -76,6 +78,11 @@ const PanelIndexRoute = PanelIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelAgendaRoute = PanelAgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
 const PanelArchivoRoute = PanelArchivoRouteImport.update({
   id: '/archivo',
   path: '/archivo',
@@ -111,6 +118,12 @@ const PanelConfiguracionRoute = PanelConfiguracionRouteImport.update({
   path: '/configuracion',
   getParentRoute: () => PanelRouteRoute,
 } as any)
+const PanelConfiguracionAgendaRoute =
+  PanelConfiguracionAgendaRouteImport.update({
+    id: '/configuracion-agenda',
+    path: '/configuracion-agenda',
+    getParentRoute: () => PanelRouteRoute,
+  } as any)
 const PanelConfiguracionCajaRoute = PanelConfiguracionCajaRouteImport.update({
   id: '/configuracion-caja',
   path: '/configuracion-caja',
@@ -274,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/clave': typeof ClaveRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/agenda': typeof PanelAgendaRoute
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
@@ -281,6 +295,7 @@ export interface FileRoutesByFullPath {
   '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-agenda': typeof PanelConfiguracionAgendaRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/configuracion-pdf': typeof PanelConfiguracionPdfRoute
@@ -315,6 +330,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/clave': typeof ClaveRoute
+  '/panel/agenda': typeof PanelAgendaRoute
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
@@ -322,6 +338,7 @@ export interface FileRoutesByTo {
   '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-agenda': typeof PanelConfiguracionAgendaRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/configuracion-pdf': typeof PanelConfiguracionPdfRoute
@@ -358,6 +375,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/clave': typeof ClaveRoute
   '/panel/textil': typeof PanelTextilRouteRouteWithChildren
+  '/panel/agenda': typeof PanelAgendaRoute
   '/panel/archivo': typeof PanelArchivoRoute
   '/panel/caja': typeof PanelCajaRoute
   '/panel/clientes': typeof PanelClientesRoute
@@ -365,6 +383,7 @@ export interface FileRoutesById {
   '/panel/compras': typeof PanelComprasRoute
   '/panel/conciliacion': typeof PanelConciliacionRoute
   '/panel/configuracion': typeof PanelConfiguracionRoute
+  '/panel/configuracion-agenda': typeof PanelConfiguracionAgendaRoute
   '/panel/configuracion-caja': typeof PanelConfiguracionCajaRoute
   '/panel/configuracion-empresa': typeof PanelConfiguracionEmpresaRoute
   '/panel/configuracion-pdf': typeof PanelConfiguracionPdfRoute
@@ -403,6 +422,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clave'
     | '/panel/textil'
+    | '/panel/agenda'
     | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
@@ -410,6 +430,7 @@ export interface FileRouteTypes {
     | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-agenda'
     | '/panel/configuracion-caja'
     | '/panel/configuracion-empresa'
     | '/panel/configuracion-pdf'
@@ -444,6 +465,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/clave'
+    | '/panel/agenda'
     | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
@@ -451,6 +473,7 @@ export interface FileRouteTypes {
     | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-agenda'
     | '/panel/configuracion-caja'
     | '/panel/configuracion-empresa'
     | '/panel/configuracion-pdf'
@@ -486,6 +509,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clave'
     | '/panel/textil'
+    | '/panel/agenda'
     | '/panel/archivo'
     | '/panel/caja'
     | '/panel/clientes'
@@ -493,6 +517,7 @@ export interface FileRouteTypes {
     | '/panel/compras'
     | '/panel/conciliacion'
     | '/panel/configuracion'
+    | '/panel/configuracion-agenda'
     | '/panel/configuracion-caja'
     | '/panel/configuracion-empresa'
     | '/panel/configuracion-pdf'
@@ -568,6 +593,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PanelIndexRouteImport
       parentRoute: typeof PanelRouteRoute
     }
+    '/panel/agenda': {
+      id: '/panel/agenda'
+      path: '/agenda'
+      fullPath: '/panel/agenda'
+      preLoaderRoute: typeof PanelAgendaRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
     '/panel/archivo': {
       id: '/panel/archivo'
       path: '/archivo'
@@ -615,6 +647,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracion'
       fullPath: '/panel/configuracion'
       preLoaderRoute: typeof PanelConfiguracionRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/configuracion-agenda': {
+      id: '/panel/configuracion-agenda'
+      path: '/configuracion-agenda'
+      fullPath: '/panel/configuracion-agenda'
+      preLoaderRoute: typeof PanelConfiguracionAgendaRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/configuracion-caja': {
@@ -881,6 +920,7 @@ const PanelTiendasTiendaIdRouteRouteWithChildren =
 
 interface PanelRouteRouteChildren {
   PanelTextilRouteRoute: typeof PanelTextilRouteRouteWithChildren
+  PanelAgendaRoute: typeof PanelAgendaRoute
   PanelArchivoRoute: typeof PanelArchivoRoute
   PanelCajaRoute: typeof PanelCajaRoute
   PanelClientesRoute: typeof PanelClientesRoute
@@ -888,6 +928,7 @@ interface PanelRouteRouteChildren {
   PanelComprasRoute: typeof PanelComprasRoute
   PanelConciliacionRoute: typeof PanelConciliacionRoute
   PanelConfiguracionRoute: typeof PanelConfiguracionRoute
+  PanelConfiguracionAgendaRoute: typeof PanelConfiguracionAgendaRoute
   PanelConfiguracionCajaRoute: typeof PanelConfiguracionCajaRoute
   PanelConfiguracionEmpresaRoute: typeof PanelConfiguracionEmpresaRoute
   PanelConfiguracionPdfRoute: typeof PanelConfiguracionPdfRoute
@@ -904,6 +945,7 @@ interface PanelRouteRouteChildren {
 
 const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelTextilRouteRoute: PanelTextilRouteRouteWithChildren,
+  PanelAgendaRoute: PanelAgendaRoute,
   PanelArchivoRoute: PanelArchivoRoute,
   PanelCajaRoute: PanelCajaRoute,
   PanelClientesRoute: PanelClientesRoute,
@@ -911,6 +953,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelComprasRoute: PanelComprasRoute,
   PanelConciliacionRoute: PanelConciliacionRoute,
   PanelConfiguracionRoute: PanelConfiguracionRoute,
+  PanelConfiguracionAgendaRoute: PanelConfiguracionAgendaRoute,
   PanelConfiguracionCajaRoute: PanelConfiguracionCajaRoute,
   PanelConfiguracionEmpresaRoute: PanelConfiguracionEmpresaRoute,
   PanelConfiguracionPdfRoute: PanelConfiguracionPdfRoute,

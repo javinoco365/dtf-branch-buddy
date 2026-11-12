@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Building2, Wallet, FileText } from "lucide-react";
+import { Users, Building2, Wallet, FileText, CalendarDays } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/panel/configuracion")({
@@ -42,6 +42,12 @@ function ConfiguracionPage() {
           icon={Wallet}
           title="Caja"
           desc="Los conceptos del desplegable y los socios que aparecen en los apuntes de caja."
+        />
+        <ConfigCard
+          to="/panel/configuracion-agenda"
+          icon={CalendarDays}
+          title="Agenda"
+          desc="Las categorías de las tareas: añadirlas, renombrarlas, ordenarlas y desactivarlas."
         />
         {isAdmin && (
           <ConfigCard

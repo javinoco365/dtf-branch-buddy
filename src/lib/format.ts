@@ -93,3 +93,40 @@ export function referenciaFactura(
   if (ejercicio == null || numero == null) return "—";
   return `${serie ?? ""}${ejercicio}/${String(numero).padStart(4, "0")}`;
 }
+
+/** Un día 'yyyy-mm-dd' como fecha a mediodía UTC: así ninguna zona lo cambia de día. */
+function deDia(dia: string): Date {
+  const [y, m, d] = dia.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!, 12));
+}
+
+const DIA_CORTO = new Intl.DateTimeFormat("es-ES", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+const DIA_LARGO = new Intl.DateTimeFormat("es-ES", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/**
+ * Un día de la Agenda respecto a hoy: «Hoy», «Mañana», «Ayer» o «mar 17 nov».
+ * Los dos son 'yyyy-mm-dd' (días de Madrid).
+ */
+export function diaRelativo(dia: string, hoy: string): string {
+  const n = Math.round((deDia(dia).getTime() - deDia(hoy).getTime()) / 86_400_000);
+  if (n === 0) return "Hoy";
+  if (n === 1) return "Mañana";
+  if (n === -1) return "Ayer";
+  return DIA_CORTO.format(deDia(dia)).replace(/\./g, "");
+}
+
+/** «Jueves, 12 de noviembre» para un día 'yyyy-mm-dd'. */
+export function diaLargo(dia: string): string {
+  const t = DIA_LARGO.format(deDia(dia));
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
