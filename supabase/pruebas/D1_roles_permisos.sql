@@ -625,7 +625,9 @@ SELECT CASE WHEN count(*) = 0
 -- funciones llevan la línea de rol_exigir_quien() y hay que devolverlas al
 -- cuerpo de 20261031200300 antes de quitar los niveles. 20261101100000 crea
 -- textil_productos_unir(), que también la lleva: su reversión la quita; y
--- 20261106100000 las envolturas emitir_factura*_con_pago(), lo mismo.
+-- 20261106100000 las envolturas emitir_factura*_con_pago(), lo mismo; y
+-- 20261115100000 socio_cuentas_fijar() y la guardia de socio_cuentas.
+\ir ../reversiones/20261115100000_socio_cuentas.sql
 \ir ../reversiones/20261106100000_factura_metodo_pago.sql
 \ir ../reversiones/20261101100000_textil_productos_unir.sql
 \ir ../reversiones/20261031400100_niveles_secretos.sql
