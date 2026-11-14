@@ -17,6 +17,7 @@ import {
   concepto,
   DATOS,
   variacionCifra,
+  cambioDeSignoCifra,
   type Cifra,
   type ClaveConcepto,
   type ClaveDato,
@@ -36,6 +37,7 @@ export function TarjetaKpi({
   icon: Icon,
   color = "primary",
   deltaInverso = false,
+  sinVariacion,
   explicacion,
   pie,
   className,
@@ -58,6 +60,8 @@ export function TarjetaKpi({
   icon: LucideIcon;
   color?: "primary" | "destructive";
   deltaInverso?: boolean;
+  /** Sin variación porque cambió el signo: «antes en pérdidas». */
+  sinVariacion?: string | null;
 }) {
   const iconBg =
     color === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary";
@@ -91,7 +95,12 @@ export function TarjetaKpi({
         >
           {valor}
         </div>
-        <LineaVariacion delta={delta} frente={frente} inverso={deltaInverso} />
+        <LineaVariacion
+          delta={delta}
+          frente={frente}
+          inverso={deltaInverso}
+          sinVariacion={sinVariacion}
+        />
         {pie && <div className="mt-2 text-xs">{pie}</div>}
       </CardContent>
     </Card>
@@ -147,6 +156,11 @@ export function TarjetaConcepto({
       delta={frente ? delta : null}
       frente={frente}
       deltaInverso={inverso}
+      sinVariacion={
+        frente && cifra && !cargando && !error
+          ? cambioDeSignoCifra(cifra, previa ?? undefined)
+          : null
+      }
       icon={ICONO_CONCEPTO[clave]}
       color={valor !== null && valor < 0 && c.destacado ? "destructive" : "primary"}
       pie={
@@ -247,12 +261,21 @@ export function LineaVariacion({
   delta,
   frente,
   inverso = false,
+  sinVariacion = null,
 }: {
   delta: number | null;
   frente?: string;
   /** Subir es malo (cancelados, por ejemplo). */
   inverso?: boolean;
+  sinVariacion?: string | null;
 }) {
+  if (frente && delta === null && sinVariacion) {
+    return (
+      <div className="mt-1 text-xs text-muted-foreground">
+        — {sinVariacion}, frente a {frente}
+      </div>
+    );
+  }
   if (!frente || delta === null) return null;
   const subiendo = delta >= 0;
   const positivo = inverso ? !subiendo : subiendo;

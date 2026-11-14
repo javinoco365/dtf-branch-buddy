@@ -34,6 +34,7 @@ import {
   separarCuenta,
   sobreVentasNetas,
   variacionCifra,
+  cambioDeSignoCifra,
   DATOS,
   type Cifra,
   type ClaveDato,
@@ -383,7 +384,8 @@ function ValorCifra({
 }
 
 /** «+12,4 %», «−3,0 %» o «×61»; «—» sin datos para comparar. */
-const textoVariacion = (delta: number | null) => variacionEscrita(delta, numero);
+const textoVariacion = (delta: number | null, motivo?: string | null) =>
+  variacionEscrita(delta, numero, motivo);
 
 /** La cascada del periodo, frente al anterior, con el peso de cada fila en las ventas netas. */
 function TablaPeriodo({
@@ -428,7 +430,10 @@ function TablaPeriodo({
               )}
               {frente && (
                 <TableCell className="text-right tabular-nums">
-                  {textoVariacion(variacionCifra(cifra, previa?.[c.clave]))}
+                  {textoVariacion(
+                    variacionCifra(cifra, previa?.[c.clave]),
+                    cambioDeSignoCifra(cifra, previa?.[c.clave]),
+                  )}
                 </TableCell>
               )}
               <TableCell className="text-right tabular-nums text-muted-foreground">

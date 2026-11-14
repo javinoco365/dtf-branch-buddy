@@ -34,6 +34,7 @@ import { redondear } from "./importes";
 import {
   ESTADO_CANCELADO,
   baseConEnvio,
+  cambioDeSigno,
   costeProduccion,
   COSTE_UV_POR_DEFECTO,
   variacion,
@@ -1025,6 +1026,12 @@ export function separarCuenta(
 // ---------------------------------------------------------------------------
 // Para pintar
 // ---------------------------------------------------------------------------
+
+/** Si una cifra ha cambiado de signo frente al periodo anterior, dicho con palabras. */
+export function cambioDeSignoCifra(actual: Cifra, anterior: Cifra | undefined): string | null {
+  if (!anterior || actual.valor === null || anterior.valor === null) return null;
+  return cambioDeSigno(actual.valor, anterior.valor);
+}
 
 /** La variación de una cifra frente al periodo anterior, en %. Nula si falta alguna. */
 export function variacionCifra(actual: Cifra, anterior: Cifra | undefined): number | null {
