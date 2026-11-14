@@ -57,7 +57,7 @@ import {
 } from "@/lib/escaner-textil.functions";
 import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
-import { eur as fmtEUR, eurConSigno, eurUnitario, numero } from "@/lib/format";
+import { eur as fmtEUR, eurConSigno, eurUnitario, fechaHora, numero } from "@/lib/format";
 import { comprasParaDevolucion } from "@/dominio/proformas";
 import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
@@ -1136,9 +1136,7 @@ function HistorialDialog({ item, onClose }: any) {
             <TableBody>
               {data.map((m: any) => (
                 <TableRow key={m.id}>
-                  <TableCell className="text-xs">
-                    {new Date(m.created_at).toLocaleString("es-ES")}
-                  </TableCell>
+                  <TableCell className="text-xs">{fechaHora(m.created_at)}</TableCell>
                   <TableCell>{MOTIVO_TEXTO[m.motivo] ?? m.motivo}</TableCell>
                   {m.motivo === "ajuste_coste" ? (
                     // Revaloriza lo que queda (factura casada con su proforma): sin
