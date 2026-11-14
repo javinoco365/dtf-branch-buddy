@@ -42,7 +42,7 @@ export const NOVEDADES: Novedad[] = [
     titulo: "«Quiero factura» desde la web",
     resumen: "Si el cliente marca «Quiero factura» al comprar, el pedido lo recuerda.",
     puntos: [
-      "Sale la etiqueta «Quiere factura»; en los manuales la marcas tú.",
+      "Sale la etiqueta «Quiere factura» en el pedido.",
       "Filtra en Pedidos los que quieren factura.",
       "A esos pedidos no se les hace ticket, solo factura.",
     ],

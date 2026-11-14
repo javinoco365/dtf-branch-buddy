@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -134,9 +133,6 @@ export function PedidoFormDialog({
   // por pedido, no por línea — el DTF va todo al mismo tipo, así que mezclar
   // tipos dentro de un mismo pedido no es un caso real.
   const [aplicaIva, setAplicaIva] = useState(true);
-  // «Quiere factura»: en uno de la web lo marca el cliente y aquí solo se ve.
-  const [pideFactura, setPideFactura] = useState(false);
-  const deLaWeb = pedido?.origen === "woocommerce";
 
   useEffect(() => {
     if (!open) return;
@@ -148,7 +144,6 @@ export function PedidoFormDialog({
       setPago(pedido.metodo_pago ?? "Transferencia bancaria directa");
       setEnvio(Number(pedido.envio ?? 0));
       setNotas(pedido.notas ?? "");
-      setPideFactura(pedido.necesita_factura === true);
       setFacturacion(aFormulario(pedido.direccion_facturacion));
       setEntrega(aFormulario(pedido.direccion_envio));
       // Se marca «la misma» cuando de verdad lo es, y también cuando no hay
@@ -190,7 +185,6 @@ export function PedidoFormDialog({
       setPago("Transferencia bancaria directa");
       setEnvio(0);
       setNotas("");
-      setPideFactura(false);
       setFacturacion(DIRECCION_VACIA);
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
@@ -265,7 +259,6 @@ export function PedidoFormDialog({
         metodo_pago: pago,
         envio,
         notas: notas || null,
-        ...(deLaWeb ? {} : { necesita_factura: pideFactura }),
         items: itemsValidos,
       };
       if (esEdicion && pedido) {
@@ -458,26 +451,6 @@ export function PedidoFormDialog({
                 línea.
               </p>
             )}
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="pide-factura"
-                checked={pideFactura}
-                disabled={deLaWeb}
-                onCheckedChange={(v) => setPideFactura(v === true)}
-              />
-              <Label
-                htmlFor="pide-factura"
-                className={cn("font-normal", deLaWeb ? "text-muted-foreground" : "cursor-pointer")}
-              >
-                Quiere factura
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {deLaWeb
-                ? "Lo marca el cliente al comprar en la web; aquí no se cambia."
-                : "Marcado, a este pedido no se le hace ticket: solo factura con nombre y NIF."}
-            </p>
 
             <div className="space-y-2">
               {lineas.map((l, i) => (

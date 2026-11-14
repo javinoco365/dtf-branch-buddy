@@ -229,8 +229,6 @@ export const createPedidoManual = createServerFn({ method: "POST" })
         metodo_pago: z.string().optional().nullable(),
         envio: z.number().nonnegative().default(0),
         notas: z.string().optional().nullable(),
-        /** «Quiere factura»: en un pedido manual lo decide quien lo crea. */
-        necesita_factura: z.boolean().optional(),
         items: z.array(itemSchema).min(1),
       })
       .parse(d),
@@ -269,9 +267,6 @@ export const createPedidoManual = createServerFn({ method: "POST" })
       direccion_facturacion: normalizarDireccion(data.direccion_facturacion),
       direccion_envio: normalizarDireccion(data.direccion_envio),
       notas: data.notas ?? null,
-      // Solo si se marca: así, sin la migración 20261117100000, un pedido
-      // normal se guarda igual que antes.
-      ...(data.necesita_factura ? { necesita_factura: true } : {}),
       ...porLinea,
       subtotal: totales.base_imponible,
       iva: totales.iva_total,
@@ -280,11 +275,6 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     const insertar = (fila: Record<string, unknown>) =>
       tabla(supabaseAdmin, "pedidos").insert(fila).select("id").single();
     let { data: pedido, error: pErr } = await insertar(filaPedido);
-    if (faltaLaColumna(pErr) && "necesita_factura" in filaPedido) {
-      throw new Error(
-        "No se puede guardar «Quiere factura» todavía: falta activarlo en la base. Desmárcalo o avisa a Javier.",
-      );
-    }
     // Sin los importes del UV (20261111100000): con sus metros aparte igual.
     if (faltaLaColumna(pErr)) {
       ({ data: pedido, error: pErr } = await insertar(sinImportesUv(filaPedido)));
@@ -389,8 +379,6 @@ export const updatePedido = createServerFn({ method: "POST" })
         metodo_pago: z.string().optional().nullable(),
         envio: z.number().nonnegative().optional(),
         notas: z.string().optional().nullable(),
-        /** Solo cuenta en los manuales: en los de la web lo trae la sincronización. */
-        necesita_factura: z.boolean().optional(),
         items: z.array(itemSchema).optional(),
       })
       .parse(d),
@@ -400,7 +388,7 @@ export const updatePedido = createServerFn({ method: "POST" })
     const supabaseAdmin = adminComoUsuario(context.userId);
     const { data: pedido } = await supabaseAdmin
       .from("pedidos")
-      .select("id, tienda_id, origen")
+      .select("id, tienda_id")
       .eq("id", data.id)
       .maybeSingle();
     if (!pedido) throw new Error("Pedido no encontrado");
@@ -473,24 +461,6 @@ export const updatePedido = createServerFn({ method: "POST" })
         .eq("id", data.id));
     }
     if (error) throw error;
-
-    // «Quiere factura», aparte para no mezclarlo con los reintentos de arriba.
-    // En los de la web no se toca: lo marca el cliente y la sincronización lo
-    // vuelve a escribir.
-    if (data.necesita_factura !== undefined && pedido.origen !== "woocommerce") {
-      const r = await tabla(supabaseAdmin, "pedidos")
-        .update({ necesita_factura: data.necesita_factura })
-        .eq("id", data.id);
-      if (faltaLaColumna(r.error)) {
-        if (data.necesita_factura) {
-          throw new Error(
-            "El pedido se ha guardado, pero «Quiere factura» no: falta activarlo en la base. Avisa a Javier.",
-          );
-        }
-      } else if (r.error) {
-        throw r.error;
-      }
-    }
     return { ok: true };
   });
 
