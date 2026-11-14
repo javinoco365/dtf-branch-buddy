@@ -174,6 +174,7 @@ seccion "Importes del pedido por línea (DTF y DTF UV)" D8_importes_por_linea.sq
 seccion "Lectura de empresas por nivel" D9_empresas_lectura.sql
 seccion "Quién usa cada cuenta" E1_socio_cuentas.sql
 seccion "Agenda: categorías, tareas e historial" E2_agenda.sql
+seccion "«Quiero factura»: pedidos.necesita_factura" E3_necesita_factura.sql
 seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
   'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 

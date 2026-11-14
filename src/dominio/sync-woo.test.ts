@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  pidioFacturaWoo,
   clientesInvitadosNuevos,
   nifPedidoWoo,
   nifsDeClientes,
@@ -193,6 +194,26 @@ describe("clientesInvitadosNuevos", () => {
     expect(
       clientesInvitadosNuevos([{ billing: { email: "ana@example.com" } }], new Set())[0].pais,
     ).toBe("ES");
+  });
+});
+
+describe("pidioFacturaWoo", () => {
+  const con = (value: unknown, key = "necesita_factura") => ({ meta_data: [{ key, value }] });
+
+  it("entiende la casilla marcada de cualquier forma", () => {
+    for (const v of ["1", "yes", "Sí", "si", "true", "on", " YES ", true, 1]) {
+      expect([v, pidioFacturaWoo(con(v))]).toEqual([v, true]);
+    }
+    expect(pidioFacturaWoo(con("1", "_necesita_factura"))).toBe(true);
+  });
+
+  it("sin marcar o sin la clave, no", () => {
+    for (const v of ["", "0", "no", "false", "off", null, undefined, 0, false]) {
+      expect([v, pidioFacturaWoo(con(v))]).toEqual([v, false]);
+    }
+    expect(pidioFacturaWoo({})).toBe(false);
+    expect(pidioFacturaWoo({ meta_data: null })).toBe(false);
+    expect(pidioFacturaWoo(con("1", "otra_clave"))).toBe(false);
   });
 });
 

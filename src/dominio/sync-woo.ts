@@ -260,3 +260,24 @@ export function nifsDeClientes<
   }
   return new Map([...elegido].map(([cliente, { nif }]) => [cliente, nif]));
 }
+
+/**
+ * La casilla «Quiero factura» del checkout. La guarda en el `meta_data` del
+ * pedido con la clave `necesita_factura` (decisión de Javier, 14-11-2026).
+ * Una casilla de WordPress puede llegar como "1", "yes", "on", "true", "sí" o
+ * como booleano; sin marcar, falta la clave o llega vacía, "0" o "no".
+ */
+export const CLAVES_PIDE_FACTURA_WOO = ["necesita_factura", "_necesita_factura"] as const;
+
+const MARCADA = new Set(["1", "yes", "si", "sí", "true", "on", "y", "s"]);
+
+/** Si el cliente marcó «Quiero factura» en la web. */
+export function pidioFacturaWoo(o: { meta_data?: readonly MetaPedidoWoo[] | null }): boolean {
+  const metas = Array.isArray(o.meta_data) ? o.meta_data : [];
+  for (const clave of CLAVES_PIDE_FACTURA_WOO) {
+    const v = metas.find((x) => x?.key === clave)?.value;
+    if (v === true || v === 1) return true;
+    if (typeof v === "string" && MARCADA.has(v.trim().toLowerCase())) return true;
+  }
+  return false;
+}

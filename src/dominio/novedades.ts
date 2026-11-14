@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-quiere-factura",
+    fecha: "2026-11-14",
+    tipo: "nuevo",
+    titulo: "«Quiero factura» desde la web",
+    resumen: "Si el cliente marca «Quiero factura» al comprar, el pedido lo recuerda.",
+    puntos: [
+      "Sale la etiqueta «Quiere factura» en el pedido.",
+      "Filtra en Pedidos los que quieren factura.",
+      "A esos pedidos no se les hace ticket, solo factura.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-novedades",
     fecha: "2026-11-14",
     tipo: "nuevo",

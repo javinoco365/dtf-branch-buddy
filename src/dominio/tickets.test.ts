@@ -21,6 +21,36 @@ const PARTICULAR = { nombre: "Vecina", nif: null, tipo_fiscal: "particular" as c
 const PROFESIONAL = { nombre: "Taller", nif: null, tipo_fiscal: "profesional" as const };
 const CON_NIF = { nombre: "Talleres Pérez S.L.", nif: "B-12.345.678", tipo_fiscal: null };
 
+describe("decidirDocumento: «Quiero factura» en la web", () => {
+  it("con datos, factura completa", () => {
+    expect(decidirDocumento(12, { ...CON_NIF, pide_factura: true })).toEqual({
+      documento: "factura",
+    });
+  });
+
+  it("sin datos, pedirlos aunque quepa en un ticket", () => {
+    const d = decidirDocumento(12, { ...SIN_DATOS, pide_factura: true });
+    expect(d).toEqual({ documento: "pedir_datos", limite: 400, motivo: "pide_factura" });
+    expect(explicarDecision(d)).toMatch(/pidió factura en la web/);
+    expect(decidirDocumento(12, { ...PARTICULAR, pide_factura: true }).documento).toBe(
+      "pedir_datos",
+    );
+  });
+
+  it("sin la casilla, todo sigue igual", () => {
+    expect(decidirDocumento(12, { ...SIN_DATOS, pide_factura: false }).documento).toBe("ticket");
+  });
+
+  it("en bloque nunca va a ticket", () => {
+    const c = clasificarParaTickets([
+      { id: "a", numero: "1", total: 50, cliente: { ...SIN_DATOS, pide_factura: true } },
+      { id: "b", numero: "2", total: 50, cliente: SIN_DATOS },
+    ]);
+    expect(c.tickets.map((p) => p.id)).toEqual(["b"]);
+    expect(c.revisar.map((r) => r.pedido.id)).toEqual(["a"]);
+  });
+});
+
 describe("decidirDocumento: la tabla del RD 1619/2012 art. 4", () => {
   it("con nombre y NIF, factura completa sea cual sea el importe", () => {
     expect(decidirDocumento(12, CON_NIF)).toEqual({ documento: "factura" });

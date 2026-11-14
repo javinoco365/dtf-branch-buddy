@@ -579,15 +579,21 @@ async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
 }
 
 /**
- * Lee pedidos con `cliente_nif` si la columna existe. Sin la migración
- * 20261104100000 no existe, y la lectura falla entera: se repite sin ella
- * antes que dejar sin poder facturar.
+ * Lee pedidos con `cliente_nif` y `necesita_factura` si las columnas existen.
+ * Sin la migración 20261104100000 (NIF) o la 20261117100000 («Quiero
+ * factura») no existen, y la lectura falla entera: se repite sin ellas antes
+ * que dejar sin poder facturar.
  */
 async function conNifDelPedido(
-  leer: (columnaNif: string) => PromiseLike<{ data: any; error: { message: string } | null }>,
+  leer: (columnas: string) => PromiseLike<{ data: any; error: { message: string } | null }>,
 ): Promise<{ data: any; error: { message: string } | null }> {
-  const r = await leer(", cliente_nif");
-  return r.error && /cliente_nif/.test(r.error.message) ? leer("") : r;
+  let columnas = ["cliente_nif", "necesita_factura"];
+  let r = await leer(columnas.map((c) => `, ${c}`).join(""));
+  while (r.error && columnas.some((c) => r.error!.message.includes(c))) {
+    columnas = columnas.filter((c) => !r.error!.message.includes(c));
+    r = await leer(columnas.map((c) => `, ${c}`).join(""));
+  }
+  return r;
 }
 
 /** Todo lo que hace falta para emitir el documento de un pedido. Solo lee. */
@@ -699,9 +705,15 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       total,
       tipo_fiscal: tipoFiscal,
       limites,
+      pide_factura: pedido.necesita_factura === true,
       decision: decidirDocumento(
         total,
-        { nombre: receptor.nombre, nif: receptor.nif, tipo_fiscal: tipoFiscal },
+        {
+          nombre: receptor.nombre,
+          nif: receptor.nif,
+          tipo_fiscal: tipoFiscal,
+          pide_factura: pedido.necesita_factura === true,
+        },
         limites,
       ),
     };
@@ -824,18 +836,26 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
       total: number;
       cliente_id: string | null;
       cliente_nombre: string | null;
+      necesita_factura?: boolean;
     };
-    const { data: pedidos, error } = await leerTodas<Fila>((a, b) =>
-      tabla(sb, "pedidos")
-        .select("id, numero, empresa_id, fecha_pedido, origen, total, cliente_id, cliente_nombre")
-        .eq("tienda_id", data.tienda_id)
-        .is("cancelado_en", null)
-        .gte("fecha_pedido", tramo.desde)
-        .lt("fecha_pedido", tramo.hasta)
-        .order("fecha_pedido")
-        .order("id")
-        .range(a, b),
-    );
+    const leerPedidos = (extra: string) =>
+      leerTodas<Fila>((a, b) =>
+        tabla(sb, "pedidos")
+          .select(
+            `id, numero, empresa_id, fecha_pedido, origen, total, cliente_id, cliente_nombre${extra}`,
+          )
+          .eq("tienda_id", data.tienda_id)
+          .is("cancelado_en", null)
+          .gte("fecha_pedido", tramo.desde)
+          .lt("fecha_pedido", tramo.hasta)
+          .order("fecha_pedido")
+          .order("id")
+          .range(a, b),
+      );
+    // Sin la migración de «Quiero factura» (20261117100000) se lee sin ella.
+    let lectura = await leerPedidos(", necesita_factura");
+    if (lectura.error?.message.includes("necesita_factura")) lectura = await leerPedidos("");
+    const { data: pedidos, error } = lectura;
     if (error) throw new Error(error.message);
     // Del más antiguo al más reciente, como se emitirán. Una vez cada uno: si
     // entra un pedido mientras se leen las páginas, una fila puede repetirse.
@@ -913,8 +933,14 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
                 nombre: ficha.nombre,
                 nif: ficha.nif,
                 tipo_fiscal: esTipoFiscal(ficha.tipo_fiscal) ? ficha.tipo_fiscal : null,
+                pide_factura: p.necesita_factura === true,
               }
-            : { nombre: p.cliente_nombre, nif: null, tipo_fiscal: null },
+            : {
+                nombre: p.cliente_nombre,
+                nif: null,
+                tipo_fiscal: null,
+                pide_factura: p.necesita_factura === true,
+              },
         };
       });
 
@@ -1032,7 +1058,12 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
             : null;
         const decision = decidirDocumento(
           total,
-          { nombre: receptor.nombre, nif: receptor.nif, tipo_fiscal: tipoFiscal },
+          {
+            nombre: receptor.nombre,
+            nif: receptor.nif,
+            tipo_fiscal: tipoFiscal,
+            pide_factura: p.necesita_factura === true,
+          },
           limites,
         );
         return {
@@ -1138,7 +1169,12 @@ async function emitirEnBloque(
         const limites = await leerLimitesTicket(sb, pedido.empresa_id ?? null);
         const decision = decidirDocumento(
           calcularTotales(lineas).total,
-          { nombre: receptor.nombre, nif: receptor.nif, tipo_fiscal: tipoFiscal },
+          {
+            nombre: receptor.nombre,
+            nif: receptor.nif,
+            tipo_fiscal: tipoFiscal,
+            pide_factura: pedido.necesita_factura === true,
+          },
           limites,
         );
         if (decision.documento !== "ticket") {

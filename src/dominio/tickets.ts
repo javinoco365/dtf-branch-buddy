@@ -66,6 +66,8 @@ export type ClienteDocumento = {
   nombre?: string | null;
   nif?: string | null;
   tipo_fiscal?: TipoFiscal | null;
+  /** Marcó «Quiero factura» en la web: nunca ticket. */
+  pide_factura?: boolean | null;
 };
 
 export type DecisionDocumento =
@@ -73,8 +75,11 @@ export type DecisionDocumento =
   | { documento: "factura" }
   /** Cabe en un ticket. */
   | { documento: "ticket"; limite: number }
-  /** No cabe en un ticket y faltan los datos para la factura. */
-  | { documento: "pedir_datos"; limite: number }
+  /**
+   * Faltan los datos para la factura que toca: porque no cabe en un ticket o
+   * porque el cliente pidió factura en la web (`motivo: "pide_factura"`).
+   */
+  | { documento: "pedir_datos"; limite: number; motivo?: "pide_factura" }
   /** Cabe en un ticket solo si el cliente es particular: hay que preguntarlo. */
   | { documento: "preguntar_tipo"; limite: number; limite_particular: number }
   /** Sin importe no hay nada que documentar. */
@@ -117,6 +122,14 @@ export function decidirDocumento(
   if (tieneDatosFiscales(cliente)) return { documento: "factura" };
 
   const tipo = cliente?.tipo_fiscal ?? null;
+  // Pidió factura en la web: ni ticket ni preguntar, aunque quepa.
+  if (cliente?.pide_factura) {
+    return {
+      documento: "pedir_datos",
+      limite: limiteTicket(tipo, limites),
+      motivo: "pide_factura",
+    };
+  }
   if (cabeEnTicket(total, tipo, limites)) {
     return { documento: "ticket", limite: limiteTicket(tipo, limites) };
   }
@@ -142,6 +155,9 @@ export function explicarDecision(d: DecisionDocumento): string {
     case "ticket":
       return "Cabe en un ticket: no hacen falta datos del cliente.";
     case "pedir_datos":
+      if (d.motivo === "pide_factura") {
+        return "El cliente pidió factura en la web: hace falta factura completa con nombre y NIF.";
+      }
       return "Pasa del límite del ticket: hace falta factura completa con nombre y NIF del cliente.";
     case "preguntar_tipo":
       return "Solo cabe en un ticket si el cliente es particular. ¿Lo es?";
