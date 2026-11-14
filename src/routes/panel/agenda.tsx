@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarDays, Clock, Plus } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   FILTRO_PERSONA_INICIAL,
   FILTROS_LISTA_INICIALES,
+  motivoSinCrear,
   pasaPersona,
   resumenDe,
   type EstadoTarea,
@@ -17,7 +18,7 @@ import {
 } from "@/dominio/agenda";
 import { cambiarEstadoTarea, pasarTarea } from "@/lib/agenda.functions";
 import { avisarError, mensajeDeError } from "@/lib/errores";
-import { hoyEnMadrid, useAgenda } from "@/hooks/use-agenda";
+import { useAgenda, useHoyEnMadrid } from "@/hooks/use-agenda";
 import { useQuienSoy } from "@/hooks/use-quien-soy";
 import { usePermisos } from "@/hooks/use-permisos";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,11 @@ const TEXTO_ESTADO: Record<EstadoTarea, string> = {
   pendiente: "Vuelve a estar pendiente",
 };
 
+/** Si no hay otro sitio lógico, el foco va al título de la lista de tareas. */
+function focoDeRespaldo() {
+  document.getElementById("titulo-lista-tareas")?.focus();
+}
+
 function filtroInicial(yo: string | null): FiltroPersona {
   // Por defecto cada uno ve lo suyo. Sin persona (cuenta sin socios), todo.
   return yo ? FILTRO_PERSONA_INICIAL : { para: "todos", de: "todos" };
@@ -48,10 +54,19 @@ function filtroInicial(yo: string | null): FiltroPersona {
 
 function Agenda() {
   const { data, isLoading, error, refetch } = useAgenda();
-  const { persona, cargando: cargandoPersona } = useQuienSoy();
+  const {
+    persona,
+    estado: estadoQuien,
+    cargando: cargandoPersona,
+    error: errorPersona,
+    reintentar: reintentarPersona,
+  } = useQuienSoy();
   const { escribir } = usePermisos();
   const yo = persona?.id ?? null;
-  const hoy = hoyEnMadrid();
+  const hoy = useHoyEnMadrid();
+  // Sin persona no hay quién firme la tarea: no se crea (decisión de Javier).
+  const motivoNoCrear = motivoSinCrear(escribir, errorPersona ? "error" : estadoQuien.tipo);
+  const puedeCrear = motivoNoCrear === null;
 
   const [filtroPersona, setFiltroPersona] = useState<FiltroPersona>(filtroInicial(yo));
   useEffect(() => {
@@ -70,8 +85,47 @@ function Agenda() {
     const o = origen.current;
     origen.current = null;
     if (o && document.contains(o)) o.focus();
-    else document.getElementById("boton-nueva-tarea")?.focus();
+    else focoDeRespaldo();
   };
+
+  // Tras marcar como realizada, pasar o cancelar, la fila puede desaparecer
+  // (sale de «Pendientes») cuando llegan los datos nuevos, y con ella el foco.
+  // Se apuntan antes las tareas de al lado: si el foco se pierde, va a la
+  // siguiente (o a la anterior); si no queda ninguna, al título de la lista.
+  const candidatosFoco = useRef<{ zona: ParentNode; ids: string[] } | null>(null);
+  const prepararFoco = (id: string) => {
+    // La zona (lista, día o casillas) de lo que se pulsó; con el panel abierto,
+    // la de lo que lo abrió.
+    const desde = (origen.current ?? document.activeElement) as HTMLElement | null;
+    const zona: ParentNode = desde?.closest("[data-zona-tareas]") ?? document;
+    const ids = [...zona.querySelectorAll<HTMLElement>("[data-tarea-id]")].map(
+      (e) => e.dataset.tareaId!,
+    );
+    const i = ids.indexOf(id);
+    candidatosFoco.current = {
+      zona,
+      ids: i < 0 ? [id] : [id, ...ids.slice(i + 1), ...ids.slice(0, i).reverse()],
+    };
+  };
+  useEffect(() => {
+    const c = candidatosFoco.current;
+    if (!c) return;
+    const activo = document.activeElement;
+    if (activo && activo !== document.body && document.contains(activo)) return;
+    candidatosFoco.current = null;
+    const zona = c.zona instanceof Node && document.contains(c.zona) ? c.zona : document;
+    for (const id of c.ids) {
+      const fila = zona.querySelector<HTMLElement>(`[data-tarea-id="${CSS.escape(id)}"]`);
+      const destino = fila?.matches("button")
+        ? fila
+        : fila?.querySelector<HTMLElement>("[data-foco-tarea]");
+      if (destino) {
+        destino.focus();
+        return;
+      }
+    }
+    focoDeRespaldo();
+  }, [data]);
 
   const tareas = useMemo(() => data?.tareas ?? [], [data]);
   const resumen = useMemo(() => resumenDe(tareas, yo, hoy), [tareas, yo, hoy]);
@@ -110,6 +164,7 @@ function Agenda() {
       toast.error("Tu cuenta no tiene una persona asignada: pídeselo a un administrador.");
       return;
     }
+    prepararFoco(tarea.id);
     const antes = tarea.estado;
     cambiar.mutate(
       { tarea, nuevo },
@@ -127,6 +182,7 @@ function Agenda() {
 
   function pasarA(tarea: Tarea, para: string, alTerminar?: () => void) {
     if (!yo) return;
+    prepararFoco(tarea.id);
     const antes = tarea.paraSocioId;
     pasarM.mutate(
       { tarea, para },
@@ -146,13 +202,14 @@ function Agenda() {
     setFiltroPersona(FILTRO_PERSONA_INICIAL);
     setFiltros({ ...FILTROS_LISTA_INICIALES, ...cambio });
     document.getElementById("lista-tareas")?.scrollIntoView({ block: "start" });
+    document.getElementById("titulo-lista-tareas")?.focus({ preventScroll: true });
   }
 
   const listo = !isLoading && !cargandoPersona && !error && !data?.falta_migracion;
 
   // «N» abre una tarea nueva, si no se está escribiendo ni eligiendo en otro sitio.
   useEffect(() => {
-    if (!escribir || !listo) return;
+    if (!puedeCrear || !listo) return;
     const alPulsar = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (
@@ -174,7 +231,7 @@ function Agenda() {
     };
     window.addEventListener("keydown", alPulsar);
     return () => window.removeEventListener("keydown", alPulsar);
-  }, [escribir, panel, listo]);
+  }, [puedeCrear, panel, listo]);
 
   if (isLoading || cargandoPersona) {
     return <p className="text-sm text-muted-foreground">Cargando la Agenda…</p>;
@@ -201,8 +258,29 @@ function Agenda() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 pb-20 sm:pb-0">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
+      {errorPersona && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            No se ha podido saber quién eres ({mensajeDeError(errorPersona)}). Puedes ver las
+            tareas, pero no crearlas ni cambiarlas hasta que se sepa.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 md:h-9"
+            onClick={reintentarPersona}
+            disabled={cargandoPersona}
+          >
+            {cargandoPersona ? "Reintentando…" : "Reintentar"}
+          </Button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 sm:items-end">
+        <div className="min-w-0 flex-1 basis-64 space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
           {persona ? (
             <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -243,24 +321,41 @@ function Agenda() {
               )}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Tu cuenta no tiene una persona asignada: ves todas las tareas. Un administrador lo
-              elige en Ajustes › Usuarios.
-            </p>
+            !errorPersona && (
+              <p className="text-sm text-muted-foreground">
+                Tu cuenta no tiene una persona asignada: ves todas las tareas.
+              </p>
+            )
           )}
         </div>
-        {escribir && (
-          <Button
-            id="boton-nueva-tarea"
-            onClick={() => abrir({ modo: "nueva" })}
-            className="hidden h-10 sm:inline-flex"
-          >
-            <Plus className="h-4 w-4" /> Nueva tarea
-            <kbd className="ml-1 hidden rounded border border-current px-1 text-[10px] font-semibold opacity-70 sm:inline">
-              N
-            </kbd>
-          </Button>
-        )}
+        {escribir &&
+          (puedeCrear ? (
+            <Button
+              id="boton-nueva-tarea"
+              onClick={() => abrir({ modo: "nueva" })}
+              className="hidden h-10 sm:inline-flex"
+            >
+              <Plus className="h-4 w-4" /> Nueva tarea
+              <kbd className="ml-1 hidden rounded border border-current px-1 text-[10px] font-semibold opacity-70 sm:inline">
+                N
+              </kbd>
+            </Button>
+          ) : (
+            // Desactivado y con el motivo a la vista (un botón desactivado no
+            // enseña su título al tocarlo en el móvil).
+            <div className="flex w-full flex-col gap-1 sm:w-auto sm:max-w-xs sm:items-end">
+              <Button
+                disabled
+                aria-describedby="motivo-sin-crear"
+                className="h-11 w-full sm:h-10 sm:w-auto"
+              >
+                <Plus className="h-4 w-4" /> Nueva tarea
+              </Button>
+              <p id="motivo-sin-crear" className="text-xs text-muted-foreground sm:text-right">
+                {motivoNoCrear}
+              </p>
+            </div>
+          ))}
       </div>
 
       <FiltroPersonas
@@ -278,7 +373,8 @@ function Agenda() {
         yo={yo}
         hoy={hoy}
         verIniciales={filtroPersona.para !== "yo"}
-        puedeEscribir={escribir}
+        puedeEscribir={escribir && !!yo}
+        puedeCrear={puedeCrear}
         cambiando={cambiar.isPending}
         onAbrir={(id) => abrir({ modo: "ver", id })}
         onNueva={(dia) => abrir({ modo: "nueva", dia })}
@@ -300,11 +396,12 @@ function Agenda() {
           onAbrir={(id) => abrir({ modo: "ver", id })}
           onCambiarHecha={(t) => cambiarEstado(t, t.estado === "hecha" ? "pendiente" : "hecha")}
           cambiando={cambiar.isPending}
-          puedeEscribir={escribir}
+          puedeEscribir={escribir && !!yo}
+          puedeCrear={puedeCrear}
         />
       </div>
 
-      {escribir && (
+      {puedeCrear && (
         <Button
           onClick={() => abrir({ modo: "nueva" })}
           className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 h-14 rounded-full px-5 text-base shadow-lg sm:hidden"

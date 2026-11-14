@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-agenda-arreglos",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Agenda más cómoda",
+    resumen: "Cada día del calendario tiene su botón «+» y en el móvil tocar un día abre ese día.",
+    puntos: [
+      "«Hoy» cambia solo a medianoche y el verde de «Realizada» se lee mejor.",
+      "Sin persona asignada no se crean tareas: el botón dice por qué.",
+      "En «Para» y «De» solo salen los socios que usan el CRM.",
+    ],
+    enlace: { ruta: "/panel/agenda", texto: "Abrir la Agenda" },
+  },
+  {
     id: "2026-11-14-quiere-factura",
     fecha: "2026-11-14",
     tipo: "nuevo",
