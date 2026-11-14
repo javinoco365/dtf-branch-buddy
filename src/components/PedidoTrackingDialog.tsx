@@ -18,6 +18,7 @@ import { usePermisos } from "@/hooks/use-permisos";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { TRANSPORTISTAS_CONOCIDOS, transportistaConocido } from "@/dominio/transportistas";
 import { avisarError } from "@/lib/errores";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 
 export function PedidoTrackingDialog({
   open,
@@ -52,9 +53,15 @@ export function PedidoTrackingDialog({
 
   const fn = useServerFn(setPedidoTracking);
   const costeFn = useServerFn(fijarCosteEnvioPedido);
-  const costeTexto = coste.trim().replace(",", ".");
+  // Vacío: sin coste apuntado. Escrito, tiene que ser un importe: si no, se
+  // dice y no se guarda (antes, lo que no se entendía no se guardaba sin más).
+  const costeNumero = coste.trim() === "" ? null : leerNumeroEscrito(coste);
   const costeValido =
-    costeTexto === "" || (/^\d+(\.\d{1,2})?$/.test(costeTexto) && Number(costeTexto) <= 1000);
+    costeNumero === null ||
+    (Number.isFinite(costeNumero) &&
+      costeNumero >= 0 &&
+      costeNumero <= 1000 &&
+      Math.abs(Math.round(costeNumero * 100) - costeNumero * 100) < 1e-6);
 
   const aplicarConocido = (nombre: string) => {
     setTransportista(nombre);
@@ -80,7 +87,9 @@ export function PedidoTrackingDialog({
           url: url || null,
         },
       });
-      const nuevo = costeTexto === "" ? null : Number(costeTexto);
+      if (!costeValido)
+        throw new Error(`El coste del envío «${coste.trim()}» no es un importe válido.`);
+      const nuevo = costeNumero;
       if (isAdmin && nuevo !== (pedido.coste_envio_real ?? null)) {
         await costeFn({ data: { tabla: "pedidos", id: pedido.id, coste: nuevo } });
       }

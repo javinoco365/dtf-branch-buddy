@@ -31,7 +31,7 @@ import {
   type SocioCaja,
 } from "@/lib/caja.functions";
 import { avisarError } from "@/lib/errores";
-import { leerNumeroEscrito } from "@/dominio/pedido-formulario";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
 

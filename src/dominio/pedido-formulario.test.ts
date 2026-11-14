@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  escribirNumero,
-  leerNumeroEscrito,
   leerPedidoEscrito,
   lineaEnBlanco,
   lineasParaTotales,
@@ -15,23 +13,6 @@ const linea = (c: Partial<LineaEscrita> = {}): LineaEscrita => ({
   iva_rate: "21",
   linea: "dtf",
   ...c,
-});
-
-describe("leerNumeroEscrito", () => {
-  it("con coma o con punto", () => {
-    expect(leerNumeroEscrito("12,5")).toBe(12.5);
-    expect(leerNumeroEscrito(" 12.5 ")).toBe(12.5);
-  });
-
-  it("vacío o con letras no es 0: es NaN, para decirlo", () => {
-    expect(leerNumeroEscrito("")).toBeNaN();
-    expect(leerNumeroEscrito("doce")).toBeNaN();
-  });
-
-  it("escribirNumero lo devuelve con coma", () => {
-    expect(escribirNumero(12.5)).toBe("12,5");
-    expect(escribirNumero(Number.NaN)).toBe("");
-  });
 });
 
 describe("leerPedidoEscrito", () => {
@@ -52,6 +33,20 @@ describe("leerPedidoEscrito", () => {
       "",
     );
     expect(r.ok && r.lineas.length).toBe(1);
+  });
+
+  it("un precio o un IVA vacíos no se guardan como 0: se dice en su línea", () => {
+    const r = leerPedidoEscrito(
+      [linea(), linea({ precio_unitario: "" }), linea({ iva_rate: " " })],
+      "",
+    );
+    expect(r).toEqual({
+      ok: false,
+      errores: [
+        "Línea 2: falta el precio (escribe 0 si va gratis).",
+        "Línea 3: falta el IVA (escribe 0 si va sin IVA).",
+      ],
+    });
   });
 
   it("una línea con precio pero sin descripción se avisa, no se descarta", () => {

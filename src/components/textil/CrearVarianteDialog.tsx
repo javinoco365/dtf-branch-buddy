@@ -24,6 +24,7 @@ import { claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado, type Recomendacion } from "@/dominio/precio-recomendado";
 import { productoQueChoca } from "@/dominio/stock-textil";
 import type { NuevaVariante, ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 
 /** Una línea de factura para la que se crea una variante. */
 export type LineaParaCrear = {
@@ -102,6 +103,15 @@ const nulo = (t: string) => (t.trim() === "" ? null : t.trim());
  * Quien lo usa lo monta solo mientras está abierto, para que el formulario
  * empiece siempre con la propuesta de las líneas.
  */
+/** Escrito y no es un número (o es negativo): se avisa y no se guarda. */
+const numeroMalEscrito = (t: string) => {
+  if (t.trim() === "") return false;
+  const n = leerNumeroEscrito(t);
+  return !Number.isFinite(n) || n < 0;
+};
+/** Vacío, 0; escrito, su número (ya comprobado con numeroMalEscrito). */
+const numeroOCero = (t: string) => (t.trim() === "" ? 0 : Math.max(0, leerNumeroEscrito(t)));
+
 export function CrearVarianteDialog({
   open,
   onOpenChange,
@@ -162,6 +172,18 @@ export function CrearVarianteDialog({
     if (v && v.ean.trim() && !eanValido(v.ean)) {
       problemas.push(`Línea ${l.indice + 1}: el EAN ${v.ean.trim()} no es válido.`);
     }
+    // Vacíos valen 0 (sin precio de venta ni mínimo); escritos, tienen que ser
+    // números: antes lo que no se entendía se guardaba como 0 sin decirlo.
+    if (v && numeroMalEscrito(v.precio_venta)) {
+      problemas.push(
+        `Línea ${l.indice + 1}: el precio «${v.precio_venta.trim()}» no es un número.`,
+      );
+    }
+    if (v && numeroMalEscrito(v.cantidad_minima)) {
+      problemas.push(
+        `Línea ${l.indice + 1}: el mínimo «${v.cantidad_minima.trim()}» no es un número.`,
+      );
+    }
   }
 
   const guardar = () => {
@@ -188,8 +210,8 @@ export function CrearVarianteDialog({
             talla: nulo(v.talla),
             ean: nulo(v.ean),
             sku: nulo(v.sku),
-            precio_venta: Math.max(0, Number(v.precio_venta.replace(",", ".")) || 0),
-            cantidad_minima: Math.max(0, Number(v.cantidad_minima) || 0),
+            precio_venta: numeroOCero(v.precio_venta),
+            cantidad_minima: numeroOCero(v.cantidad_minima),
           },
         });
       }

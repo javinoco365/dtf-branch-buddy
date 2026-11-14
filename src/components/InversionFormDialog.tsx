@@ -26,6 +26,7 @@ import type { SocioCaja } from "@/lib/caja.functions";
 import type { TipoInversion } from "@/dominio/inversion";
 import { avisarError } from "@/lib/errores";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 
 export function InversionFormDialog({
   open,
@@ -68,7 +69,7 @@ export function InversionFormDialog({
   const mut = useMutation({
     mutationFn: async () => {
       if (!socioId) throw new Error("Elige un socio");
-      const n = Number(String(importe).replace(",", "."));
+      const n = leerNumeroEscrito(importe);
       if (!Number.isFinite(n) || n <= 0) throw new Error("El importe tiene que ser mayor que cero");
       return guardar({
         data: {

@@ -17,22 +17,7 @@
  * solo se descarta la línea que está en blanco del todo; las demás se avisan.
  */
 
-/**
- * Un número como lo escribe una persona: «12,5» o «12.5». Vacío o con letras,
- * NaN, para que quien lo llame lo diga en vez de tomarlo por 0. Es la lectura
- * de Caja y de Cobros.
- */
-export function leerNumeroEscrito(texto: string | number | null | undefined): number {
-  if (typeof texto === "number") return texto;
-  const t = String(texto ?? "").trim();
-  if (t === "") return Number.NaN;
-  return Number(t.replace(",", "."));
-}
-
-/** Un número para enseñarlo en un campo de texto: con coma, sin ceros de más. */
-export function escribirNumero(n: number): string {
-  return Number.isFinite(n) ? String(n).replace(".", ",") : "";
-}
+import { leerNumeroEscrito } from "./numeros";
 
 /** Una línea tal como está en el formulario: los números, como texto. */
 export interface LineaEscrita {
@@ -97,8 +82,9 @@ export function leerPedidoEscrito(lineas: LineaEscrita[], envioTexto: string): L
     if (lineaEnBlanco(l)) return;
     const n = `Línea ${i + 1}`;
     const cantidad = leerNumeroEscrito(l.cantidad);
-    const precio = l.precio_unitario.trim() === "" ? 0 : leerNumeroEscrito(l.precio_unitario);
-    const iva = l.iva_rate.trim() === "" ? 0 : leerNumeroEscrito(l.iva_rate);
+    // Vacíos no son 0: un precio o un IVA sin escribir se dice, no se guarda a cero.
+    const precio = leerNumeroEscrito(l.precio_unitario);
+    const iva = leerNumeroEscrito(l.iva_rate);
     const propios: string[] = [];
     if (!l.descripcion.trim()) {
       propios.push(`${n}: falta la descripción (escríbela o borra la línea).`);
@@ -106,10 +92,14 @@ export function leerPedidoEscrito(lineas: LineaEscrita[], envioTexto: string): L
     if (!Number.isFinite(cantidad) || cantidad <= 0) {
       propios.push(`${n}: la cantidad «${l.cantidad.trim()}» tiene que ser un número mayor que 0.`);
     }
-    if (!Number.isFinite(precio) || precio < 0) {
+    if (l.precio_unitario.trim() === "") {
+      propios.push(`${n}: falta el precio (escribe 0 si va gratis).`);
+    } else if (!Number.isFinite(precio) || precio < 0) {
       propios.push(`${n}: el precio «${l.precio_unitario.trim()}» no es un número válido.`);
     }
-    if (!Number.isFinite(iva) || iva < 0) {
+    if (l.iva_rate.trim() === "") {
+      propios.push(`${n}: falta el IVA (escribe 0 si va sin IVA).`);
+    } else if (!Number.isFinite(iva) || iva < 0) {
       propios.push(`${n}: el IVA «${l.iva_rate.trim()}» no es un número válido.`);
     }
     if (propios.length) {

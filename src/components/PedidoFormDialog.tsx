@@ -33,12 +33,11 @@ import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import {
-  escribirNumero,
-  leerNumeroEscrito,
   leerPedidoEscrito,
   lineasParaTotales,
   type LineaEscrita,
 } from "@/dominio/pedido-formulario";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 import { mismaDireccion, normalizarDireccion, type Direccion } from "@/dominio/direcciones";
 import { avisarError } from "@/lib/errores";

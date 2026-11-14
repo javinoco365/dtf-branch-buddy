@@ -40,7 +40,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
-import { leerNumeroEscrito } from "@/dominio/pedido-formulario";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
