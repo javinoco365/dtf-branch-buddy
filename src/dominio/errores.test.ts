@@ -128,6 +128,14 @@ describe("errores de PostgREST", () => {
     );
   });
 
+  it("un aviso que nombra el fichero de la migración no lo enseña", () => {
+    const m = "Falta aplicar la migración 20261027100000_pedidos_realizado.sql";
+    expect(errorParaPersonas(m)).toEqual({
+      texto: "Esta parte aún no está activada. Avisa a Javier.",
+      detalle: m,
+    });
+  });
+
   it("no hay fila cuando se esperaba una", () => {
     expect(
       errorParaPersonas("JSON object requested, multiple (or no) rows returned").texto,

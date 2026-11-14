@@ -42,6 +42,7 @@ import {
 } from "@/lib/tiendas.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { avisarError } from "@/lib/errores";
+import { EstadoVacio } from "@/components/EstadoVacio";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
@@ -105,7 +106,7 @@ function TiendasIndex() {
   const [editando, setEditando] = useState<any>(null);
   const [borrando, setBorrando] = useState<any>(null);
 
-  const { data: tiendas = [] } = useQuery({
+  const { data: tiendas = [], isLoading: cargandoTiendas } = useQuery({
     queryKey: ["tiendas"],
     queryFn: async () => {
       const { data, error } = await supabase.from("tiendas").select("*").order("nombre");
@@ -156,7 +157,7 @@ function TiendasIndex() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tiendas</h1>
-          <p className="text-muted-foreground">Gestiona las webs WooCommerce</p>
+          <p className="text-muted-foreground">Tus tiendas online</p>
         </div>
         {isAdmin && (
           <Dialog open={open} onOpenChange={setOpen}>
@@ -202,8 +203,26 @@ function TiendasIndex() {
             <CardContent className="space-y-3">
               <div className="text-sm text-muted-foreground space-y-1">
                 <div className="truncate">{t.woo_url || "Sin URL configurada"}</div>
-                <div>CIF: {t.cif || "—"}</div>
-                <div>Sync: {t.sync_enabled ? "✅ Activa" : "⏸ Desactivada"}</div>
+                <div title="El número fiscal con el que factura la tienda">
+                  CIF (número fiscal): {t.cif || "—"}
+                </div>
+                <div>Sincronización con la web: {t.sync_enabled ? "activa" : "desactivada"}</div>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                <Link
+                  to="/panel/tiendas/$tiendaId/pedidos"
+                  params={{ tiendaId: t.id }}
+                  className="text-primary hover:underline"
+                >
+                  Pedidos
+                </Link>
+                <Link
+                  to="/panel/tiendas/$tiendaId/cobros"
+                  params={{ tiendaId: t.id }}
+                  className="text-primary hover:underline"
+                >
+                  Cobros pendientes
+                </Link>
               </div>
               {isAdmin && (
                 <div className="flex flex-wrap gap-2 pt-1 border-t">
@@ -243,12 +262,26 @@ function TiendasIndex() {
             </CardContent>
           </Card>
         ))}
-        {tiendas.length === 0 && (
-          <Card className="md:col-span-2 lg:col-span-3">
-            <CardContent className="text-center py-12 text-muted-foreground">
-              No hay tiendas. {isAdmin && "Crea la primera."}
-            </CardContent>
-          </Card>
+        {!cargandoTiendas && tiendas.length === 0 && (
+          <div className="md:col-span-2 lg:col-span-3">
+            <EstadoVacio
+              icono={Store}
+              titulo="Aún no hay tiendas"
+              descripcion={
+                isAdmin
+                  ? "Conecta tu primera tienda online para traer sus pedidos."
+                  : "Cuando un administrador conecte una tienda, saldrá aquí."
+              }
+              accion={
+                isAdmin ? (
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Conectar una tienda
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
         )}
       </div>
 

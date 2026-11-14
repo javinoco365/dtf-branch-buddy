@@ -74,7 +74,7 @@ function ConciliacionPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
         <p className="text-sm text-muted-foreground">
-          Los cargos se casan con las facturas recibidas y los abonos con las emitidas.
+          Sube el extracto del banco y comprueba qué facturas ya están pagadas o cobradas.
         </p>
       </div>
       <CuentasExtractos alImportar={refrescar} />
@@ -190,7 +190,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
             </p>
             {falta && (
               <p className="text-xs text-muted-foreground">
-                El motor de conciliación necesita la migración <code>{falta}</code>.
+                La comprobación automática aún no está activada. Avisa a Javier.
               </p>
             )}
           </div>

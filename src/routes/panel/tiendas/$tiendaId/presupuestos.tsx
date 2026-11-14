@@ -211,8 +211,7 @@ function PresupuestosTienda() {
       {data?.disponible === false && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            Los presupuestos de tienda necesitan la migración{" "}
-            <code>20261001100000_presupuestos_tiendas.sql</code>.
+            Los presupuestos de tienda aún no están activados. Avisa a Javier.
           </CardContent>
         </Card>
       )}

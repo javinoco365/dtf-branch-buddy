@@ -122,7 +122,7 @@ function InversionPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Exportar
+            <Download className="h-4 w-4 mr-2" /> Descargar Excel
           </Button>
           <SiPuede accion="escribir">
             <Button

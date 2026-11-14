@@ -299,9 +299,7 @@ function Facturas() {
           <h1 className="text-2xl font-bold tracking-tight">
             Facturas · {tienda?.nombre ?? "Tienda"}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Numeración única de la sociedad. El número lo asigna la base al emitir.
-          </p>
+          <p className="text-sm text-muted-foreground">Facturas y tickets de esta tienda</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <DescargarPdfs

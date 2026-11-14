@@ -3,7 +3,6 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -273,13 +272,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border">
-        {!collapsed && (
-          <div className="px-3 py-2 text-[10px] text-sidebar-foreground/40 tracking-wider">
-            v1.0.0
-          </div>
-        )}
-      </SidebarFooter>
     </Sidebar>
   );
 }

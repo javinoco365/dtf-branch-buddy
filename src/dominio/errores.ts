@@ -85,12 +85,21 @@ const REGLAS_ACCESO: Regla[] = [
   },
 ];
 
+/** Lo que dice cuando a una parte de la app le falta su cambio en la base. */
+export const AVISO_SIN_ACTIVAR = "Esta parte aún no está activada. Avisa a Javier.";
+
 /** PostgREST y Postgres, lo que no es de permisos ni de restricciones. */
 const REGLAS_BASE: Regla[] = [
   {
+    // Los avisos de la propia app que nombran el fichero de la migración
+    // («Falta aplicar la migración 20261027100000_…»): el nombre, solo de detalle.
+    patron: /migraci[oó]n|\b20\d{12}(?:_\w+)?(?:\.sql)?\b/i,
+    texto: AVISO_SIN_ACTIVAR,
+  },
+  {
     patron:
       /could not find the (?:table|function|column)|schema cache|PGRST20[25]|(?:relation|function|column) \S+ does not exist|(?:code|código|sqlstate)\W{0,4}(?:42P01|42883|42703)/i,
-    texto: "Esta parte aún no está activada. Avisa a Javier.",
+    texto: AVISO_SIN_ACTIVAR,
   },
   {
     patron: /JSON object requested, multiple \(or no\) rows returned|PGRST116/i,

@@ -14,9 +14,7 @@ function PedidosGlobal() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-        <p className="text-sm text-muted-foreground">
-          Vista unificada de pedidos de todas las tiendas. Filtra y exporta.
-        </p>
+        <p className="text-sm text-muted-foreground">Todos los pedidos de todas las tiendas.</p>
       </div>
       <PedidosErrorBoundary>
         <PedidosTable />

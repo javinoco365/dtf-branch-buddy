@@ -28,7 +28,7 @@ export function ImagenesPresupuesto({ estado }: { estado: EstadoImagenesPresupue
   if (estado.estado === "no-disponible") {
     return estado.nuevas.length > 0 ? (
       <p className="text-xs text-muted-foreground">
-        Las imágenes no se guardarán: falta aplicar la migración 20261030100000.
+        Las imágenes no se guardarán: esta parte aún no está activada. Avisa a Javier.
       </p>
     ) : null;
   }

@@ -107,8 +107,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Los pedidos pendientes necesitan la migración{" "}
-          <code>20260930100000_pedidos_pendientes_cobro.sql</code>.
+          Los pedidos pendientes de cobro aún no están activados. Avisa a Javier.
         </CardContent>
       </Card>
     );

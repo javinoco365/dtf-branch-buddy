@@ -302,8 +302,7 @@ function PedidosPage() {
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
-            Hasta que se aplique, no se pueden registrar.
+            Apuntar los cobros de los pedidos aún no está activado. Avisa a Javier.
           </CardContent>
         </Card>
       )}

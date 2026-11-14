@@ -125,7 +125,7 @@ const claveDoc = (d: { tipo: string; id: string }) => `${d.tipo}:${d.id}`;
 /** La clave de las páginas del historial: se refrescan juntas tras cada cambio. */
 const CLAVE_HISTORIAL = "conciliacion-historial";
 
-/** Lo que devolvió el último «Aplicar» o «Re-conciliar», para enseñarlo hasta cerrarlo. */
+/** Lo que devolvió el último «Aplicar» o «Volver a comprobar», para enseñarlo hasta cerrarlo. */
 type Resultado = {
   titulo: string;
   verdes: number;
@@ -461,7 +461,7 @@ export function MotorConciliacion({
                   <RefreshCw
                     className={`h-4 w-4 mr-2 ${reconciliarM.isPending ? "animate-spin" : ""}`}
                   />
-                  Re-conciliar
+                  Volver a comprobar
                 </Button>
                 <Button disabled={!hayPlan || aplicar.isPending} onClick={() => aplicar.mutate()}>
                   <Wand2 className="h-4 w-4 mr-2" />
@@ -470,8 +470,8 @@ export function MotorConciliacion({
               </div>
               {!hayPlan && sinConciliar.length > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  Nada que aplicar: concilia a mano con «Conciliar», o pulsa «Re-conciliar» tras
-                  registrar facturas nuevas.
+                  Nada que aplicar: concilia a mano con «Conciliar», o pulsa «Volver a comprobar»
+                  tras registrar facturas nuevas.
                 </span>
               )}
             </div>
@@ -485,9 +485,9 @@ export function MotorConciliacion({
         <p className="flex gap-2 text-sm text-muted-foreground">
           <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <span>
-            Falta aplicar la migración <code>{datos.falta}</code>. Mientras, la conciliación mira lo
-            más reciente de cada cosa, cobrado o no, como antes: con muchos tickets, una factura
-            pendiente más antigua puede quedarse fuera. Con ella, mira solo lo pendiente.
+            Una mejora de la comprobación aún no está activada (avisa a Javier). Mientras, mira lo
+            más reciente de cada cosa, cobrado o no: con muchos tickets, una factura pendiente más
+            antigua puede quedarse fuera.
           </span>
         </p>
       )}
@@ -833,7 +833,7 @@ export function MotorConciliacion({
       <Dialog open={reconciliarAbierto} onOpenChange={setReconciliarAbierto}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Re-conciliar</DialogTitle>
+            <DialogTitle>Volver a comprobar</DialogTitle>
             <DialogDescription>
               Vuelve a leer los movimientos y las facturas de ahora (también las registradas o
               emitidas después de subir el extracto) y vuelve a intentar casarlos. Lo ya conciliado
@@ -863,7 +863,7 @@ export function MotorConciliacion({
               <RefreshCw
                 className={`h-4 w-4 mr-2 ${reconciliarM.isPending ? "animate-spin" : ""}`}
               />
-              Re-conciliar
+              Volver a comprobar
             </Button>
           </div>
         </DialogContent>
@@ -1031,7 +1031,7 @@ function textoIncidencia(i: Incidencia): { titulo: string; detalle: string } {
       return {
         titulo: `${i.n} ${i.n === 1 ? "pago" : "pagos"} sin factura de compra que encaje · ${eur(i.importe)}`,
         detalle:
-          "Salieron hace más de 3 días y no hay factura recibida que encaje. Registra la factura en Facturas de compra y pulsa «Re-conciliar», o concílialos a mano.",
+          "Salieron hace más de 3 días y no hay factura recibida que encaje. Registra la factura en Facturas de compra y pulsa «Volver a comprobar», o concílialos a mano.",
       };
     case "documento_sin_banco":
       return {
@@ -1163,7 +1163,7 @@ function ListaIncidencias({
   );
 }
 
-/** Lo que hizo el último «Aplicar» o «Re-conciliar», con cada error a la vista. */
+/** Lo que hizo el último «Aplicar» o «Volver a comprobar», con cada error a la vista. */
 function TarjetaResultado({ resultado, alCerrar }: { resultado: Resultado; alCerrar: () => void }) {
   const r = resultado;
   return (

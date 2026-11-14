@@ -668,7 +668,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
           <CardContent className="flex gap-3 py-4 text-sm">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
             <p>
-              Falta aplicar la migración de compras generales (20261013100000). Hasta entonces, las
+              Las compras generales aún no están activadas (avisa a Javier). Hasta entonces, las
               compras de textil se registran en Textil › Compras.
             </p>
           </CardContent>
