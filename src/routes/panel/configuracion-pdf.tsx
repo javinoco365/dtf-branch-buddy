@@ -69,7 +69,7 @@ import { SeccionesPlantilla } from "@/components/plantillas/SeccionesPlantilla";
 import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
-import { avisarError } from "@/lib/errores";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -90,7 +90,6 @@ export const Route = createFileRoute("/panel/configuracion-pdf")({
 });
 
 const CLAVE_LISTA = ["plantillas-presupuesto"] as const;
-const MIGRACION = "20261026100000_plantillas_presupuesto.sql";
 /** Desde este ancho, el editor y la vista previa van lado a lado. */
 const ANCHO_DOS_COLUMNAS = "(min-width: 1280px)";
 
@@ -369,7 +368,7 @@ function ConfiguracionPdfPage() {
             <div className="min-w-0 flex-1">
               <p className="font-medium">No se han podido cargar las plantillas</p>
               <p className="break-words text-sm text-muted-foreground">
-                {lista.error?.message || "Error desconocido"}
+                {mensajeDeError(lista.error, "No se ha podido cargar")}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => void lista.refetch()}>
@@ -382,6 +381,15 @@ function ConfiguracionPdfPage() {
           icono={Store}
           titulo="No hay tiendas"
           descripcion="Cuando haya alguna tienda o el textil personalizado, aquí podrás diseñar su PDF de presupuestos."
+          accion={
+            isAdmin ? (
+              <Button asChild>
+                <Link to="/panel/tiendas" search={{ nueva: 1 }}>
+                  Conectar una tienda
+                </Link>
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>
@@ -471,14 +479,12 @@ function ConfiguracionPdfPage() {
             <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
               <CardHeader className="p-4 pb-1">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" /> Falta la migración de las
-                  plantillas
+                  <AlertTriangle className="h-4 w-4 text-amber-600" /> Guardar plantillas aún no
+                  está activado
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Para guardar plantillas hay que aplicar la migración{" "}
-                  <code className="rounded bg-muted px-1 font-mono">{MIGRACION}</code>. Mientras
-                  tanto, los PDF salen con la plantilla por defecto; aquí puedes probar cambios en
-                  la vista previa, pero no guardarlos.
+                  Avisa a Javier para activarlo. Mientras tanto, los PDF salen con la plantilla por
+                  defecto; aquí puedes probar cambios en la vista previa, pero no guardarlos.
                 </CardDescription>
               </CardHeader>
             </Card>

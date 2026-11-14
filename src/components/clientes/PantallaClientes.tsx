@@ -132,7 +132,11 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const qc = useQueryClient();
   // Los filtros viven en la dirección. El origen por defecto depende de desde
   // dónde se entra: la tienda, el textil o todos.
-  const { valores: filtros, cambiar } = useFiltrosUrl({
+  const {
+    valores: filtros,
+    cambiar,
+    quitar,
+  } = useFiltrosUrl({
     q: "",
     origen: filtroInicial(contexto),
     // «uv»: solo los que han comprado DTF UV. No es la «línea» de los paneles
@@ -377,13 +381,36 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
               {!isLoading && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    {clientes.length === 0
-                      ? "Sin clientes"
-                      : soloUv && conUv.isLoading
-                        ? "Buscando quién ha comprado DTF UV…"
-                        : soloUv && conUv.error
-                          ? "No se ha podido saber quién ha comprado DTF UV. Recarga la página."
-                          : "Ningún cliente con este filtro. Prueba con «Todos los clientes» y «Compren lo que compren»."}
+                    {clientes.length === 0 ? (
+                      <>
+                        Todavía no hay clientes.
+                        <SiPuede accion="escribir">
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditing({ ...vacio })}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Nuevo cliente
+                            </Button>
+                          </div>
+                        </SiPuede>
+                      </>
+                    ) : soloUv && conUv.isLoading ? (
+                      "Buscando quién ha comprado DTF UV…"
+                    ) : soloUv && conUv.error ? (
+                      "No se ha podido saber quién ha comprado DTF UV. Recarga la página."
+                    ) : (
+                      <>
+                        Ningún cliente cumple los filtros.
+                        <div className="mt-2">
+                          <Button variant="ghost" size="sm" onClick={() => quitar()}>
+                            Quitar filtros
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}

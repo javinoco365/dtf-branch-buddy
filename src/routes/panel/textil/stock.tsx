@@ -57,7 +57,7 @@ import {
 } from "@/lib/escaner-textil.functions";
 import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
-import { eur as fmtEUR, eurConSigno, eurUnitario, numero } from "@/lib/format";
+import { eur as fmtEUR, eurConSigno, eurUnitario, fechaHora, numero } from "@/lib/format";
 import { comprasParaDevolucion } from "@/dominio/proformas";
 import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
@@ -377,11 +377,34 @@ function StockPage() {
       {isLoading || data.length === 0 || curva.filas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            {isLoading
-              ? "Cargando…"
-              : data.length === 0
-                ? "Sin artículos."
-                : "Ninguna prenda coincide con los filtros."}
+            {isLoading ? (
+              "Cargando…"
+            ) : data.length === 0 ? (
+              <>
+                Todavía no hay artículos.
+                {escribir && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(null);
+                        setOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                Ninguna prenda cumple los filtros.
+                <div className="mt-2">
+                  <QuitarFiltros visible alQuitar={() => quitar()} />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -1136,16 +1159,16 @@ function HistorialDialog({ item, onClose }: any) {
             <TableBody>
               {data.map((m: any) => (
                 <TableRow key={m.id}>
-                  <TableCell className="text-xs">
-                    {new Date(m.created_at).toLocaleString("es-ES")}
-                  </TableCell>
+                  <TableCell className="text-xs">{fechaHora(m.created_at)}</TableCell>
                   <TableCell>{MOTIVO_TEXTO[m.motivo] ?? m.motivo}</TableCell>
                   {m.motivo === "ajuste_coste" ? (
                     // Revaloriza lo que queda (factura casada con su proforma): sin
                     // unidades, con su importe.
                     <>
-                      <TableCell className="text-right text-muted-foreground">—</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell className="text-right text-muted-foreground tabular-nums">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap tabular-nums">
                         {eurConSigno(Number(m.importe_ajuste ?? 0))}{" "}
                         <span className="text-xs text-muted-foreground">en total</span>
                       </TableCell>
@@ -1153,14 +1176,14 @@ function HistorialDialog({ item, onClose }: any) {
                   ) : (
                     <>
                       <TableCell
-                        className={`text-right font-medium ${
+                        className={`text-right font-medium tabular-nums ${
                           Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}
                         {m.cantidad}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {fmtEUR(Number(m.coste_unitario))}
                       </TableCell>
                     </>

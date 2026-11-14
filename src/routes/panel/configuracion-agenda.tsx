@@ -81,8 +81,8 @@ function ConfiguracionAgenda() {
       ) : data?.falta_migracion ? (
         <EstadoVacio
           icono={CalendarDays}
-          titulo="La Agenda todavía no está en la base"
-          descripcion="Falta aplicar la migración 20261116100000_agenda."
+          titulo="La Agenda aún no está activada"
+          descripcion="Avisa a Javier para activarla."
         />
       ) : (
         <Card>

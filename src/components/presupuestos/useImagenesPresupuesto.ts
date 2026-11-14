@@ -157,7 +157,7 @@ export function useImagenesPresupuesto({
       if (!info?.disponible) {
         return nuevas.length
           ? [
-              `las ${nuevas.length} imágenes no se han guardado: falta aplicar la migración 20261030100000`,
+              `las ${nuevas.length} imágenes no se han guardado: esta parte aún no está activada (avisa a Javier)`,
             ]
           : [];
       }

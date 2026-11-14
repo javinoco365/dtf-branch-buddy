@@ -191,8 +191,7 @@ function Usuarios() {
           )}
           {socios.data?.falta_migracion && (
             <p className="mt-3 text-sm text-muted-foreground">
-              Para elegir quién usa cada cuenta falta aplicar la migración
-              20261115100000_socio_cuentas en la base.
+              Elegir quién usa cada cuenta aún no está activado. Avisa a Javier.
             </p>
           )}
         </CardContent>

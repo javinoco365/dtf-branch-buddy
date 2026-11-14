@@ -37,7 +37,7 @@ import {
   diagnosticoLineasWoo,
   recuperarEnviosWoo,
 } from "@/lib/woocommerce.functions";
-import { eur, metros as fmtMetros, numero } from "@/lib/format";
+import { eur, fechaHora, metros as fmtMetros, numero } from "@/lib/format";
 import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
 import {
   SUMA_SYNC_WOO_VACIA,
@@ -630,7 +630,7 @@ function CredencialesCard({
             </div>
             {updatedAt && (
               <div className="md:col-span-2 text-xs text-muted-foreground">
-                Actualizado el {new Date(updatedAt).toLocaleString("es-ES")}
+                Actualizado el {fechaHora(updatedAt)}
               </div>
             )}
           </div>

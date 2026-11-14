@@ -146,7 +146,7 @@ function CajaPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportar} disabled={visibles.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Exportar
+            <Download className="h-4 w-4 mr-2" /> Descargar Excel
           </Button>
           <SiPuede accion="escribir">
             <Button
@@ -325,7 +325,7 @@ function CajaPage() {
                   <TableCell className="text-muted-foreground text-sm">
                     {m.observaciones ?? ""}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <SiPuede accion="escribir">
                       <Button
                         variant="ghost"

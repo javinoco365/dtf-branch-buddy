@@ -74,7 +74,7 @@ function ConciliacionPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
         <p className="text-sm text-muted-foreground">
-          Los cargos se casan con las facturas recibidas y los abonos con las emitidas.
+          Sube el extracto del banco y comprueba qué facturas ya están pagadas o cobradas.
         </p>
       </div>
       <CuentasExtractos alImportar={refrescar} />
@@ -190,7 +190,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
             </p>
             {falta && (
               <p className="text-xs text-muted-foreground">
-                El motor de conciliación necesita la migración <code>{falta}</code>.
+                La comprobación automática aún no está activada. Avisa a Javier.
               </p>
             )}
           </div>
@@ -275,7 +275,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                     <TableRow key={m.id}>
                       <TableCell className="whitespace-nowrap">{fechaCorta(m.fecha)}</TableCell>
                       <TableCell className="text-sm">{m.concepto || "—"}</TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-medium tabular-nums">
                         {eur(Number(m.importe))}
                       </TableCell>
                       <TableCell>
@@ -322,7 +322,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -425,8 +425,8 @@ function ConciliadosTabla({
           <TableRow key={m.id}>
             <TableCell>{fechaCorta(m.fecha)}</TableCell>
             <TableCell>{m.concepto || "—"}</TableCell>
-            <TableCell className="text-right">{eur(Number(m.importe))}</TableCell>
-            <TableCell className="text-right">
+            <TableCell className="text-right tabular-nums">{eur(Number(m.importe))}</TableCell>
+            <TableCell className="text-right tabular-nums">
               <Button variant="ghost" size="icon" title="Deshacer" onClick={() => onDeshacer(m.id)}>
                 <Undo2 className="h-4 w-4" />
               </Button>

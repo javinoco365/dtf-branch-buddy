@@ -88,8 +88,8 @@ function AjustesPage() {
       <div>
         <h1 className="text-2xl font-bold">Ajustes de Textil</h1>
         <p className="text-sm text-muted-foreground">
-          Gestiona las marcas comerciales que puedes usar en presupuestos y facturas. Los datos
-          fiscales (SL) siguen siendo únicos.
+          Las marcas con las que puedes firmar presupuestos y facturas. La empresa que factura es
+          siempre la misma.
         </p>
       </div>
 

@@ -135,7 +135,7 @@ export function ColaRevision({
                       </ul>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <div className="inline-flex items-center gap-1">
                       {!error && (
                         <SiPuede accion="escribir">

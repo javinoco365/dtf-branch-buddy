@@ -107,8 +107,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Los pedidos pendientes necesitan la migración{" "}
-          <code>20260930100000_pedidos_pendientes_cobro.sql</code>.
+          Los pedidos pendientes de cobro aún no están activados. Avisa a Javier.
         </CardContent>
       </Card>
     );
@@ -265,7 +264,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {eur(Number(p.pendiente))}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <Button size="sm" variant="outline" onClick={() => setCobrando(p)}>
                         {origen === "web" ? "Ver" : "Cobrar"}
                       </Button>
@@ -277,9 +276,18 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                 <TableRow>
                   <TableCell colSpan={columnas} className="text-center py-8 text-muted-foreground">
                     <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
-                    {hayFiltro
-                      ? "Ningún pedido pendiente cumple los filtros."
-                      : "Todo cobrado: no hay pedidos pendientes."}
+                    {hayFiltro ? (
+                      <>
+                        Ningún pedido pendiente cumple los filtros.
+                        <div className="mt-2">
+                          <Button variant="ghost" size="sm" onClick={() => quitar()}>
+                            <X className="h-4 w-4 mr-1" /> Quitar filtros
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      "Todo cobrado: no hay pedidos pendientes."
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -290,7 +298,9 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                   <TableCell colSpan={columnas - 2} className="font-semibold">
                     TOTAL PENDIENTE
                   </TableCell>
-                  <TableCell className="text-right font-bold">{eur(resumen.pendiente)}</TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(resumen.pendiente)}
+                  </TableCell>
                   <TableCell />
                 </TableRow>
               </TableFooter>

@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { mensajeDeError } from "@/lib/errores";
 import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -28,6 +30,7 @@ import { AbrirDocumento } from "@/components/archivo/AbrirDocumento";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { listarArchivo } from "@/lib/archivo.functions";
 import { eur, fechaCorta } from "@/lib/format";
+import { esNavegable, moverSeleccion } from "@/dominio/periodos";
 import { normalizarTexto } from "@/dominio/clientes";
 import { CLASES_ARCHIVO, nombreZip, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
 import { totalesArchivo } from "@/dominio/sumatorios-facturas";
@@ -195,14 +198,36 @@ function ArchivoPage() {
               {error && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-destructive">
-                    {(error as Error).message || "No se pudo leer el archivo"}
+                    {mensajeDeError(error, "No se pudo leer el archivo")}
                   </TableCell>
                 </TableRow>
               )}
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    No hay documentos en este periodo con estos filtros.
+                    {hay() ? (
+                      <>
+                        Ningún documento cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        No hay documentos en este periodo.
+                        {esNavegable(periodo.seleccion.tipo) && (
+                          <div className="mt-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => periodo.elegir(moverSeleccion(periodo.seleccion, -1))}
+                            >
+                              Ver el periodo anterior
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -222,7 +247,9 @@ function ArchivoPage() {
                         "—"
                       ))}
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(d.total)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(d.total)}
+                  </TableCell>
                   <TableCell>
                     {/* Un documento emitido se genera al descargarlo: es lo
                         normal. Una compra sin fichero sí es un hueco. */}

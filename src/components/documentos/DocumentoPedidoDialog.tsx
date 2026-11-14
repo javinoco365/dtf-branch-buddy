@@ -23,6 +23,7 @@ import {
 import { AlertTriangle, ArrowLeft, FileText, Receipt } from "lucide-react";
 import { eur } from "@/lib/format";
 import { invalidarTrasGuardar } from "@/lib/cache";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 import { calcularTotales } from "@/dominio/importes";
 import { diaEnEspana, diaLegible } from "@/dominio/fecha-documento";
 import {
@@ -246,15 +247,15 @@ export function DocumentoPedidoDialog({
       } catch (errPdf: any) {
         ventana?.close();
         toast.warning(
-          `${emitido}, pero no se pudo generar el PDF: ${errPdf?.message ?? "error desconocido"}`,
+          `${emitido}, pero no se pudo generar el PDF: ${mensajeDeError(errPdf, "error desconocido")}`,
         );
       }
       alEmitir();
-    } catch (e: any) {
+    } catch (e: unknown) {
       ventana?.close();
-      toast.error(
-        e?.message ??
-          (documento === "ticket" ? "No se pudo emitir el ticket" : "No se pudo emitir la factura"),
+      avisarError(
+        e,
+        documento === "ticket" ? "No se pudo emitir el ticket" : "No se pudo emitir la factura",
       );
     } finally {
       setEmitiendo(false);
@@ -340,7 +341,7 @@ export function DocumentoPedidoDialog({
 
             {error && (
               <p className="py-6 text-center text-sm text-destructive">
-                {(error as Error).message || "No se pudo preparar el documento"}
+                {mensajeDeError(error, "No se pudo preparar el documento")}
               </p>
             )}
 

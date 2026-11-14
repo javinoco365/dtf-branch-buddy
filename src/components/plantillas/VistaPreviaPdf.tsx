@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mensajeDeError } from "@/lib/errores";
 import { AlertTriangle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,7 +82,7 @@ export function VistaPreviaPdf({
             <div className="space-y-1">
               <p className="text-sm font-medium">No se ha podido preparar la vista previa</p>
               <p className="mx-auto max-w-xs break-words text-xs text-muted-foreground">
-                {error.message || "Error desconocido"}
+                {mensajeDeError(error, "Error desconocido")}
               </p>
               <p className="mx-auto max-w-xs text-xs text-muted-foreground">
                 La plantilla se puede seguir editando y guardando.

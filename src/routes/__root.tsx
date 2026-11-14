@@ -25,16 +25,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Esta página no existe</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          Puede que el enlace esté mal escrito o que la página se haya movido.
         </p>
         <div className="mt-6">
           <Link
-            to="/"
+            to="/panel"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            Ir a Inicio
           </Link>
         </div>
       </div>
@@ -87,7 +87,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
           Esta página no ha cargado
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Algo ha fallado por nuestra parte. Puedes reintentar o volver al principio.
+          Algo ha fallado por nuestra parte. Puedes volver a intentarlo o ir a Inicio.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -103,7 +103,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Ir al inicio
+            Ir a Inicio
           </a>
         </div>
       </div>

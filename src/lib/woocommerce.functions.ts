@@ -1157,13 +1157,13 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
 
   if (primera && ctx.esquema === "sin_tabla") {
     ctx.avisos.push(
-      "Falta aplicar la migración 20261024100000 (woo_sincronizacion). Mientras tanto se " +
+      "Una mejora de la sincronización aún no está activada (avisa a Javier). Mientras tanto se " +
         "sincroniza como antes: los 100 últimos pedidos por fecha y los 100 productos cambiados " +
         "más recientes. Un pedido más antiguo que cambie en WooCommerce no se actualiza aquí.",
     );
   } else if (primera && ctx.esquema === "sin_bloqueo") {
     ctx.avisos.push(
-      "Falta aplicar la migración 20261024110000. Sin ella nada impide que dos " +
+      "Una protección de la sincronización aún no está activada (avisa a Javier). Sin ella nada impide que dos " +
         "sincronizaciones de esta tienda vayan a la vez (podrían duplicar líneas de pedido), ni " +
         "se guarda la página cuando cientos de pedidos cambian en el mismo segundo, ni por " +
         "dónde iban los clientes nuevos si una sincronización se corta.",

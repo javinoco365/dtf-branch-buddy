@@ -79,7 +79,7 @@ export function ProformasPendientes({
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right tabular-nums">
                   {p.fichero_ruta && (
                     <Button
                       variant="ghost"

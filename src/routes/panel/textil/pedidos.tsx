@@ -302,8 +302,7 @@ function PedidosPage() {
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
-            Hasta que se aplique, no se pueden registrar.
+            Apuntar los cobros de los pedidos aún no está activado. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -358,7 +357,33 @@ function PedidosPage() {
               {filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? "Sin pedidos." : "Ningún pedido cumple los filtros."}
+                    {data.length === 0 ? (
+                      <>
+                        Todavía no hay pedidos.
+                        {escribir && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditing(null);
+                                setLineasIniciales(null);
+                                setOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Ningún pedido cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -407,13 +432,15 @@ function PedidosPage() {
                         <EtiquetaEstado tipo="pedido_textil" valor={p.estado} />
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {eur(Number(p.total))}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{eur(cobro.cobrado)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <div className="tabular-nums">{eur(Math.max(cobro.pendiente, 0))}</div>
                       {p.estado !== "cancelado" && <EstadoCobroTexto estado={cobro.estado} />}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                       <Button
                         variant="ghost"
                         size="icon"

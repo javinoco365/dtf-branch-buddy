@@ -211,8 +211,7 @@ function PresupuestosTienda() {
       {data?.disponible === false && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            Los presupuestos de tienda necesitan la migración{" "}
-            <code>20261001100000_presupuestos_tiendas.sql</code>.
+            Los presupuestos de tienda aún no están activados. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -271,11 +270,32 @@ function PresupuestosTienda() {
       {!isLoading && !error && data?.disponible !== false && filtrados.length === 0 ? (
         <EstadoVacio
           icono={FileText}
-          titulo={hayFiltro ? "Nada con estos filtros" : "Todavía no hay presupuestos"}
+          titulo={
+            hayFiltro ? "Ningún presupuesto cumple los filtros" : "Todavía no hay presupuestos"
+          }
           descripcion={
             hayFiltro
-              ? "Ningún presupuesto cumple los filtros elegidos."
-              : "Crea el primero con «Nuevo presupuesto»."
+              ? "Quita los filtros o elige otras fechas."
+              : escribir
+                ? "Crea el primero."
+                : "Cuando alguien cree uno, saldrá aquí."
+          }
+          accion={
+            hayFiltro ? (
+              <Button variant="outline" onClick={() => quitar()}>
+                <X className="h-4 w-4 mr-1" /> Quitar filtros
+              </Button>
+            ) : escribir ? (
+              <Button
+                onClick={() => {
+                  setBorrador(null);
+                  setImagenesIa([]);
+                  setNuevo(true);
+                }}
+              >
+                Nuevo presupuesto
+              </Button>
+            ) : undefined
           }
         />
       ) : (

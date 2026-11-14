@@ -23,7 +23,7 @@ import {
   type PedidoParaFacturar,
 } from "@/lib/facturas.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
-import { avisarError } from "@/lib/errores";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 type Modo = "ticket" | "factura";
 
@@ -221,7 +221,7 @@ export function FacturarPedidosDialog({
         {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Leyendo…</p>}
         {error && (
           <p className="py-6 text-center text-sm text-destructive">
-            {(error as Error).message || "No se pudieron leer los pedidos"}
+            {mensajeDeError(error, "No se pudieron leer los pedidos")}
           </p>
         )}
 

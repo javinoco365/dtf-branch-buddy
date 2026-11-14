@@ -325,7 +325,7 @@ function DetalleTallas({
             <TableCell className="text-right tabular-nums text-muted-foreground">
               {v.cantidad_reservada ? numeroJusto(v.cantidad_reservada) : "—"}
             </TableCell>
-            <TableCell className="text-right font-medium">
+            <TableCell className="text-right font-medium tabular-nums">
               <CifraDisponible n={disponible(v)} minimo={v.cantidad_minima} />
             </TableCell>
             <TableCell className="text-right tabular-nums">
@@ -333,7 +333,7 @@ function DetalleTallas({
             </TableCell>
             <TableCell className="text-right tabular-nums">{eur(v.coste_unitario)}</TableCell>
             <TableCell className="text-right tabular-nums">{eur(v.precio_venta)}</TableCell>
-            <TableCell className="whitespace-nowrap text-right">
+            <TableCell className="whitespace-nowrap text-right tabular-nums">
               <BotonesVariante v={v} escaner={escaner} acciones={acciones} />
             </TableCell>
           </TableRow>
@@ -438,7 +438,7 @@ export function TablaStockPorTallas(p: PropsStockPorTallas) {
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {f.reservado ? numeroJusto(f.reservado) : "—"}
                     </TableCell>
-                    <TableCell className="text-right font-semibold">
+                    <TableCell className="text-right font-semibold tabular-nums">
                       <CifraDisponible n={f.disponible} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right tabular-nums">
