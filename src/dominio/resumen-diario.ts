@@ -240,7 +240,13 @@ const enRango = (dia: string | null, desde: string, hasta: string) =>
  * mismo que pagó el cliente: sin coste apuntado, cuesta lo cobrado (y no es
  * una estimación). Si se apunta otro coste, manda el apuntado.
  */
-function costeEnvio(p: PedidoParaResumen, defecto: number): { coste: number; estimado: boolean } {
+export function costeEnvio(
+  p: Pick<
+    PedidoParaResumen,
+    "coste_envio_real" | "con_envio" | "envio" | "total" | "devuelto" | "metros_total" | "metros_uv"
+  >,
+  defecto: number,
+): { coste: number; estimado: boolean } {
   const real = p.coste_envio_real;
   if (real != null && real !== "") return { coste: num(real), estimado: false };
   if (esSoloUv(p)) return { coste: redondear(num(p.envio) * parteVendida(p)), estimado: false };
