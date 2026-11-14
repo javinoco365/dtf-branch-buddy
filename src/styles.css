@@ -71,6 +71,7 @@
   --color-prioridad-alta-texto: var(--prioridad-alta-texto);
   --color-prioridad-normal-texto: var(--prioridad-normal-texto);
   --color-prioridad-baja-texto: var(--prioridad-baja-texto);
+  --color-realizada-texto: var(--realizada-texto);
 }
 
 :root {
@@ -159,6 +160,9 @@
   --prioridad-alta-texto: oklch(0.4628 0.1048 56.1); /* #7E4100 */
   --prioridad-normal-texto: oklch(0.4285 0.1712 272.2); /* #2B3FB0 */
   --prioridad-baja-texto: oklch(0.4278 0.0215 273); /* #4A4E5C */
+  /* «Realizada» en la Agenda: el verde de éxito, más oscuro para el texto
+     pequeño sobre su fondo suave (6,5:1; el de éxito se queda en 4,3:1). */
+  --realizada-texto: oklch(0.46 0.11 153.84);
 }
 
 .dark {
@@ -227,6 +231,7 @@
   --prioridad-alta-texto: oklch(0.85 0.1 70); /* #FFC47E */
   --prioridad-normal-texto: oklch(0.85 0.07 275); /* #C3CEFF */
   --prioridad-baja-texto: oklch(0.84 0.015 270); /* #C7CAD4 */
+  --realizada-texto: oklch(0.84 0.1 153.84);
 }
 
 @layer base {

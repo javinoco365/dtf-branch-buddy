@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Avatar, EtiquetaPrioridad } from "./piezas";
-import { CLASES_PRIORIDAD, iconoDeCategoria, prioridadDe } from "./estilos";
+import { CLASES_PRIORIDAD, CLASES_REALIZADA, iconoDeCategoria, prioridadDe } from "./estilos";
 
 const PESTANAS: { id: EstadoTarea | "todas"; nombre: string }[] = [
   { id: "pendiente", nombre: "Pendientes" },
@@ -70,6 +70,7 @@ export function ListaTareas({
   onCambiarHecha,
   cambiando,
   puedeEscribir,
+  puedeCrear,
 }: {
   tareas: Tarea[];
   categorias: CategoriaAgenda[];
@@ -85,7 +86,10 @@ export function ListaTareas({
   onCambiarHecha: (t: Tarea) => void;
   /** Se está guardando un cambio de estado: los círculos esperan. */
   cambiando: boolean;
+  /** Puede marcar realizadas (nivel y persona). */
   puedeEscribir: boolean;
+  /** Puede crear tareas (nivel y persona). */
+  puedeCrear: boolean;
 }) {
   const ctx = useMemo(() => ({ yo, hoy }), [yo, hoy]);
   const base = useMemo(
@@ -127,11 +131,17 @@ export function ListaTareas({
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4">
-        <h2 className="text-lg font-semibold">Tareas</h2>
+        <h2
+          id="titulo-lista-tareas"
+          tabIndex={-1}
+          className="text-lg font-semibold focus-visible:outline-none"
+        >
+          Tareas
+        </h2>
         <div
           role="group"
           aria-label="Estado"
-          className="inline-flex flex-wrap gap-0.5 rounded-lg bg-muted p-1"
+          className="grid grid-cols-2 gap-0.5 rounded-lg bg-muted p-1 max-sm:w-full sm:inline-flex sm:flex-wrap"
         >
           {PESTANAS.map((p) => {
             const activo = filtros.estado === p.id;
@@ -142,21 +152,21 @@ export function ListaTareas({
                 aria-pressed={activo}
                 onClick={() => set({ estado: p.id })}
                 className={cn(
-                  "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm transition-colors md:min-h-9",
+                  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm transition-colors md:min-h-9",
                   activo
                     ? "bg-card font-semibold text-foreground shadow-sm"
                     : "text-secondary-foreground hover:text-foreground",
                 )}
               >
                 {p.id === "hecha" && (
-                  <Check className="h-3.5 w-3.5 text-status-completado" aria-hidden="true" />
+                  <Check className={cn("h-3.5 w-3.5", CLASES_REALIZADA.texto)} aria-hidden="true" />
                 )}
                 {p.nombre}
                 <span
                   className={cn(
                     "rounded-md px-1.5 text-[11px] font-semibold tabular-nums",
                     p.id === "hecha"
-                      ? "bg-status-completado/10 text-status-completado"
+                      ? cn(CLASES_REALIZADA.suave, CLASES_REALIZADA.texto)
                       : "bg-border/60",
                   )}
                 >
@@ -305,7 +315,7 @@ export function ListaTareas({
           </p>
           <p className="max-w-sm text-sm text-muted-foreground empty:hidden">
             {totalPersona === 0
-              ? puedeEscribir
+              ? puedeCrear
                 ? "Crea la primera con «Nueva tarea»."
                 : "Cuando alguien cree una, aparecerá aquí."
               : hayFiltrosLista(filtros)
@@ -327,7 +337,7 @@ export function ListaTareas({
           )}
         </div>
       ) : (
-        <div role="table" aria-label="Tareas">
+        <div role="table" aria-label="Tareas" data-zona-tareas="">
           <div
             role="row"
             className="hidden grid-cols-[40px_96px_minmax(0,1fr)_160px_140px] items-center gap-x-3 border-b bg-muted/40 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:grid"
@@ -367,6 +377,7 @@ export function ListaTareas({
               <div
                 key={t.id}
                 role="row"
+                data-tarea-id={t.id}
                 className={cn(
                   "grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 gap-y-1 border-b px-4 py-3 last:border-b-0 hover:bg-accent/50 md:grid-cols-[40px_96px_minmax(0,1fr)_160px_140px] xl:grid-cols-[44px_112px_minmax(0,1fr)_200px_170px] md:items-center md:py-2.5",
                   hecha && "bg-status-completado/5",
@@ -380,9 +391,7 @@ export function ListaTareas({
                     aria-label={`${hecha ? "Volver a pendiente" : "Marcar como realizada"}: ${t.titulo}`}
                     className={cn(
                       "relative grid h-8 w-8 place-items-center rounded-full border-2 transition-colors after:absolute after:-inset-2 after:content-[''] disabled:cursor-not-allowed disabled:opacity-40 md:h-7 md:w-7",
-                      hecha
-                        ? "border-status-completado bg-status-completado text-white"
-                        : "border-input text-transparent hover:border-status-completado hover:text-status-completado",
+                      hecha ? CLASES_REALIZADA.circulo : CLASES_REALIZADA.circuloVacio,
                     )}
                   >
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
@@ -395,10 +404,11 @@ export function ListaTareas({
                   <div className="flex min-w-0 items-baseline gap-2 md:items-center">
                     <button
                       type="button"
+                      data-foco-tarea=""
                       onClick={() => onAbrir(t.id)}
                       className={cn(
                         "min-w-0 break-words text-left font-semibold hover:underline md:truncate",
-                        hecha && "text-status-completado line-through",
+                        hecha && cn(CLASES_REALIZADA.texto, "line-through"),
                         t.estado === "cancelada" && "text-muted-foreground line-through",
                       )}
                     >
@@ -462,7 +472,12 @@ export function ListaTareas({
                     </span>
                   )}
                   {hecha && t.hechaEn && (
-                    <span className="flex items-center gap-1 text-xs font-semibold text-status-completado">
+                    <span
+                      className={cn(
+                        "flex items-center gap-1 text-xs font-semibold",
+                        CLASES_REALIZADA.texto,
+                      )}
+                    >
                       <Check className="h-3.5 w-3.5" aria-hidden="true" />
                       Realizada {diaRelativo(diaDeTarea({ inicio: t.hechaEn }), hoy).toLowerCase()}
                     </span>

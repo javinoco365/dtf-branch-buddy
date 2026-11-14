@@ -17,6 +17,7 @@ import {
   diaDeTarea,
   esVencida,
   ETIQUETA_ESTADO,
+  franjaDeTarea,
   horaDeMadrid,
   LARGO_NOTAS,
   LARGO_TITULO,
@@ -70,7 +71,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { Avatar, EtiquetaPrioridad, EtiquetaRealizada } from "./piezas";
-import { CLASES_PRIORIDAD, iconoDeCategoria } from "./estilos";
+import { CLASES_PRIORIDAD, CLASES_REALIZADA, iconoDeCategoria } from "./estilos";
 
 export type QuePanel = { modo: "nueva"; dia?: string } | { modo: "ver"; id: string } | null;
 
@@ -341,10 +342,7 @@ function Formulario({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <EtiquetaPrioridad prioridad={tarea.prioridad} />
               <span>
-                {diaLargo(diaDeTarea(tarea))} ·{" "}
-                {tarea.todoElDia
-                  ? "todo el día"
-                  : `${horaDeMadrid(tarea.inicio)}–${tarea.fin ? horaDeMadrid(tarea.fin) : ""}`}
+                {diaLargo(diaDeTarea(tarea))} · {franjaDeTarea(tarea) ?? "todo el día"}
               </span>
               {tarea.estado === "hecha" ? (
                 <EtiquetaRealizada />
@@ -431,7 +429,11 @@ function Formulario({
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="border-status-completado/50 text-status-completado hover:text-status-completado"
+                      className={cn(
+                        "border-status-completado/50",
+                        CLASES_REALIZADA.texto,
+                        "hover:text-realizada-texto",
+                      )}
                       disabled={ocupado || !!bloqueoAcciones}
                       onClick={() => acciones.onCambiarEstado(tarea, "hecha", onCerrar)}
                     >
@@ -490,7 +492,7 @@ function Formulario({
               id="tarea-para"
               etiqueta="Para"
               error={errores.para}
-              vacio="No hay personas activas. Se activan en Ajustes › Caja."
+              vacio="No hay nadie a quien mandarla. Un administrador asigna cada socio a su cuenta en Ajustes › Usuarios."
               opciones={activasPara.map((p) => ({
                 id: p.id,
                 contenido: (

@@ -12,6 +12,12 @@ export type QuienSoy = {
   elegir: (id: string) => void;
   /** Aún no se sabe qué socios tiene la cuenta: no decidir nada todavía. */
   cargando: boolean;
+  /**
+   * No se ha podido leer qué socios tiene la cuenta. El CRM sigue (como «sin
+   * personas»), pero no se puede firmar nada: quien lo use lo ve y reintenta.
+   */
+  error: Error | null;
+  reintentar: () => void;
 };
 
 export const QuienSoyContexto = createContext<QuienSoy>({
@@ -19,6 +25,8 @@ export const QuienSoyContexto = createContext<QuienSoy>({
   persona: null,
   elegir: () => {},
   cargando: false,
+  error: null,
+  reintentar: () => {},
 });
 
 export const useQuienSoy = () => useContext(QuienSoyContexto);
