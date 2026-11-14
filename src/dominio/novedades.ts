@@ -36,15 +36,54 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-sociedades-documentado",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Sociedades, solo sobre lo documentado",
+    resumen: "La Cuenta de resultados estima el impuesto solo sobre lo que tiene factura o ticket.",
+    puntos: [
+      "Lo vendido sin factura ni ticket no entra en el impuesto.",
+      "Los gastos, solo los que tienen justificante.",
+      "Es una estimación: el de verdad lo calcula la gestoría.",
+    ],
+    enlace: { ruta: "/panel/cuenta-resultados", texto: "Abrir la cuenta" },
+  },
+  {
+    id: "2026-11-14-cuenta-mas-fiel",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Cuenta de resultados más fiel",
+    resumen: "Tres casos en que las cifras de la cuenta no eran las de verdad.",
+    puntos: [
+      "Mirando solo DTF UV, un pedido solo de DTF ya no cuenta ni resta su envío.",
+      "Sin coste por metro en Ajustes, el margen sale como estimado, no inflado.",
+      "Lo facturado sin pedido suma también en «Ventas con IVA» y en «IVA».",
+    ],
+    enlace: { ruta: "/panel/cuenta-resultados", texto: "Abrir la cuenta" },
+  },
+  {
+    id: "2026-11-14-mas-claro",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Más claro en toda la app",
+    resumen: "Los mismos nombres, dibujos y colores en todas partes, también en modo oscuro.",
+    puntos: [
+      "Cada pantalla se llama igual que en el menú; cada cifra, con su dibujo.",
+      "Si una lista sale vacía, tienes a mano «Quitar filtros» o «Nuevo».",
+      "Desde Pedidos creas un pedido de cualquier tienda, eligiéndola antes.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-mas-comodo-en-el-movil",
     fecha: "2026-11-14",
     tipo: "mejora",
     titulo: "Más cómodo en el móvil",
     resumen: "Botones más fáciles de tocar y ventanas que no esconden «Guardar».",
     puntos: [
-      "Intro (o «Ir» en el móvil) guarda pedidos, cobros, apuntes y fichas.",
-      "Cada pantalla se llama igual que en el menú.",
-      "Avisos y gráficas que se leen bien en modo oscuro; cada cifra, con su dibujo.",
+      "«Ir» en el teclado del móvil guarda pedidos, cobros, apuntes y fichas.",
+      "La X de cerrar y el menú, del tamaño de un dedo.",
+      "Tarjetas más juntas y tablas que se leen sin desplazarse de lado.",
     ],
   },
   {
@@ -52,10 +91,10 @@ export const NOVEDADES: Novedad[] = [
     fecha: "2026-11-14",
     tipo: "mejora",
     titulo: "Inicio: lo de hoy, arriba",
-    resumen: "Al entrar ves qué hay por producir, por enviar, por cobrar y tus tareas.",
+    resumen: "Al entrar ves cuántos pedidos hay por producir, enviar y cobrar, y tus tareas.",
     puntos: [
       "Toca cada número para ir a su pantalla.",
-      "Debajo, cuatro cifras del periodo: ventas netas, margen, cobrado y pendiente.",
+      "Debajo, del periodo: ventas netas, margen bruto, cobrado y pendiente de cobro.",
       "Las mismas cifras, con el mismo nombre, en el resumen de cada tienda.",
     ],
     enlace: { ruta: "/panel", texto: "Ir a Inicio" },
@@ -81,8 +120,8 @@ export const NOVEDADES: Novedad[] = [
     resumen: "Lo que avisa al cliente o no tiene vuelta atrás se confirma antes.",
     puntos: [
       "Enviado o cancelado pregunta antes; si el correo o la web fallan, se avisa.",
-      "Si una lista no carga, lo dice y deja reintentar, en vez de salir vacía.",
-      "Cerrar un pedido, apunte o cobro a medias pregunta antes de descartarlo.",
+      "Cerrar un pedido, ficha, apunte o tarea a medias pregunta antes de descartarlo.",
+      "Al crear un pedido la ventana se cierra: no se crea dos veces.",
     ],
   },
   {
@@ -92,11 +131,10 @@ export const NOVEDADES: Novedad[] = [
     titulo: "Avisos y textos más claros",
     resumen: "Los avisos y errores salen en castellano llano y dicen qué hacer.",
     puntos: [
-      "Si una lista sale vacía, tienes a mano «Quitar filtros» o «Nuevo».",
-      "Desde Pedidos puedes crear un pedido: primero eliges la tienda.",
-      "Cada tienda enlaza a sus pedidos y a sus cobros pendientes.",
+      "Si una lista no carga, dice por qué y deja reintentar, en vez de salir vacía.",
+      "Un número que no se entiende se dice; ya no se guarda como 0.",
+      "«Aún no está activada» solo sale cuando de verdad falta algo por activar.",
     ],
-    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
   },
   {
     id: "2026-11-14-agenda-arreglos",
@@ -116,7 +154,7 @@ export const NOVEDADES: Novedad[] = [
     fecha: "2026-11-14",
     tipo: "arreglo",
     titulo: "Cifras corregidas",
-    resumen: "Dos totales que salían más altos de lo real ya cuadran.",
+    resumen: "Tres totales que salían más altos de lo real ya cuadran.",
     puntos: [
       "Cobros pendientes: no suma borradores y resta lo ya cobrado.",
       "Resumen de la tienda: sin cancelados y con todos los pedidos.",
