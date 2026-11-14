@@ -17,7 +17,23 @@
  * solo se descarta la línea que está en blanco del todo; las demás se avisan.
  */
 
-import { leerNumeroEscrito } from "./numeros";
+import { eur, numeroJusto } from "@/lib/format";
+import { leerNumeroEscrito, llevaPuntoDeMiles, numeroEnLetras } from "./numeros";
+
+/** Los tipos de IVA que puede llevar una línea de pedido: los de España. */
+export const TIPOS_IVA_PEDIDO: readonly number[] = [21, 10, 4, 0];
+
+/** Si un IVA es uno de los que se admiten. */
+export function ivaDePedidoValido(iva: number): boolean {
+  return TIPOS_IVA_PEDIDO.includes(iva);
+}
+
+/**
+ * Una línea que pasa de esto (cantidad × precio, sin IVA) se confirma antes de
+ * guardar: en una venta de DTF por metros es casi siempre una cifra mal
+ * escrita.
+ */
+export const LINEA_GRANDE_EUR = 10_000;
 
 /** Una línea tal como está en el formulario: los números, como texto. */
 export interface LineaEscrita {
@@ -101,6 +117,8 @@ export function leerPedidoEscrito(lineas: LineaEscrita[], envioTexto: string): L
       propios.push(`${n}: falta el IVA (escribe 0 si va sin IVA).`);
     } else if (!Number.isFinite(iva) || iva < 0) {
       propios.push(`${n}: el IVA «${l.iva_rate.trim()}» no es un número válido.`);
+    } else if (!ivaDePedidoValido(iva)) {
+      propios.push(`${n}: el IVA ${l.iva_rate.trim()} % no existe: tiene que ser 21, 10, 4 o 0.`);
     }
     if (propios.length) {
       errores.push(...propios);
@@ -118,4 +136,47 @@ export function leerPedidoEscrito(lineas: LineaEscrita[], envioTexto: string): L
   if (errores.length === 0 && leidas.length === 0) errores.push("Añade al menos una línea.");
   if (errores.length) return { ok: false, errores };
   return { ok: true, lineas: leidas, envio };
+}
+
+/** Una cifra escrita en letra si se puede («mil quinientos»), o en número. */
+function cifraLeida(n: number): string {
+  return numeroEnLetras(n) ?? numeroJusto(n, 4);
+}
+
+/**
+ * Lo que hay que confirmar antes de guardar un pedido que ya se lee bien:
+ * cantidades o precios escritos con punto de miles («1.500» puede ser mil
+ * quinientos o 1,5 mal escrito) y líneas de más de 10.000 € sin IVA. Cada
+ * aviso dice la cifra que se ha leído, para que se vea el error sin abrir la
+ * línea. Vacío: nada que confirmar.
+ */
+export function avisosAntesDeGuardar(lineas: LineaEscrita[]): string[] {
+  const avisos: string[] = [];
+  lineas.forEach((l, i) => {
+    if (lineaEnBlanco(l)) return;
+    const n = `Línea ${i + 1}`;
+    const cantidad = leerNumeroEscrito(l.cantidad);
+    const precio = leerNumeroEscrito(l.precio_unitario);
+    for (const [que, texto, valor] of [
+      ["cantidad", l.cantidad, cantidad],
+      ["precio", l.precio_unitario, precio],
+    ] as const) {
+      if (Number.isFinite(valor) && llevaPuntoDeMiles(texto)) {
+        avisos.push(
+          `${n}: en ${que === "cantidad" ? "la cantidad" : "el precio"} has escrito ` +
+            `${texto.trim()}: se guardará como ${cifraLeida(valor)}. ¿Es correcto?`,
+        );
+      }
+    }
+    if (Number.isFinite(cantidad) && Number.isFinite(precio)) {
+      const importe = cantidad * precio;
+      if (importe > LINEA_GRANDE_EUR) {
+        avisos.push(
+          `${n}: ${numeroJusto(cantidad, 4)} × ${eur(precio)} = ${eur(importe)} sin IVA. ` +
+            "¿Es correcto?",
+        );
+      }
+    }
+  });
+  return avisos;
 }

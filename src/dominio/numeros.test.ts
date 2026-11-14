@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escribirNumero, leerNumeroEscrito } from "./numeros";
+import { escribirNumero, leerNumeroEscrito, llevaPuntoDeMiles, numeroEnLetras } from "./numeros";
 
 describe("leerNumeroEscrito", () => {
   it("coma o punto decimal", () => {
@@ -40,5 +40,33 @@ describe("escribirNumero", () => {
     expect(escribirNumero(12.5)).toBe("12,5");
     expect(escribirNumero(3)).toBe("3");
     expect(escribirNumero(Number.NaN)).toBe("");
+  });
+});
+
+describe("llevaPuntoDeMiles", () => {
+  it("«1.500» y «2.500,50» sí; «1.5», «0.250», «1500» y «12,5» no", () => {
+    expect(llevaPuntoDeMiles("1.500")).toBe(true);
+    expect(llevaPuntoDeMiles("2.500,50")).toBe(true);
+    expect(["1.5", "0.250", "1500", "12,5", ""].some(llevaPuntoDeMiles)).toBe(false);
+  });
+});
+
+describe("numeroEnLetras", () => {
+  it("escribe en letra los enteros", () => {
+    expect(numeroEnLetras(1500)).toBe("mil quinientos");
+    expect(numeroEnLetras(2500)).toBe("dos mil quinientos");
+    expect(numeroEnLetras(100)).toBe("cien");
+    expect(numeroEnLetras(101)).toBe("ciento uno");
+    expect(numeroEnLetras(21000)).toBe("veintiún mil");
+    expect(numeroEnLetras(31000)).toBe("treinta y un mil");
+    expect(numeroEnLetras(100000)).toBe("cien mil");
+    expect(numeroEnLetras(1000000)).toBe("un millón");
+    expect(numeroEnLetras(3750000)).toBe("tres millones setecientos cincuenta mil");
+    expect(numeroEnLetras(0)).toBe("cero");
+  });
+
+  it("con decimales o negativo, null", () => {
+    expect(numeroEnLetras(1.5)).toBeNull();
+    expect(numeroEnLetras(-3)).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { ivaDePedidoValido } from "@/dominio/pedido-formulario";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
 import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
@@ -140,7 +141,10 @@ const itemSchema = z.object({
   descripcion: z.string().min(1),
   cantidad: z.number().nonnegative(),
   precio_unitario: z.number().nonnegative(),
-  iva_rate: z.number().nonnegative().default(21),
+  iva_rate: z
+    .number()
+    .refine(ivaDePedidoValido, "El IVA de una línea tiene que ser 21, 10, 4 o 0")
+    .default(21),
   /** DTF (por defecto) o DTF UV, que imprime la subcontrata (ver por-linea.ts). */
   linea: z.enum(["dtf", "uv"]).default("dtf"),
 });

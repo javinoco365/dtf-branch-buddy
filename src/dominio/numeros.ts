@@ -45,3 +45,114 @@ export function leerNumeroEscrito(texto: string | number | null | undefined): nu
 export function escribirNumero(n: number): string {
   return Number.isFinite(n) ? String(n).replace(".", ",") : "";
 }
+
+/**
+ * Si el texto lleva puntos de miles («1.500», «2.500,50»). Con ellos, «1.500»
+ * puede ser mil quinientos o uno y medio mal escrito: quien guarda lo
+ * confirma.
+ */
+export function llevaPuntoDeMiles(texto: string | null | undefined): boolean {
+  const t = String(texto ?? "").trim();
+  if (SOLO_MILES.test(t)) return true;
+  return t.includes(",") && t.includes(".") && Number.isFinite(leerNumeroEscrito(t));
+}
+
+const UNIDADES = [
+  "cero",
+  "uno",
+  "dos",
+  "tres",
+  "cuatro",
+  "cinco",
+  "seis",
+  "siete",
+  "ocho",
+  "nueve",
+  "diez",
+  "once",
+  "doce",
+  "trece",
+  "catorce",
+  "quince",
+  "dieciséis",
+  "diecisiete",
+  "dieciocho",
+  "diecinueve",
+  "veinte",
+  "veintiuno",
+  "veintidós",
+  "veintitrés",
+  "veinticuatro",
+  "veinticinco",
+  "veintiséis",
+  "veintisiete",
+  "veintiocho",
+  "veintinueve",
+];
+const DECENAS = [
+  "",
+  "",
+  "",
+  "treinta",
+  "cuarenta",
+  "cincuenta",
+  "sesenta",
+  "setenta",
+  "ochenta",
+  "noventa",
+];
+const CENTENAS = [
+  "",
+  "ciento",
+  "doscientos",
+  "trescientos",
+  "cuatrocientos",
+  "quinientos",
+  "seiscientos",
+  "setecientos",
+  "ochocientos",
+  "novecientos",
+];
+
+/** De 1 a 999 en letra. */
+function hastaMil(n: number): string {
+  if (n === 100) return "cien";
+  const c = Math.floor(n / 100);
+  const r = n % 100;
+  const partes: string[] = [];
+  if (c) partes.push(CENTENAS[c]);
+  if (r) {
+    if (r < 30) partes.push(UNIDADES[r]);
+    else {
+      const d = Math.floor(r / 10);
+      const u = r % 10;
+      partes.push(u ? `${DECENAS[d]} y ${UNIDADES[u]}` : DECENAS[d]);
+    }
+  }
+  return partes.join(" ");
+}
+
+/** «veintiuno mil» → «veintiún mil», «treinta y uno mil» → «treinta y un mil». */
+function apocope(t: string): string {
+  return t.replace(/veintiuno$/, "veintiún").replace(/uno$/, "un");
+}
+
+/**
+ * Un número entero en letra («mil quinientos», «dos millones»), para que se
+ * lea sin dudar qué cifra se ha entendido. Con decimales, negativo o de mil
+ * millones en adelante, `null`.
+ */
+export function numeroEnLetras(n: number): string | null {
+  if (!Number.isInteger(n) || n < 0 || n >= 1e9) return null;
+  if (n === 0) return UNIDADES[0];
+  const millones = Math.floor(n / 1e6);
+  const miles = Math.floor((n % 1e6) / 1000);
+  const resto = n % 1000;
+  const partes: string[] = [];
+  if (millones) {
+    partes.push(millones === 1 ? "un millón" : `${apocope(hastaMil(millones))} millones`);
+  }
+  if (miles) partes.push(miles === 1 ? "mil" : `${apocope(hastaMil(miles))} mil`);
+  if (resto) partes.push(hastaMil(resto));
+  return partes.join(" ");
+}

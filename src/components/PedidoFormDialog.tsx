@@ -33,6 +33,17 @@ import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  avisosAntesDeGuardar,
   leerPedidoEscrito,
   lineasParaTotales,
   type LineaEscrita,
@@ -342,6 +353,16 @@ export function PedidoFormDialog({
     onError: (e: any) => avisarError(e, "Error al guardar"),
   });
 
+  // Cifras que conviene confirmar antes de guardar (punto de miles, líneas de
+  // más de 10.000 €): se enseñan con la cifra leída y se guarda solo si se acepta.
+  const [porConfirmar, setPorConfirmar] = useState<string[] | null>(null);
+  function enviar() {
+    const leido = leerPedidoEscrito(lineas, envio);
+    const avisos = leido.ok ? avisosAntesDeGuardar(lineas) : [];
+    if (avisos.length) setPorConfirmar(avisos);
+    else mut.mutate();
+  }
+
   function setLinea(i: number, patch: Partial<Linea>) {
     setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -384,7 +405,7 @@ export function PedidoFormDialog({
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar pedido" : "Nuevo pedido manual"}</DialogTitle>
         </DialogHeader>
-        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+        <FormularioDialogo alEnviar={enviar} ocupado={mut.isPending}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -609,6 +630,31 @@ export function PedidoFormDialog({
         </FormularioDialogo>
       </DialogContent>
       {avisoDescartar}
+      <AlertDialog open={porConfirmar !== null} onOpenChange={(o) => !o && setPorConfirmar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Son correctas estas cifras?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <ul className="list-disc pl-5 space-y-1">
+                {(porConfirmar ?? []).map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Corregir</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setPorConfirmar(null);
+                mut.mutate();
+              }}
+            >
+              Sí, guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
