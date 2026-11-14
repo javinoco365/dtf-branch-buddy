@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-hoy-con-lista",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "«Hoy»: toca una cifra y ve sus pedidos",
+    resumen: "Por producir, por enviar y por cobrar abren la lista de esos pedidos.",
+    puntos: [
+      "Con número, cliente, tienda, estado e importe.",
+      "Toca un pedido para ir a él en su lista.",
+    ],
+    enlace: { ruta: "/panel", texto: "Ir a Inicio" },
+  },
+  {
     id: "2026-11-14-pendientes-sin-cancelados",
     fecha: "2026-11-14",
     tipo: "arreglo",

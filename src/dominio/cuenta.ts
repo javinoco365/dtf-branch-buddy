@@ -732,11 +732,20 @@ export function pedidosPorCobrarHoy(
   f: FiltroCuenta,
   soloUv: ReadonlySet<string> = new Set(),
 ): number {
+  return listaPorCobrarHoy(pendientes, f, soloUv).length;
+}
+
+/** Los pedidos que cuenta «Pedidos por cobrar», para listarlos. */
+export function listaPorCobrarHoy<P extends PedidoPendiente>(
+  pendientes: readonly P[],
+  f: FiltroCuenta,
+  soloUv: ReadonlySet<string> = new Set(),
+): P[] {
   const deTienda =
     f.tienda === TODAS ? pendientes : pendientes.filter((p) => tiendaDelPendiente(p) === f.tienda);
   return pendientesDeLinea(deTienda, f.linea, soloUv).filter(
     (p) => !esWebSinPagar(p) && num(p.pendiente) > 0,
-  ).length;
+  );
 }
 
 /** Un pedido de la web que el cliente aún no ha pagado: no es venta. */

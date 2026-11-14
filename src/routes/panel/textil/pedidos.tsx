@@ -88,8 +88,15 @@ import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
   // «Desde el stock»: Textil › Stock manda aquí las variantes marcadas.
-  validateSearch: (s: Record<string, unknown>): { desde_stock?: string } => ({
+  // Los filtros de la lista (q, estado, cobro, periodo) también van en la
+  // dirección: se conservan para que se pueda llegar con uno puesto (p. ej.
+  // desde «Hoy» en Inicio, buscando un pedido por su número).
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { desde_stock?: string; q?: string } & Record<string, unknown> => ({
+    ...s,
     desde_stock: typeof s.desde_stock === "string" ? s.desde_stock : undefined,
+    q: typeof s.q === "string" ? s.q : undefined,
   }),
   component: PedidosPage,
 });
