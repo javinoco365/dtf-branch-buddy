@@ -51,6 +51,7 @@ import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -61,6 +62,7 @@ function FacturasPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listTextilFacturas);
   const [borrando, setBorrando] = useState<any>(null);
+  const [anulando, setAnulando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
   const {
     data = [],
@@ -165,6 +167,7 @@ function FacturasPage() {
     mutationFn: (id: string) => anularFn({ data: { factura_id: id } }),
     onSuccess: (r: any) => {
       toast.success(`Ticket anulado con la rectificativa ${r.referencia}`);
+      setAnulando(null);
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
     },
     onError: (e: any) => avisarError(e, "No se pudo anular"),
@@ -364,15 +367,7 @@ function FacturasPage() {
                           title="Anular con una rectificativa"
                           aria-label="Anular con una rectificativa"
                           disabled={anular.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Se emitirá una rectificativa que anula el ticket ${f.numero}. El ticket no se borra ni se modifica. ¿Continuar?`,
-                              )
-                            ) {
-                              anular.mutate(f.id);
-                            }
-                          }}
+                          onClick={() => setAnulando(f)}
                         >
                           <Undo2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -432,6 +427,14 @@ function FacturasPage() {
           alCanjear={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
         />
       )}
+
+      <ConfirmarRectificativa
+        abierto={!!anulando}
+        que={`el ticket ${anulando?.numero ?? ""}`}
+        cargando={anular.isPending}
+        onCerrar={() => setAnulando(null)}
+        onConfirmar={() => anulando && anular.mutate(anulando.id)}
+      />
 
       <ConfirmarBorrado
         abierto={!!borrando}

@@ -77,6 +77,7 @@ import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -178,6 +179,7 @@ function StockPage() {
   const [recuento, setRecuento] = useState<Item | null>(null);
   const [historial, setHistorial] = useState<Item | null>(null);
   const [fusionando, setFusionando] = useState<VarianteCatalogo | null>(null);
+  const [borrandoVariante, setBorrandoVariante] = useState<VarianteCatalogo | null>(null);
   // Variantes marcadas para crear un presupuesto o un pedido con ellas.
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const marcar = (ids: readonly string[], si: boolean) =>
@@ -253,6 +255,7 @@ function StockPage() {
           ? "La variante tiene movimientos, así que se ha desactivado en vez de borrarla"
           : "Variante eliminada",
       );
+      setBorrandoVariante(null);
     },
     onError: (e: any) => avisarError(e),
   });
@@ -280,21 +283,7 @@ function StockPage() {
       setEditing(it);
       setOpen(true);
     },
-    borrar: (v) => {
-      if (
-        confirm(
-          `¿Seguro que quieres eliminar "${etiquetaVariante(v)}"?\n\n` +
-            "Si tiene movimientos de stock no se borrará: se desactivará, " +
-            "porque su historia explica el coste de lo que ya vendiste." +
-            // Con la migración del escáner, solo a 0 unidades.
-            (escaner && v.cantidad !== 0
-              ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
-                "merma o un recuento que la deje a 0, o fusiónala con la buena."
-              : ""),
-        )
-      )
-        del.mutate(v.id);
-    },
+    borrar: (v) => setBorrandoVariante(v),
     fusionar: (v) => setFusionando(v),
   };
   const propsCurva = {
@@ -450,6 +439,23 @@ function StockPage() {
           loading={fusionar.isPending}
         />
       )}
+
+      <ConfirmarBorrado
+        abierto={!!borrandoVariante}
+        que={borrandoVariante ? `«${etiquetaVariante(borrandoVariante)}»` : "la variante"}
+        consecuencias={[
+          "Si tiene movimientos de stock no se borra: se desactiva, porque su historia explica el coste de lo que ya vendiste.",
+        ]}
+        // Con la migración del escáner, solo a 0 unidades.
+        impedimento={
+          escaner && borrandoVariante && borrandoVariante.cantidad !== 0
+            ? "Todavía tiene unidades: para retirarla, antes anota una merma o un recuento que la deje a 0, o fusiónala con la buena."
+            : null
+        }
+        cargando={del.isPending}
+        onCerrar={() => !del.isPending && setBorrandoVariante(null)}
+        onConfirmar={() => borrandoVariante && del.mutate(borrandoVariante.id)}
+      />
 
       <HistorialDialog item={historial} onClose={() => setHistorial(null)} />
     </div>

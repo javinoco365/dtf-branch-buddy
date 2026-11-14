@@ -86,6 +86,7 @@ import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -238,6 +239,7 @@ function Facturas() {
   const sePuedeBorrar = (f: any) =>
     impedimentoBorrado(f, ultimos, referenciaFactura(f.serie, f.ejercicio, f.numero)) === null;
   const [borrando, setBorrando] = useState<any>(null);
+  const [anulando, setAnulando] = useState<any>(null);
   const borrarFn = useServerFn(borrarUltimaFactura);
   const borrar = useMutation({
     mutationFn: (id: string) => borrarFn({ data: { tipo: "tienda", factura_id: id } }),
@@ -267,6 +269,7 @@ function Facturas() {
       }),
     onSuccess: (r: any) => {
       toast.success(`Anulada con la rectificativa ${r.referencia}`);
+      setAnulando(null);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => avisarError(e, "No se pudo anular"),
@@ -463,15 +466,7 @@ function Facturas() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
-                                )
-                              ) {
-                                anular.mutate({ id: f.id, tipo: f.tipo });
-                              }
-                            }}
+                            onClick={() => setAnulando(f)}
                             disabled={anular.isPending}
                             title="Anular con una rectificativa"
                           >
@@ -547,6 +542,18 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarRectificativa
+        abierto={!!anulando}
+        que={
+          anulando
+            ? `${anulando.tipo === "simplificada" ? "el ticket" : "la factura"} ${referenciaFactura(anulando.serie, anulando.ejercicio, anulando.numero)}`
+            : "el documento"
+        }
+        cargando={anular.isPending}
+        onCerrar={() => setAnulando(null)}
+        onConfirmar={() => anulando && anular.mutate({ id: anulando.id, tipo: anulando.tipo })}
+      />
 
       <ConfirmarBorrado
         abierto={!!borrando}
