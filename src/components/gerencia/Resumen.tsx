@@ -24,7 +24,10 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
+import { useCuentaResultados } from "@/lib/cuenta";
+import { mensajeDeError } from "@/lib/errores";
+import { FILTRO_CUENTA_TODO } from "@/dominio/cuenta";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import {
   Table,
@@ -46,7 +49,6 @@ import {
   antiguedadPendientes,
   avanceObjetivo,
   avisosGerencia,
-  beneficioEstimado,
   cifrasGerencia,
   cifrasGerenciaPorLinea,
   cobradoPorTramos,
@@ -237,7 +239,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 
       {(d.filtro.linea ?? "todo") === "todo" && <PorLinea d={d} />}
 
-      <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
+      <BeneficioYObjetivos d={d} c={c} sinCostes={sinCostes} />
 
       <Card>
         <CardHeader>
@@ -344,15 +346,21 @@ function PorLinea({ d }: { d: DatosGerencia }) {
 function BeneficioYObjetivos({
   d,
   c,
-  p,
   sinCostes,
 }: {
   d: DatosGerencia;
   c: CifrasGerencia;
-  p: CifrasGerencia;
   sinCostes: boolean;
 }) {
   const frente = d.comparacion?.etiqueta;
+  // El beneficio, con la cuenta de resultados (cuenta.ts): el mismo que en la
+  // pantalla Cuenta de resultados, con devoluciones, envíos y estructura.
+  const lectura = useCuentaResultados({
+    rango: d.rango,
+    previo: d.comparacion?.previo ?? null,
+    filtro: FILTRO_CUENTA_TODO,
+    dinero: false,
+  });
   // Los objetivos son de toda la venta: en B (lo pendiente de documentar) no
   // se comparan.
   const objetivo =
@@ -369,46 +377,41 @@ function BeneficioYObjetivos({
   if (!hayGastos && !hayObjetivo) {
     return (
       <Nota>
-        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio estimado y
-        cómo vas frente al objetivo. <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
+        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio antes de
+        impuestos y cómo vas frente al objetivo.{" "}
+        <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
       </Nota>
     );
   }
   if (!sinFiltros) {
     return (
       <Nota>
-        El beneficio estimado y los objetivos son de toda la empresa: se ven con «Todas las tiendas»
-        y «Todos los canales».
+        El beneficio antes de impuestos y los objetivos son de toda la empresa: se ven con «Todas
+        las tiendas» y «Todos los canales».
       </Nota>
     );
   }
 
   const transcurrido = parteTranscurrida(d.rango, d.hoy);
-  const actual = beneficioEstimado(c.margen, d.gastosDelGrupo, d.rango, d.hoy);
-  const previo = d.comparacion
-    ? beneficioEstimado(p.margen, d.gastosDelGrupo, d.comparacion.previo)
-    : null;
+  const bai = lectura.cuenta?.beneficio_antes_impuestos ?? null;
 
   return (
     <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-      {hayGastos && (
-        <TarjetaKpi
-          titulo="Beneficio estimado"
-          explicacion="g_beneficio"
-          valor={sinCostes ? "—" : eur(actual.beneficio)}
-          color={!sinCostes && actual.beneficio < 0 ? "destructive" : "primary"}
+      {hayGastos && d.grupo === "total" && (
+        <TarjetaConcepto
+          clave="beneficio_antes_impuestos"
+          cifra={lectura.error ? { valor: null, falta: mensajeDeError(lectura.error) } : bai}
+          previa={lectura.previa?.beneficio_antes_impuestos}
           frente={frente}
-          delta={
-            sinCostes || !previo || previo.beneficio <= 0
-              ? null
-              : variacion(actual.beneficio, previo.beneficio)
-          }
           icon={PiggyBank}
           pie={
-            <span className="text-muted-foreground">
-              {sinCostes
-                ? "Falta el coste por metro para calcular el margen."
-                : `Margen ${eur(c.margen)} − gastos ${eur(actual.gastos)}${actual.hastaHoy ? " hasta hoy" : ""}`}
+            <span className="flex flex-wrap items-center gap-x-2">
+              {sinCostes && (
+                <span className="text-muted-foreground">
+                  Falta el coste por metro: la producción va sin coste.
+                </span>
+              )}
+              <VerDetalle destino={{ to: "/panel/cuenta-resultados" }} texto="Ver la cuenta" />
             </span>
           }
         />

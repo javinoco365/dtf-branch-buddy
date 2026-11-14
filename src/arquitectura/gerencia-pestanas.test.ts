@@ -24,8 +24,6 @@ const FICHERO: Record<PestanaGerencia, string> = {
   clientes: "components/gerencia/Clientes.tsx",
   comercial: "components/gerencia/Comercial.tsx",
   produccion: "components/gerencia/Produccion.tsx",
-  margen: "components/gerencia/Margen.tsx",
-  resultados: "components/gerencia/Resultados.tsx",
   fiscal: "components/gerencia/Fiscal.tsx",
   textil: "components/gerencia/Textil.tsx",
 };
