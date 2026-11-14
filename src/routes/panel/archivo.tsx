@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { mensajeDeError } from "@/lib/errores";
 import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -195,7 +196,7 @@ function ArchivoPage() {
               {error && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-destructive">
-                    {(error as Error).message || "No se pudo leer el archivo"}
+                    {mensajeDeError(error, "No se pudo leer el archivo")}
                   </TableCell>
                 </TableRow>
               )}

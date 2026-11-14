@@ -69,7 +69,7 @@ import { SeccionesPlantilla } from "@/components/plantillas/SeccionesPlantilla";
 import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
-import { avisarError } from "@/lib/errores";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -369,7 +369,7 @@ function ConfiguracionPdfPage() {
             <div className="min-w-0 flex-1">
               <p className="font-medium">No se han podido cargar las plantillas</p>
               <p className="break-words text-sm text-muted-foreground">
-                {lista.error?.message || "Error desconocido"}
+                {mensajeDeError(lista.error, "No se ha podido cargar")}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => void lista.refetch()}>

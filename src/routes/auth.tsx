@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Marca, MARCA_NOMBRE } from "@/components/Marca";
-import { avisarError } from "@/lib/errores";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -39,7 +39,9 @@ function AuthPage() {
     setNeedsBootstrap(null);
     checkAdmin()
       .then((r) => setNeedsBootstrap(!r.existe))
-      .catch((err: Error) => setErrorComprobacion(err.message || "No se pudo comprobar el acceso"));
+      .catch((err: unknown) =>
+        setErrorComprobacion(mensajeDeError(err, "No se pudo comprobar el acceso")),
+      );
   }
 
   useEffect(() => {
@@ -48,7 +50,9 @@ function AuthPage() {
     });
     checkAdmin()
       .then((r) => setNeedsBootstrap(!r.existe))
-      .catch((err: Error) => setErrorComprobacion(err.message || "No se pudo comprobar el acceso"));
+      .catch((err: unknown) =>
+        setErrorComprobacion(mensajeDeError(err, "No se pudo comprobar el acceso")),
+      );
   }, [navigate, checkAdmin]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -115,7 +119,7 @@ function AuthPage() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Correo</Label>
                 <Input
                   id="email"
                   type="email"

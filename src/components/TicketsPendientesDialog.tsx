@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { mensajeDeError } from "@/lib/errores";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { endOfMonth, format, startOfMonth } from "date-fns";
@@ -179,7 +180,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
         {isLoading && <p className="py-4 text-center text-sm text-muted-foreground">Buscando…</p>}
         {error && (
           <p className="py-4 text-center text-sm text-destructive">
-            {(error as Error).message || "No se pudo leer los pedidos"}
+            {mensajeDeError(error, "No se pudo leer los pedidos")}
           </p>
         )}
 
