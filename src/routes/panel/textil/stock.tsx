@@ -78,6 +78,7 @@ import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -299,29 +300,25 @@ function StockPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Stock textil</h1>
-          <p className="text-sm text-muted-foreground">
-            Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado
-            para pedidos.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado para pedidos."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+            </Button>
+          </SiPuede>
+        }
+      />
       {estadoEscaner && !escaner && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_ESCANER}</p>
           </CardContent>
         </Card>
@@ -565,7 +562,7 @@ function StockDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item ? "Editar artículo" : "Nuevo artículo"}</DialogTitle>
         </DialogHeader>
@@ -1072,7 +1069,7 @@ function RecuentoDialog({ item, onClose, onSave, loading }: any) {
             </div>
             <div
               className={`rounded-md border p-3 text-sm ${
-                diferencia === 0 ? "bg-muted/30" : "border-amber-500/50 bg-amber-500/10"
+                diferencia === 0 ? "bg-muted/30" : "border-aviso-atencion-borde bg-aviso-atencion"
               }`}
             >
               {diferencia === 0
@@ -1155,7 +1152,7 @@ function HistorialDialog({ item, onClose }: any) {
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Historial de movimientos</DialogTitle>
         </DialogHeader>
@@ -1211,7 +1208,7 @@ function HistorialDialog({ item, onClose }: any) {
                     <>
                       <TableCell
                         className={`text-right font-medium tabular-nums ${
-                          Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
+                          Number(m.cantidad) > 0 ? "text-aviso-bien-texto" : "text-destructive"
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}

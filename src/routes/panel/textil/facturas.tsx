@@ -52,6 +52,7 @@ import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -210,18 +211,15 @@ function FacturasPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Facturas textil</h1>
-          <p className="text-sm text-muted-foreground">
-            Las facturas se generan al convertir un presupuesto aceptado.
-          </p>
-        </div>
-        <DescargarPdfs
-          docs={(filtrados as any[]).map(deFacturaTextil)}
-          nombreZip={nombreZip(periodo.seleccion, periodo.rango, "Facturas_textil")}
-        />
-      </div>
+      <CabeceraPantalla
+        subtitulo="Las facturas se generan al convertir un presupuesto aceptado."
+        acciones={
+          <DescargarPdfs
+            docs={(filtrados as any[]).map(deFacturaTextil)}
+            nombreZip={nombreZip(periodo.seleccion, periodo.rango, "Facturas_textil")}
+          />
+        }
+      />
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}
@@ -330,6 +328,13 @@ function FacturasPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     <Button
+                      aria-label={
+                        f.pdf_path
+                          ? "Abrir el PDF"
+                          : escribir
+                            ? "Generar el PDF"
+                            : "Todavía sin PDF guardado"
+                      }
                       variant="ghost"
                       size="icon"
                       title={
@@ -376,7 +381,12 @@ function FacturasPage() {
                       </>
                     )}
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
+                      <Button
+                        aria-label="Borrar la factura"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(f)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </SiPuede>

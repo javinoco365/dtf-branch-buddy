@@ -41,6 +41,8 @@ import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export type Producto = {
   id: string;
@@ -204,24 +206,21 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {tiendaId ? "Catálogo" : "Productos generales"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {tiendaId
-              ? "Los productos de esta tienda y los generales, que salen en todas."
-              : "Productos de la empresa, disponibles en todas las tiendas para pedidos y presupuestos."}
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo producto
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo={
+          tiendaId
+            ? "Los productos de esta tienda y los generales, que salen en todas."
+            : "Productos de la empresa, disponibles en todas las tiendas para pedidos y presupuestos."
+        }
+        acciones={
+          <SiPuede accion="escribir">
+            <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo producto
+            </Button>
+          </SiPuede>
+        }
+      />
 
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -317,6 +316,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                     <TableCell>
                       <SiPuede accion="escribir">
                         <Button
+                          aria-label="Editar"
                           variant="ghost"
                           size="icon"
                           title="Editar"
@@ -327,6 +327,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       </SiPuede>
                       <SiPuede accion="borrar">
                         <Button
+                          aria-label="Borrar"
                           variant="ghost"
                           size="icon"
                           title="Borrar"
@@ -410,116 +411,121 @@ function ProductoForm({
         <DialogHeader>
           <DialogTitle>{producto.id ? "Editar producto" : "Nuevo producto"}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>SKU</Label>
-            <Input value={producto.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
-          </div>
-          <div>
-            <Label>Unidad</Label>
-            <Select value={producto.unidad ?? "m"} onValueChange={(v) => set("unidad", v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {UNIDADES.map((u) => (
-                  <SelectItem key={u.value} value={u.value}>
-                    {u.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="col-span-2">
-            <Label>Línea</Label>
-            <Select
-              value={producto.linea === "uv" ? "uv" : "dtf"}
-              onValueChange={(v) => set("linea", v)}
-              disabled={!!producto.woo_product_id}
-            >
-              <SelectTrigger aria-label="Línea de producto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dtf">DTF</SelectItem>
-                <SelectItem value="uv">DTF UV (subcontratado)</SelectItem>
-              </SelectContent>
-            </Select>
-            {producto.woo_product_id ? (
-              <p className="text-xs text-muted-foreground mt-1">
-                Viene de WooCommerce: la línea sale de su categoría.
-              </p>
-            ) : null}
-          </div>
-          {tiendaId && (
-            <div className="col-span-2">
-              <Label>Disponible en</Label>
-              <Select
-                value={producto.tienda_id ? "tienda" : "todas"}
-                onValueChange={(v) => set("tienda_id", v === "tienda" ? tiendaId : null)}
-                disabled={!!producto.woo_product_id}
-              >
+        <FormularioDialogo alEnviar={onSave} ocupado={saving}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>SKU</Label>
+              <Input value={producto.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
+            </div>
+            <div>
+              <Label>Unidad</Label>
+              <Select value={producto.unidad ?? "m"} onValueChange={(v) => set("unidad", v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tienda">Solo esta tienda</SelectItem>
-                  <SelectItem value="todas">Todas las tiendas (general)</SelectItem>
+                  {UNIDADES.map((u) => (
+                    <SelectItem key={u.value} value={u.value}>
+                      {u.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label>Línea</Label>
+              <Select
+                value={producto.linea === "uv" ? "uv" : "dtf"}
+                onValueChange={(v) => set("linea", v)}
+                disabled={!!producto.woo_product_id}
+              >
+                <SelectTrigger aria-label="Línea de producto">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dtf">DTF</SelectItem>
+                  <SelectItem value="uv">DTF UV (subcontratado)</SelectItem>
                 </SelectContent>
               </Select>
               {producto.woo_product_id ? (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Viene de WooCommerce: se queda en su tienda.
+                  Viene de WooCommerce: la línea sale de su categoría.
                 </p>
               ) : null}
             </div>
-          )}
-          <div className="col-span-2">
-            <Label>Nombre *</Label>
-            <Input value={producto.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Descripción</Label>
-            <Textarea
-              rows={2}
-              value={producto.descripcion ?? ""}
-              onChange={(e) => set("descripcion", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Precio por {producto.unidad ?? "m"} (€)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={producto.precio_unitario ?? 0}
-              onChange={(e) => set("precio_unitario", Number(e.target.value))}
-            />
-          </div>
-          <div>
-            <Label>IVA (%)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={producto.iva_rate ?? 21}
-              onChange={(e) => set("iva_rate", Number(e.target.value))}
-            />
-          </div>
-          <div className="col-span-2 flex items-center justify-between pt-2 border-t">
-            <div>
-              <Label>Activo</Label>
-              <p className="text-xs text-muted-foreground">Disponible para pedidos y facturas</p>
+            {tiendaId && (
+              <div className="col-span-2">
+                <Label>Disponible en</Label>
+                <Select
+                  value={producto.tienda_id ? "tienda" : "todas"}
+                  onValueChange={(v) => set("tienda_id", v === "tienda" ? tiendaId : null)}
+                  disabled={!!producto.woo_product_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tienda">Solo esta tienda</SelectItem>
+                    <SelectItem value="todas">Todas las tiendas (general)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {producto.woo_product_id ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Viene de WooCommerce: se queda en su tienda.
+                  </p>
+                ) : null}
+              </div>
+            )}
+            <div className="col-span-2">
+              <Label>Nombre *</Label>
+              <Input
+                value={producto.nombre ?? ""}
+                onChange={(e) => set("nombre", e.target.value)}
+              />
             </div>
-            <Switch checked={producto.activo ?? true} onCheckedChange={(v) => set("activo", v)} />
+            <div className="col-span-2">
+              <Label>Descripción</Label>
+              <Textarea
+                rows={2}
+                value={producto.descripcion ?? ""}
+                onChange={(e) => set("descripcion", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Precio por {producto.unidad ?? "m"} (€)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={producto.precio_unitario ?? 0}
+                onChange={(e) => set("precio_unitario", Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label>IVA (%)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={producto.iva_rate ?? 21}
+                onChange={(e) => set("iva_rate", Number(e.target.value))}
+              />
+            </div>
+            <div className="col-span-2 flex items-center justify-between pt-2 border-t">
+              <div>
+                <Label>Activo</Label>
+                <p className="text-xs text-muted-foreground">Disponible para pedidos y facturas</p>
+              </div>
+              <Switch checked={producto.activo ?? true} onCheckedChange={(v) => set("activo", v)} />
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

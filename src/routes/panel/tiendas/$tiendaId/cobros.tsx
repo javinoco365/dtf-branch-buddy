@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PantallaCobrosPendientes } from "@/components/cobros/PantallaCobrosPendientes";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/cobros")({
   component: CobrosTienda,
@@ -16,14 +17,11 @@ function CobrosTienda() {
   });
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Cobros pendientes · {tienda?.nombre ?? "Tienda"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Lo que queda por cobrar de los pedidos de esta tienda, y sus facturas sin cobrar.
-        </p>
-      </div>
+      <CabeceraPantalla
+        titulo="Cobros pendientes"
+        tienda={tienda?.nombre}
+        subtitulo="Lo que queda por cobrar de los pedidos de esta tienda, y sus facturas sin cobrar."
+      />
       <PantallaCobrosPendientes tiendaId={tiendaId} />
     </div>
   );

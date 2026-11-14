@@ -88,7 +88,7 @@ export function SubidaFacturas({
     if (e === "leyendo" || e === "esperando")
       return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
     if (e === "pendiente") return <CheckCircle2 className="h-4 w-4 text-status-completado" />;
-    if (e === "duplicado") return <CopyX className="h-4 w-4 text-amber-600" />;
+    if (e === "duplicado") return <CopyX className="h-4 w-4 text-aviso-atencion-texto" />;
     return <XCircle className="h-4 w-4 text-destructive" />;
   };
 

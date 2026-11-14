@@ -76,7 +76,7 @@ export function VistaPreviaPdf({
       >
         {error ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-aviso-atencion text-aviso-atencion-texto">
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div className="space-y-1">
@@ -106,7 +106,7 @@ export function VistaPreviaPdf({
         )}
       </div>
       {logoFallido && !error && (
-        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+        <p className="text-[11px] text-aviso-atencion-texto">
           No se ha podido cargar el logo en la vista previa, que sale sin él. Comprueba que es un
           PNG, JPG o WebP; si es así, súbelo aquí para que el PDF lo lleve seguro.
         </p>

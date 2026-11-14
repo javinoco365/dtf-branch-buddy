@@ -226,7 +226,7 @@ export function FacturarPedidosDialog({
         )}
 
         {resultado && (
-          <div className="max-h-[55vh] space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
+          <div className="max-h-[55dvh] space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
             {resultado.emitidos.length > 0 && (
               <p>
                 Emitidos:{" "}
@@ -266,7 +266,7 @@ export function FacturarPedidosDialog({
               />
               Marcar todos los que se pueden ({posibles.length} de {pedidos.length})
             </label>
-            <div className="max-h-[50vh] divide-y overflow-y-auto rounded-md border text-sm">
+            <div className="max-h-[50dvh] divide-y overflow-y-auto rounded-md border text-sm">
               {pedidos.map((p) => {
                 const no = motivo(p);
                 const tienda = nombreTienda?.(p.tienda_id);

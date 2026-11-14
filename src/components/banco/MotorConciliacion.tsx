@@ -446,8 +446,13 @@ export function MotorConciliacion({
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">Propuesta del motor:</span>
-            <Badge className="bg-emerald-600 hover:bg-emerald-600">{verdes.length} verdes</Badge>
-            <Badge variant="outline" className="border-amber-500 text-amber-700">
+            <Badge className="border-aviso-bien-borde bg-aviso-bien text-aviso-bien-texto hover:bg-aviso-bien">
+              {verdes.length} verdes
+            </Badge>
+            <Badge
+              variant="outline"
+              className="border-aviso-atencion-borde text-aviso-atencion-texto"
+            >
               {ambares.length} a revisar
             </Badge>
             <Badge variant="secondary">{tp.length} traspasos</Badge>
@@ -485,7 +490,7 @@ export function MotorConciliacion({
 
       {datos.falta && (
         <p className="flex gap-2 text-sm text-muted-foreground">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
           <span>
             Una mejora de la comprobación aún no está activada (avisa a Javier). Mientras, mira lo
             más reciente de cada cosa, cobrado o no: con muchos tickets, una factura pendiente más
@@ -496,7 +501,7 @@ export function MotorConciliacion({
 
       {recorte && (
         <p className="flex gap-2 text-sm text-muted-foreground">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
           {recorte}
         </p>
       )}
@@ -505,12 +510,12 @@ export function MotorConciliacion({
         <button
           type="button"
           onClick={() => setPestana("resolver")}
-          className={`flex w-full items-center gap-2 rounded-md border p-3 text-left text-sm hover:bg-muted/50 ${errores > 0 ? "border-destructive/50 bg-destructive/5" : "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20"}`}
+          className={`flex w-full items-center gap-2 rounded-md border p-3 text-left text-sm hover:bg-muted/50 ${errores > 0 ? "border-destructive/50 bg-destructive/5" : "border-aviso-atencion-borde bg-aviso-atencion/50"}`}
         >
           {errores > 0 ? (
             <XCircle className="h-4 w-4 shrink-0 text-destructive" />
           ) : (
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-aviso-atencion-texto" />
           )}
           <span className="flex-1">
             {incidencias.length} {incidencias.length === 1 ? "cosa" : "cosas"} para resolver
@@ -584,6 +589,18 @@ export function MotorConciliacion({
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* En el móvil la tabla va en tarjetas y su cabecera, con la casilla
+              de marcar todos, no se ve: aquí la misma casilla, con su texto. */}
+          {escribir && visibles.length > 0 && (
+            <label className="flex min-h-11 items-center gap-2 text-sm md:hidden">
+              <Checkbox
+                checked={todosVisiblesMarcados}
+                onCheckedChange={(v) => alternarVisibles(v === true)}
+              />
+              Marcar todos los que se ven
+            </label>
           )}
 
           <Card>
@@ -743,6 +760,7 @@ export function MotorConciliacion({
                     Confirmar
                   </Button>
                   <Button
+                    aria-label="No es esto: deshacer"
                     variant="ghost"
                     size="icon"
                     title="No es esto: deshacer"
@@ -765,6 +783,7 @@ export function MotorConciliacion({
             acciones={(e) =>
               escribir && (
                 <Button
+                  aria-label="Deshacer"
                   variant="ghost"
                   size="icon"
                   title="Deshacer"
@@ -797,7 +816,7 @@ export function MotorConciliacion({
       </p>
 
       <Dialog open={!!conciliar} onOpenChange={(o) => !o && setConciliar(null)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {conciliar && conciliar.length > 1
@@ -1124,7 +1143,7 @@ function ListaIncidencias({
             {i.gravedad === "error" ? (
               <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
             ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-aviso-atencion-texto" />
             )}
             <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1 space-y-0.5">
@@ -1201,7 +1220,7 @@ function ListaIncidencias({
 function TarjetaResultado({ resultado, alCerrar }: { resultado: Resultado; alCerrar: () => void }) {
   const r = resultado;
   return (
-    <Card className={r.errores.length > 0 ? "border-amber-500" : ""}>
+    <Card className={r.errores.length > 0 ? "border-aviso-atencion-borde" : ""}>
       <CardContent className="space-y-2 py-4 text-sm">
         <div className="flex items-start justify-between gap-2">
           <p>
@@ -1209,13 +1228,20 @@ function TarjetaResultado({ resultado, alCerrar }: { resultado: Resultado; alCer
             por revisar, {r.traspasos} traspasos
             {r.rehechos > 0 && `, ${r.rehechos} propuestas recalculadas`}.
           </p>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Cerrar" onClick={alCerrar}>
+          <Button
+            aria-label="Cerrar"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Cerrar"
+            onClick={alCerrar}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
         {r.errores.length > 0 && (
           <div className="space-y-1">
-            <p className="flex items-center gap-2 font-medium text-amber-700">
+            <p className="flex items-center gap-2 font-medium text-aviso-atencion-texto">
               <AlertTriangle className="h-4 w-4" />
               {r.errores.length}{" "}
               {r.errores.length === 1 ? "no se pudo hacer" : "no se pudieron hacer"}:
@@ -1274,7 +1300,9 @@ function Propuesta({ enlace, docs }: { enlace: Enlace; docs: Map<string, Documen
       <Badge
         variant={verde ? "default" : "outline"}
         className={
-          verde ? "bg-emerald-600 hover:bg-emerald-600" : "border-amber-500 text-amber-700"
+          verde
+            ? "border-aviso-bien-borde bg-aviso-bien text-aviso-bien-texto hover:bg-aviso-bien"
+            : "border-aviso-atencion-borde text-aviso-atencion-texto"
         }
       >
         {ETIQUETA_MOTIVO[enlace.motivo]}
@@ -1506,7 +1534,9 @@ function TablaEnlaces({
                 <TableCell />
                 <TableCell>
                   {total.diferencia !== 0 && (
-                    <div className="text-xs text-amber-600">Difiere {eur(total.diferencia)}</div>
+                    <div className="text-xs text-aviso-atencion-texto">
+                      Difiere {eur(total.diferencia)}
+                    </div>
                   )}
                 </TableCell>
                 <TableCell />
@@ -1535,7 +1565,7 @@ function Diferencia({ enlace }: { enlace: EnlaceGuardado }) {
       Falta {sentidoDe(falta) === "cobro" ? "cobrar" : "pagar"} {eur(Math.abs(falta))}
     </div>
   ) : (
-    <div className="text-xs text-amber-600">Difiere {eur(enlace.diferencia)}</div>
+    <div className="text-xs text-aviso-atencion-texto">Difiere {eur(enlace.diferencia)}</div>
   );
 }
 
@@ -1609,6 +1639,7 @@ function HistorialTraspasos({
                   )}
                   {escribir && (
                     <Button
+                      aria-label="No es un traspaso"
                       variant="ghost"
                       size="icon"
                       title="No es un traspaso"
@@ -1720,7 +1751,7 @@ function ListaSugerencias({
     );
   }
   return (
-    <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+    <div className="max-h-[60dvh] space-y-2 overflow-y-auto">
       {lista.map((s) => (
         <div
           key={claveDoc(s.documento)}
@@ -1748,7 +1779,10 @@ function ListaSugerencias({
                 </Badge>
               )}
               {!s.enVentana && (
-                <Badge variant="outline" className="border-amber-500 text-amber-700">
+                <Badge
+                  variant="outline"
+                  className="border-aviso-atencion-borde text-aviso-atencion-texto"
+                >
                   Fuera de fechas
                 </Badge>
               )}
@@ -1856,7 +1890,7 @@ function BuscarDocumentos({
         </p>
       )}
       {lista.length > 0 && (
-        <ul className="max-h-[40vh] divide-y overflow-y-auto rounded-md border text-sm">
+        <ul className="max-h-[40dvh] divide-y overflow-y-auto rounded-md border text-sm">
           {lista.map((d) => {
             const clave = claveDoc(d);
             const exacto = coincideImporte(suma, queda(d));
@@ -1941,7 +1975,7 @@ function DesgloseRecibo({ recibo, alCerrar }: { recibo: Movimiento | null; alCer
   });
   return (
     <Dialog open={!!recibo} onOpenChange={(o) => !o && alCerrar()}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Compras de este recibo</DialogTitle>
           <DialogDescription>

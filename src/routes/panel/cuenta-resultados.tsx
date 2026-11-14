@@ -41,6 +41,7 @@ import { esFiltroLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
 import { formaVariacion } from "@/dominio/kpis";
 import { etiquetaPeriodo, PERIODOS_CUADRO } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/cuenta-resultados")({
   head: () => ({ meta: [{ title: "Cuenta de resultados · DTF Culture" }] }),
@@ -102,13 +103,7 @@ function CuentaResultados() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Cuenta de resultados</h1>
-        <p className="text-muted-foreground max-md:text-sm">
-          De lo que pagan los clientes a lo que le queda a la empresa. Sin IVA, salvo las ventas con
-          IVA y el bloque de dinero. El ⓘ de cada fila dice qué es y cómo se calcula.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="De lo que pagan los clientes a lo que le queda a la empresa. Sin IVA, salvo las ventas con IVA y el bloque de dinero. El ⓘ de cada fila dice qué es y cómo se calcula." />
 
       <FiltrosPlegables resumen={resumenFiltros}>
         <Card>

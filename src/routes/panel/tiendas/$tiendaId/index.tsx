@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { mensajeDeError } from "@/lib/errores";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
-import { Clock, Euro, FileText, Package, Percent, Ruler, ShoppingCart, Wallet } from "lucide-react";
+import { Clock, FileText } from "lucide-react";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
@@ -91,19 +93,20 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Resumen{nombreTienda ? ` · ${nombreTienda}` : ""}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
-          totales de la tienda.
-          {linea !== "todo"
-            ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
-            : ""}
-        </p>
+      <CabeceraPantalla
+        tienda={nombreTienda}
+        subtitulo={
+          <>
+            El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
+            totales de la tienda.
+            {linea !== "todo"
+              ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
+              : ""}
+          </>
+        }
+      >
         <SelectorLinea valor={linea} alCambiar={cambiarLinea} className="mt-2" />
-      </div>
+      </CabeceraPantalla>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Este mes</h2>
@@ -131,7 +134,7 @@ function Dashboard() {
               cifra={cuenta.ventas_netas}
               previa={previa?.ventas_netas}
               frente={frente}
-              icon={Euro}
+              icon={ICONO.vendido}
               pie={
                 <span className="text-muted-foreground">
                   {numero(cuenta.pedidos, 0)} {cuenta.pedidos === 1 ? "pedido" : "pedidos"}
@@ -143,7 +146,7 @@ function Dashboard() {
               cifra={cuenta.margen_bruto}
               previa={previa?.margen_bruto}
               frente={frente}
-              icon={Percent}
+              icon={ICONO.margen}
               pie={
                 cuenta.margenPct !== null ? (
                   <span className="text-muted-foreground">
@@ -157,7 +160,7 @@ function Dashboard() {
               cifra={cuenta.cobrado}
               previa={previa?.cobrado}
               frente={frente}
-              icon={Wallet}
+              icon={ICONO.cobrado}
             />
             <TarjetaConcepto
               clave="pendiente_cobro"
@@ -172,7 +175,7 @@ function Dashboard() {
                 valor={metros(cuenta.metros)}
                 frente={frente}
                 delta={previa ? variacion(cuenta.metros, previa.metros) : null}
-                icon={Package}
+                icon={ICONO.metros}
               />
             )}
             {(linea === "uv" || cuenta.metrosUv > 0) && (
@@ -182,7 +185,7 @@ function Dashboard() {
                 valor={metros(cuenta.metrosUv)}
                 frente={frente}
                 delta={previa ? variacion(cuenta.metrosUv, previa.metrosUv) : null}
-                icon={Package}
+                icon={ICONO.metros}
               />
             )}
           </div>
@@ -196,13 +199,13 @@ function Dashboard() {
             titulo="Pedidos"
             valor={String(pedidos.length)}
             delta={null}
-            icon={ShoppingCart}
+            icon={ICONO.pedidos}
           />
           <TarjetaKpi
             titulo="Metros"
             valor={metros(mts)}
             delta={null}
-            icon={Ruler}
+            icon={ICONO.metros}
             pie={
               mtsUv > 0 ? (
                 <span className="text-muted-foreground">

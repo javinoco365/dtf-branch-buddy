@@ -33,6 +33,7 @@ import {
 import { avisarError } from "@/lib/errores";
 import { leerNumeroEscrito } from "@/dominio/pedido-formulario";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 const SIN_CLIENTE = "__sin_cliente__";
 const SIN_SOCIO = "__sin_socio__";
@@ -159,122 +160,123 @@ export function CajaFormDialog({
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar apunte" : "Nuevo apunte de caja"}</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Importe (€)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={importe}
+                  onChange={(e) => setImporte(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
             </div>
+
             <div className="space-y-1">
-              <Label>Importe (€)</Label>
-              <Input
-                inputMode="decimal"
-                value={importe}
-                onChange={(e) => setImporte(e.target.value)}
-                placeholder="0,00"
+              <Label>Concepto</Label>
+              <Select value={conceptoId} onValueChange={setConceptoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elige un concepto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {conceptosVisibles.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                      <span className="text-muted-foreground text-xs ml-2">
+                        {c.categoria === "ingreso" ? "ingreso" : "gasto"}
+                        {!c.activo && " · desactivado"}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!concepto && (
+                <p className="text-xs text-muted-foreground">
+                  La categoría —ingreso o gasto— la marca el concepto.
+                </p>
+              )}
+            </div>
+
+            {esIngreso && (
+              <div className="space-y-1">
+                <Label>Cliente</Label>
+                <Select
+                  value={clienteId}
+                  onValueChange={(v) => {
+                    if (v === NUEVO_CLIENTE) {
+                      setNuevoClienteAbierto(true);
+                      return;
+                    }
+                    setClienteId(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_CLIENTE}>Sin cliente (venta de mostrador)</SelectItem>
+                    <SelectItem value={NUEVO_CLIENTE}>
+                      <span className="flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
+                      </span>
+                    </SelectItem>
+                    {(clientes ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {esGasto && (
+              <div className="space-y-1">
+                <Label>Socio</Label>
+                <Select value={socioId} onValueChange={setSocioId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_SOCIO}>Ninguno (lo paga la empresa)</SelectItem>
+                    {sociosVisibles.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nombre}
+                        {!s.activo && (
+                          <span className="text-muted-foreground text-xs ml-2">desactivado</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label>Observaciones</Label>
+              <Textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
               />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label>Concepto</Label>
-            <Select value={conceptoId} onValueChange={setConceptoId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige un concepto" />
-              </SelectTrigger>
-              <SelectContent>
-                {conceptosVisibles.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.nombre}
-                    <span className="text-muted-foreground text-xs ml-2">
-                      {c.categoria === "ingreso" ? "ingreso" : "gasto"}
-                      {!c.activo && " · desactivado"}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!concepto && (
-              <p className="text-xs text-muted-foreground">
-                La categoría —ingreso o gasto— la marca el concepto.
-              </p>
-            )}
-          </div>
-
-          {esIngreso && (
-            <div className="space-y-1">
-              <Label>Cliente</Label>
-              <Select
-                value={clienteId}
-                onValueChange={(v) => {
-                  if (v === NUEVO_CLIENTE) {
-                    setNuevoClienteAbierto(true);
-                    return;
-                  }
-                  setClienteId(v);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_CLIENTE}>Sin cliente (venta de mostrador)</SelectItem>
-                  <SelectItem value={NUEVO_CLIENTE}>
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
-                    </span>
-                  </SelectItem>
-                  {(clientes ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {esGasto && (
-            <div className="space-y-1">
-              <Label>Socio</Label>
-              <Select value={socioId} onValueChange={setSocioId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_SOCIO}>Ninguno (lo paga la empresa)</SelectItem>
-                  {sociosVisibles.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nombre}
-                      {!s.activo && (
-                        <span className="text-muted-foreground text-xs ml-2">desactivado</span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label>Observaciones</Label>
-            <Textarea
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              rows={2}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={pedirCierre}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={pedirCierre}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
       {avisoDescartar}
 
@@ -352,35 +354,36 @@ function NuevoClienteDialog({
         <DialogHeader>
           <DialogTitle>Nuevo cliente</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label>Nombre</Label>
-            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+          <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Teléfono</Label>
-              <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              <Label>Nombre</Label>
+              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
             </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Teléfono</Label>
+                <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              El resto de datos —NIF, dirección…— se rellenan luego desde Clientes, si hace falta.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            El resto de datos —NIF, dirección…— se rellenan luego desde Clientes, si hace falta.
-          </p>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Creando…" : "Crear"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Creando…" : "Crear"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

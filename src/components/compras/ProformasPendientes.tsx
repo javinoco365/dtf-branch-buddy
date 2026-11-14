@@ -34,10 +34,10 @@ export function ProformasPendientes({
   if (pendientes.length === 0) return null;
 
   return (
-    <Card className="border-amber-500/50">
+    <Card className="border-aviso-atencion-borde">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
           Proformas sin factura ({pendientes.length})
         </CardTitle>
         <p className="text-xs text-muted-foreground">

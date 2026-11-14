@@ -44,8 +44,6 @@ import {
   Phone,
   MapPin,
   FileText,
-  ShoppingCart,
-  Receipt,
   Pencil,
   Trash2,
   Shirt,
@@ -68,6 +66,9 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
+import { ICONO, ICONOS_PANTALLA } from "@/components/iconos";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -253,30 +254,19 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
     onError: (e: Error) => avisarError(e),
   });
 
-  const titulo =
-    contexto.tipo === "textil"
-      ? "Clientes textil"
-      : contexto.tipo === "tienda"
-        ? "Clientes de la tienda"
-        : "Clientes";
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{titulo}</h1>
-          <p className="text-sm text-muted-foreground">
-            Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la
-            misma lista.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button onClick={() => setEditing({ ...vacio })}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo cliente
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la misma lista."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button onClick={() => setEditing({ ...vacio })}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo cliente
+            </Button>
+          </SiPuede>
+        }
+      />
 
       <div className="flex flex-wrap gap-3">
         <div className="relative w-full max-w-sm">
@@ -345,7 +335,18 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
               {filtrados.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setDetailId(c.id)}>
                   <TableCell className="font-medium">
-                    {c.nombre}
+                    {/* La fila entera se abre con el ratón; el nombre es un botón
+                        para abrirla también con el teclado. */}
+                    <button
+                      type="button"
+                      className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailId(c.id);
+                      }}
+                    >
+                      {c.nombre}
+                    </button>
                     {c.apodo && (
                       <div className="text-xs font-normal text-muted-foreground">{c.apodo}</div>
                     )}
@@ -364,6 +365,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar"
                         variant="ghost"
                         size="icon"
                         title="Editar"
@@ -374,6 +376,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     </SiPuede>
                     <SiPuede accion="borrar">
                       <Button
+                        aria-label="Borrar"
                         variant="ghost"
                         size="icon"
                         title="Borrar"
@@ -570,92 +573,98 @@ function ClienteForm({
         <DialogHeader>
           <DialogTitle>{cliente.id ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label>Nombre *</Label>
-            <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
-              WooCommerce ni se cambia solo.
-            </p>
+        <FormularioDialogo alEnviar={onSave} ocupado={saving}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Nombre *</Label>
+              <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
+                WooCommerce ni se cambia solo.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <Label>Apodo</Label>
+              <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí»
+                para «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una
+                factura.
+              </p>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={cliente.email ?? ""}
+                onChange={(e) => set("email", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Teléfono</Label>
+              <Input
+                value={cliente.telefono ?? ""}
+                onChange={(e) => set("telefono", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>NIF / CIF</Label>
+              <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
+            </div>
+            <div>
+              <Label>Empresa</Label>
+              <Input
+                value={cliente.empresa ?? ""}
+                onChange={(e) => set("empresa", e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Dirección</Label>
+              <Input
+                value={cliente.direccion ?? ""}
+                onChange={(e) => set("direccion", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Código postal</Label>
+              <Input
+                value={cliente.codigo_postal ?? ""}
+                onChange={(e) => set("codigo_postal", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Ciudad</Label>
+              <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
+            </div>
+            <div>
+              <Label>Provincia</Label>
+              <Input
+                value={cliente.provincia ?? ""}
+                onChange={(e) => set("provincia", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>País</Label>
+              <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Notas</Label>
+              <Textarea
+                rows={3}
+                value={cliente.notas ?? ""}
+                onChange={(e) => set("notas", e.target.value)}
+              />
+            </div>
           </div>
-          <div className="col-span-2">
-            <Label>Apodo</Label>
-            <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí» para
-              «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una factura.
-            </p>
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={cliente.email ?? ""}
-              onChange={(e) => set("email", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Teléfono</Label>
-            <Input
-              value={cliente.telefono ?? ""}
-              onChange={(e) => set("telefono", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>NIF / CIF</Label>
-            <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
-          </div>
-          <div>
-            <Label>Empresa</Label>
-            <Input value={cliente.empresa ?? ""} onChange={(e) => set("empresa", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Dirección</Label>
-            <Input
-              value={cliente.direccion ?? ""}
-              onChange={(e) => set("direccion", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Código postal</Label>
-            <Input
-              value={cliente.codigo_postal ?? ""}
-              onChange={(e) => set("codigo_postal", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Ciudad</Label>
-            <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
-          </div>
-          <div>
-            <Label>Provincia</Label>
-            <Input
-              value={cliente.provincia ?? ""}
-              onChange={(e) => set("provincia", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>País</Label>
-            <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Notas</Label>
-            <Textarea
-              rows={3}
-              value={cliente.notas ?? ""}
-              onChange={(e) => set("notas", e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );
@@ -812,7 +821,7 @@ function ClienteDetalle({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
@@ -886,7 +895,7 @@ function ClienteDetalle({
 
         <Historial
           titulo="Pedidos de las tiendas"
-          icono={<ShoppingCart className="h-4 w-4" />}
+          icono={<ICONO.pedidos className="h-4 w-4" />}
           vacio="Sin pedidos en las tiendas"
           consultas={[qPedidos]}
           pie={{
@@ -921,7 +930,7 @@ function ClienteDetalle({
         />
         <Historial
           titulo="Facturas"
-          icono={<Receipt className="h-4 w-4" />}
+          icono={<ICONOS_PANTALLA.facturas className="h-4 w-4" />}
           vacio="Sin facturas"
           consultas={[qFacturas, qFacturasTextil]}
           pie={{

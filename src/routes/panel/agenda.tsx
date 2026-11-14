@@ -27,6 +27,7 @@ import { FiltroPersonas } from "@/components/agenda/FiltroPersonas";
 import { ListaTareas } from "@/components/agenda/ListaTareas";
 import { Calendario } from "@/components/agenda/Calendario";
 import { PanelTarea, type QuePanel } from "@/components/agenda/PanelTarea";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/agenda")({
   head: () => ({ meta: [{ title: "Agenda · DTF Culture" }] }),
@@ -279,56 +280,10 @@ function Agenda() {
           </Button>
         </div>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 sm:items-end">
-        <div className="min-w-0 flex-1 basis-64 space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
-          {persona ? (
-            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              <span>
-                {persona.nombre.split(" ")[0]}, hoy tienes{" "}
-                <button
-                  type="button"
-                  className="font-semibold text-foreground underline underline-offset-2"
-                  onClick={() => verEnLista({ periodo: "hoy" })}
-                >
-                  {resumen.hoy} {resumen.hoy === 1 ? "tarea pendiente" : "tareas pendientes"}
-                </button>
-              </span>
-              {resumen.vencidas > 0 && (
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
-                  <button
-                    type="button"
-                    className="font-semibold text-foreground underline underline-offset-2"
-                    onClick={() => verEnLista({ periodo: "vencidas" })}
-                  >
-                    {resumen.vencidas} {resumen.vencidas === 1 ? "vencida" : "vencidas"}
-                  </button>{" "}
-                  de días anteriores
-                </span>
-              )}
-              {resumen.nuevas > 0 && (
-                <span className="text-status-procesando">
-                  <button
-                    type="button"
-                    className="font-semibold underline underline-offset-2"
-                    onClick={() => verEnLista({ soloNuevas: true })}
-                  >
-                    {resumen.nuevas} {resumen.nuevas === 1 ? "nueva" : "nuevas"}
-                  </button>{" "}
-                  que te han mandado
-                </span>
-              )}
-            </p>
-          ) : (
-            !errorPersona && (
-              <p className="text-sm text-muted-foreground">
-                Tu cuenta no tiene una persona asignada: ves todas las tareas.
-              </p>
-            )
-          )}
-        </div>
-        {escribir &&
+      <CabeceraPantalla
+        className="sm:items-end"
+        acciones={
+          escribir &&
           (puedeCrear ? (
             <Button
               id="boton-nueva-tarea"
@@ -355,8 +310,55 @@ function Agenda() {
                 {motivoNoCrear}
               </p>
             </div>
-          ))}
-      </div>
+          ))
+        }
+      >
+        {persona ? (
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span>
+              {persona.nombre.split(" ")[0]}, hoy tienes{" "}
+              <button
+                type="button"
+                className="font-semibold text-foreground underline underline-offset-2"
+                onClick={() => verEnLista({ periodo: "hoy" })}
+              >
+                {resumen.hoy} {resumen.hoy === 1 ? "tarea pendiente" : "tareas pendientes"}
+              </button>
+            </span>
+            {resumen.vencidas > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="font-semibold text-foreground underline underline-offset-2"
+                  onClick={() => verEnLista({ periodo: "vencidas" })}
+                >
+                  {resumen.vencidas} {resumen.vencidas === 1 ? "vencida" : "vencidas"}
+                </button>{" "}
+                de días anteriores
+              </span>
+            )}
+            {resumen.nuevas > 0 && (
+              <span className="text-status-procesando">
+                <button
+                  type="button"
+                  className="font-semibold underline underline-offset-2"
+                  onClick={() => verEnLista({ soloNuevas: true })}
+                >
+                  {resumen.nuevas} {resumen.nuevas === 1 ? "nueva" : "nuevas"}
+                </button>{" "}
+                que te han mandado
+              </span>
+            )}
+          </p>
+        ) : (
+          !errorPersona && (
+            <p className="text-sm text-muted-foreground">
+              Tu cuenta no tiene una persona asignada: ves todas las tareas.
+            </p>
+          )
+        )}
+      </CabeceraPantalla>
 
       <FiltroPersonas
         valor={filtroPersona}

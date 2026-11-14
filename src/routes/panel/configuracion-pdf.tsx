@@ -70,6 +70,7 @@ import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -339,22 +340,24 @@ function ConfiguracionPdfPage() {
         sucio && !dosColumnas && "pb-20",
       )}
     >
-      <div className="space-y-1">
-        <Link
-          to="/panel/configuracion"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
-        </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <FileText className="h-6 w-6 text-primary" /> PDF de presupuestos
-        </h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          La plantilla con la que sale el PDF de cada presupuesto: se usa sola cada vez que se crea
-          o se descarga uno. Hay una por tienda y otra para el textil personalizado; sin plantilla
-          guardada, sale la de por defecto.
-        </p>
-      </div>
+      <CabeceraPantalla
+        antes={
+          <Link
+            to="/panel/configuracion"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
+          </Link>
+        }
+        icono={<FileText className="h-6 w-6 text-primary" />}
+        subtitulo={
+          <p className="max-w-3xl">
+            La plantilla con la que sale el PDF de cada presupuesto: se usa sola cada vez que se
+            crea o se descarga uno. Hay una por tienda y otra para el textil personalizado; sin
+            plantilla guardada, sale la de por defecto.
+          </p>
+        }
+      />
 
       {lista.isLoading ? (
         <div className="space-y-4">
@@ -438,7 +441,7 @@ function ConfiguracionPdfPage() {
                 </Badge>
               )}
               {sucio && (
-                <Badge className="whitespace-nowrap border-transparent bg-amber-100 font-normal text-amber-900 shadow-none hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-200">
+                <Badge className="whitespace-nowrap border-transparent bg-aviso-atencion font-normal text-aviso-atencion-texto shadow-none hover:bg-aviso-atencion">
                   Cambios sin guardar
                 </Badge>
               )}
@@ -476,11 +479,11 @@ function ConfiguracionPdfPage() {
           </div>
 
           {!disponible && (
-            <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
+            <Card className="border-aviso-atencion-borde bg-aviso-atencion/60">
               <CardHeader className="p-4 pb-1">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" /> Guardar plantillas aún no
-                  está activado
+                  <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" /> Guardar plantillas
+                  aún no está activado
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Avisa a Javier para activarlo. Mientras tanto, los PDF salen con la plantilla por

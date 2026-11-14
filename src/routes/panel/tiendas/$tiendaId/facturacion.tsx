@@ -31,21 +31,11 @@ import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
 import { useCuentaResultados } from "@/lib/cuenta";
 import { concepto, pctIva } from "@/dominio/cuenta";
 import type { LucideIcon } from "lucide-react";
-import {
-  Download,
-  Euro,
-  Receipt,
-  Percent,
-  Truck,
-  Wallet,
-  Ruler,
-  ShoppingCart,
-  XCircle,
-  ClipboardList,
-  Undo2,
-} from "lucide-react";
+import { Download, Receipt, Percent, Truck, XCircle, Undo2 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -185,28 +175,25 @@ function FacturacionTienda() {
   return (
     <div className="space-y-6">
       {/* Barra de herramientas */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">Facturación</h2>
-          <p className="text-sm text-muted-foreground">
-            Vista contable filtrada a {tienda?.nombre ?? "esta tienda"}
-          </p>
-        </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo={`Vista contable filtrada a ${tienda?.nombre ?? "esta tienda"}`}
+        acciones={
+          <>
+            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
-
-          <Button
-            onClick={exportar}
-            size="sm"
-            variant="outline"
-            disabled={pedidos.length === 0 || deAntes}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Descargar Excel
-          </Button>
-        </div>
-      </div>
+            <Button
+              onClick={exportar}
+              size="sm"
+              variant="outline"
+              disabled={pedidos.length === 0 || deAntes}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Descargar Excel
+            </Button>
+          </>
+        }
+      />
 
       <AvisoActualizando activo={deAntes} />
 
@@ -242,14 +229,14 @@ function FacturacionTienda() {
               cifra={c?.ventas_netas ?? null}
               previa={cPrev?.ventas_netas}
               frente={comparacion?.etiqueta}
-              icon={Euro}
+              icon={ICONO.vendido}
             />
             <TarjetaConcepto
               clave="margen_bruto"
               cifra={c?.margen_bruto ?? null}
               previa={cPrev?.margen_bruto}
               frente={comparacion?.etiqueta}
-              icon={Percent}
+              icon={ICONO.margen}
               pie={
                 c?.margenPct != null ? (
                   <span className="text-muted-foreground">
@@ -263,7 +250,7 @@ function FacturacionTienda() {
               cifra={c?.cobrado ?? null}
               previa={cPrev?.cobrado}
               frente={comparacion?.etiqueta}
-              icon={Wallet}
+              icon={ICONO.cobrado}
             />
             <TarjetaKpi
               titulo="Pedidos"
@@ -271,7 +258,7 @@ function FacturacionTienda() {
               valor={String(k.pedidos)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.pedidos, kPrev.pedidos)}
-              icon={ClipboardList}
+              icon={ICONO.pedidos}
             />
             <TarjetaKpi
               titulo="Ticket medio"
@@ -279,7 +266,7 @@ function FacturacionTienda() {
               valor={eur(k.ticket)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.ticket, kPrev.ticket)}
-              icon={ShoppingCart}
+              icon={ICONO.ticketMedio}
             />
             <TarjetaKpi
               titulo="Metros vendidos"
@@ -287,7 +274,7 @@ function FacturacionTienda() {
               valor={metros(k.metros)}
               frente={comparacion?.etiqueta}
               delta={variacion(k.metros, kPrev.metros)}
-              icon={Ruler}
+              icon={ICONO.metros}
             />
             <TarjetaConcepto
               clave="devoluciones"
@@ -313,7 +300,7 @@ function FacturacionTienda() {
               titulo={concepto("ventas").nombre}
               subtitulo={concepto("ventas").definicion}
               valor={c ? eur(c.ventas.valor) : "…"}
-              icon={Receipt}
+              icon={ICONO.ventas}
               tono="primary"
             />
             <Bloque
@@ -338,7 +325,7 @@ function FacturacionTienda() {
               titulo={concepto("ventas_con_iva").nombre}
               subtitulo="Ventas + portes + IVA"
               valor={c ? eur(c.ventas_con_iva.valor) : "…"}
-              icon={Wallet}
+              icon={ICONO.ventasConIva}
               tono="success"
             />
           </div>
@@ -363,28 +350,28 @@ function FacturacionTienda() {
                     cifra={cUv?.ventas_netas ?? null}
                     previa={cUvPrev?.ventas_netas}
                     frente={comparacion?.etiqueta}
-                    icon={Euro}
+                    icon={ICONO.vendido}
                   />
                   <TarjetaConcepto
                     clave="ventas"
                     cifra={cUv?.ventas ?? null}
                     previa={cUvPrev?.ventas}
                     frente={comparacion?.etiqueta}
-                    icon={Receipt}
+                    icon={ICONO.ventas}
                   />
                   <TarjetaKpi
                     titulo="Metros UV"
                     valor={metros(uv.metrosUv)}
                     frente={comparacion?.etiqueta}
                     delta={variacion(uv.metrosUv, uvPrev.metrosUv)}
-                    icon={Ruler}
+                    icon={ICONO.metros}
                   />
                   <TarjetaConcepto
                     clave="margen_bruto"
                     cifra={cUv?.margen_bruto ?? null}
                     previa={cUvPrev?.margen_bruto}
                     frente={comparacion?.etiqueta}
-                    icon={Wallet}
+                    icon={ICONO.margen}
                   />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">

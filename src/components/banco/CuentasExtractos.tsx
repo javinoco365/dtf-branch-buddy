@@ -324,7 +324,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
 
       <Dialog open={!!revision} onOpenChange={(o) => !o && setRevision(null)}>
         {revision && a && (
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Antes de importar: {revision.fichero.name}</DialogTitle>
               <DialogDescription>
@@ -375,10 +375,10 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
             </div>
 
             {pendientes.length > 0 && (
-              <Card className="border-amber-500/50">
+              <Card className="border-aviso-atencion-borde">
                 <CardContent className="space-y-3 py-4 text-sm">
                   <p className="flex gap-2 font-medium">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
                     Mirando el fichero no se puede saber esto. Elígelo:
                   </p>
                   {pendientes.includes("orden_fecha") && (
@@ -486,7 +486,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
                 </>
               ) : a.diferencia === null ? (
                 <>
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
                   Sin saldos no se puede comprobar si cuadra. Escríbelos si los tienes.
                 </>
               ) : (

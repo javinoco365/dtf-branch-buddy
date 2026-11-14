@@ -41,6 +41,7 @@ import { verConciliacion } from "@/lib/conciliacion.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -78,12 +79,7 @@ function ConciliacionPage() {
   };
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
-        <p className="text-sm text-muted-foreground">
-          Sube el extracto del banco y comprueba qué facturas ya están pagadas o cobradas.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="Sube el extracto del banco y comprueba qué facturas ya están pagadas o cobradas." />
       <CuentasExtractos alImportar={refrescar} />
       {!isLoading && error ? (
         <ErrorCarga
@@ -196,60 +192,58 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
   return (
     <CamposSegunNivel>
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
-            <p className="text-sm text-muted-foreground">
-              Sube el extracto del banco y marca de una vez las facturas cobradas.
+        <CabeceraPantalla
+          subtitulo="Sube el extracto del banco y marca de una vez las facturas cobradas."
+          acciones={
+            <>
+              {!conCuentas && (
+                <>
+                  <input
+                    ref={ficheroRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) importar.mutate(f);
+                    }}
+                  />
+                  <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
+                    {importar.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileUp className="h-4 w-4 mr-2" />
+                    )}
+                    Subir extracto
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="secondary"
+                disabled={seguras.length === 0 || aplicar.isPending}
+                onClick={() =>
+                  aplicar.mutate(
+                    seguras.map((p) => ({
+                      movimiento_id: p.movimiento_id,
+                      factura_id: p.factura_id,
+                      motivo: p.motivo,
+                    })),
+                  )
+                }
+              >
+                <Wand2 className="h-4 w-4 mr-2" />
+                Aplicar las {seguras.length} seguras
+              </Button>
+            </>
+          }
+        >
+          {falta && (
+            <p className="text-xs text-muted-foreground">
+              La comprobación automática aún no está activada. Avisa a Javier.
             </p>
-            {falta && (
-              <p className="text-xs text-muted-foreground">
-                La comprobación automática aún no está activada. Avisa a Javier.
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {!conCuentas && (
-              <>
-                <input
-                  ref={ficheroRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) importar.mutate(f);
-                  }}
-                />
-                <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
-                  {importar.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileUp className="h-4 w-4 mr-2" />
-                  )}
-                  Subir extracto
-                </Button>
-              </>
-            )}
-            <Button
-              variant="secondary"
-              disabled={seguras.length === 0 || aplicar.isPending}
-              onClick={() =>
-                aplicar.mutate(
-                  seguras.map((p) => ({
-                    movimiento_id: p.movimiento_id,
-                    factura_id: p.factura_id,
-                    motivo: p.motivo,
-                  })),
-                )
-              }
-            >
-              <Wand2 className="h-4 w-4 mr-2" />
-              Aplicar las {seguras.length} seguras
-            </Button>
-          </div>
-        </div>
+          )}
+        </CabeceraPantalla>
 
         {conCuentas && <CuentasExtractos alImportar={refrescar} />}
 
@@ -306,7 +300,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                           value={elegida}
                           onValueChange={(v) => setElegidas({ ...elegidas, [m.id]: v })}
                         >
-                          <SelectTrigger className={segura ? "" : "border-amber-500/60"}>
+                          <SelectTrigger className={segura ? "" : "border-aviso-atencion-borde"}>
                             <SelectValue placeholder="Sin casar" />
                           </SelectTrigger>
                           <SelectContent>
@@ -339,7 +333,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             contra la propuesta: al cambiarla a mano hay que ver
                             si el importe deja de cuadrar. */}
                           {factura && Math.abs(Number(m.importe) - Number(factura.total)) > 0 && (
-                            <div className="text-xs text-amber-600">
+                            <div className="text-xs text-aviso-atencion-texto">
                               Difiere {eur(Number(m.importe) - Number(factura.total))}
                             </div>
                           )}
@@ -347,6 +341,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         <Button
+                          aria-label="Marcar como cobrada"
                           variant="ghost"
                           size="icon"
                           title="Marcar como cobrada"
@@ -361,7 +356,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             ])
                           }
                         >
-                          <Check className="h-4 w-4 text-emerald-600" />
+                          <Check className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -463,7 +458,13 @@ function ConciliadosTabla({
             <TableCell>{m.concepto || "—"}</TableCell>
             <TableCell className="text-right tabular-nums">{eur(Number(m.importe))}</TableCell>
             <TableCell className="text-right tabular-nums">
-              <Button variant="ghost" size="icon" title="Deshacer" onClick={() => onDeshacer(m.id)}>
+              <Button
+                aria-label="Deshacer"
+                variant="ghost"
+                size="icon"
+                title="Deshacer"
+                onClick={() => onDeshacer(m.id)}
+              >
                 <Undo2 className="h-4 w-4" />
               </Button>
             </TableCell>

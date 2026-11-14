@@ -87,6 +87,7 @@ import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -305,43 +306,41 @@ function Facturas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Facturas · {tienda?.nombre ?? "Tienda"}
-          </h1>
-          <p className="text-sm text-muted-foreground">Facturas y tickets de esta tienda</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <DescargarPdfs
-            docs={docsFiltrados}
-            nombreZip={nombreZip(
-              periodo.seleccion,
-              periodo.rango,
-              `Facturas_${tienda?.nombre ?? "tienda"}`,
-            )}
-          />
-          {escribir && <TicketsPendientesDialog tiendaId={tiendaId} />}
-          <Dialog open={abierto} onOpenChange={setAbierto}>
-            {/* El permiso, por fuera del disparador: dentro, <SiPuede> se
-                tragaba el clic y el diálogo no se abría. */}
-            {escribir && (
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" /> Nueva factura
-                </Button>
-              </DialogTrigger>
-            )}
-            <NuevaFacturaDialog
-              tiendaId={tiendaId}
-              onDone={() => {
-                setAbierto(false);
-                qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
-              }}
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Facturas y tickets de esta tienda"
+        acciones={
+          <>
+            <DescargarPdfs
+              docs={docsFiltrados}
+              nombreZip={nombreZip(
+                periodo.seleccion,
+                periodo.rango,
+                `Facturas_${tienda?.nombre ?? "tienda"}`,
+              )}
             />
-          </Dialog>
-        </div>
-      </div>
+            {escribir && <TicketsPendientesDialog tiendaId={tiendaId} />}
+            <Dialog open={abierto} onOpenChange={setAbierto}>
+              {/* El permiso, por fuera del disparador: dentro, <SiPuede> se
+                tragaba el clic y el diálogo no se abría. */}
+              {escribir && (
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" /> Nueva factura
+                  </Button>
+                </DialogTrigger>
+              )}
+              <NuevaFacturaDialog
+                tiendaId={tiendaId}
+                onDone={() => {
+                  setAbierto(false);
+                  qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+                }}
+              />
+            </Dialog>
+          </>
+        }
+      />
 
       <BarraFiltros>
         <CampoBusqueda
@@ -431,6 +430,7 @@ function Facturas() {
                         onClick={() => descargar(f)}
                         disabled={generandoId === f.id}
                         title={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
+                        aria-label={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
                       >
                         {generandoId === f.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -445,8 +445,9 @@ function Facturas() {
                           onClick={() => marcarPagada.mutate(f.id)}
                           disabled={marcarPagada.isPending}
                           title="Marcar como pagada"
+                          aria-label="Marcar como pagada"
                         >
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       )}
                       {escribir && situaciones.get(f.id)?.admite_cambios && (
@@ -469,6 +470,7 @@ function Facturas() {
                             onClick={() => setAnulando(f)}
                             disabled={anular.isPending}
                             title="Anular con una rectificativa"
+                            aria-label="Anular con una rectificativa"
                           >
                             <Undo2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -715,7 +717,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   }
 
   return (
-    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Nueva factura</DialogTitle>
       </DialogHeader>
@@ -845,6 +847,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
                 </div>
                 <div className="col-span-1">
                   <Button
+                    aria-label="Quitar la línea"
                     type="button"
                     variant="ghost"
                     size="icon"

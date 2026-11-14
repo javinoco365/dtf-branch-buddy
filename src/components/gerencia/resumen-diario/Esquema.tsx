@@ -1,15 +1,4 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Euro,
-  Gauge,
-  Info,
-  PiggyBank,
-  Receipt,
-  Ruler,
-  ShoppingCart,
-  Wallet,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gauge, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -33,10 +22,11 @@ import {
   type Resumen,
 } from "@/dominio/resumen-diario";
 import { porcentaje, textoAvisoResumen } from "@/lib/resumen-diario-textos";
+import { ICONO } from "@/components/iconos";
 
 const NIVEL: Record<AvisoResumen["nivel"], { icono: typeof Info; clase: string }> = {
   alto: { icono: AlertTriangle, clase: "text-destructive" },
-  medio: { icono: AlertTriangle, clase: "text-amber-600 dark:text-amber-400" },
+  medio: { icono: AlertTriangle, clase: "text-aviso-atencion-texto" },
   info: { icono: Info, clase: "text-muted-foreground" },
 };
 
@@ -69,7 +59,7 @@ export function Esquema({
           valor={String(t.pedido.pedidos)}
           delta={v(t.pedido.pedidos, a?.pedido.pedidos)}
           frente={comparar}
-          icon={ShoppingCart}
+          icon={ICONO.pedidos}
           explicacion="rd_pedidos"
           pie={
             <span className="text-muted-foreground">
@@ -82,7 +72,7 @@ export function Esquema({
           valor={metros(t.realizado.metrosImpresos)}
           delta={v(t.realizado.metrosImpresos, a?.realizado.metrosImpresos)}
           frente={comparar}
-          icon={Ruler}
+          icon={ICONO.metros}
           explicacion="rd_metros_realizados"
           pie={
             <span className="text-muted-foreground">
@@ -96,7 +86,7 @@ export function Esquema({
           valor={eur(t.facturado)}
           delta={v(t.facturado, a?.facturado)}
           frente={comparar}
-          icon={Receipt}
+          icon={ICONO.ventas}
           explicacion="rd_facturado"
           pie={<span className="text-muted-foreground">Base imponible, sin IVA</span>}
         />
@@ -105,7 +95,7 @@ export function Esquema({
           valor={eur(t.cobrado)}
           delta={v(t.cobrado, a?.cobrado)}
           frente={comparar}
-          icon={Wallet}
+          icon={ICONO.cobrado}
           explicacion="rd_cobrado"
           pie={
             <span className="text-muted-foreground">
@@ -118,7 +108,7 @@ export function Esquema({
           valor={eur(t.pedido.margenConEnvios)}
           delta={v(t.pedido.margenConEnvios, a?.pedido.margenConEnvios)}
           frente={comparar}
-          icon={PiggyBank}
+          icon={ICONO.beneficio}
           color={t.pedido.margenConEnvios < 0 ? "destructive" : "primary"}
           explicacion="rd_margen_neto"
           pie={
@@ -132,7 +122,7 @@ export function Esquema({
           valor={eur(t.pedido.margenSinEnvios)}
           delta={v(t.pedido.margenSinEnvios, a?.pedido.margenSinEnvios)}
           frente={comparar}
-          icon={Euro}
+          icon={ICONO.margen}
           color={t.pedido.margenSinEnvios < 0 ? "destructive" : "primary"}
           explicacion="rd_margen_sin_envios"
           pie={

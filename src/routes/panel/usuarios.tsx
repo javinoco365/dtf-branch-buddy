@@ -74,6 +74,8 @@ import {
   type SocioConCuenta,
 } from "@/lib/quien-soy.functions";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -132,24 +134,22 @@ function Usuarios() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      <CabeceraPantalla
+        antes={
           <Link
             to="/panel/configuracion"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Ajustes
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Usuarios y permisos</h1>
-          <p className="text-sm text-muted-foreground">
-            Quién entra en el CRM y qué puede hacer. Desactivar no borra: lo que hizo cada uno se
-            conserva en la auditoría.
-          </p>
-        </div>
-        <Button onClick={() => setAlta(true)}>
-          <UserPlus className="h-4 w-4" /> Nuevo usuario
-        </Button>
-      </div>
+        }
+        subtitulo="Quién entra en el CRM y qué puede hacer. Desactivar no borra: lo que hizo cada uno se conserva en la auditoría."
+        acciones={
+          <Button onClick={() => setAlta(true)}>
+            <UserPlus className="h-4 w-4" /> Nuevo usuario
+          </Button>
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-3">
         {NIVELES.map((n) => (
@@ -520,93 +520,104 @@ function AltaUsuario({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nuevo usuario</DialogTitle>
           <DialogDescription>
             Entra con su correo. Elige qué puede hacer; se puede cambiar después.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="alta-nombre">Nombre</Label>
-              <Input id="alta-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <FormularioDialogo
+          alEnviar={() => {
+            if (!problema) m.mutate();
+          }}
+          ocupado={m.isPending}
+        >
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="alta-nombre">Nombre</Label>
+                <Input
+                  id="alta-nombre"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="alta-email">Correo</Label>
+                <Input
+                  id="alta-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="alta-email">Correo</Label>
-              <Input
-                id="alta-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Nivel</Label>
-            <RadioGroup value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
-              {NIVELES.map((n) => (
-                <label key={n} className="flex items-start gap-2 text-sm">
-                  <RadioGroupItem value={n} className="mt-0.5" />
-                  <span>
-                    <span className="font-medium">{ETIQUETA_NIVEL[n]}</span>
-                    <span className="block text-muted-foreground">{DESCRIPCION_NIVEL[n]}</span>
-                  </span>
+            <div className="space-y-2">
+              <Label>Nivel</Label>
+              <RadioGroup value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
+                {NIVELES.map((n) => (
+                  <label key={n} className="flex items-start gap-2 text-sm">
+                    <RadioGroupItem value={n} className="mt-0.5" />
+                    <span>
+                      <span className="font-medium">{ETIQUETA_NIVEL[n]}</span>
+                      <span className="block text-muted-foreground">{DESCRIPCION_NIVEL[n]}</span>
+                    </span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Acceso</Label>
+              <RadioGroup value={modo} onValueChange={(v) => setModo(v as typeof modo)}>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="contrasena" /> Le pongo una contraseña inicial
                 </label>
-              ))}
-            </RadioGroup>
-          </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="enlace" /> Genero un enlace para que la elija él
+                </label>
+              </RadioGroup>
+              {modo === "contrasena" ? (
+                <Input
+                  type="password"
+                  placeholder="Al menos 8 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Al crearlo verás el enlace para copiarlo y mandárselo. Caduca en unas horas.
+                </p>
+              )}
+            </div>
 
-          <div className="space-y-2">
-            <Label>Acceso</Label>
-            <RadioGroup value={modo} onValueChange={(v) => setModo(v as typeof modo)}>
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="contrasena" /> Le pongo una contraseña inicial
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="enlace" /> Genero un enlace para que la elija él
-              </label>
-            </RadioGroup>
-            {modo === "contrasena" ? (
-              <Input
-                type="password"
-                placeholder="Al menos 8 caracteres"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Al crearlo verás el enlace para copiarlo y mandárselo. Caduca en unas horas.
-              </p>
+            {nivel !== "admin" && (
+              <div className="space-y-2">
+                <Label>Tiendas que ve</Label>
+                <SelectorTiendas
+                  tiendas={tiendas}
+                  seleccion={tiendasElegidas}
+                  onCambio={setSeleccion}
+                />
+              </div>
             )}
           </div>
-
-          {nivel !== "admin" && (
-            <div className="space-y-2">
-              <Label>Tiendas que ve</Label>
-              <SelectorTiendas
-                tiendas={tiendas}
-                seleccion={tiendasElegidas}
-                onCambio={setSeleccion}
-              />
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => m.mutate()}
-            disabled={!!problema || m.isPending}
-            title={problema ?? undefined}
-          >
-            {m.isPending ? "Creando…" : "Crear usuario"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onCerrar}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={!!problema || m.isPending}
+              title={problema ?? undefined}
+            >
+              {m.isPending ? "Creando…" : "Crear usuario"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

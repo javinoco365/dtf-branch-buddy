@@ -44,6 +44,8 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { avisarError } from "@/lib/errores";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
@@ -161,28 +163,27 @@ function TiendasIndex() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tiendas</h1>
-          <p className="text-muted-foreground">Tus tiendas online</p>
-        </div>
-        {isAdmin && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva tienda
-              </Button>
-            </DialogTrigger>
-            <NuevaTiendaWizard
-              onDone={() => {
-                setOpen(false);
-                refrescar();
-              }}
-            />
-          </Dialog>
-        )}
-      </div>
+      <CabeceraPantalla
+        subtitulo="Tus tiendas online"
+        acciones={
+          isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva tienda
+                </Button>
+              </DialogTrigger>
+              <NuevaTiendaWizard
+                onDone={() => {
+                  setOpen(false);
+                  refrescar();
+                }}
+              />
+            </Dialog>
+          )
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tiendas.map((t: any) => (
@@ -387,54 +388,63 @@ function EditarTiendaDialog({ tienda, onDone }: { tienda: any; onDone: () => voi
           solo salen el nombre comercial y el logo.
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label>Nombre</Label>
-          <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+      <FormularioDialogo
+        alEnviar={() => {
+          if (f.nombre.trim()) guardar.mutate();
+        }}
+        ocupado={guardar.isPending}
+      >
+        <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Identificador</Label>
+            <Label>Nombre</Label>
+            <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Identificador</Label>
+              <Input
+                value={f.slug}
+                placeholder={slugify(f.nombre)}
+                onChange={(e) => setF({ ...f, slug: slugify(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Color</Label>
+              <Input
+                type="color"
+                value={f.color}
+                className="h-10 p-1"
+                onChange={(e) => setF({ ...f, color: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>URL de WooCommerce</Label>
             <Input
-              value={f.slug}
-              placeholder={slugify(f.nombre)}
-              onChange={(e) => setF({ ...f, slug: slugify(e.target.value) })}
+              value={f.woo_url}
+              placeholder="https://…"
+              onChange={(e) => setF({ ...f, woo_url: e.target.value })}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label>Color</Label>
-            <Input
-              type="color"
-              value={f.color}
-              className="h-10 p-1"
-              onChange={(e) => setF({ ...f, color: e.target.value })}
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div>
+              <Label className="cursor-pointer">Sincronización activa</Label>
+              <p className="text-xs text-muted-foreground">
+                Necesita URL y credenciales guardadas.
+              </p>
+            </div>
+            <Switch
+              checked={f.sync_enabled}
+              onCheckedChange={(v) => setF({ ...f, sync_enabled: v })}
             />
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>URL de WooCommerce</Label>
-          <Input
-            value={f.woo_url}
-            placeholder="https://…"
-            onChange={(e) => setF({ ...f, woo_url: e.target.value })}
-          />
-        </div>
-        <div className="flex items-center justify-between rounded-md border p-3">
-          <div>
-            <Label className="cursor-pointer">Sincronización activa</Label>
-            <p className="text-xs text-muted-foreground">Necesita URL y credenciales guardadas.</p>
-          </div>
-          <Switch
-            checked={f.sync_enabled}
-            onCheckedChange={(v) => setF({ ...f, sync_enabled: v })}
-          />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button onClick={() => guardar.mutate()} disabled={guardar.isPending || !f.nombre.trim()}>
-          {guardar.isPending ? "Guardando…" : "Guardar"}
-        </Button>
-      </DialogFooter>
+        <DialogFooter>
+          <Button type="submit" disabled={guardar.isPending || !f.nombre.trim()}>
+            {guardar.isPending ? "Guardando…" : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </FormularioDialogo>
     </DialogContent>
   );
 }
@@ -508,87 +518,95 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Nueva tienda</DialogTitle>
         <DialogDescription>
           Configura identidad, datos fiscales, facturación y WooCommerce en un solo paso.
         </DialogDescription>
       </DialogHeader>
+      <FormularioDialogo
+        alEnviar={() => {
+          if (tab !== "woo") setTab(tab === "identidad" ? "facturacion" : "woo");
+          else if (f.nombre.trim()) return crearTienda();
+        }}
+        ocupado={saving}
+      >
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="grid grid-cols-3 w-full">
+            <TabsTrigger value="identidad" className="gap-1">
+              <Store className="h-3.5 w-3.5" />
+              Identidad
+            </TabsTrigger>
+            <TabsTrigger value="facturacion" className="gap-1">
+              <Receipt className="h-3.5 w-3.5" />
+              Facturación
+            </TabsTrigger>
+            <TabsTrigger value="woo" className="gap-1">
+              <ShoppingBag className="h-3.5 w-3.5" />
+              WooCommerce
+            </TabsTrigger>
+          </TabsList>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="identidad" className="gap-1">
-            <Store className="h-3.5 w-3.5" />
-            Identidad
-          </TabsTrigger>
-          <TabsTrigger value="facturacion" className="gap-1">
-            <Receipt className="h-3.5 w-3.5" />
-            Facturación
-          </TabsTrigger>
-          <TabsTrigger value="woo" className="gap-1">
-            <ShoppingBag className="h-3.5 w-3.5" />
-            WooCommerce
-          </TabsTrigger>
-        </TabsList>
-
-        {/* === IDENTIDAD === */}
-        <TabsContent value="identidad" className="space-y-3 mt-4">
-          <Row>
-            <FieldText
-              label="Nombre comercial *"
-              v={f.nombre}
-              on={(v) => {
-                set("nombre", v);
-                if (!f.slug) set("slug", slugify(v));
-              }}
-              placeholder="DTFTextil.es"
-            />
-            <FieldText
-              label="Slug"
-              v={f.slug}
-              on={(v) => set("slug", slugify(v))}
-              placeholder="dtftextil"
-            />
-          </Row>
-          <div className="space-y-1">
-            <Label className="text-xs">Color identificativo</Label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={f.color}
-                onChange={(e) => set("color", e.target.value)}
-                className="h-9 w-12 rounded border bg-background cursor-pointer"
+          {/* === IDENTIDAD === */}
+          <TabsContent value="identidad" className="space-y-3 mt-4">
+            <Row>
+              <FieldText
+                label="Nombre comercial *"
+                v={f.nombre}
+                on={(v) => {
+                  set("nombre", v);
+                  if (!f.slug) set("slug", slugify(v));
+                }}
+                placeholder="DTFTextil.es"
               />
-              <Input
-                value={f.color}
-                onChange={(e) => set("color", e.target.value)}
-                className="w-32 font-mono"
+              <FieldText
+                label="Slug"
+                v={f.slug}
+                on={(v) => set("slug", slugify(v))}
+                placeholder="dtftextil"
               />
-              <span className="text-xs text-muted-foreground">Se usa en el sidebar y badges.</span>
+            </Row>
+            <div className="space-y-1">
+              <Label className="text-xs">Color identificativo</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={f.color}
+                  onChange={(e) => set("color", e.target.value)}
+                  className="h-9 w-12 rounded border bg-background cursor-pointer"
+                />
+                <Input
+                  value={f.color}
+                  onChange={(e) => set("color", e.target.value)}
+                  className="w-32 font-mono"
+                />
+                <span className="text-xs text-muted-foreground">
+                  Se usa en el sidebar y badges.
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3 flex items-start gap-3">
-            <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>
-                Esta tienda heredará automáticamente los datos fiscales de la SL (razón social, CIF,
-                dirección, etc.).
-              </p>
-              <p>
-                Si necesitas modificarlos, ve a{" "}
-                <Link to="/panel/configuracion-empresa" className="underline text-primary">
-                  Ajustes › Datos de la empresa
-                </Link>
-                .
-              </p>
+            <div className="rounded-lg border bg-muted/30 p-3 flex items-start gap-3">
+              <Building2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  Esta tienda heredará automáticamente los datos fiscales de la SL (razón social,
+                  CIF, dirección, etc.).
+                </p>
+                <p>
+                  Si necesitas modificarlos, ve a{" "}
+                  <Link to="/panel/configuracion-empresa" className="underline text-primary">
+                    Ajustes › Datos de la empresa
+                  </Link>
+                  .
+                </p>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        {/* === FACTURACIÓN === */}
-        <TabsContent value="facturacion" className="space-y-3 mt-4">
-          {/*
+          {/* === FACTURACIÓN === */}
+          <TabsContent value="facturacion" className="space-y-3 mt-4">
+            {/*
             Aquí había «Serie de factura» y «Siguiente nº de factura». Los dos
             dejaron de hacer nada en 20260903100000: la serie es de la sociedad
             y el contador vive en series_facturacion. Se podía escribir 500 en
@@ -596,103 +614,103 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
             el 1. Un control que acepta un dato fiscal y lo tira engaña más que
             no tenerlo.
           */}
-          <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-            La serie y la numeración de las facturas son de la sociedad, no de la tienda: todas las
-            tiendas comparten una única numeración correlativa. Se configuran en{" "}
-            <Link to="/panel/configuracion-empresa" className="underline underline-offset-2">
-              Configuración de empresa
-            </Link>
-            .
-          </div>
-          <Row>
-            <FieldNum
-              label="IVA por defecto (%)"
-              v={f.iva_default}
-              on={(v) => set("iva_default", v)}
-              step="0.01"
-            />
-            <FieldNum
-              label="Gastos de envío (€)"
-              v={f.gastos_envio_default}
-              on={(v) => set("gastos_envio_default", v)}
-              step="0.01"
-            />
-          </Row>
-        </TabsContent>
-
-        {/* === WOOCOMMERCE === */}
-        <TabsContent value="woo" className="space-y-3 mt-4">
-          <FieldText
-            label="URL de la tienda WooCommerce"
-            v={f.woo_url}
-            on={(v) => set("woo_url", v)}
-            placeholder="https://mitienda.com"
-          />
-          <div className="flex items-center justify-between border rounded-lg px-4 py-3">
-            <div>
-              <Label>Activar sincronización al crear</Label>
-              <p className="text-xs text-muted-foreground">
-                Requiere URL + Consumer Key + Secret. Puedes activarlo más tarde en Ajustes.
-              </p>
-            </div>
-            <Switch checked={f.sync_enabled} onCheckedChange={(c) => set("sync_enabled", c)} />
-          </div>
-
-          <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <KeyRound className="h-4 w-4" /> Credenciales API
-              <span className="text-xs text-muted-foreground font-normal">
-                Se cifran en el servidor. Opcional ahora.
-              </span>
+            <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+              La serie y la numeración de las facturas son de la sociedad, no de la tienda: todas
+              las tiendas comparten una única numeración correlativa. Se configuran en{" "}
+              <Link to="/panel/configuracion-empresa" className="underline underline-offset-2">
+                Configuración de empresa
+              </Link>
+              .
             </div>
             <Row>
-              <FieldText
-                label="Consumer Key"
-                v={f.consumer_key}
-                on={(v) => set("consumer_key", v)}
-                placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxx"
+              <FieldNum
+                label="IVA por defecto (%)"
+                v={f.iva_default}
+                on={(v) => set("iva_default", v)}
+                step="0.01"
               />
-              <FieldPassword
-                label="Consumer Secret"
-                v={f.consumer_secret}
-                on={(v) => set("consumer_secret", v)}
-                placeholder="cs_xxxxxxxxxxxxxxxxxxxxxxxx"
+              <FieldNum
+                label="Gastos de envío (€)"
+                v={f.gastos_envio_default}
+                on={(v) => set("gastos_envio_default", v)}
+                step="0.01"
               />
             </Row>
-          </div>
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
 
-      <DialogFooter className="mt-4 flex !justify-between items-center w-full">
-        <div className="text-xs text-muted-foreground">
-          {f.nombre ? (
-            <>
-              Creando <strong>{f.nombre}</strong>
-            </>
-          ) : (
-            "Empieza por el nombre"
-          )}
-        </div>
-        <div className="flex gap-2">
-          {tab !== "identidad" && (
-            <Button
-              variant="ghost"
-              onClick={() => setTab(tab === "facturacion" ? "identidad" : "facturacion")}
-            >
-              Anterior
-            </Button>
-          )}
-          {tab !== "woo" ? (
-            <Button onClick={() => setTab(tab === "identidad" ? "facturacion" : "woo")}>
-              Siguiente
-            </Button>
-          ) : (
-            <Button onClick={crearTienda} disabled={saving || !f.nombre.trim()}>
-              {saving ? "Creando…" : "Crear tienda"}
-            </Button>
-          )}
-        </div>
-      </DialogFooter>
+          {/* === WOOCOMMERCE === */}
+          <TabsContent value="woo" className="space-y-3 mt-4">
+            <FieldText
+              label="URL de la tienda WooCommerce"
+              v={f.woo_url}
+              on={(v) => set("woo_url", v)}
+              placeholder="https://mitienda.com"
+            />
+            <div className="flex items-center justify-between border rounded-lg px-4 py-3">
+              <div>
+                <Label>Activar sincronización al crear</Label>
+                <p className="text-xs text-muted-foreground">
+                  Requiere URL + Consumer Key + Secret. Puedes activarlo más tarde en Ajustes.
+                </p>
+              </div>
+              <Switch checked={f.sync_enabled} onCheckedChange={(c) => set("sync_enabled", c)} />
+            </div>
+
+            <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <KeyRound className="h-4 w-4" /> Credenciales API
+                <span className="text-xs text-muted-foreground font-normal">
+                  Se cifran en el servidor. Opcional ahora.
+                </span>
+              </div>
+              <Row>
+                <FieldText
+                  label="Consumer Key"
+                  v={f.consumer_key}
+                  on={(v) => set("consumer_key", v)}
+                  placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxx"
+                />
+                <FieldPassword
+                  label="Consumer Secret"
+                  v={f.consumer_secret}
+                  on={(v) => set("consumer_secret", v)}
+                  placeholder="cs_xxxxxxxxxxxxxxxxxxxxxxxx"
+                />
+              </Row>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <DialogFooter className="mt-4 flex !justify-between items-center w-full">
+          <div className="text-xs text-muted-foreground">
+            {f.nombre ? (
+              <>
+                Creando <strong>{f.nombre}</strong>
+              </>
+            ) : (
+              "Empieza por el nombre"
+            )}
+          </div>
+          <div className="flex gap-2">
+            {tab !== "identidad" && (
+              <Button
+                variant="ghost"
+                onClick={() => setTab(tab === "facturacion" ? "identidad" : "facturacion")}
+              >
+                Anterior
+              </Button>
+            )}
+            {tab !== "woo" ? (
+              // Intro también pasa al paso siguiente; en el último, crea.
+              <Button type="submit">Siguiente</Button>
+            ) : (
+              <Button type="submit" disabled={saving || !f.nombre.trim()}>
+                {saving ? "Creando…" : "Crear tienda"}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
+      </FormularioDialogo>
     </DialogContent>
   );
 }

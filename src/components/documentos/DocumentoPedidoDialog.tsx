@@ -285,8 +285,8 @@ export function DocumentoPedidoDialog({
       <DialogContent
         className={
           vistaPrevia && preparado
-            ? "max-w-4xl max-h-[95vh] overflow-y-auto"
-            : "max-w-2xl max-h-[95vh] overflow-y-auto"
+            ? "max-w-4xl max-h-[95dvh] overflow-y-auto"
+            : "max-w-2xl max-h-[95dvh] overflow-y-auto"
         }
       >
         {vistaPrevia && preparado ? (

@@ -92,6 +92,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -301,24 +302,21 @@ function PresupuestosPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between max-md:flex-wrap max-md:gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Presupuestos</h1>
-          <p className="text-sm text-muted-foreground">
-            Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido.
-          </p>
-        </div>
-        <NuevoPresupuestoMenu
-          onManual={() => {
-            setEditing(null);
-            setLineasIniciales(null);
-            setBorrador(null);
-            setImagenesIa([]);
-            setOpen(true);
-          }}
-          onIa={setModoIa}
-        />
-      </div>
+      <CabeceraPantalla
+        subtitulo="Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido."
+        acciones={
+          <NuevoPresupuestoMenu
+            onManual={() => {
+              setEditing(null);
+              setLineasIniciales(null);
+              setBorrador(null);
+              setImagenesIa([]);
+              setOpen(true);
+            }}
+            onIa={setModoIa}
+          />
+        }
+      />
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}
@@ -475,6 +473,7 @@ function PresupuestosPage() {
                       p.estado !== "facturado" &&
                       p.estado !== "rechazado" && (
                         <Button
+                          aria-label="Confirmar: crear el pedido"
                           variant="ghost"
                           size="icon"
                           title="Confirmar: crear el pedido"
@@ -485,6 +484,9 @@ function PresupuestosPage() {
                         </Button>
                       )}
                     <Button
+                      aria-label={
+                        !escribir ? "Ver" : p.pedido_id ? "Ya es un pedido: no se cambia" : "Editar"
+                      }
                       variant="ghost"
                       size="icon"
                       title={
@@ -502,7 +504,12 @@ function PresupuestosPage() {
                       {escribir ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                      <Button
+                        aria-label="Borrar el presupuesto"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(p)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </SiPuede>
@@ -688,7 +695,7 @@ function PresupuestoDialog({
   const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {presupuesto ? `Editar ${presupuesto.numero}` : "Nuevo presupuesto"}

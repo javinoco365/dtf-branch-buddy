@@ -37,6 +37,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
   head: () => ({ meta: [{ title: "Ajustes textil · DTF Culture" }] }),
@@ -92,13 +93,7 @@ function AjustesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Ajustes de Textil</h1>
-        <p className="text-sm text-muted-foreground">
-          Las marcas con las que puedes firmar presupuestos y facturas. La empresa que factura es
-          siempre la misma.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="Las marcas con las que puedes firmar presupuestos y facturas. La empresa que factura es siempre la misma." />
 
       <Card>
         <CardContent className="p-4 space-y-3">
@@ -181,6 +176,7 @@ function AjustesPage() {
                 <div className="flex gap-1">
                   <SiPuede accion="escribir">
                     <Button
+                      aria-label="Editar la marca"
                       size="icon"
                       variant="ghost"
                       onClick={() => {
@@ -193,6 +189,7 @@ function AjustesPage() {
                   </SiPuede>
                   <SiPuede accion="borrar">
                     <Button
+                      aria-label="Borrar la marca"
                       size="icon"
                       variant="ghost"
                       onClick={() => {

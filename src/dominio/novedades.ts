@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-mas-comodo-en-el-movil",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Más cómodo en el móvil",
+    resumen: "Botones más fáciles de tocar y ventanas que no esconden «Guardar».",
+    puntos: [
+      "Intro (o «Ir» en el móvil) guarda pedidos, cobros, apuntes y fichas.",
+      "Cada pantalla se llama igual que en el menú.",
+      "Avisos y gráficas que se leen bien en modo oscuro; cada cifra, con su dibujo.",
+    ],
+  },
+  {
     id: "2026-11-14-inicio-hoy",
     fecha: "2026-11-14",
     tipo: "mejora",

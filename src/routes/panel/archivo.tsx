@@ -34,6 +34,7 @@ import { normalizarTexto } from "@/dominio/clientes";
 import { CLASES_ARCHIVO, nombreZip, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
 import { totalesArchivo } from "@/dominio/sumatorios-facturas";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/archivo")({
   head: () => ({ meta: [{ title: "Archivo · DTF Culture" }] }),
@@ -103,19 +104,18 @@ function ArchivoPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Archivo</h1>
-          <p className="text-sm text-muted-foreground">
-            Facturas emitidas, tickets, rectificativas y facturas de compra de todas las tiendas y
-            del textil. Elige el periodo, filtra y descárgalos en un ZIP.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <RehacerPdfsFacturas />
-          <DescargarPdfs docs={filtrados} nombreZip={nombreZip(periodo.seleccion, periodo.rango)} />
-        </div>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Facturas emitidas, tickets, rectificativas y facturas de compra de todas las tiendas y del textil. Elige el periodo, filtra y descárgalos en un ZIP."
+        acciones={
+          <>
+            <RehacerPdfsFacturas />
+            <DescargarPdfs
+              docs={filtrados}
+              nombreZip={nombreZip(periodo.seleccion, periodo.rango)}
+            />
+          </>
+        }
+      />
 
       <BarraFiltros>
         <CampoBusqueda

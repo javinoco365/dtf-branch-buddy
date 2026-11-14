@@ -63,7 +63,7 @@ export function SelectorTipoDocumento({
       <ToggleGroup
         type="single"
         variant="outline"
-        className={`w-fit justify-start ${valor === null ? "rounded-md ring-1 ring-amber-500" : ""}`}
+        className={`w-fit justify-start ${valor === null ? "rounded-md ring-1 ring-aviso-atencion-borde" : ""}`}
         value={valor ?? ""}
         onValueChange={(v) => v && onCambiar(v as TipoDocumentoCompra)}
       >
@@ -98,13 +98,17 @@ const ETIQUETA_ESTADO: Record<EstadoFilaRegularizacion, string> = {
 
 function BadgeEstado({ estado }: { estado: EstadoFilaRegularizacion }) {
   if (estado === "igual") {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600">{ETIQUETA_ESTADO[estado]}</Badge>;
+    return (
+      <Badge className="border-aviso-bien-borde bg-aviso-bien text-aviso-bien-texto hover:bg-aviso-bien">
+        {ETIQUETA_ESTADO[estado]}
+      </Badge>
+    );
   }
   if (estado === "solo_factura" || estado === "solo_proforma") {
     return <Badge variant="destructive">{ETIQUETA_ESTADO[estado]}</Badge>;
   }
   return (
-    <Badge variant="outline" className="border-amber-500 text-amber-700">
+    <Badge variant="outline" className="border-aviso-atencion-borde text-aviso-atencion-texto">
       {ETIQUETA_ESTADO[estado]}
     </Badge>
   );
@@ -151,10 +155,10 @@ export function CasarProforma({
   const [mejor, ...resto] = sugerencias;
 
   return (
-    <Card className="border-amber-500/50">
+    <Card className="border-aviso-atencion-borde">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
           {elegida ? "Casada con su proforma" : "¿Es la factura de una de estas proformas?"}
         </CardTitle>
       </CardHeader>
@@ -266,13 +270,13 @@ function LineaPago({
         </span>
       </p>
       {pago.revisarSiEnlazada && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-aviso-atencion-texto">
           El líquido es distinto (diferencia {eur(pago.diferencia)}): si el pago está enlazado en el
           banco, ese enlace quedará por revisar.
         </p>
       )}
       {pago.pendienteSiAMano && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-aviso-atencion-texto">
           Si la proforma se marcó pagada a mano (sin enlace en el banco), la factura quedará
           pendiente por la diferencia de {eur(pago.diferencia)} (lo pagado con la proforma ya
           cuenta). Márcala pagada cuando pagues esa diferencia.
@@ -340,8 +344,8 @@ function ComparacionTallas({ proformaId, datos }: { proformaId: string; datos: D
   return (
     <div className="space-y-2">
       {devueltas.length > 0 && (
-        <p className="flex gap-2 rounded-md border border-amber-500/50 p-2 text-xs">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+        <p className="flex gap-2 rounded-md border border-aviso-atencion-borde p-2 text-xs">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-aviso-atencion-texto" />
           <span>
             La proforma ya tiene {numeroJusto(totalDevueltas)} uds devueltas a mano al proveedor (
             {devueltas.map((d) => nombre(d.stock_id)).join(", ")}). La comparación no las descuenta:

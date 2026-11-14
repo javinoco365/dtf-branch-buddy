@@ -234,7 +234,7 @@ export function PresupuestoIaDialog({
 
   return (
     <Dialog open={!!modo} onOpenChange={(o) => !o && !montar.isPending && onCerrar()}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
@@ -354,8 +354,8 @@ export function PresupuestoIaDialog({
 /** Las dudas de la IA y lo que hay que mirar, arriba del editor. */
 export function AvisosIa({ avisos }: { avisos: readonly string[] }) {
   return (
-    <Alert className="border-amber-500/40 bg-amber-500/5">
-      <AlertTriangle className="h-4 w-4 !text-amber-600" />
+    <Alert variant="atencion">
+      <AlertTriangle className="h-4 w-4" />
       <AlertTitle>Borrador de la IA: revísalo antes de guardar</AlertTitle>
       <AlertDescription>
         {avisos.length ? (

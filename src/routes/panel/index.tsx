@@ -28,16 +28,16 @@ import {
   CalendarCheck,
   Clock,
   Download,
-  Euro,
   Inbox,
   Percent,
   Printer,
   Truck,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
@@ -74,9 +74,8 @@ function Hoy() {
 
   return (
     <section aria-labelledby="titulo-hoy" className="space-y-3">
-      <h1 id="titulo-hoy" className="text-2xl font-bold">
-        Hoy
-      </h1>
+      {/* «Hoy» y no «Inicio»: es lo primero que se ve al entrar, y lo que dice. */}
+      <CabeceraPantalla id="titulo-hoy" titulo="Hoy" />
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <CifraHoy
           titulo="Por producir"
@@ -286,7 +285,7 @@ function DelPeriodo() {
               cifra={cuenta.ventas_netas}
               previa={previa?.ventas_netas}
               frente={frente}
-              icon={Euro}
+              icon={ICONO.vendido}
             />
             <TarjetaConcepto
               clave="margen_bruto"
@@ -307,7 +306,7 @@ function DelPeriodo() {
               cifra={cuenta.cobrado}
               previa={previa?.cobrado}
               frente={frente}
-              icon={Wallet}
+              icon={ICONO.cobrado}
               pie={
                 linea !== "todo" ? (
                   <span className="text-muted-foreground">

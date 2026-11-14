@@ -43,19 +43,22 @@ function Marco({ children }: { children: ReactNode }) {
               <SidebarTrigger className="shrink-0" />
               <DondeEstoy />
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-1 md:gap-3">
               <SelectorPersona email={user?.email} />
               <BotonTema />
+              {/* En el móvil, solo el icono: el texto apretaba la cabecera. El
+                  lector de pantalla sigue leyendo «Salir». */}
               <Button
                 variant="ghost"
                 size="sm"
+                className="max-md:min-w-11 max-md:px-0"
                 onClick={async () => {
                   await signOut();
                   navigate({ to: "/auth" });
                 }}
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Salir
+                <LogOut className="h-4 w-4 md:mr-2" aria-hidden />
+                <span className="max-md:sr-only">Salir</span>
               </Button>
             </div>
           </header>

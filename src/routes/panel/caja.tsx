@@ -45,6 +45,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/caja")({
   head: () => ({ meta: [{ title: "Caja · DTF Culture" }] }),
@@ -137,31 +138,28 @@ function CajaPage() {
   const sinCatalogos = cat && cat.conceptos.filter((c) => c.activo).length === 0;
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Caja</h1>
-          <p className="text-sm text-muted-foreground">
-            Efectivo y aportaciones de los socios. No es el extracto del banco.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportar} disabled={visibles.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Descargar Excel
-          </Button>
-          <SiPuede accion="escribir">
-            <Button
-              onClick={() => {
-                setEditando(undefined);
-                setAbierto(true);
-              }}
-              disabled={sinCatalogos}
-            >
-              <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+    <div className="space-y-4">
+      <CabeceraPantalla
+        subtitulo={"Efectivo y aportaciones de los socios. No es el extracto del banco."}
+        acciones={
+          <>
+            <Button variant="outline" onClick={exportar} disabled={visibles.length === 0}>
+              <Download className="h-4 w-4 mr-2" /> Descargar Excel
             </Button>
-          </SiPuede>
-        </div>
-      </div>
+            <SiPuede accion="escribir">
+              <Button
+                onClick={() => {
+                  setEditando(undefined);
+                  setAbierto(true);
+                }}
+                disabled={sinCatalogos}
+              >
+                <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+              </Button>
+            </SiPuede>
+          </>
+        }
+      />
 
       {sinCatalogos && (
         <Card>
@@ -331,6 +329,7 @@ function CajaPage() {
                   <TableCell className="text-right tabular-nums">
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar el apunte"
                         variant="ghost"
                         size="icon"
                         onClick={() => {
@@ -342,7 +341,12 @@ function CajaPage() {
                       </Button>
                     </SiPuede>
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
+                      <Button
+                        aria-label="Borrar el apunte"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(m)}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </SiPuede>

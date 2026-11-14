@@ -72,6 +72,12 @@
   --color-prioridad-normal-texto: var(--prioridad-normal-texto);
   --color-prioridad-baja-texto: var(--prioridad-baja-texto);
   --color-realizada-texto: var(--realizada-texto);
+  --color-aviso-atencion: var(--aviso-atencion);
+  --color-aviso-atencion-borde: var(--aviso-atencion-borde);
+  --color-aviso-atencion-texto: var(--aviso-atencion-texto);
+  --color-aviso-bien: var(--aviso-bien);
+  --color-aviso-bien-borde: var(--aviso-bien-borde);
+  --color-aviso-bien-texto: var(--aviso-bien-texto);
 }
 
 :root {
@@ -163,6 +169,17 @@
   /* «Realizada» en la Agenda: el verde de éxito, más oscuro para el texto
      pequeño sobre su fondo suave (6,5:1; el de éxito se queda en 4,3:1). */
   --realizada-texto: oklch(0.46 0.11 153.84);
+  /* Avisos: «atención» (ámbar) y «bien» (verde). Fondo suave, borde y texto;
+     el texto pasa de 4,5:1 sobre su fondo y sobre el de la página, en claro y
+     en oscuro. Úsalos con <Alert variant="atencion" | "bien"> o con las
+     clases bg-aviso-*, border-aviso-*-borde y text-aviso-*-texto; nunca con
+     amber-*, emerald-*, green-* o yellow-* a mano. */
+  --aviso-atencion: oklch(0.97 0.04 85);
+  --aviso-atencion-borde: oklch(0.8 0.12 75);
+  --aviso-atencion-texto: oklch(0.45 0.1 60);
+  --aviso-bien: oklch(0.97 0.035 155);
+  --aviso-bien-borde: oklch(0.78 0.11 155);
+  --aviso-bien-texto: oklch(0.42 0.1 155);
 }
 
 .dark {
@@ -232,6 +249,12 @@
   --prioridad-normal-texto: oklch(0.85 0.07 275); /* #C3CEFF */
   --prioridad-baja-texto: oklch(0.84 0.015 270); /* #C7CAD4 */
   --realizada-texto: oklch(0.84 0.1 153.84);
+  --aviso-atencion: oklch(0.27 0.05 70);
+  --aviso-atencion-borde: oklch(0.52 0.1 70);
+  --aviso-atencion-texto: oklch(0.87 0.11 80);
+  --aviso-bien: oklch(0.26 0.045 155);
+  --aviso-bien-borde: oklch(0.5 0.09 155);
+  --aviso-bien-texto: oklch(0.86 0.12 155);
 }
 
 @layer base {

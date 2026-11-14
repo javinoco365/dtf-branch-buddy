@@ -111,7 +111,7 @@ export function SelectorStockTextil(props: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {modo === "una" ? "Elegir la variante del almacén" : "Elegir del stock"}
@@ -299,7 +299,7 @@ export function SelectorStockTextil(props: Props) {
           <DialogFooter className="items-center gap-2">
             {conFalta > 0 && (
               <span
-                className={`text-sm mr-auto ${bloqueado ? "text-destructive" : "text-amber-700"}`}
+                className={`text-sm mr-auto ${bloqueado ? "text-destructive" : "text-aviso-atencion-texto"}`}
               >
                 {bloqueado
                   ? "Un pedido no puede llevar más de lo disponible: baja las cantidades en rojo."

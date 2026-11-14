@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CalendarClock, FileWarning, Landmark, Receipt, ShoppingBag } from "lucide-react";
+import { CalendarClock, FileWarning, Landmark, ShoppingBag } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -36,6 +36,7 @@ import { ivaSoportado, resultadoIva, resumenIva } from "@/dominio/fiscal";
 import { totalTiposIva } from "@/dominio/sumatorios-gerencia-a";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, NotaGrupo } from "./comun";
+import { ICONO } from "@/components/iconos";
 
 /** Las facturas son de una tienda o del textil; el canal no se les aplica. */
 function deLaTienda<T extends { tienda_id: string }>(lista: readonly T[], tienda: string) {
@@ -113,7 +114,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
           valor={eur(iva.repercutido.iva)}
           frente={frente}
           delta={ivaPrevio ? variacion(iva.repercutido.iva, ivaPrevio.repercutido.iva) : null}
-          icon={Receipt}
+          icon={ICONO.iva}
           pie={
             <span className="text-muted-foreground">
               Sobre {eur(iva.repercutido.base)} de base · {iva.repercutido.documentos}{" "}
