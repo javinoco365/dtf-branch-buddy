@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pctIva } from "@/dominio/cuenta";
 import { useMemo } from "react";
 import { addWeeks, endOfWeek, format, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -193,7 +194,7 @@ function FacturacionGlobal() {
     return variacion(historico[historico.length - 1].total, historico[historico.length - 2].total);
   }, [historico]);
 
-  const pctIva = totales.base === 0 ? 0 : (totales.iva / totales.base) * 100;
+  const ivaPct = pctIva(totales.iva, totales.base) ?? 0;
 
   const comparativa = filas
     .filter((f) => f.total > 0)
@@ -278,9 +279,14 @@ function FacturacionGlobal() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={cobros.length === 0 || deAntes}>
+          <Button
+            onClick={exportar}
+            size="sm"
+            variant="outline"
+            disabled={cobros.length === 0 || deAntes}
+          >
             <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
+            Descargar Excel
           </Button>
         </div>
       </div>
@@ -390,8 +396,7 @@ function FacturacionGlobal() {
       {!disponible && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            «Lo cobrado» se calcula con los cobros, que necesitan la migración{" "}
-            <code>20260929100000_cobros.sql</code>.
+            Esta parte aún no está activada. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -440,9 +445,9 @@ function FacturacionGlobal() {
               frente={frente}
             />
             <TarjetaTotal
-              titulo="IVA repercutido"
+              titulo="IVA de lo cobrado"
               explicacion="iva_cobrado"
-              subtitulo={`${numero(pctIva, 1)}% sobre la base`}
+              subtitulo={`${numero(ivaPct, 1)}\u00A0% sobre la base`}
               valor={eur(totales.iva)}
               icon={Percent}
               tono="info"
@@ -472,42 +477,54 @@ function FacturacionGlobal() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tienda</TableHead>
-                      <TableHead className="text-right">Pedidos</TableHead>
-                      <TableHead className="text-right">Metros DTF</TableHead>
-                      <TableHead className="text-right">Base</TableHead>
-                      <TableHead className="text-right">IVA</TableHead>
-                      <TableHead className="text-right">Envíos</TableHead>
-                      <TableHead className="text-right">Cobrado</TableHead>
-                      <TableHead className="text-right">Propina</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right tabular-nums">Pedidos</TableHead>
+                      <TableHead className="text-right tabular-nums">Metros DTF</TableHead>
+                      <TableHead className="text-right tabular-nums">Base</TableHead>
+                      <TableHead className="text-right tabular-nums">IVA</TableHead>
+                      <TableHead className="text-right tabular-nums">Envíos</TableHead>
+                      <TableHead className="text-right tabular-nums">Cobrado</TableHead>
+                      <TableHead className="text-right tabular-nums">Propina</TableHead>
+                      <TableHead className="text-right tabular-nums">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filas.map((f) => (
                       <TableRow key={f.tienda_id}>
                         <TableCell className="font-medium">{f.nombre}</TableCell>
-                        <TableCell className="text-right">{f.pedidos}</TableCell>
-                        <TableCell className="text-right">{metros(f.metros)}</TableCell>
-                        <TableCell className="text-right">{eur(f.base)}</TableCell>
-                        <TableCell className="text-right">{eur(f.iva)}</TableCell>
-                        <TableCell className="text-right">{eur(f.envios)}</TableCell>
-                        <TableCell className="text-right">{eur(f.cobrado)}</TableCell>
-                        <TableCell className="text-right">{eur(f.propina)}</TableCell>
-                        <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{f.pedidos}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {metros(f.metros)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.base)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.iva)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.envios)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.cobrado)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(f.propina)}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold">
+                          {eur(f.total)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                   <TableFooter>
                     <TableRow className="font-bold">
                       <TableCell>Total</TableCell>
-                      <TableCell className="text-right">{totales.pedidos}</TableCell>
-                      <TableCell className="text-right">{metros(totales.metros)}</TableCell>
-                      <TableCell className="text-right">{eur(totales.base)}</TableCell>
-                      <TableCell className="text-right">{eur(totales.iva)}</TableCell>
-                      <TableCell className="text-right">{eur(totales.envios)}</TableCell>
-                      <TableCell className="text-right">{eur(totales.cobrado)}</TableCell>
-                      <TableCell className="text-right">{eur(totales.propina)}</TableCell>
-                      <TableCell className="text-right text-primary">
+                      <TableCell className="text-right tabular-nums">{totales.pedidos}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {metros(totales.metros)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(totales.base)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(totales.iva)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {eur(totales.envios)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {eur(totales.cobrado)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {eur(totales.propina)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-primary">
                         {eur(totales.total)}
                       </TableCell>
                     </TableRow>
@@ -528,10 +545,10 @@ function FacturacionGlobal() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Método</TableHead>
-                      <TableHead className="text-right">Cobros</TableHead>
-                      <TableHead className="text-right">Cobrado</TableHead>
-                      <TableHead className="text-right">Propina</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right tabular-nums">Cobros</TableHead>
+                      <TableHead className="text-right tabular-nums">Cobrado</TableHead>
+                      <TableHead className="text-right tabular-nums">Propina</TableHead>
+                      <TableHead className="text-right tabular-nums">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -545,10 +562,12 @@ function FacturacionGlobal() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">{m.cobros}</TableCell>
-                        <TableCell className="text-right">{eur(m.cobrado)}</TableCell>
-                        <TableCell className="text-right">{eur(m.propina)}</TableCell>
-                        <TableCell className="text-right font-semibold">{eur(m.total)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{m.cobros}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(m.cobrado)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{eur(m.propina)}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold">
+                          {eur(m.total)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -645,8 +664,8 @@ function FacturacionGlobal() {
                       <TableHead>Tienda</TableHead>
                       <TableHead>Método</TableHead>
                       <TableHead>Origen</TableHead>
-                      <TableHead className="text-right">Cobrado</TableHead>
-                      <TableHead className="text-right">Propina</TableHead>
+                      <TableHead className="text-right tabular-nums">Cobrado</TableHead>
+                      <TableHead className="text-right tabular-nums">Propina</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
