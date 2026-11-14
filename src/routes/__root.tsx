@@ -182,7 +182,9 @@ const GUION_TEMA = `try{var t=localStorage.getItem('dtfculture:tema');var o=t===
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="es">
+    // El guion del tema pone `color-scheme` y la clase «dark» antes de
+    // hidratar: es a propósito, y React no debe quejarse de la diferencia.
+    <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: GUION_TEMA }} />

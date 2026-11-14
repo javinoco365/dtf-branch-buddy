@@ -316,7 +316,9 @@ function Formulario({
             ? "Cambios guardados"
             : paraOtro
               ? `Tarea mandada a ${nombre(b.paraSocioId)}. Le saldrá como nueva.`
-              : `Tarea creada en la Agenda de ${b.paraSocioId === yo ? "ti" : nombre(b.paraSocioId)}`,
+              : b.paraSocioId === yo
+                ? "Tarea creada en tu Agenda"
+                : `Tarea creada en la Agenda de ${nombre(b.paraSocioId)}`,
         );
         onCerrar();
       },

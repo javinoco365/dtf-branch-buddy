@@ -639,7 +639,7 @@ function VistaDia({
                     {nombre(t.paraSocioId)}
                     {t.paraSocioId === yo && " (tú)"}
                     <span className="block text-xs text-muted-foreground">
-                      de {t.deSocioId === yo ? "ti" : nombre(t.deSocioId)}
+                      {t.deSocioId === yo ? "creada por ti" : `creada por ${nombre(t.deSocioId)}`}
                     </span>
                   </span>
                 </div>

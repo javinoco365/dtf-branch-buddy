@@ -68,7 +68,8 @@ function AuthPage() {
       toast.success("Bienvenido");
       navigate({ to: "/panel" });
     } catch (err: any) {
-      avisarError(err, "Error al iniciar sesión");
+      // La traducción basta: el texto en inglés de Supabase no se enseña.
+      avisarError(err, "Error al iniciar sesión", { sinDetalle: true });
     } finally {
       setLoading(false);
     }
