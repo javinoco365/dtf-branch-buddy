@@ -36,6 +36,58 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-web-sin-pagar-no-cuenta",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "No pagado no es venta, en todas partes",
+    resumen: "Gerencia ya no cuenta nunca los pedidos de la web sin pagar.",
+    puntos: [
+      "Salen en el aviso de Gerencia y cuentan en cuanto se pagan.",
+      "Se quita de Ajustes de Gerencia el interruptor que los contaba.",
+      "En Cobros pendientes, uno con algo cobrado dice «Web (pago parcial)».",
+    ],
+    enlace: { ruta: "/panel/gerencia", texto: "Abrir Gerencia" },
+  },
+  {
+    id: "2026-11-14-mismas-ventas-netas",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Las mismas ventas netas en todas partes",
+    resumen: "Lo facturado sin pedido es venta también en Inicio, en cada tienda y en Gerencia.",
+    puntos: [
+      "En Inicio, la gráfica es «Ventas netas por día»: sin IVA y con el textil.",
+      "Gerencia › Resumen calcula ventas netas, margen y ticket con canal o A/B.",
+      "Al separar la cuenta, las columnas suman justo el total, sin céntimos sueltos.",
+    ],
+    enlace: { ruta: "/panel", texto: "Ir a Inicio" },
+  },
+  {
+    id: "2026-11-14-sociedades-y-variacion",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Impuesto y comparaciones más fieles",
+    resumen: "Sociedades resta todas las devoluciones de lo documentado y se ve por periodo.",
+    puntos: [
+      "Separando por mes, el impuesto sale solo en el total: es del periodo entero.",
+      "De pérdidas a beneficio ya no sale un porcentaje raro: dice «antes en pérdidas».",
+      "Cada devolución de la web se guarda con su fecha real, no la de sincronizar.",
+    ],
+    enlace: { ruta: "/panel/cuenta-resultados", texto: "Abrir la cuenta" },
+  },
+  {
+    id: "2026-11-14-pedidos-con-cuidado",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Pedidos: menos sustos",
+    resumen: "El formulario avisa de cifras raras y la web no cambia sin preguntarte.",
+    puntos: [
+      "El IVA de una línea solo puede ser 21, 10, 4 o 0.",
+      "«1.500» o una línea de más de 10.000 € piden confirmar la cifra leída.",
+      "Cambiar el estado de un pedido de la web, o reabrir uno cancelado, se confirma.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-sociedades-documentado",
     fecha: "2026-11-14",
     tipo: "mejora",
