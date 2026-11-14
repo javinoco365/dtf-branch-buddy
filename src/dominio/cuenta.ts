@@ -497,3 +497,45 @@ export function pendienteDeCobro(
       .reduce((s, p) => s + Math.max(0, num(p.total) - num(p.devuelto) - num(p.cobrado)), 0),
   );
 }
+
+/**
+ * Lo que falta por cobrar de una factura de Cobros pendientes: su total menos
+ * lo cobrado de su pedido, nunca por debajo de cero ni por encima del total.
+ * Un borrador no se debe todavía: no es una factura emitida. Antes la lista
+ * sumaba el total entero de todas, borradores incluidos, y un pago a medias
+ * seguía contando como deuda entera.
+ */
+export function pendienteDeFactura(f: {
+  estado: string;
+  total: Numerico;
+  /** Lo cobrado del pedido de la factura, con IVA; 0 si no tiene pedido. */
+  cobrado: Numerico;
+}): number {
+  if (f.estado === "borrador") return 0;
+  const total = num(f.total);
+  return redondear(Math.min(total, Math.max(0, total - num(f.cobrado))));
+}
+
+/** Lo justo de una factura o ticket para sumar lo facturado. */
+export type DocumentoFacturado = {
+  id: string;
+  total: Numerico;
+  estado: string | null;
+  /** El ticket que esta factura canjea, si lo canjea. */
+  sustituye_a_id?: string | null;
+};
+
+/**
+ * Lo facturado con IVA: facturas, tickets y rectificativas (que restan), sin
+ * borradores ni anuladas. Un ticket canjeado por una factura vigente cuenta
+ * una vez, la de la factura: antes se sumaban los dos.
+ */
+export function totalFacturado(docs: readonly DocumentoFacturado[]): number {
+  const vale = (d: DocumentoFacturado) => d.estado !== "anulada" && d.estado !== "borrador";
+  const canjeados = new Set(
+    docs.filter((d) => vale(d) && d.sustituye_a_id).map((d) => d.sustituye_a_id as string),
+  );
+  return redondear(
+    docs.filter((d) => vale(d) && !canjeados.has(d.id)).reduce((s, d) => s + num(d.total), 0),
+  );
+}

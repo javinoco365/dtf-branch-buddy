@@ -5,7 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { eur, metros, numero } from "@/lib/format";
 import { usePedidosPeriodo } from "@/lib/periodo";
-import { variacion } from "@/dominio/kpis";
+import { ESTADO_CANCELADO, variacion } from "@/dominio/kpis";
+import { totalFacturado, type DocumentoFacturado } from "@/dominio/cuenta";
+import { leerTodas } from "@/lib/paginar";
 import { cifrasPorLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
 import { useLineaUrl } from "@/lib/filtros-url";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
@@ -26,19 +28,36 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
+      // Todos, por páginas: antes se leía de una vez y Supabase corta en
+      // 1000 filas sin avisar. Sin los cancelados, que no son venta.
       // metros_uv viene de 20261110100000: sin ella, se lee como antes.
       const leerPedidos = async () => {
-        const r = await tabla(supabase, "pedidos")
-          .select("total, metros_total, metros_uv, fecha_pedido, estado")
-          .eq("tienda_id", tiendaId);
+        const leer = (columnas: string) =>
+          leerTodas<{
+            total: number | null;
+            metros_total: number | null;
+            metros_uv?: number | null;
+          }>((a, b) =>
+            tabla(supabase, "pedidos")
+              .select(columnas)
+              .eq("tienda_id", tiendaId)
+              .neq("estado", ESTADO_CANCELADO)
+              .order("id")
+              .range(a, b),
+          );
+        const r = await leer("id, total, metros_total, metros_uv");
         if (!faltaLaColumna(r.error)) return r;
-        return tabla(supabase, "pedidos")
-          .select("total, metros_total, fecha_pedido, estado")
-          .eq("tienda_id", tiendaId);
+        return leer("id, total, metros_total");
       };
       const [pedidos, facturas, empresa] = await Promise.all([
         leerPedidos(),
-        supabase.from("facturas").select("total, estado").eq("tienda_id", tiendaId),
+        leerTodas<DocumentoFacturado>((a, b) =>
+          tabla(supabase, "facturas")
+            .select("id, total, estado, sustituye_a_id")
+            .eq("tienda_id", tiendaId)
+            .order("id")
+            .range(a, b),
+        ),
         tabla(supabase, "empresas")
           .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
           .eq("activa", true)
@@ -51,7 +70,9 @@ function Dashboard() {
         metros_total: number | null;
         metros_uv?: number | null;
       }[];
-      return { pedidos: filas, facturas: facturas.data ?? [], empresa: empresa.data };
+      if (pedidos.error) throw new Error(pedidos.error.message);
+      if (facturas.error) throw new Error(facturas.error.message);
+      return { pedidos: filas, facturas: facturas.data, empresa: empresa.data };
     },
   });
   const pedidos = data?.pedidos ?? [];
@@ -61,9 +82,8 @@ function Dashboard() {
     Number(eg?.coste_consumibles_metro ?? 0) +
     Number(eg?.coste_packaging_metro ?? 0) +
     Number(eg?.coste_electricidad_metro ?? 0);
-  const fact = facturas
-    .filter((f) => f.estado !== "anulada" && f.estado !== "borrador")
-    .reduce((s, f) => s + Number(f.total), 0);
+  // Sin contar dos veces un ticket canjeado por factura (ver totalFacturado).
+  const fact = totalFacturado(facturas);
   // Los metros de cada línea, por separado: no se suman entre sí.
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
   const mtsUv = pedidos.reduce((s, p) => s + Number(p.metros_uv ?? 0), 0);

@@ -4,6 +4,8 @@ import {
   calcularCuenta,
   devolucionSinIva,
   pendienteDeCobro,
+  pendienteDeFactura,
+  totalFacturado,
   ventasDeLaLinea,
   ventasQueCuentan,
   type EntradaCuenta,
@@ -243,5 +245,37 @@ describe("pendiente de cobro", () => {
         { estado: "cancelado", total: 100, cobrado: 0 },
       ]),
     ).toBe(60);
+  });
+});
+
+describe("pendiente de una factura", () => {
+  it("resta lo cobrado de su pedido y no cuenta borradores", () => {
+    expect(pendienteDeFactura({ estado: "emitida", total: 100, cobrado: 0 })).toBe(100);
+    expect(pendienteDeFactura({ estado: "emitida", total: 100, cobrado: 40 })).toBe(60);
+    expect(pendienteDeFactura({ estado: "vencida", total: 100, cobrado: 150 })).toBe(0);
+    expect(pendienteDeFactura({ estado: "borrador", total: 100, cobrado: 0 })).toBe(0);
+  });
+});
+
+describe("lo facturado", () => {
+  it("un ticket canjeado cuenta una vez; sin borradores ni anuladas", () => {
+    expect(
+      totalFacturado([
+        { id: "t", total: 100, estado: "emitida" },
+        { id: "f", total: 100, estado: "emitida", sustituye_a_id: "t" },
+        { id: "b", total: 50, estado: "borrador" },
+        { id: "a", total: 70, estado: "anulada" },
+        { id: "r", total: -20, estado: "emitida" },
+      ]),
+    ).toBe(80);
+  });
+
+  it("si la factura del canje se anula, vuelve a contar el ticket", () => {
+    expect(
+      totalFacturado([
+        { id: "t", total: 100, estado: "emitida" },
+        { id: "f", total: 100, estado: "anulada", sustituye_a_id: "t" },
+      ]),
+    ).toBe(100);
   });
 });

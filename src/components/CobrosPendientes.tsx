@@ -30,6 +30,9 @@ import { useTiendas } from "@/lib/periodo";
 import { avisarError } from "@/lib/errores";
 import { useServerFn } from "@tanstack/react-start";
 import { cambiarEstadoCobro } from "@/lib/facturas.functions";
+import { leerPorIds } from "@/lib/leer-por-ids";
+import { tabla } from "@/lib/rpc";
+import { pendienteDeFactura } from "@/dominio/cuenta";
 
 type Factura = {
   id: string;
@@ -41,6 +44,11 @@ type Factura = {
   estado: string;
   cliente_nombre: string | null;
   total: number;
+  pedido_id: string | null;
+  /** Lo cobrado de su pedido, con IVA (0 sin pedido). */
+  cobrado: number;
+  /** Lo que falta: total − cobrado; 0 en un borrador (ver pendienteDeFactura). */
+  pendiente: number;
   tiendas?: { nombre: string; color: string | null } | null;
 };
 
@@ -67,14 +75,35 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
       let q = supabase
         .from("facturas")
         .select(
-          "id,tienda_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)",
+          "id,tienda_id,pedido_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)",
         )
         .in("estado", ["emitida", "vencida", "borrador"])
         .order("fecha", { ascending: true });
       if (tiendaId) q = q.eq("tienda_id", tiendaId);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as unknown as Factura[];
+      const filas = (data ?? []) as unknown as Omit<Factura, "cobrado" | "pendiente">[];
+      // Lo ya cobrado de cada pedido: un pago a medias no es deuda entera.
+      const pedidos = filas.map((f) => f.pedido_id).filter((id): id is string => !!id);
+      const { data: cobros, error: errCobros } = await leerPorIds<{
+        pedido_id: string;
+        importe: number;
+      }>(pedidos, (trozo, a, b) =>
+        tabla(supabase, "cobros")
+          .select("pedido_id, importe")
+          .in("pedido_id", trozo)
+          .order("id")
+          .range(a, b),
+      );
+      if (errCobros) throw new Error(errCobros.message);
+      const cobradoDe = new Map<string, number>();
+      for (const c of cobros) {
+        cobradoDe.set(c.pedido_id, (cobradoDe.get(c.pedido_id) ?? 0) + Number(c.importe));
+      }
+      return filas.map((f): Factura => {
+        const cobrado = f.pedido_id ? (cobradoDe.get(f.pedido_id) ?? 0) : 0;
+        return { ...f, cobrado, pendiente: pendienteDeFactura({ ...f, cobrado }) };
+      });
     },
   });
 
@@ -108,9 +137,10 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
     });
   }, [facturas, filtros.fq, filtros.ftienda, filtros.festado, tiendaId]);
 
-  const totalPendiente = filtradas.reduce((s, f) => s + Number(f.total), 0);
-  const vencidas = filtradas.filter((f) => diasVencidos(f) > 0);
-  const totalVencido = vencidas.reduce((s, f) => s + Number(f.total), 0);
+  // Lo que de verdad se debe: sin borradores y restando lo ya cobrado.
+  const totalPendiente = filtradas.reduce((s, f) => s + f.pendiente, 0);
+  const vencidas = filtradas.filter((f) => f.estado !== "borrador" && diasVencidos(f) > 0);
+  const totalVencido = vencidas.reduce((s, f) => s + f.pendiente, 0);
 
   return (
     <div className="space-y-4">
@@ -192,7 +222,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Importe</TableHead>
+                <TableHead className="text-right">Falta por cobrar</TableHead>
                 <TableHead className="text-right">Acción</TableHead>
               </TableRow>
             </TableHeader>
@@ -233,7 +263,23 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                         {vencida ? "vencida" : f.estado}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {f.estado === "borrador" ? (
+                        <span className="text-muted-foreground">{eur(f.total)}</span>
+                      ) : (
+                        eur(f.pendiente)
+                      )}
+                      {f.estado === "borrador" && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          borrador: no suma
+                        </div>
+                      )}
+                      {f.estado !== "borrador" && f.cobrado > 0 && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          de {eur(f.total)}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <SiPuede accion="escribir">
                         <Button

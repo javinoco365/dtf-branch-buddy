@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-cifras-corregidas",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Cifras corregidas",
+    resumen: "Dos totales que salían más altos de lo real ya cuadran.",
+    puntos: [
+      "Cobros pendientes: no suma borradores y resta lo ya cobrado.",
+      "Resumen de la tienda: sin cancelados y con todos los pedidos.",
+      "Un ticket cambiado por factura ya no cuenta dos veces.",
+    ],
+    enlace: { ruta: "/panel/cobros", texto: "Ir a Cobros pendientes" },
+  },
+  {
     id: "2026-11-14-quiere-factura",
     fecha: "2026-11-14",
     tipo: "nuevo",
