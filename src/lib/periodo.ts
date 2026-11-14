@@ -402,6 +402,7 @@ export function useCosteMetroHoy({ activo = true }: OpcionesLectura = {}) {
 
 type FilaDevolucion = {
   fecha: string;
+  pedido_id: string;
   importe: number | string;
   tienda_id: string;
   pedido: {
@@ -447,7 +448,7 @@ export function useDevolucionesPeriodo(
         leerTodas<FilaDevolucion>((a, b) => {
           let consulta = tabla(supabase, "pedido_devoluciones")
             .select(
-              `id, fecha, importe, tienda_id, pedido:pedidos(estado, subtotal, iva, envio, total, metros_total${camposUv(uv)})`,
+              `id, fecha, importe, tienda_id, pedido_id, pedido:pedidos(estado, subtotal, iva, envio, total, metros_total${camposUv(uv)})`,
             )
             .gte("fecha", tramo.desde)
             .lt("fecha", tramo.hasta);
@@ -463,7 +464,13 @@ export function useDevolucionesPeriodo(
       for (const d of r.data) {
         const fecha = diaEnEspana(new Date(d.fecha));
         if (!d.pedido || fecha < dias.desde || fecha > dias.hasta) continue;
-        salida.push({ fecha, importe: d.importe, tienda_id: d.tienda_id, pedido: d.pedido });
+        salida.push({
+          fecha,
+          importe: d.importe,
+          tienda_id: d.tienda_id,
+          pedido_id: d.pedido_id,
+          pedido: d.pedido,
+        });
       }
       return salida;
     },

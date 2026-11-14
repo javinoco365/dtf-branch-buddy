@@ -670,11 +670,12 @@ async function referenciasDeCanje(
  * fuera que hacen falta para casar sus canjes, compras del rango y huecos de
  * numeración.
  */
-export function useFiscal(rango: RangoFechas) {
+export function useFiscal(rango: RangoFechas, { activo = true }: OpcionesLectura = {}) {
   const desde = dia(rango.desde);
   const hasta = dia(rango.hasta);
   return useQuery({
     queryKey: ["gerencia-fiscal", desde, hasta],
+    enabled: activo,
     queryFn: async (): Promise<DatosFiscal> => {
       const enRango = (nombre: string, campos: string) =>
         leerTodas<FilaDocumento>((a, b) =>

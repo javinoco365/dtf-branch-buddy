@@ -195,7 +195,8 @@ export const CONCEPTOS: readonly Concepto[] = [
   {
     clave: "sociedades",
     nombre: "Impuesto sobre Sociedades",
-    definicion: "Estimado: el de verdad lo calcula la gestoría.",
+    definicion:
+      "Estimado sobre lo que tiene factura o ticket; el de verdad lo calcula la gestoría.",
     signo: "−",
     bloque: "resultados",
     conIva: false,
@@ -276,6 +277,8 @@ export type DevolucionCuenta = {
   importe: Numerico;
   /** La tienda del pedido: para filtrar y separar por tienda. */
   tienda_id?: string;
+  /** El pedido devuelto: para saber si tiene factura o ticket (impuesto). */
+  pedido_id?: string;
   /**
    * El pedido: con su base y su total para quitarle el IVA; con su estado
    * (un pedido cancelado no es venta, y su reembolso no la resta) y con lo
@@ -288,12 +291,22 @@ export type DevolucionCuenta = {
 /** Gastos de estructura del periodo, sin IVA (ver grupos.ts, gastosFijosPorGrupo). */
 export type EstructuraCuenta = {
   fijos: number;
+  /**
+   * De `fijos`, los que tienen factura o justificante: solo esos rebajan el
+   * Impuesto sobre Sociedades (ver grupos.ts).
+   */
+  fijosConJustificante: number;
   compras: number;
   amortizacion: number;
   /** Mermas y ajustes del almacén textil. */
   almacen: number;
   /** Si entre los gastos fijos hay nóminas dadas de alta. Sin ellas, la cifra está incompleta. */
   conNominas: boolean;
+};
+
+export type DocumentadoCuenta = {
+  pedidos: ReadonlySet<string>;
+  facturadoSinPedido: number;
 };
 
 export type EntradaCuenta = {
@@ -315,10 +328,14 @@ export type EntradaCuenta = {
   /** Tipo del Impuesto sobre Sociedades, en %. Nulo si no está en Ajustes. */
   tipoIs: number | null;
   /**
-   * Base sobre la que se estima el impuesto (el beneficio de lo documentado,
-   * ver grupos.ts). Sin ella, el beneficio antes de impuestos.
+   * Lo que tiene factura o ticket (decisión de Javier, 14-11-2026: el
+   * Impuesto sobre Sociedades sale solo de ahí, como en grupos.ts):
+   * `pedidos`, los ids de los pedidos con documento vigente; y
+   * `facturadoSinPedido`, lo facturado sin pedido (facturas manuales), sin
+   * IVA, que además es venta y se suma a «Ventas». Sin esto, el impuesto sale
+   * «—»: no se estima sobre lo que no lleva documento.
    */
-  baseSociedades?: number | null;
+  documentado?: DocumentadoCuenta | null;
   /** El bloque de dinero. Cada cifra, nula si la pantalla no la ha leído. */
   dinero?: {
     cobrado?: number | null;
@@ -390,7 +407,9 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
   const iva = ventas.reduce((s, v) => s + num(v.iva), 0);
   const portes = ventas.reduce((s, v) => s + num(v.envio), 0);
   const base = ventas.reduce((s, v) => s + baseConEnvio(v), 0);
-  const ventasSinPortes = base - portes;
+  // Las facturas sin pedido (manuales) también son venta.
+  const sinPedido = e.documentado?.facturadoSinPedido ?? 0;
+  const ventasSinPortes = base - portes + sinPedido;
 
   // 5-6. Las devoluciones, por el día del reembolso.
   // Un reembolso de un pedido cancelado no resta: ese pedido no es venta.
@@ -447,10 +466,20 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
       sociedades = sinDato("Falta el tipo del impuesto en Ajustes de Gerencia.");
       neto = sinDato("Falta el tipo del impuesto en Ajustes de Gerencia.");
     } else {
-      const baseIs = e.baseSociedades ?? valorBai;
-      const is = baseIs > 0 ? (baseIs * e.tipoIs) / 100 : 0;
-      sociedades = cifra(is, { estimado: true, nota: "Lo calcula la gestoría." });
-      neto = cifra(valorBai - is, { estimado: true, nota: "Con el impuesto estimado." });
+      if (!e.documentado) {
+        const falta =
+          "Falta saber qué ventas tienen factura o ticket: el impuesto sale solo de esas.";
+        sociedades = sinDato(falta);
+        neto = sinDato(falta);
+      } else {
+        const baseIs = beneficioDocumentado({ ...e, ventas }, e.documentado, g);
+        const is = baseIs > 0 ? (baseIs * e.tipoIs) / 100 : 0;
+        sociedades = cifra(is, {
+          estimado: true,
+          nota: "Sobre lo que tiene factura o ticket. El de verdad lo calcula la gestoría.",
+        });
+        neto = cifra(valorBai - is, { estimado: true, nota: "Con el impuesto estimado." });
+      }
     }
   }
 
@@ -510,6 +539,30 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
     ticketMedio: ventas.length > 0 ? redondear(netas / ventas.length) : null,
     cancelados: e.ventas.filter((v) => v.estado === ESTADO_CANCELADO).length,
   };
+}
+
+/**
+ * El beneficio antes de impuestos de lo que tiene factura o ticket: la base
+ * del Impuesto sobre Sociedades (grupo A de grupos.ts). Las ventas y
+ * devoluciones de pedidos con documento, lo facturado sin pedido, y los
+ * gastos con justificante, las compras, las amortizaciones y el almacén.
+ */
+export function beneficioDocumentado(
+  e: EntradaCuenta,
+  d: DocumentadoCuenta,
+  g: EstructuraCuenta,
+): number {
+  const a = calcularCuenta({
+    ...e,
+    ventas: e.ventas.filter((v) => !!v.id && d.pedidos.has(v.id)),
+    devoluciones: e.devoluciones.filter((x) => !!x.pedido_id && d.pedidos.has(x.pedido_id)),
+    estructura: null,
+    documentado: { pedidos: d.pedidos, facturadoSinPedido: d.facturadoSinPedido },
+    dinero: undefined,
+  });
+  return redondear(
+    (a.margen_bruto.valor ?? 0) - g.fijosConJustificante - g.compras - g.amortizacion - g.almacen,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -697,6 +750,7 @@ export function estructuraDelPeriodo(
   const g = gastosFijosPorGrupo(gastos, rango, hoy);
   return {
     fijos: g.total,
+    fijosConJustificante: g.a,
     compras: g.compras,
     amortizacion: g.amortizacion,
     almacen: redondear(almacen),
@@ -748,12 +802,14 @@ export function separarCuenta(
     tiendas?: readonly { id: string; nombre: string }[];
     rango?: Rango;
     estructuraDe?: (r: Rango) => EstructuraCuenta | null;
+    /** Lo documentado de un mes (lo facturado sin pedido es de ese mes). */
+    documentadoDe?: (r: Rango) => DocumentadoCuenta | null;
   } = {},
 ): ColumnaCuenta[] {
   const sinEstructura: EntradaCuenta = {
     ...e,
     estructura: null,
-    baseSociedades: undefined,
+    documentado: undefined,
     dinero: undefined,
   };
   if (por === "tienda") {
@@ -806,7 +862,7 @@ export function separarCuenta(
         cuenta: calcularCuenta({
           ...e,
           dinero: undefined,
-          baseSociedades: undefined,
+          documentado: opciones.documentadoDe ? opciones.documentadoDe(m) : undefined,
           ventas: e.ventas.filter((v) => enMes(diaDelPedido(v))),
           devoluciones: e.devoluciones.filter((d) => enMes(d.fecha.slice(0, 10))),
           estructura: e.estructura && opciones.estructuraDe ? opciones.estructuraDe(m) : null,

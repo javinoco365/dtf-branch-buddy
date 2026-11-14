@@ -25,6 +25,8 @@ import {
 import {
   useAjustesGerencia,
   useComprasGerencia,
+  useDocumentosDePedidos,
+  useFiscal,
   useMovimientosAlmacen,
   usePagosProveedores,
   usePendientesCobro,
@@ -41,6 +43,7 @@ import {
   ventasDelFiltro,
   type Cuenta,
   type DevolucionCuenta,
+  type DocumentadoCuenta,
   type EntradaCuenta,
   type EstructuraCuenta,
   type FiltroCuenta,
@@ -52,6 +55,8 @@ import { costeAlmacenPeriodo } from "@/dominio/cuenta-almacen";
 import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { diaDeFecha, type Rango } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
+import { facturadoSinPedido, pedidosDocumentados } from "@/dominio/grupos";
+import type { DocumentoDePedido } from "@/dominio/fiscal";
 
 export type OpcionesCuenta = {
   rango: RangoFechas;
@@ -78,6 +83,8 @@ export type LecturaCuenta = {
   entrada: EntradaCuenta | null;
   /** La estructura de un rango (un mes del periodo), o nula si no se puede saber. */
   estructuraDe: (r: Rango) => EstructuraCuenta | null;
+  /** Lo que tiene factura o ticket en un rango (un mes del periodo), para el impuesto. */
+  documentadoDe: (r: Rango) => DocumentadoCuenta | null;
   cargando: boolean;
   error: Error | null;
   /** Vuelve a pedir lo que ha fallado. */
@@ -165,6 +172,16 @@ export function useCuentaResultados({
   const compras = useComprasGerencia({ activo: conGastos });
   const movimientos = useMovimientosAlmacen({ activo: conGastos });
   const pagos = usePagosProveedores({ activo: dinero && conEstructura(filtro) });
+  // Qué tiene factura o ticket: el Impuesto sobre Sociedades sale solo de ahí
+  // (decisión de Javier, 14-11-2026), y lo facturado sin pedido es venta.
+  const fiscal = useFiscal(rango, { activo: conGastos });
+  const fiscalPrevio = useFiscal(rangoPrevio, { activo: conGastos && !!previo });
+  const docs = useDocumentosDePedidos(ventas.data ?? [], {
+    activo: conGastos && !!ventas.data,
+  });
+  const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? [], {
+    activo: conGastos && !!previo && !!ventasPrevias.data,
+  });
   const cobros = useCobrosPeriodo(rango, "cobro", tiendaLectura, { activo: dinero });
   const cobrosPrevios = useCobrosPeriodo(rangoPrevio, "cobro", tiendaLectura, {
     activo: dinero && !!previo,
@@ -207,6 +224,42 @@ export function useCuentaResultados({
     [conGastos, listaGastos, almacenListo, movs, hoy],
   );
 
+  // undefined: todavía se lee; null: no se puede saber (y el impuesto sale «—»).
+  const documentado = (
+    d: { data?: DocumentoDePedido[]; isError: boolean },
+    f: {
+      data?: {
+        documentos: Parameters<typeof facturadoSinPedido>[0];
+        referencias: Parameters<typeof facturadoSinPedido>[1];
+      };
+      isError: boolean;
+    },
+    r?: Rango,
+  ): DocumentadoCuenta | null | undefined => {
+    if (!conGastos) return undefined;
+    if (d.isError || f.isError) return null;
+    if (!d.data || !f.data) return undefined;
+    const desde = r ? diaDeFecha(r.desde) : null;
+    const hasta = r ? diaDeFecha(r.hasta) : null;
+    const delRango = r
+      ? f.data.documentos.filter((x) => x.fecha >= desde! && x.fecha <= hasta!)
+      : f.data.documentos;
+    return {
+      pedidos: pedidosDocumentados(d.data),
+      facturadoSinPedido: facturadoSinPedido(delRango, [
+        ...(f.data.referencias ?? []),
+        ...f.data.documentos,
+      ]),
+    };
+  };
+  const docActual = documentado(docs, fiscal);
+  const docPrevio = documentado(docsPrevios, fiscalPrevio);
+  const documentadoDe = useCallback(
+    (r: Rango): DocumentadoCuenta | null => documentado(docs, fiscal, r) ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conGastos, docs.data, docs.isError, fiscal.data, fiscal.isError],
+  );
+
   const soloUvIds = soloUv.data;
   const montar = useCallback(
     (
@@ -217,12 +270,14 @@ export function useCuentaResultados({
       cobrosLeidos:
         { disponible: boolean; cobros: Parameters<typeof cobradoDelPeriodo>[0] } | undefined,
       actual: boolean,
+      doc: DocumentadoCuenta | null | undefined,
     ): EntradaCuenta | null => {
       if (!v || !envios || !devs || costeMetro === undefined) return null;
       if (filtro.linea !== "todo" && dinero && !soloUvIds) return null;
       const uv = soloUvIds ?? new Set<string>();
       const estructura = conGastos ? estructuraDe(r) : null;
       if (conGastos && !estructura) return null;
+      if (conGastos && doc === undefined) return null;
       return {
         ventas: ventasDelFiltro(conEnvio(v, envios), filtro),
         devoluciones: devolucionesDelFiltro(devs, filtro),
@@ -230,6 +285,7 @@ export function useCuentaResultados({
         costeEnvioDefecto,
         estructura,
         tipoIs,
+        documentado: doc ?? null,
         dinero: dinero
           ? {
               cobrado: cobrosLeidos?.disponible
@@ -262,8 +318,17 @@ export function useCuentaResultados({
   );
 
   const entrada = useMemo(
-    () => montar(rango, ventas.data, ventas.envios.data, devoluciones.data, cobros.data, true),
-    [montar, rango, ventas.data, ventas.envios.data, devoluciones.data, cobros.data],
+    () =>
+      montar(
+        rango,
+        ventas.data,
+        ventas.envios.data,
+        devoluciones.data,
+        cobros.data,
+        true,
+        docActual,
+      ),
+    [montar, rango, ventas.data, ventas.envios.data, devoluciones.data, cobros.data, docActual],
   );
   const entradaPrevia = useMemo(
     () =>
@@ -275,6 +340,7 @@ export function useCuentaResultados({
             devolucionesPrevias.data,
             cobrosPrevios.data,
             false,
+            docPrevio,
           )
         : null,
     [
@@ -284,6 +350,7 @@ export function useCuentaResultados({
       ventasPrevias.envios.data,
       devolucionesPrevias.data,
       cobrosPrevios.data,
+      docPrevio,
     ],
   );
 
@@ -313,6 +380,7 @@ export function useCuentaResultados({
     previa,
     entrada,
     estructuraDe,
+    documentadoDe,
     cargando: !error && !cuenta,
     error,
     reintentar,

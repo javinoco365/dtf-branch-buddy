@@ -34,6 +34,7 @@ import type { CobroConsolidado } from "./facturacion";
 
 /** Un pedido de tienda: 100 € de trabajo + 10 € de envío, IVA 21 %. */
 const venta = (v: Partial<VentaCuenta> = {}): VentaCuenta => ({
+  id: "p1",
   fecha_pedido: "2026-11-05T10:00:00.000Z",
   tienda_id: "t1",
   estado: "entregado",
@@ -55,8 +56,16 @@ const entrada = (e: Partial<EntradaCuenta> = {}): EntradaCuenta => ({
   devoluciones: [],
   costeMetroActual: 4,
   costeEnvioDefecto: 6,
-  estructura: { fijos: 30, compras: 5, amortizacion: 3, almacen: 2, conNominas: true },
+  estructura: {
+    fijos: 30,
+    fijosConJustificante: 30,
+    compras: 5,
+    amortizacion: 3,
+    almacen: 2,
+    conNominas: true,
+  },
   tipoIs: 25,
+  documentado: { pedidos: new Set(["p1"]), facturadoSinPedido: 0 },
   ...e,
 });
 
@@ -172,7 +181,14 @@ describe("la cascada", () => {
   it("sin nóminas, la estructura está incompleta y lo dice", () => {
     const c = calcularCuenta(
       entrada({
-        estructura: { fijos: 30, compras: 0, amortizacion: 0, almacen: 0, conNominas: false },
+        estructura: {
+          fijos: 30,
+          fijosConJustificante: 30,
+          compras: 0,
+          amortizacion: 0,
+          almacen: 0,
+          conNominas: false,
+        },
       }),
     );
     expect(c.gastos_estructura).toMatchObject({ valor: 30, estimado: true });
@@ -189,7 +205,14 @@ describe("la cascada", () => {
   it("con pérdidas no hay impuesto", () => {
     const c = calcularCuenta(
       entrada({
-        estructura: { fijos: 200, compras: 0, amortizacion: 0, almacen: 0, conNominas: true },
+        estructura: {
+          fijos: 200,
+          fijosConJustificante: 200,
+          compras: 0,
+          amortizacion: 0,
+          almacen: 0,
+          conNominas: true,
+        },
       }),
     );
     expect(c.beneficio_antes_impuestos.valor).toBe(-120);
@@ -197,10 +220,43 @@ describe("la cascada", () => {
     expect(c.beneficio_neto.valor).toBe(-120);
   });
 
-  it("el impuesto sobre la base que se le dé (lo documentado)", () => {
-    const c = calcularCuenta(entrada({ baseSociedades: 20 }));
-    expect(c.sociedades.valor).toBe(5);
-    expect(c.beneficio_neto.valor).toBe(35);
+  it("el impuesto sale solo de lo que tiene factura o ticket", () => {
+    // Dos pedidos iguales (80 € de margen cada uno); solo p1 tiene documento.
+    // Gastos: 30 fijos, de los que 20 con justificante, + 5 + 3 + 2.
+    const c = calcularCuenta(
+      entrada({
+        ventas: [venta(), venta({ id: "p2" })],
+        estructura: {
+          fijos: 30,
+          fijosConJustificante: 20,
+          compras: 5,
+          amortizacion: 3,
+          almacen: 2,
+          conNominas: true,
+        },
+      }),
+    );
+    expect(c.beneficio_antes_impuestos.valor).toBe(120);
+    // Base: 80 − 20 − 5 − 3 − 2 = 50 → 25 % = 12,5.
+    expect(c.sociedades).toMatchObject({ valor: 12.5, estimado: true });
+    expect(c.sociedades.nota).toMatch(/factura o ticket/);
+    expect(c.beneficio_neto.valor).toBe(107.5);
+  });
+
+  it("lo facturado sin pedido es venta y cuenta para el impuesto", () => {
+    const c = calcularCuenta(
+      entrada({ documentado: { pedidos: new Set(["p1"]), facturadoSinPedido: 40 } }),
+    );
+    expect(c.ventas.valor).toBe(140);
+    expect(c.beneficio_antes_impuestos.valor).toBe(80);
+    expect(c.sociedades.valor).toBe(20);
+  });
+
+  it("sin saber qué tiene documento, no hay impuesto", () => {
+    const c = calcularCuenta(entrada({ documentado: null }));
+    expect(c.beneficio_antes_impuestos.valor).toBe(40);
+    expect(c.sociedades.valor).toBeNull();
+    expect(c.sociedades.falta).toMatch(/factura o ticket/);
   });
 
   it("sin ventas, ni margen % ni ticket medio", () => {
@@ -478,6 +534,7 @@ describe("separar en columnas", () => {
       rango: { desde: new Date(2026, 9, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) },
       estructuraDe: () => ({
         fijos: 10,
+        fijosConJustificante: 10,
         compras: 0,
         amortizacion: 0,
         almacen: 0,
@@ -496,6 +553,7 @@ describe("separar en columnas", () => {
       rango: { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30) },
       estructuraDe: () => ({
         fijos: 10,
+        fijosConJustificante: 10,
         compras: 0,
         amortizacion: 0,
         almacen: 0,
