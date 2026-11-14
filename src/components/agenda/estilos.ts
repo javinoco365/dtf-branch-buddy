@@ -54,12 +54,22 @@ export const CLASES_PRIORIDAD: Record<
   },
 };
 
+/**
+ * «Realizada»: el verde de éxito para puntos, rayas y fondos; el texto, en su
+ * variante -texto, que pasa AA sobre el fondo suave en claro y en oscuro.
+ * `circulo`: el botón redondo marcado; el ✓ va en blanco en claro y en tinta
+ * oscura en oscuro (el blanco sobre el verde claro del modo oscuro no se lee).
+ */
 export const CLASES_REALIZADA = {
   punto: "bg-status-completado",
   borde: "border-l-status-completado",
   suave: "bg-status-completado/10",
-  texto: "text-status-completado",
+  texto: "text-realizada-texto",
   barra: "max-sm:bg-status-completado",
+  circulo: "border-status-completado bg-status-completado text-white dark:text-background",
+  /** El círculo sin marcar, al pasar por encima. */
+  circuloVacio:
+    "border-input text-transparent hover:border-status-completado hover:text-realizada-texto",
 };
 
 export function prioridadDe(id: Prioridad) {
