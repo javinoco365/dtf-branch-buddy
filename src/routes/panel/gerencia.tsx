@@ -329,8 +329,11 @@ function Gerencia() {
           El ⓘ de cada cifra explica qué es y cómo se calcula (con el ratón encima, o tocándolo en
           el móvil).
         </p>
-        <p className="text-sm">
-          El margen y los resultados están en la{" "}
+        {/* Una sola vez: con un enlace viejo (?pestana=margen) se dice que se ha movido. */}
+        <p className={PESTANAS_MOVIDAS.has(f.pestana) ? "text-sm font-medium" : "text-sm"}>
+          {PESTANAS_MOVIDAS.has(f.pestana)
+            ? "El margen y los resultados tienen ahora su propia pantalla: la "
+            : "El margen y los resultados están en la "}
           <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
             Cuenta de resultados
           </Link>
@@ -391,18 +394,6 @@ function Gerencia() {
       )}
 
       {ventas.error && !enAjustes && <ErrorCarga error={ventas.error} que="los pedidos" />}
-
-      {PESTANAS_MOVIDAS.has(f.pestana) && (
-        <Card>
-          <CardContent className="py-4 text-sm">
-            El margen y los resultados tienen ahora su propia pantalla:{" "}
-            <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
-              Cuenta de resultados
-            </Link>
-            .
-          </CardContent>
-        </Card>
-      )}
 
       <Tabs value={f.pestana} onValueChange={(pestana) => cambiar({ pestana })}>
         {/* En el móvil las pestañas se desplazan de lado: un degradado a la
