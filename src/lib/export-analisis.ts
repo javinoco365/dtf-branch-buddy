@@ -107,7 +107,6 @@ export async function exportarPedidosParaAnalisis({
   // Como la sincronización: sin ajustes guardados, los de fábrica.
   const ajustes: AjustesExport = {
     precio_metro: AJUSTES_POR_DEFECTO.precio_metro,
-    web_sin_pagar_cuenta: AJUSTES_POR_DEFECTO.web_sin_pagar_cuenta,
     de_fabrica: true,
   };
   if (empresa.data?.id) {
@@ -115,7 +114,7 @@ export async function exportarPedidosParaAnalisis({
     // se lee lo de antes, y el precio es el de fábrica.
     const leer = (conPrecio: boolean) =>
       tabla(supabase, "gerencia_ajustes")
-        .select(conPrecio ? "precio_metro, web_sin_pagar_cuenta" : "web_sin_pagar_cuenta")
+        .select(conPrecio ? "precio_metro" : "empresa_id")
         .eq("empresa_id", empresa.data.id)
         .maybeSingle();
     const r0 = await leer(true);
@@ -136,9 +135,6 @@ export async function exportarPedidosParaAnalisis({
       if (r.data) {
         ajustes.de_fabrica = false;
         if (Number(r.data.precio_metro) > 0) ajustes.precio_metro = Number(r.data.precio_metro);
-        if (typeof r.data.web_sin_pagar_cuenta === "boolean") {
-          ajustes.web_sin_pagar_cuenta = r.data.web_sin_pagar_cuenta;
-        }
       }
     }
   }

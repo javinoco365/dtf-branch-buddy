@@ -87,11 +87,11 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       avisosGerencia({
         tramos: antiguedadPendientes(d.pendientes, d.hoy),
         variacionVendido: frente ? variacion(c.total, p.total) : null,
-        webSinPagar: { ...d.webSinPagar, cuentan: d.ajustes.web_sin_pagar_cuenta },
+        webSinPagar: d.webSinPagar,
         banco: d.banco ? resumenBanco(d.banco) : null,
         proformas,
       }),
-    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco, proformas],
+    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.banco, proformas],
   );
 
   const grafica = useMemo(() => {

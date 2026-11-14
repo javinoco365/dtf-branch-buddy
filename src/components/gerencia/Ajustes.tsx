@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -23,7 +22,7 @@ import { DatosFiscales, GastosFijos } from "./AjustesGastos";
 import { Acciones, Campo } from "./comun";
 import { eur, metros } from "@/lib/format";
 import { useAjustesGerencia } from "@/lib/gerencia";
-import { borrarObjetivo, guardarAjustesGerencia, guardarObjetivo } from "@/lib/gerencia.functions";
+import { borrarObjetivo, guardarObjetivo } from "@/lib/gerencia.functions";
 import type { Objetivo } from "@/dominio/gerencia";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -45,7 +44,7 @@ export function Ajustes() {
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
           Esta parte aún no está activada. Avisa a Javier. Hasta entonces, Gerencia funciona sin
-          gastos fijos ni objetivos, y los pedidos web sin pagar cuentan como vendidos.
+          gastos fijos ni objetivos.
         </CardContent>
       </Card>
     );
@@ -55,7 +54,6 @@ export function Ajustes() {
   return (
     <CamposSegunNivel>
       <div className="space-y-4">
-        <AjusteWebSinPagar cuenta={data.ajustes.web_sin_pagar_cuenta} />
         <Objetivos objetivos={data.objetivos} />
         <DatosFiscales ajustes={data.ajustes} disponible={data.impuestosDisponibles} />
         <GastosFijos
@@ -74,45 +72,6 @@ function useRefrescar() {
 }
 
 // ---------------------------------------------------------------------------
-
-function AjusteWebSinPagar({ cuenta }: { cuenta: boolean }) {
-  const guardar = useServerFn(guardarAjustesGerencia);
-  const refrescar = useRefrescar();
-  const mut = useMutation({
-    mutationFn: (v: boolean) => guardar({ data: { web_sin_pagar_cuenta: v } }),
-    onSuccess: () => {
-      toast.success("Ajuste guardado");
-      refrescar();
-    },
-    onError: (e: Error) => avisarError(e),
-  });
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Qué cuenta como vendido</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <label className="flex items-start gap-3 text-sm">
-          <Switch
-            checked={cuenta}
-            disabled={mut.isPending}
-            onCheckedChange={(v) => mut.mutate(v)}
-            aria-label="Contar los pedidos web sin pagar como vendidos"
-          />
-          <span>
-            <span className="font-medium">Contar los pedidos web sin pagar como vendidos</span>
-            <span className="block text-muted-foreground">
-              En WooCommerce, un pedido «pendiente de pago» o «en espera» puede no pagarse nunca.
-              Apagado, Gerencia no los cuenta en lo vendido hasta que se paguen. No cambia el Inicio
-              ni la Facturación de las tiendas.
-            </span>
-          </span>
-        </label>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ---------------------------------------------------------------------------
 

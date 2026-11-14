@@ -432,8 +432,6 @@ export type Aviso =
       nivel: "medio";
       pedidos: number;
       importe: number;
-      /** Si cuentan en lo vendido (Gerencia › Ajustes). */
-      cuentan: boolean;
     }
   | { tipo: "banco_sin_casar"; nivel: "medio"; movimientos: number; importe: number }
   | {
@@ -457,8 +455,8 @@ export function avisosGerencia(d: {
   tramos: readonly TramoAntiguedad[];
   /** Variación de lo vendido frente a la comparación, en %. */
   variacionVendido: number | null;
-  /** Pedidos web del periodo todavía sin pagar, y si cuentan en lo vendido. */
-  webSinPagar: { pedidos: number; importe: number; cuentan: boolean };
+  /** Pedidos web del periodo todavía sin pagar (no cuentan en lo vendido). */
+  webSinPagar: { pedidos: number; importe: number };
   banco: ResumenBanco | null;
   /** Proformas registradas sin factura (resumenProformas). Desde el día 1, sin periodo. */
   proformas?: ResumenProformas | null;
@@ -592,7 +590,6 @@ export type Objetivo = {
 };
 
 export type AjustesGerencia = {
-  web_sin_pagar_cuenta: boolean;
   /** Tipo del Impuesto sobre Sociedades, en %. 15 para nueva creación. */
   tipo_is: number;
   /** Cuota íntegra del último modelo 200: base de los pagos fraccionados. */
@@ -602,7 +599,6 @@ export type AjustesGerencia = {
 };
 
 export const AJUSTES_POR_DEFECTO: AjustesGerencia = {
-  web_sin_pagar_cuenta: true,
   tipo_is: 15,
   cuota_is_anterior: null,
   precio_metro: 7,
@@ -851,12 +847,15 @@ export function parteTranscurrida(r: { desde: Date; hasta: Date }, hoy: Date): n
   return total > 0 ? pasados / total : 1;
 }
 
-/** Si los pedidos web sin pagar no cuentan, se quitan de las ventas. */
-export function aplicarAjustesVentas<T extends Pick<Venta, "canal" | "estado">>(
+/**
+ * Las ventas sin los pedidos web sin pagar. No pagado no es venta, siempre
+ * (decisión de Javier, 14-11-2026): Gerencia los quita de todas sus cifras
+ * (pedidos, metros, por línea, objetivo…), como ventasQueCuentan() en la
+ * Cuenta de resultados. Antes era un ajuste; ya no se puede encender.
+ */
+export function sinWebSinPagar<T extends Pick<Venta, "canal" | "estado">>(
   ventas: readonly T[],
-  a: Pick<AjustesGerencia, "web_sin_pagar_cuenta">,
 ): T[] {
-  if (a.web_sin_pagar_cuenta) return [...ventas];
   return ventas.filter((v) => !(v.canal === "web" && v.estado === "pendiente"));
 }
 

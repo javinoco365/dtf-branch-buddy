@@ -121,7 +121,7 @@ export function textoAviso(a: Aviso, frente?: string): string {
     case "caida_ventas":
       return `Lo vendido cae un ${numero(a.porcentaje, 1)}\u00A0%${frente ? ` frente a ${frente}` : ""}.`;
     case "web_sin_pagar":
-      return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). ${a.cuentan ? "Cuentan" : "No cuentan"} en lo vendido (se cambia en Ajustes).`;
+      return `${a.pedidos} ${a.pedidos === 1 ? "pedido web está" : "pedidos web están"} sin pagar (${eur(a.importe)}). No cuentan en lo vendido hasta que se paguen.`;
     case "banco_sin_casar":
       return `${a.movimientos} ${a.movimientos === 1 ? "entrada del banco está" : "entradas del banco están"} sin casar con una factura (${eur(a.importe)}).`;
     case "proforma_sin_factura": {

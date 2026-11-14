@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AJUSTES_POR_DEFECTO,
-  aplicarAjustesVentas,
+  sinWebSinPagar,
   avanceObjetivo,
   tonoObjetivo,
   beneficioEstimado,
@@ -319,7 +318,7 @@ describe("avisos", () => {
     const a = avisosGerencia({
       tramos,
       variacionVendido: -25,
-      webSinPagar: { pedidos: 2, importe: 80, cuentan: true },
+      webSinPagar: { pedidos: 2, importe: 80 },
       banco: resumenBanco([{ fecha: "2026-10-01", importe: 10, conciliado: false }]),
     });
     expect(a.map((x) => x.tipo)).toEqual([
@@ -335,7 +334,7 @@ describe("avisos", () => {
     const a = avisosGerencia({
       tramos: [],
       variacionVendido: -10,
-      webSinPagar: { pedidos: 0, importe: 0, cuentan: true },
+      webSinPagar: { pedidos: 0, importe: 0 },
       banco: null,
     });
     expect(a).toEqual([]);
@@ -448,15 +447,16 @@ describe("objetivos prorrateados", () => {
   });
 });
 
-describe("pedidos web sin pagar según el ajuste", () => {
-  it("cuentan por defecto; si se apaga, se quitan solo los web pendientes", () => {
+describe("pedidos web sin pagar", () => {
+  it("no cuentan nunca: se quitan solo los web pendientes", () => {
     const ventas = [
       tienda({ estado: "pendiente" }),
       tienda(),
       tienda({ origen: "manual", estado: "pendiente" }),
     ];
-    expect(aplicarAjustesVentas(ventas, AJUSTES_POR_DEFECTO)).toHaveLength(3);
-    expect(aplicarAjustesVentas(ventas, { web_sin_pagar_cuenta: false })).toHaveLength(2);
+    const quedan = sinWebSinPagar(ventas);
+    expect(quedan).toHaveLength(2);
+    expect(quedan.some((v) => v.canal === "web" && v.estado === "pendiente")).toBe(false);
   });
 });
 
@@ -511,14 +511,14 @@ describe("aviso de proformas sin factura", () => {
   const base = {
     tramos: [],
     variacionVendido: null,
-    webSinPagar: { pedidos: 0, importe: 0, cuentan: true },
+    webSinPagar: { pedidos: 0, importe: 0 },
     banco: null,
   };
 
   it("desde la primera proforma, el último", () => {
     const a = avisosGerencia({
       ...base,
-      webSinPagar: { pedidos: 1, importe: 10, cuentan: true },
+      webSinPagar: { pedidos: 1, importe: 10 },
       proformas: {
         proformas: 2,
         importe: 181.5,

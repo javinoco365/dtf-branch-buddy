@@ -73,6 +73,8 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<DatosAjustesGerencia> => {
     // Sin la migración de impuestos (20261010100000) las columnas nuevas no
     // existen: se leen las de antes y valen los valores por defecto.
+    // `web_sin_pagar_cuenta` ya no se usa (los web sin pagar nunca cuentan):
+    // se lee solo para saber si la tabla existe.
     const leerAjustes = (nuevas: boolean) =>
       tabla(context.supabase, "gerencia_ajustes")
         .select(`web_sin_pagar_cuenta${nuevas ? ", tipo_is, cuota_is_anterior, precio_metro" : ""}`)
@@ -141,10 +143,6 @@ export const leerAjustesGerencia = createServerFn({ method: "GET" })
       impuestosDisponibles: conImpuestos,
       justificanteDisponible: columnas === 0,
       ajustes: {
-        web_sin_pagar_cuenta:
-          typeof fila?.web_sin_pagar_cuenta === "boolean"
-            ? fila.web_sin_pagar_cuenta
-            : AJUSTES_POR_DEFECTO.web_sin_pagar_cuenta,
         tipo_is: fila?.tipo_is != null ? Number(fila.tipo_is) : AJUSTES_POR_DEFECTO.tipo_is,
         cuota_is_anterior: fila?.cuota_is_anterior != null ? Number(fila.cuota_is_anterior) : null,
         precio_metro:
@@ -162,7 +160,6 @@ export const guardarAjustesGerencia = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z
       .object({
-        web_sin_pagar_cuenta: z.boolean().optional(),
         tipo_is: z.number().min(0).max(100).optional(),
         cuota_is_anterior: z.number().min(0).nullable().optional(),
         precio_metro: z.number().positive("El metro tiene que valer más de 0").optional(),

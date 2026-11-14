@@ -110,7 +110,7 @@ export const DEFINICIONES = {
   g_vendido: {
     que: "Lo vendido en el periodo, con IVA y envío, en tiendas y textil.",
     calculo:
-      "Suma del total de los pedidos no cancelados, menos lo devuelto. Los pedidos web sin pagar cuentan o no según lo elegido en Gerencia › Ajustes; eso vale para todas las cifras de pedidos de Gerencia.",
+      "Suma del total de los pedidos no cancelados, menos lo devuelto. Los pedidos web sin pagar no cuentan hasta que se paguen, en todas las cifras de pedidos de Gerencia.",
     fuente: GERENCIA_PEDIDOS,
   },
   g_cobrado: {

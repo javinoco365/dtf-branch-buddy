@@ -25,7 +25,7 @@ import {
 } from "./grupos";
 import {
   AJUSTES_POR_DEFECTO,
-  aplicarAjustesVentas,
+  sinWebSinPagar,
   filtrarCobrosGerencia,
   filtrarPendientesGerencia,
   filtrarVentas,
@@ -60,12 +60,11 @@ export type DatosGerencia<TCaja = unknown> = {
   costeMetro: number;
   tiendas: readonly { id: string; nombre: string }[];
   /**
-   * Las del grupo elegido, ya sin los pedidos web sin pagar si en Ajustes se
-   * ha dicho que no cuentan.
+   * Las del grupo elegido, ya sin los pedidos web sin pagar: no son venta.
    */
   ventas: Venta[];
   ventasPrevias: Venta[];
-  /** Los pedidos web sin pagar del periodo, cuenten o no. */
+  /** Los pedidos web sin pagar del periodo (fuera de las ventas). */
   webSinPagar: { pedidos: number; importe: number };
   ajustes: AjustesGerencia;
   /**
@@ -270,7 +269,7 @@ export function montarDatosGerencia<TCaja>(
   const { ajustes: a, gastos: gastosAjustes, objetivos } = aj ?? SIN_AJUSTES;
   const gastos = gastosConCompras(gastosAjustes, compras.data ?? []);
   const delPeriodo = deLinea(ventas ?? []);
-  const todas = aplicarAjustesVentas(delPeriodo, a);
+  const todas = sinWebSinPagar(delPeriodo);
   const documentados = pedidosDocumentados(docs ?? []);
   const documentadosPrevios = pedidosDocumentados(docsPrevios ?? []);
   return {
@@ -286,7 +285,7 @@ export function montarDatosGerencia<TCaja>(
     tiendas: e.tiendas,
     ventas: ventasDelGrupo(todas, documentados, grupo),
     ventasPrevias: ventasDelGrupo(
-      aplicarAjustesVentas(deLinea(ventasPrevias ?? []), a),
+      sinWebSinPagar(deLinea(ventasPrevias ?? [])),
       documentadosPrevios,
       grupo,
     ),
@@ -332,7 +331,7 @@ export function montarPendienteDocumentar(
 ): PendienteDocumentar | null {
   const aj = e.ajustes.data ?? (e.ajustes.isError ? SIN_AJUSTES : null);
   if (!e.ventas || !aj || !e.docs) return null;
-  const todas = aplicarAjustesVentas(filtrarVentas(e.ventas, e.filtro), aj.ajustes);
+  const todas = sinWebSinPagar(filtrarVentas(e.ventas, e.filtro));
   return pendienteDocumentar(todas, pedidosDocumentados(e.docs));
 }
 

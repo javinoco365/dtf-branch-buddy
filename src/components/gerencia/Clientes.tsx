@@ -18,7 +18,7 @@ import { useHistorialClientes } from "@/lib/gerencia";
 import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { ETIQUETA_FILTRO_LINEA, ventasDeLinea } from "@/dominio/por-linea";
-import { aplicarAjustesVentas, etiquetaCanal, filtrarVentas } from "@/dominio/gerencia";
+import { etiquetaCanal, filtrarVentas, sinWebSinPagar } from "@/dominio/gerencia";
 import { clientesDormidos, DIAS_DORMIDO, PARTE_PARETO, resumenClientes } from "@/dominio/clientela";
 import { totalDormidos, totalRankingClientes } from "@/dominio/sumatorios-gerencia-a";
 import { destinoCliente, type DatosGerencia } from "./destinos";
@@ -33,11 +33,10 @@ export function Clientes({ d }: { d: DatosGerencia }) {
   // cliente «nuevo» de DTF UV es el que hace su primer pedido de UV.
   const ventas = useMemo(
     () =>
-      aplicarAjustesVentas(
+      sinWebSinPagar(
         ventasDeLinea(filtrarVentas(historial.data ?? [], d.filtro), d.filtro.linea ?? "todo"),
-        d.ajustes,
       ),
-    [historial.data, d.filtro, d.ajustes],
+    [historial.data, d.filtro],
   );
   const r = useMemo(() => resumenClientes(ventas, d.rango), [ventas, d.rango]);
   const p = useMemo(
