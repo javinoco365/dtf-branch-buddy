@@ -47,9 +47,8 @@ export function Ajustes() {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Los ajustes de Gerencia necesitan la migración{" "}
-          <code>20261008100000_gerencia_ajustes.sql</code>. Hasta que se aplique, Gerencia funciona
-          sin gastos fijos ni objetivos, y los pedidos web sin pagar cuentan como vendidos.
+          Esta parte aún no está activada. Avisa a Javier. Hasta entonces, Gerencia funciona sin
+          gastos fijos ni objetivos, y los pedidos web sin pagar cuentan como vendidos.
         </CardContent>
       </Card>
     );

@@ -256,8 +256,8 @@ export function ContenidoResumenDiario({
 
       {actual.data && !actual.data.conRealizado && (
         <Nota>
-          Falta aplicar la migración 20261027100000_pedidos_realizado.sql: sin ella no se sabe qué
-          día se realizó cada pedido, así que los metros realizados salen a cero.
+          Esta parte aún no está activada. Avisa a Javier. Hasta entonces no se sabe qué día se
+          realizó cada pedido, así que los metros realizados salen a cero.
         </Nota>
       )}
 
