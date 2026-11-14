@@ -383,10 +383,15 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                   </p>
                 )}
                 <p>
+                  {/* Lo que falta, no el total: con un pago a medias, el total
+                      decía que se debía más de lo que se debe. */}
                   Queda pendiente{" "}
                   <span className="font-semibold text-foreground">
-                    {eur(cobrando ? Number(cobrando.total) : 0)}
+                    {cobrando ? eur(cobrando.pendiente) : "…"}
                   </span>
+                  {cobrando && cobrando.pendiente !== Number(cobrando.total) && (
+                    <> de {eur(Number(cobrando.total))}</>
+                  )}
                   . Al confirmar, la factura pasa a pagada y deja de salir aquí.
                 </p>
               </div>
