@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -18,12 +19,6 @@ import { sumarCantidades } from "@/dominio/sumatorios";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { CANALES, desglose, porDiaSemana, type FilaDesglose } from "@/dominio/gerencia";
 import type { DatosGerencia } from "./destinos";
-
-const estiloTooltip = {
-  background: "var(--color-card)",
-  border: "1px solid var(--color-border)",
-  borderRadius: 8,
-};
 
 export function Ventas({ d }: { d: DatosGerencia }) {
   const nombresTienda = useMemo(
@@ -110,22 +105,24 @@ export function Ventas({ d }: { d: DatosGerencia }) {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={semana}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid {...REJILLA} />
                 <XAxis
+                  {...EJE}
                   dataKey="dia"
-                  tick={{ fontSize: 11 }}
+                  tick={TEXTO_EJE}
                   tickFormatter={(v: string) => v.slice(0, 3)}
                 />
                 <YAxis
-                  tick={{ fontSize: 11 }}
+                  {...EJE}
+                  tick={TEXTO_EJE}
                   tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
                 />
                 <Tooltip
+                  {...BOCADILLO}
                   formatter={(v: number, nombre) => [
                     eur(v),
                     nombre === "vendido" ? "Vendido" : nombre,
                   ]}
-                  contentStyle={estiloTooltip}
                 />
                 <Bar dataKey="vendido" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
               </BarChart>

@@ -22,6 +22,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
@@ -250,21 +251,14 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <CardContent className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={grafica.datos}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="tramo" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+              <CartesianGrid {...REJILLA} />
+              <XAxis {...EJE} dataKey="tramo" tick={TEXTO_EJE} interval="preserveStartEnd" />
               <YAxis
-                tick={{ fontSize: 11 }}
+                {...EJE}
+                tick={TEXTO_EJE}
                 tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
               />
-              <Tooltip
-                formatter={(v: number) => eur(v)}
-                labelStyle={{ color: "var(--color-foreground)" }}
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                }}
-              />
+              <Tooltip {...BOCADILLO} formatter={(v: number) => eur(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="Vendido" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Cobrado" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
