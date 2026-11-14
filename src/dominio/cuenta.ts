@@ -241,6 +241,36 @@ export function concepto(clave: ClaveConcepto): Concepto {
   return CONCEPTOS.find((c) => c.clave === clave)!;
 }
 
+/**
+ * Los datos de la cuenta que no son dinero, con su nombre y su definición:
+ * los mismos en todas las pantallas (Inicio, la Cuenta de resultados, el
+ * resumen y la facturación de cada tienda, Gerencia).
+ */
+export type ClaveDato = "pedidos" | "metros" | "metros_uv" | "ticket_medio" | "cancelados";
+
+export const DATOS: Record<ClaveDato, { nombre: string; definicion: string }> = {
+  pedidos: {
+    nombre: "Pedidos",
+    definicion: "Cuántos pedidos cuentan: sin cancelados ni los de la web sin pagar.",
+  },
+  metros: {
+    nombre: "Metros de DTF",
+    definicion: "Metros de DTF impresos y vendidos.",
+  },
+  metros_uv: {
+    nombre: "Metros de DTF UV",
+    definicion: "Metros de DTF UV vendidos: aparte, no se suman a los de DTF.",
+  },
+  ticket_medio: {
+    nombre: "Ticket medio",
+    definicion: "Lo que se vende de media en cada pedido, sin IVA.",
+  },
+  cancelados: {
+    nombre: "Cancelados",
+    definicion: "Pedidos cancelados: no cuentan en ninguna otra cifra.",
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Las cifras
 // ---------------------------------------------------------------------------
@@ -307,7 +337,12 @@ export type EstructuraCuenta = {
 
 export type DocumentadoCuenta = {
   pedidos: ReadonlySet<string>;
+  /** Lo facturado sin pedido, sin IVA (grupos.ts, importesSinPedido). */
   facturadoSinPedido: number;
+  /** Su IVA: se suma a «IVA» para que la cascada cuadre. */
+  ivaSinPedido: number;
+  /** Su total con IVA: se suma a «Ventas con IVA». */
+  totalSinPedido: number;
 };
 
 export type EntradaCuenta = {
@@ -419,12 +454,14 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
   const ventas = ventasQueCuentan(e.ventas);
 
   // 1-4. Las ventas del periodo, enteras: lo devuelto va en su propio día (5).
-  const conIva = ventas.reduce((s, v) => s + num(v.total), 0);
-  const iva = ventas.reduce((s, v) => s + num(v.iva), 0);
+  // Las facturas sin pedido (manuales) también son venta: con su IVA y su
+  // total, para que «Ventas con IVA» − «IVA» − «Portes» dé «Ventas».
+  const sinPedido = e.documentado?.facturadoSinPedido ?? 0;
+  const conIva =
+    ventas.reduce((s, v) => s + num(v.total), 0) + (e.documentado?.totalSinPedido ?? 0);
+  const iva = ventas.reduce((s, v) => s + num(v.iva), 0) + (e.documentado?.ivaSinPedido ?? 0);
   const portes = ventas.reduce((s, v) => s + num(v.envio), 0);
   const base = ventas.reduce((s, v) => s + baseConEnvio(v), 0);
-  // Las facturas sin pedido (manuales) también son venta.
-  const sinPedido = e.documentado?.facturadoSinPedido ?? 0;
   const ventasSinPortes = base - portes + sinPedido;
 
   // 5-6. Las devoluciones, por el día del reembolso.
@@ -442,6 +479,19 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
   const produccion =
     costeProduccion(ventas, e.costeMetroActual, e.costeUvActual ?? COSTE_UV_POR_DEFECTO) +
     ventas.reduce((s, v) => s + num(v.coste_textil), 0);
+  // Sin coste por metro en Ajustes (0), los pedidos de DTF sin coste congelado
+  // irían a coste cero: el margen saldría inflado y como exacto.
+  const conMetrosDtf = ventas.filter((v) => num(v.metros_total) > 0);
+  const sinCosteMetro =
+    num(e.costeMetroActual) > 0
+      ? 0
+      : conMetrosDtf.filter((v) => v.coste_metro_snapshot == null || v.coste_metro_snapshot === "")
+          .length;
+  const produccionDesconocida = sinCosteMetro > 0 && sinCosteMetro === conMetrosDtf.length;
+  const notaSinCosteMetro =
+    sinCosteMetro > 0
+      ? `Sin coste por metro en Ajustes: ${sinCosteMetro} ${sinCosteMetro === 1 ? "pedido va" : "pedidos van"} sin coste.`
+      : undefined;
 
   // 8. Envíos: lo cobrado menos lo que cobra la agencia.
   let costeEnvios = 0;
@@ -499,9 +549,30 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
     }
   }
 
+  // Sin coste por metro: lo que sale del margen no se sabe (ningún pedido lo
+  // tiene congelado) o va estimado (algunos sí).
+  if (notaSinCosteMetro && e.estructura) {
+    if (produccionDesconocida) {
+      bai = sinDato(notaSinCosteMetro);
+      sociedades = sinDato(notaSinCosteMetro);
+      neto = sinDato(notaSinCosteMetro);
+    } else {
+      const marcar = (c: Cifra): Cifra =>
+        c.valor === null ? c : { ...c, estimado: true, nota: c.nota ?? notaSinCosteMetro };
+      bai = marcar(bai);
+      sociedades = marcar(sociedades);
+      neto = marcar(neto);
+    }
+  }
+
   const dinero = (v: number | null | undefined, falta: string): Cifra =>
     v == null ? sinDato(falta) : cifra(v);
 
+  const notaTextil =
+    textilSinCoste > 0
+      ? `${textilSinCoste} ${textilSinCoste === 1 ? "pedido textil" : "pedidos textil"} sin la ropa sacada del almacén: van sin coste.`
+      : undefined;
+  const notaProduccion = [notaSinCosteMetro, notaTextil].filter(Boolean).join(" ");
   const valorNetas = redondear(netas);
   const valorMargen = redondear(margen);
   return {
@@ -511,15 +582,9 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
     ventas: cifra(ventasSinPortes),
     devoluciones: cifra(devuelto),
     ventas_netas: cifra(netas),
-    coste_produccion: cifra(
-      produccion,
-      textilSinCoste > 0
-        ? {
-            estimado: true,
-            nota: `${textilSinCoste} ${textilSinCoste === 1 ? "pedido textil" : "pedidos textil"} sin la ropa sacada del almacén: van sin coste.`,
-          }
-        : {},
-    ),
+    coste_produccion: produccionDesconocida
+      ? sinDato(notaSinCosteMetro!)
+      : cifra(produccion, notaProduccion ? { estimado: true, nota: notaProduccion } : {}),
     resultado_portes: cifra(
       resultadoPortes,
       enviosEstimados > 0
@@ -529,12 +594,14 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
           }
         : {},
     ),
-    margen_bruto: cifra(
-      margen,
-      textilSinCoste > 0 || enviosEstimados > 0
-        ? { estimado: true, nota: "Lleva costes estimados: mira producción y envíos." }
-        : {},
-    ),
+    margen_bruto: produccionDesconocida
+      ? sinDato(notaSinCosteMetro!)
+      : cifra(
+          margen,
+          notaProduccion || enviosEstimados > 0
+            ? { estimado: true, nota: "Lleva costes estimados: mira producción y envíos." }
+            : {},
+        ),
     gastos_estructura: estructura,
     beneficio_antes_impuestos: bai,
     sociedades,
@@ -551,7 +618,10 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
       ventas.reduce((s, v) => s + num(v.metros_uv), 0),
       3,
     ),
-    margenPct: valorNetas > 0 ? redondear((valorMargen / valorNetas) * 100, 1) : null,
+    margenPct:
+      valorNetas > 0 && !produccionDesconocida
+        ? redondear((valorMargen / valorNetas) * 100, 1)
+        : null,
     ticketMedio: ventas.length > 0 ? redondear(netas / ventas.length) : null,
     cancelados: e.ventas.filter((v) => v.estado === ESTADO_CANCELADO).length,
   };
@@ -573,7 +643,7 @@ export function beneficioDocumentado(
     ventas: e.ventas.filter((v) => !!v.id && d.pedidos.has(v.id)),
     devoluciones: e.devoluciones.filter((x) => !!x.pedido_id && d.pedidos.has(x.pedido_id)),
     estructura: null,
-    documentado: { pedidos: d.pedidos, facturadoSinPedido: d.facturadoSinPedido },
+    documentado: d,
     dinero: undefined,
   });
   return redondear(
@@ -584,27 +654,6 @@ export function beneficioDocumentado(
 // ---------------------------------------------------------------------------
 // El bloque de dinero
 // ---------------------------------------------------------------------------
-
-/**
- * Lo que nos deben hoy: de cada pedido que cuenta, el total menos lo cobrado
- * y lo devuelto, nunca por debajo de cero (un pedido cobrado de más no
- * compensa lo que debe otro). Una sola definición para toda la aplicación.
- */
-export function pendienteDeCobro(
-  pedidos: readonly {
-    estado: string;
-    canal?: string;
-    total: Numerico;
-    devuelto?: Numerico;
-    cobrado: Numerico;
-  }[],
-): number {
-  return redondear(
-    pedidos
-      .filter((p) => p.estado !== ESTADO_CANCELADO)
-      .reduce((s, p) => s + Math.max(0, num(p.total) - num(p.devuelto) - num(p.cobrado)), 0),
-  );
-}
 
 /**
  * Lo que falta por cobrar de una factura de Cobros pendientes: su total menos
@@ -624,28 +673,25 @@ export function pendienteDeFactura(f: {
   return redondear(Math.min(total, Math.max(0, total - num(f.cobrado))));
 }
 
-/** Lo justo de una factura o ticket para sumar lo facturado. */
+/** Lo justo de una factura o ticket para contar lo facturado. */
 export type DocumentoFacturado = {
   id: string;
-  total: Numerico;
   estado: string | null;
   /** El ticket que esta factura canjea, si lo canjea. */
   sustituye_a_id?: string | null;
 };
 
 /**
- * Lo facturado con IVA: facturas, tickets y rectificativas (que restan), sin
- * borradores ni anuladas. Un ticket canjeado por una factura vigente cuenta
- * una vez, la de la factura: antes se sumaban los dos.
+ * Las facturas, tickets y rectificativas vigentes: sin borradores ni
+ * anuladas, y un ticket canjeado por una factura vigente una sola vez (la
+ * factura). Para contarlos sin contar dos veces el mismo ingreso.
  */
-export function totalFacturado(docs: readonly DocumentoFacturado[]): number {
+export function documentosVigentes<D extends DocumentoFacturado>(docs: readonly D[]): D[] {
   const vale = (d: DocumentoFacturado) => d.estado !== "anulada" && d.estado !== "borrador";
   const canjeados = new Set(
     docs.filter((d) => vale(d) && d.sustituye_a_id).map((d) => d.sustituye_a_id as string),
   );
-  return redondear(
-    docs.filter((d) => vale(d) && !canjeados.has(d.id)).reduce((s, d) => s + num(d.total), 0),
-  );
+  return docs.filter((d) => vale(d) && !canjeados.has(d.id));
 }
 
 /**
@@ -666,6 +712,23 @@ export function pendienteDeCobroHoy(
       .filter((p) => !esWebSinPagar(p))
       .reduce((s, p) => s + num(p.pendiente), 0),
   );
+}
+
+/**
+ * Cuántos pedidos tienen hoy algo por cobrar, con los mismos que suma
+ * `pendienteDeCobroHoy`: el número de Inicio («Pedidos por cobrar»); el
+ * importe es la cifra «Pendiente de cobro».
+ */
+export function pedidosPorCobrarHoy(
+  pendientes: readonly PedidoPendiente[],
+  f: FiltroCuenta,
+  soloUv: ReadonlySet<string> = new Set(),
+): number {
+  const deTienda =
+    f.tienda === TODAS ? pendientes : pendientes.filter((p) => tiendaDelPendiente(p) === f.tienda);
+  return pendientesDeLinea(deTienda, f.linea, soloUv).filter(
+    (p) => !esWebSinPagar(p) && num(p.pendiente) > 0,
+  ).length;
 }
 
 /** Un pedido de la web que el cliente aún no ha pagado: no es venta. */
@@ -811,6 +874,9 @@ export type ColumnaCuenta = {
  * son de una tienda ni de una línea. Por mes, la de cada mes si la entrada
  * la trae (`estructuraDe` da la de un mes).
  */
+/** La columna de lo facturado sin pedido al separar por tienda o por línea. */
+export const CLAVE_SIN_PEDIDO = "sin-pedido";
+
 export function separarCuenta(
   e: EntradaCuenta,
   por: SepararPor,
@@ -828,11 +894,29 @@ export function separarCuenta(
     documentado: undefined,
     dinero: undefined,
   };
+  // Lo facturado sin pedido (facturas a mano) no es de ninguna tienda ni
+  // línea: va en su columna, para que las columnas sumen el total.
+  const d = e.documentado;
+  const sinPedido: ColumnaCuenta[] =
+    d && (d.facturadoSinPedido !== 0 || d.totalSinPedido !== 0)
+      ? [
+          {
+            clave: CLAVE_SIN_PEDIDO,
+            titulo: "Sin pedido",
+            cuenta: calcularCuenta({
+              ...sinEstructura,
+              ventas: [],
+              devoluciones: [],
+              documentado: d,
+            }),
+          },
+        ]
+      : [];
   if (por === "tienda") {
     const tiendas = [...(opciones.tiendas ?? []), TIENDA_TEXTIL];
     const ids = new Set(e.ventas.map((v) => v.tienda_id));
     for (const d of e.devoluciones) if (d.tienda_id) ids.add(d.tienda_id);
-    return tiendas
+    const deTiendas = tiendas
       .filter((t) => ids.has(t.id))
       .map((t) => {
         const f: FiltroCuenta = { tienda: t.id, linea: "todo" };
@@ -846,6 +930,7 @@ export function separarCuenta(
           }),
         };
       });
+    return [...deTiendas, ...sinPedido];
   }
   if (por === "linea") {
     const columnas: ColumnaCuenta[] = (["dtf", "uv"] as const).map((l) => ({
@@ -865,7 +950,7 @@ export function separarCuenta(
         cuenta: calcularCuenta({ ...sinEstructura, ventas: textil, devoluciones: [] }),
       });
     }
-    return columnas;
+    return [...columnas, ...sinPedido];
   }
   if (por === "mes" && opciones.rango) {
     return mesesDelRango(opciones.rango).map((m) => {

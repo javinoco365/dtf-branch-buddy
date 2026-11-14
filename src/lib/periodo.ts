@@ -385,18 +385,23 @@ export function useCosteMetroHoy({ activo = true }: OpcionesLectura = {}) {
     queryKey: ["empresa_costes"],
     enabled: activo,
     queryFn: async () => {
-      const { data } = await tabla(supabase, "empresas")
+      const { data, error } = await tabla(supabase, "empresas")
         .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
         .eq("activa", true)
         .order("created_at")
         .limit(1)
         .maybeSingle();
+      // Sin poder leerlo, el coste no es 0: es desconocido. Un 0 inventado
+      // daría un margen inflado y como si fuera exacto.
+      if (error) throw error;
       return data;
     },
   });
   return {
+    /** 0 si no está en Ajustes: la cuenta lo trata como desconocido. */
     costeMetro: consulta.data === undefined ? undefined : costeMetroDeEmpresa(consulta.data),
     isPending: consulta.isPending,
+    error: consulta.error,
   };
 }
 

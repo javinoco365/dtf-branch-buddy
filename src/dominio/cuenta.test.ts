@@ -15,9 +15,9 @@ import {
   estructuraDelPeriodo,
   mesesDelRango,
   pctIva,
-  pendienteDeCobro,
+  pedidosPorCobrarHoy,
   pendienteDeFactura,
-  totalFacturado,
+  documentosVigentes,
   pendienteDeCobroHoy,
   separarCuenta,
   sobreVentasNetas,
@@ -66,7 +66,12 @@ const entrada = (e: Partial<EntradaCuenta> = {}): EntradaCuenta => ({
     conNominas: true,
   },
   tipoIs: 25,
-  documentado: { pedidos: new Set(["p1"]), facturadoSinPedido: 0 },
+  documentado: {
+    pedidos: new Set(["p1"]),
+    facturadoSinPedido: 0,
+    ivaSinPedido: 0,
+    totalSinPedido: 0,
+  },
   ...e,
 });
 
@@ -246,9 +251,24 @@ describe("la cascada", () => {
 
   it("lo facturado sin pedido es venta y cuenta para el impuesto", () => {
     const c = calcularCuenta(
-      entrada({ documentado: { pedidos: new Set(["p1"]), facturadoSinPedido: 40 } }),
+      entrada({
+        documentado: {
+          pedidos: new Set(["p1"]),
+          facturadoSinPedido: 40,
+          ivaSinPedido: 8.4,
+          totalSinPedido: 48.4,
+        },
+      }),
     );
     expect(c.ventas.valor).toBe(140);
+    // La cascada cuadra: ventas con IVA − IVA − portes = ventas.
+    expect(c.ventas_con_iva.valor).toBe(181.5);
+    expect(c.iva.valor).toBe(31.5);
+    expect(
+      redondear(
+        (c.ventas_con_iva.valor ?? 0) - (c.iva.valor ?? 0) - (c.portes_cobrados.valor ?? 0),
+      ),
+    ).toBe(c.ventas.valor);
     expect(c.beneficio_antes_impuestos.valor).toBe(80);
     expect(c.sociedades.valor).toBe(20);
   });
@@ -258,6 +278,31 @@ describe("la cascada", () => {
     expect(c.beneficio_antes_impuestos.valor).toBe(40);
     expect(c.sociedades.valor).toBeNull();
     expect(c.sociedades.falta).toMatch(/factura o ticket/);
+  });
+
+  it("sin coste por metro en Ajustes y sin coste congelado, la producción no se sabe", () => {
+    const c = calcularCuenta(
+      entrada({ costeMetroActual: 0, ventas: [venta({ coste_metro_snapshot: null })] }),
+    );
+    expect(c.coste_produccion.valor).toBeNull();
+    expect(c.coste_produccion.falta).toBe("Sin coste por metro en Ajustes: 1 pedido va sin coste.");
+    expect(c.margen_bruto.valor).toBeNull();
+    expect(c.beneficio_neto.valor).toBeNull();
+    expect(c.margenPct).toBeNull();
+    expect(c.ventas.valor).toBe(100);
+  });
+
+  it("sin coste por metro pero con algunos congelados, va estimado y lo dice", () => {
+    const c = calcularCuenta(
+      entrada({
+        costeMetroActual: 0,
+        ventas: [venta(), venta({ id: "p2", coste_metro_snapshot: null })],
+      }),
+    );
+    expect(c.coste_produccion).toMatchObject({ valor: 20, estimado: true });
+    expect(c.coste_produccion.nota).toMatch(/Sin coste por metro en Ajustes: 1 pedido va/);
+    expect(c.margen_bruto.estimado).toBe(true);
+    expect(c.beneficio_antes_impuestos.estimado).toBe(true);
   });
 
   it("sin ventas, ni margen % ni ticket medio", () => {
@@ -366,19 +411,6 @@ describe("por línea: las partes vacías no cuentan", () => {
   });
 });
 
-describe("pendiente de cobro", () => {
-  it("total − cobrado − devuelto por pedido, sin bajar de cero ni contar cancelados", () => {
-    expect(
-      pendienteDeCobro([
-        { estado: "entregado", total: 100, cobrado: 40 },
-        { estado: "entregado", total: 100, cobrado: 130 },
-        { estado: "entregado", total: 100, devuelto: 100, cobrado: 0 },
-        { estado: "cancelado", total: 100, cobrado: 0 },
-      ]),
-    ).toBe(60);
-  });
-});
-
 describe("pendiente de una factura", () => {
   it("resta lo cobrado de su pedido y no cuenta borradores", () => {
     expect(pendienteDeFactura({ estado: "emitida", total: 100, cobrado: 0 })).toBe(100);
@@ -388,26 +420,26 @@ describe("pendiente de una factura", () => {
   });
 });
 
-describe("lo facturado", () => {
+describe("los documentos vigentes", () => {
   it("un ticket canjeado cuenta una vez; sin borradores ni anuladas", () => {
     expect(
-      totalFacturado([
-        { id: "t", total: 100, estado: "emitida" },
-        { id: "f", total: 100, estado: "emitida", sustituye_a_id: "t" },
-        { id: "b", total: 50, estado: "borrador" },
-        { id: "a", total: 70, estado: "anulada" },
-        { id: "r", total: -20, estado: "emitida" },
-      ]),
-    ).toBe(80);
+      documentosVigentes([
+        { id: "t", estado: "emitida" },
+        { id: "f", estado: "emitida", sustituye_a_id: "t" },
+        { id: "b", estado: "borrador" },
+        { id: "a", estado: "anulada" },
+        { id: "r", estado: "emitida" },
+      ]).map((d) => d.id),
+    ).toEqual(["f", "r"]);
   });
 
   it("si la factura del canje se anula, vuelve a contar el ticket", () => {
     expect(
-      totalFacturado([
-        { id: "t", total: 100, estado: "emitida" },
-        { id: "f", total: 100, estado: "anulada", sustituye_a_id: "t" },
-      ]),
-    ).toBe(100);
+      documentosVigentes([
+        { id: "t", estado: "emitida" },
+        { id: "f", estado: "anulada", sustituye_a_id: "t" },
+      ]).map((d) => d.id),
+    ).toEqual(["t"]);
   });
 });
 
@@ -520,6 +552,17 @@ describe("dinero", () => {
     expect(pendienteDeCobroHoy(lista, { tienda: "t1", linea: "dtf" })).toBe(100);
   });
 
+  it("los pedidos por cobrar son los mismos que suma lo pendiente", () => {
+    const lista = [
+      pendiente({}),
+      pendiente({ id: "w", origen: "woocommerce", estado: "pendiente", pendiente: 40 }),
+      pendiente({ id: "c", pendiente: 0 }),
+      pendiente({ id: "x", tipo: "textil", tienda_id: null, origen: "textil", pendiente: 20 }),
+    ];
+    expect(pedidosPorCobrarHoy(lista, FILTRO_CUENTA_TODO)).toBe(2);
+    expect(pedidosPorCobrarHoy(lista, { tienda: "t1", linea: "todo" })).toBe(1);
+  });
+
   it("lo cobrado, por tienda y por línea", () => {
     const cobro = (c: Partial<CobroConsolidado>) =>
       ({
@@ -567,6 +610,30 @@ describe("separar en columnas", () => {
     const cols = separarCuenta(entrada({ ventas: [venta(), textil] }), "linea");
     expect(cols.map((c) => c.clave)).toEqual(["dtf", "uv", "textil"]);
     expect(cols[2].cuenta.pedidos).toBe(1);
+  });
+
+  it("lo facturado sin pedido va en su columna y las columnas suman el total", () => {
+    const documentado = {
+      pedidos: new Set(["p1"]),
+      facturadoSinPedido: 40,
+      ivaSinPedido: 8.4,
+      totalSinPedido: 48.4,
+    };
+    const e = entrada({ ventas: [venta(), venta({ tienda_id: "t2" })], documentado });
+    const todo = calcularCuenta(e);
+    for (const por of ["tienda", "linea"] as const) {
+      const cols = separarCuenta(e, por, {
+        tiendas: [
+          { id: "t1", nombre: "Uno" },
+          { id: "t2", nombre: "Dos" },
+        ],
+      });
+      expect(cols.at(-1)?.titulo).toBe("Sin pedido");
+      for (const k of ["ventas_con_iva", "iva", "ventas", "margen_bruto"] as const) {
+        const suma = redondear(cols.reduce((s, c) => s + (c.cuenta[k].valor ?? 0), 0));
+        expect([por, k, suma]).toEqual([por, k, todo[k].valor]);
+      }
+    }
   });
 
   it("por mes: cada venta y cada devolución en su mes, con la estructura de cada mes", () => {

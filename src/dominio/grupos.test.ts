@@ -5,6 +5,7 @@ import {
   facturadoSinPedido,
   gastosDelGrupo,
   gastosFijosPorGrupo,
+  importesSinPedido,
   pedidosDocumentados,
   pendienteDocumentar,
   resultadosPorGrupo,
@@ -108,6 +109,19 @@ describe("facturado sin pedido", () => {
         f("m2", 30),
       ]),
     ).toBe(30);
+  });
+
+  it("con su IVA y su total, con la misma regla", () => {
+    const conIva = (id: string, base: number, extra: Partial<DocumentoFiscal> = {}) =>
+      f(id, base, { iva: base * 0.21, total: base * 1.21, ...extra });
+    expect(
+      importesSinPedido([
+        conIva("m1", 200),
+        conIva("p1", 100, { pedido_id: "p" }),
+        conIva("r1", -200, { tipo: "rectificativa", rectifica_a_id: "m1" }),
+        conIva("m2", 100),
+      ]),
+    ).toEqual({ base: 100, iva: 21, total: 121 });
   });
 
   describe("un ticket sin pedido canjeado por factura cuenta una vez", () => {

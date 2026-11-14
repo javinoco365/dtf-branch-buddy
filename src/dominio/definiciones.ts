@@ -7,7 +7,7 @@
  * mismo commit.
  */
 
-import { concepto, type ClaveConcepto } from "./cuenta";
+import { concepto, DATOS, type ClaveConcepto, type ClaveDato } from "./cuenta";
 
 export type Definicion = {
   /** Qué significa, en una frase. */
@@ -535,11 +535,12 @@ const CUENTA_PEDIDOS =
 
 const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
   ventas_con_iva: {
-    calculo: "Suma del total de los pedidos, con IVA y envío. Lo devuelto va aparte, en su día.",
+    calculo:
+      "Suma del total de los pedidos, con IVA y envío, más lo facturado sin pedido (facturas hechas a mano). Lo devuelto va aparte, en su día.",
     fuente: CUENTA_PEDIDOS,
   },
   iva: {
-    calculo: "Suma del IVA de los pedidos.",
+    calculo: "Suma del IVA de los pedidos y de lo facturado sin pedido.",
     fuente: CUENTA_PEDIDOS,
   },
   portes_cobrados: {
@@ -612,4 +613,33 @@ const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
 /** El ⓘ de una cifra de la cuenta: su definición del diccionario, con su cálculo. */
 export function definicionDeConcepto(clave: ClaveConcepto): Definicion {
   return { que: concepto(clave).definicion, ...CALCULO_CUENTA[clave] };
+}
+
+const CALCULO_DATO: Record<ClaveDato, Omit<Definicion, "que">> = {
+  pedidos: {
+    calculo: "Número de pedidos que cuentan en la cuenta de resultados.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  metros: {
+    calculo:
+      "Suma de los metros de DTF de los pedidos que cuentan. Las devoluciones no los restan: lo impreso, impreso está.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  metros_uv: {
+    calculo: "Suma de los metros de DTF UV de los pedidos que cuentan.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  ticket_medio: {
+    calculo: "Ventas netas ÷ pedidos.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  cancelados: {
+    calculo: "Número de pedidos en estado cancelado con fecha de pedido en el periodo.",
+    fuente: CUENTA_PEDIDOS,
+  },
+};
+
+/** El ⓘ de un dato de la cuenta que no es dinero (DATOS de cuenta.ts). */
+export function definicionDeDato(clave: ClaveDato): Definicion {
+  return { que: DATOS[clave].definicion, ...CALCULO_DATO[clave] };
 }

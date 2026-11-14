@@ -166,26 +166,46 @@ export function facturadoSinPedido(
   docs: readonly DocumentoFiscal[],
   referencias: readonly DocumentoFiscal[] = [],
 ): number {
+  return importesSinPedido(docs, referencias).base;
+}
+
+/**
+ * Lo facturado sin pedido con su IVA: la base (que es `facturadoSinPedido`),
+ * el IVA y el total, con la misma regla de canjes y rectificativas. La cuenta
+ * de resultados lo suma a «Ventas», a «IVA» y a «Ventas con IVA», para que la
+ * cascada cuadre.
+ */
+export function importesSinPedido(
+  docs: readonly DocumentoFiscal[],
+  referencias: readonly DocumentoFiscal[] = [],
+): { base: number; iva: number; total: number } {
   const sinPedido = new Set(
     [...referencias, ...docs]
       .filter((d) => d.tipo !== "rectificativa" && !d.pedido_id)
       .map((d) => d.id),
   );
   let base = 0;
+  let iva = 0;
+  let total = 0;
+  const sumar = (d: DocumentoFiscal, signo: number) => {
+    base += signo * num(d.base);
+    iva += signo * num(d.iva);
+    total += signo * num(d.total);
+  };
   for (const a of apuntesDeVenta(docs, referencias)) {
     const d = a.importes;
     if (a.motivo !== "documento") {
       // Lo del ticket canjeado: solo si el ticket no es de un pedido.
-      if (!d.pedido_id) base += a.signo * num(d.base);
+      if (!d.pedido_id) sumar(d, a.signo);
       continue;
     }
     if (d.tipo === "rectificativa") {
-      if (d.rectifica_a_id && sinPedido.has(d.rectifica_a_id)) base += num(d.base);
+      if (d.rectifica_a_id && sinPedido.has(d.rectifica_a_id)) sumar(d, 1);
       continue;
     }
-    if (!d.pedido_id) base += num(d.base);
+    if (!d.pedido_id) sumar(d, 1);
   }
-  return redondear(base);
+  return { base: redondear(base), iva: redondear(iva), total: redondear(total) };
 }
 
 export type ColumnaResultados = {

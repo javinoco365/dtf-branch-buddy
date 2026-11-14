@@ -10,7 +10,7 @@
  * se vuelve a pedir.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCobrosPeriodo,
@@ -41,6 +41,7 @@ import {
   pendienteDeCobroHoy,
   TODAS,
   ventasDelFiltro,
+  type ClaveConcepto,
   type Cuenta,
   type DevolucionCuenta,
   type DocumentadoCuenta,
@@ -55,8 +56,8 @@ import { costeAlmacenPeriodo } from "@/dominio/cuenta-almacen";
 import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { diaDeFecha, type Rango } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { facturadoSinPedido, pedidosDocumentados } from "@/dominio/grupos";
-import type { DocumentoDePedido } from "@/dominio/fiscal";
+import { importesSinPedido, pedidosDocumentados } from "@/dominio/grupos";
+import type { DocumentoDePedido, DocumentoFiscal } from "@/dominio/fiscal";
 
 export type OpcionesCuenta = {
   rango: RangoFechas;
@@ -89,9 +90,69 @@ export type LecturaCuenta = {
   error: Error | null;
   /** Vuelve a pedir lo que ha fallado. */
   reintentar: () => void;
+  /** Mientras se vuelve a pedir lo que falló: el botón no se pulsa dos veces. */
+  reintentando: boolean;
+  /**
+   * Cómo va cada cifra del bloque de dinero, que se lee aparte: si una falla,
+   * el resto de la cuenta se ve igual y esa dice que no se pudo leer.
+   */
+  estadoDinero: Record<ClaveDinero, EstadoCifra>;
   /** Son las del periodo anterior mientras llega el nuevo: hay que avisar. */
   deAntes: boolean;
 };
+
+/** Las cifras del bloque de dinero, que se leen cada una por su lado. */
+export type ClaveDinero = Extract<ClaveConcepto, "cobrado" | "pendiente_cobro" | "pendiente_pago">;
+
+/** Cómo va la lectura de una cifra: leyéndose, con error o leída. */
+export type EstadoCifra = { cargando: boolean; error: Error | null };
+
+const LISTA: EstadoCifra = { cargando: false, error: null };
+
+/** El estado de una consulta que hace falta (o no) para una cifra. */
+const estadoDe = (
+  activa: boolean,
+  q: { isPending: boolean; error: unknown; data?: unknown },
+): EstadoCifra =>
+  !activa
+    ? LISTA
+    : { cargando: q.data === undefined && !q.error, error: (q.error as Error | null) ?? null };
+
+type LecturaDocumentos = { data?: DocumentoDePedido[]; isError: boolean };
+type LecturaFiscal = {
+  data?: { documentos: DocumentoFiscal[]; referencias?: DocumentoFiscal[] };
+  isError: boolean;
+};
+
+/**
+ * Lo que tiene factura o ticket (en un rango, si se da). undefined: todavía
+ * se lee; null: no se puede saber (y el impuesto sale «—»).
+ */
+function documentado(
+  conGastos: boolean,
+  d: LecturaDocumentos,
+  f: LecturaFiscal,
+  r?: Rango,
+): DocumentadoCuenta | null | undefined {
+  if (!conGastos) return undefined;
+  if (d.isError || f.isError) return null;
+  if (!d.data || !f.data) return undefined;
+  const desde = r ? diaDeFecha(r.desde) : null;
+  const hasta = r ? diaDeFecha(r.hasta) : null;
+  const delRango = r
+    ? f.data.documentos.filter((x) => x.fecha >= desde! && x.fecha <= hasta!)
+    : f.data.documentos;
+  const sinPedido = importesSinPedido(delRango, [
+    ...(f.data.referencias ?? []),
+    ...f.data.documentos,
+  ]);
+  return {
+    pedidos: pedidosDocumentados(d.data),
+    facturadoSinPedido: sinPedido.base,
+    ivaSinPedido: sinPedido.iva,
+    totalSinPedido: sinPedido.total,
+  };
+}
 
 /** El rango vacío de las consultas que no hacen falta (no traen nada). */
 const vacio = (r: RangoFechas): RangoFechas => ({ desde: r.hasta, hasta: r.desde });
@@ -167,7 +228,7 @@ export function useCuentaResultados({
   const devolucionesPrevias = useDevolucionesPeriodo(rangoPrevio, tiendaLectura, {
     activo: !!previo,
   });
-  const { costeMetro } = useCosteMetroHoy();
+  const { costeMetro, error: errorCosteMetro } = useCosteMetroHoy();
   const ajustes = useAjustesGerencia();
   const compras = useComprasGerencia({ activo: conGastos });
   const movimientos = useMovimientosAlmacen({ activo: conGastos });
@@ -224,38 +285,18 @@ export function useCuentaResultados({
     [conGastos, listaGastos, almacenListo, movs, hoy],
   );
 
-  // undefined: todavía se lee; null: no se puede saber (y el impuesto sale «—»).
-  const documentado = (
-    d: { data?: DocumentoDePedido[]; isError: boolean },
-    f: {
-      data?: {
-        documentos: Parameters<typeof facturadoSinPedido>[0];
-        referencias: Parameters<typeof facturadoSinPedido>[1];
-      };
-      isError: boolean;
-    },
-    r?: Rango,
-  ): DocumentadoCuenta | null | undefined => {
-    if (!conGastos) return undefined;
-    if (d.isError || f.isError) return null;
-    if (!d.data || !f.data) return undefined;
-    const desde = r ? diaDeFecha(r.desde) : null;
-    const hasta = r ? diaDeFecha(r.hasta) : null;
-    const delRango = r
-      ? f.data.documentos.filter((x) => x.fecha >= desde! && x.fecha <= hasta!)
-      : f.data.documentos;
-    return {
-      pedidos: pedidosDocumentados(d.data),
-      facturadoSinPedido: facturadoSinPedido(delRango, [
-        ...(f.data.referencias ?? []),
-        ...f.data.documentos,
-      ]),
-    };
-  };
-  const docActual = documentado(docs, fiscal);
-  const docPrevio = documentado(docsPrevios, fiscalPrevio);
+  const docActual = useMemo(
+    () => documentado(conGastos, docs, fiscal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conGastos, docs.data, docs.isError, fiscal.data, fiscal.isError],
+  );
+  const docPrevio = useMemo(
+    () => documentado(conGastos, docsPrevios, fiscalPrevio),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conGastos, docsPrevios.data, docsPrevios.isError, fiscalPrevio.data, fiscalPrevio.isError],
+  );
   const documentadoDe = useCallback(
-    (r: Rango): DocumentadoCuenta | null => documentado(docs, fiscal, r) ?? null,
+    (r: Rango): DocumentadoCuenta | null => documentado(conGastos, docs, fiscal, r) ?? null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [conGastos, docs.data, docs.isError, fiscal.data, fiscal.isError],
   );
@@ -367,13 +408,38 @@ export function useCuentaResultados({
     (ventas.error as Error | null) ??
     (ventas.envios.error as Error | null) ??
     devoluciones.error ??
+    (errorCosteMetro as Error | null) ??
     (ajustes.error as Error | null) ??
     (conGastos ? (compras.error as Error | null) : null) ??
     (dinero && filtro.linea !== "todo" ? (soloUv.error as Error | null) : null) ??
     null;
+  const [reintentando, setReintentando] = useState(false);
   const reintentar = useCallback(() => {
-    void qc.refetchQueries({ predicate: (q) => q.state.status === "error" });
+    setReintentando(true);
+    void qc
+      .refetchQueries({ predicate: (q) => q.state.status === "error" })
+      .finally(() => setReintentando(false));
   }, [qc]);
+
+  const pagosActivos = dinero && conEstructura(filtro);
+  const estadoDinero = useMemo(
+    (): Record<ClaveDinero, EstadoCifra> => ({
+      cobrado: estadoDe(dinero, cobros),
+      pendiente_cobro: estadoDe(dinero, pendientes),
+      pendiente_pago: estadoDe(pagosActivos, pagos),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      dinero,
+      pagosActivos,
+      cobros.data,
+      cobros.error,
+      pendientes.data,
+      pendientes.error,
+      pagos.data,
+      pagos.error,
+    ],
+  );
 
   return {
     cuenta,
@@ -384,6 +450,8 @@ export function useCuentaResultados({
     cargando: !error && !cuenta,
     error,
     reintentar,
+    reintentando,
+    estadoDinero,
     deAntes: ventas.isPlaceholderData || devoluciones.isPlaceholderData,
   };
 }
