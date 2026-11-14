@@ -38,13 +38,27 @@ export type OrigenPendiente = "manual" | "web" | "textil";
 
 export const ORIGENES_PENDIENTE: readonly { valor: OrigenPendiente; etiqueta: string }[] = [
   { valor: "manual", etiqueta: "Pedido manual" },
-  { valor: "web", etiqueta: "Web (sin pagar)" },
+  { valor: "web", etiqueta: "Web" },
   { valor: "textil", etiqueta: "Textil" },
 ];
 
 export function origenPendiente(p: Pick<PedidoPendiente, "tipo" | "origen">): OrigenPendiente {
   if (p.tipo === "textil") return "textil";
   return p.origen === "woocommerce" ? "web" : "manual";
+}
+
+/**
+ * El origen de un pendiente tal como se lee en su fila: un pedido de la web
+ * con algo cobrado no está «sin pagar», está a medias. Solo la etiqueta: qué
+ * cuenta como venta lo decide su estado, no esto.
+ */
+export function etiquetaOrigenPendiente(
+  p: Pick<PedidoPendiente, "tipo" | "origen" | "cobrado">,
+): string {
+  const origen = origenPendiente(p);
+  if (origen === "textil") return "Textil";
+  if (origen === "manual") return "Pedido manual";
+  return num(p.cobrado) > 0 ? "Web (pago parcial)" : "Web (sin pagar)";
 }
 
 /** La tienda del pedido, o el identificador del textil: el mismo que en la Consolidada. */

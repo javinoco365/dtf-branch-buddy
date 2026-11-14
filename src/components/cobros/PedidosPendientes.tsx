@@ -38,6 +38,7 @@ import {
   filtrarPendientes,
   ordenarPendientes,
   origenPendiente,
+  etiquetaOrigenPendiente,
   resumirPendientes,
   tiendaDelPendiente,
   type FiltroPendientes,
@@ -48,8 +49,6 @@ import { ICONO } from "@/components/iconos";
 
 /** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
 const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
-
-const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_PENDIENTE.map((o) => [o.valor, o.etiqueta]));
 
 /**
  * Lo que queda por cobrar de los pedidos, de todas las tiendas y del textil.
@@ -254,7 +253,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                     )}
                     <TableCell>
                       <Badge variant={origen === "web" ? "default" : "outline"}>
-                        {ETIQUETA_ORIGEN[origen]}
+                        {etiquetaOrigenPendiente(p)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
