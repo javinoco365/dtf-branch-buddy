@@ -177,6 +177,22 @@ function InversionPage() {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Todavía no hay ninguna inversión anotada.
+                    {!sinSocios && (
+                      <SiPuede accion="escribir">
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditando(undefined);
+                              setAbierto(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+                          </Button>
+                        </div>
+                      </SiPuede>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -293,9 +309,16 @@ function InversionPage() {
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    {movimientos.length === 0
-                      ? "Sin apuntes."
-                      : "Ningún apunte cumple los filtros."}
+                    {movimientos.length === 0 ? (
+                      "Todavía no hay apuntes."
+                    ) : (
+                      <>
+                        Ningún apunte cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}

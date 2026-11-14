@@ -377,11 +377,34 @@ function StockPage() {
       {isLoading || data.length === 0 || curva.filas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            {isLoading
-              ? "Cargando…"
-              : data.length === 0
-                ? "Sin artículos."
-                : "Ninguna prenda coincide con los filtros."}
+            {isLoading ? (
+              "Cargando…"
+            ) : data.length === 0 ? (
+              <>
+                Todavía no hay artículos.
+                {escribir && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(null);
+                        setOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                Ninguna prenda cumple los filtros.
+                <div className="mt-2">
+                  <QuitarFiltros visible alQuitar={() => quitar()} />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

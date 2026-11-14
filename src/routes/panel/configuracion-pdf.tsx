@@ -381,6 +381,15 @@ function ConfiguracionPdfPage() {
           icono={Store}
           titulo="No hay tiendas"
           descripcion="Cuando haya alguna tienda o el textil personalizado, aquí podrás diseñar su PDF de presupuestos."
+          accion={
+            isAdmin ? (
+              <Button asChild>
+                <Link to="/panel/tiendas" search={{ nueva: 1 }}>
+                  Conectar una tienda
+                </Link>
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>

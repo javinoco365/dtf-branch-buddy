@@ -357,7 +357,33 @@ function PedidosPage() {
               {filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? "Sin pedidos." : "Ningún pedido cumple los filtros."}
+                    {data.length === 0 ? (
+                      <>
+                        Todavía no hay pedidos.
+                        {escribir && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditing(null);
+                                setLineasIniciales(null);
+                                setOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Ningún pedido cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}

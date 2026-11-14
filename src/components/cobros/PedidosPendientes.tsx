@@ -276,9 +276,18 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                 <TableRow>
                   <TableCell colSpan={columnas} className="text-center py-8 text-muted-foreground">
                     <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
-                    {hayFiltro
-                      ? "Ningún pedido pendiente cumple los filtros."
-                      : "Todo cobrado: no hay pedidos pendientes."}
+                    {hayFiltro ? (
+                      <>
+                        Ningún pedido pendiente cumple los filtros.
+                        <div className="mt-2">
+                          <Button variant="ghost" size="sm" onClick={() => quitar()}>
+                            <X className="h-4 w-4 mr-1" /> Quitar filtros
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      "Todo cobrado: no hay pedidos pendientes."
+                    )}
                   </TableCell>
                 </TableRow>
               )}

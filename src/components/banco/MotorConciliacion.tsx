@@ -597,9 +597,25 @@ export function MotorConciliacion({
                         colSpan={escribir ? 7 : 6}
                         className="py-8 text-center text-muted-foreground"
                       >
-                        {sinConciliar.length === 0
-                          ? "No hay movimientos sin conciliar."
-                          : "Ningún movimiento sin conciliar cumple el filtro."}
+                        {sinConciliar.length === 0 ? (
+                          "No hay movimientos sin conciliar."
+                        ) : (
+                          <>
+                            Ningún movimiento sin conciliar cumple los filtros.
+                            <div className="mt-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setFiltro(SIN_FILTRO);
+                                  setSoloIds(null);
+                                }}
+                              >
+                                Quitar filtros
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   )}

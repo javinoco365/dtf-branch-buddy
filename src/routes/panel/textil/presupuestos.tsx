@@ -353,9 +353,35 @@ function PresupuestosPage() {
               {filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    {data.length === 0
-                      ? "Sin presupuestos."
-                      : "Ningún presupuesto cumple los filtros."}
+                    {data.length === 0 ? (
+                      <>
+                        Todavía no hay presupuestos.
+                        {escribir && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditing(null);
+                                setLineasIniciales(null);
+                                setBorrador(null);
+                                setImagenesIa([]);
+                                setOpen(true);
+                              }}
+                            >
+                              Nuevo presupuesto
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Ningún presupuesto cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
