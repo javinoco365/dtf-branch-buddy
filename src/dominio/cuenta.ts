@@ -316,7 +316,12 @@ export type DevolucionCuenta = {
    * del DTF UV para repartir el reembolso por línea.
    */
   pedido: Pick<PedidoResumen, "subtotal" | "iva" | "envio" | "total"> &
-    Partial<Pick<PedidoResumen, "estado" | "metros_total" | "metros_uv" | "bruta_uv" | "iva_uv">>;
+    Partial<
+      Pick<
+        PedidoResumen,
+        "estado" | "metros_total" | "metros_uv" | "bruta_uv" | "iva_uv" | "origen"
+      >
+    >;
 };
 
 /** Gastos de estructura del periodo, sin IVA (ver grupos.ts, gastosFijosPorGrupo). */
@@ -1017,3 +1022,33 @@ export function costeMetroDeEmpresa(
 export const FILAS_RESULTADOS = CONCEPTOS.filter((c) => c.bloque === "resultados");
 /** Las filas del bloque de dinero. */
 export const FILAS_DINERO = CONCEPTOS.filter((c) => c.bloque === "dinero");
+
+/**
+ * La cuenta de un canal (web, manual o textil) y de un grupo (con factura o
+ * ticket, o sin documento), como los filtros de Gerencia. Las ventas, por su
+ * canal y por si su pedido tiene documento; las devoluciones, igual por su
+ * pedido (textil no tiene). Sin gastos ni impuesto: no son de un canal ni de
+ * un grupo.
+ */
+export function entradaDeCanalYGrupo(
+  e: EntradaCuenta,
+  canal: "todos" | "web" | "manual" | "textil",
+  grupo: "total" | "a" | "b",
+  documentados: ReadonlySet<string> | null,
+): EntradaCuenta {
+  if (canal === "todos" && grupo === "total") return e;
+  const delGrupo = (id: string | undefined | null) =>
+    grupo === "total" || (!!id && !!documentados?.has(id)) === (grupo === "a");
+  const canalDevolucion = (d: DevolucionCuenta) =>
+    d.pedido.origen === "woocommerce" ? "web" : "manual";
+  return {
+    ...e,
+    ventas: e.ventas.filter((v) => (canal === "todos" || v.canal === canal) && delGrupo(v.id)),
+    devoluciones: e.devoluciones.filter(
+      (d) => (canal === "todos" || canalDevolucion(d) === canal) && delGrupo(d.pedido_id),
+    ),
+    estructura: null,
+    documentado: null,
+    dinero: undefined,
+  };
+}

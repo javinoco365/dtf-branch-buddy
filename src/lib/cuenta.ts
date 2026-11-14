@@ -82,6 +82,8 @@ export type LecturaCuenta = {
   previa: Cuenta | null;
   /** Lo que ha entrado en la cuenta, ya filtrado: para separarla en columnas. */
   entrada: EntradaCuenta | null;
+  /** La del periodo anterior (nula sin comparar o mientras se lee). */
+  entradaPrevia: EntradaCuenta | null;
   /** La estructura de un rango (un mes del periodo), o nula si no se puede saber. */
   estructuraDe: (r: Rango) => EstructuraCuenta | null;
   /** Lo que tiene factura o ticket en un rango (un mes del periodo), para el impuesto. */
@@ -438,6 +440,7 @@ export function useCuentaResultados({
     cuenta,
     previa,
     entrada,
+    entradaPrevia,
     estructuraDe,
     documentadoDe,
     cargando: !error && !cuenta,

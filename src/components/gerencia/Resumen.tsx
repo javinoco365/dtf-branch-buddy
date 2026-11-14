@@ -16,7 +16,12 @@ import { Progress } from "@/components/ui/progress";
 import { TarjetaConcepto, TarjetaDato, TarjetaKpi } from "@/components/TarjetaKpi";
 import { useCuentaResultados } from "@/lib/cuenta";
 import { ErrorCarga } from "@/components/ErrorCarga";
-import { FILTRO_CUENTA_TODO, type Cifra } from "@/dominio/cuenta";
+import {
+  FILTRO_CUENTA_TODO,
+  calcularCuenta,
+  entradaDeCanalYGrupo,
+  type Cifra,
+} from "@/dominio/cuenta";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import {
   Table,
@@ -57,9 +62,6 @@ import {
   type DatosGerencia,
 } from "./destinos";
 import { Nota, VerDetalle } from "./comun";
-
-const MOTIVO_SIN_CUENTA =
-  "La cuenta de resultados no separa por canal ni por documentado: quita ese filtro para verla.";
 
 export function Resumen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -112,8 +114,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 
   // Las ventas netas y el margen bruto, con la cuenta de resultados
   // (cuenta.ts): el mismo nombre y la misma cuenta que en Inicio y en la
-  // Cuenta de resultados. La cuenta separa por tienda y por línea, no por
-  // canal ni por documentado: con esos filtros no se enseñan.
+  // Cuenta de resultados. Con filtro de canal o de grupo (A/B), la misma
+  // cuenta sobre esos pedidos (entradaDeCanalYGrupo).
   const cuentaAplica = d.filtro.canal === "todos" && d.grupo === "total";
   const filtroCuenta = useMemo(
     () => ({ tienda: d.filtro.tienda, linea: d.filtro.linea ?? "todo" }),
@@ -126,8 +128,28 @@ export function Resumen({ d }: { d: DatosGerencia }) {
     gastos: false,
     dinero: false,
   });
-  const delaCuenta = (cifra: Cifra | undefined): Cifra | null =>
-    !cuentaAplica ? { valor: null, falta: MOTIVO_SIN_CUENTA } : (cifra ?? null);
+  // Con filtro de canal o de grupo (A/B), la misma cuenta sobre esos pedidos.
+  const cuentaFiltrada = useMemo(
+    () =>
+      cuentaAplica || !lectura.entrada
+        ? null
+        : calcularCuenta(
+            entradaDeCanalYGrupo(lectura.entrada, d.filtro.canal, d.grupo, d.documentados),
+          ),
+    [cuentaAplica, lectura.entrada, d.filtro.canal, d.grupo, d.documentados],
+  );
+  const previaFiltrada = useMemo(
+    () =>
+      cuentaAplica || !lectura.entradaPrevia
+        ? null
+        : calcularCuenta(
+            entradaDeCanalYGrupo(lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentados),
+          ),
+    [cuentaAplica, lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentados],
+  );
+  const laCuenta = cuentaAplica ? lectura.cuenta : cuentaFiltrada;
+  const laPrevia = cuentaAplica ? lectura.previa : previaFiltrada;
+  const delaCuenta = (cifra: Cifra | undefined): Cifra | null => cifra ?? null;
   // Lo cobrado y lo pendiente, de Gerencia: con todos sus filtros.
   const cifraCobrado: Cifra | null = d.cobrosDisponibles
     ? { valor: cobrado }
@@ -184,7 +206,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         )}
       </section>
 
-      {lectura.error && cuentaAplica && (
+      {lectura.error && (
         <ErrorCarga
           error={lectura.error}
           onReintentar={lectura.reintentar}
@@ -195,8 +217,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaConcepto
           clave="ventas_netas"
-          cifra={delaCuenta(lectura.cuenta?.ventas_netas)}
-          previa={lectura.previa?.ventas_netas}
+          cifra={delaCuenta(laCuenta?.ventas_netas)}
+          previa={laPrevia?.ventas_netas}
           frente={frente}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
@@ -221,8 +243,8 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
         <TarjetaConcepto
           clave="margen_bruto"
-          cifra={delaCuenta(lectura.cuenta?.margen_bruto)}
-          previa={lectura.previa?.margen_bruto}
+          cifra={delaCuenta(laCuenta?.margen_bruto)}
+          previa={laPrevia?.margen_bruto}
           frente={frente}
         />
         <TarjetaDato
@@ -234,27 +256,12 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         />
         <TarjetaDato
           clave="ticket_medio"
-          valor={
-            !cuentaAplica
-              ? "—"
-              : !lectura.cuenta
-                ? "…"
-                : lectura.cuenta.ticketMedio === null
-                  ? "—"
-                  : eur(lectura.cuenta.ticketMedio)
-          }
+          valor={!laCuenta ? "…" : laCuenta.ticketMedio === null ? "—" : eur(laCuenta.ticketMedio)}
           frente={frente}
           delta={
-            cuentaAplica &&
-            lectura.cuenta?.ticketMedio != null &&
-            lectura.previa?.ticketMedio != null
-              ? variacion(lectura.cuenta.ticketMedio, lectura.previa.ticketMedio)
+            laCuenta?.ticketMedio != null && laPrevia?.ticketMedio != null
+              ? variacion(laCuenta.ticketMedio, laPrevia.ticketMedio)
               : null
-          }
-          pie={
-            !cuentaAplica ? (
-              <span className="text-muted-foreground">{MOTIVO_SIN_CUENTA}</span>
-            ) : undefined
           }
         />
         <TarjetaDato

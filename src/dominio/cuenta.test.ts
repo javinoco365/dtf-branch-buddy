@@ -25,6 +25,7 @@ import {
   ventasDeLaLinea,
   ventasDelFiltro,
   ventasQueCuentan,
+  entradaDeCanalYGrupo,
   type EntradaCuenta,
   type VentaCuenta,
 } from "./cuenta";
@@ -716,5 +717,47 @@ describe("para pintar", () => {
       "pendiente_cobro",
       "pendiente_pago",
     ]);
+  });
+});
+
+describe("canal y grupo (filtros de Gerencia)", () => {
+  const web = venta({ id: "w", canal: "web" });
+  const manual = venta({ id: "m", canal: "manual" });
+  const pedido = { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 };
+  const devWeb = {
+    fecha: "2026-11-20",
+    importe: 13.31,
+    pedido_id: "w",
+    pedido: { ...pedido, origen: "woocommerce" },
+  };
+  const devManual = {
+    fecha: "2026-11-20",
+    importe: 13.31,
+    pedido_id: "m",
+    pedido: { ...pedido, origen: "manual" },
+  };
+  const e = entrada({ ventas: [web, manual], devoluciones: [devWeb, devManual] });
+
+  it("por canal: sus ventas y sus devoluciones, sin gastos", () => {
+    const f = entradaDeCanalYGrupo(e, "web", "total", null);
+    expect(f.ventas.map((v) => v.id)).toEqual(["w"]);
+    expect(f.devoluciones).toHaveLength(1);
+    expect(calcularCuenta(f).gastos_estructura.valor).toBeNull();
+  });
+
+  it("por grupo: con documento (A) o sin él (B), y A + B = total", () => {
+    const docs = new Set(["w"]);
+    const a = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "a", docs));
+    const b = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "b", docs));
+    const t = calcularCuenta({ ...e, documentado: null });
+    expect((a.ventas_netas.valor ?? 0) + (b.ventas_netas.valor ?? 0)).toBeCloseTo(
+      t.ventas_netas.valor ?? 0,
+      6,
+    );
+    expect(a.pedidos).toBe(1);
+  });
+
+  it("sin filtros, la misma entrada", () => {
+    expect(entradaDeCanalYGrupo(e, "todos", "total", null)).toBe(e);
   });
 });

@@ -412,6 +412,7 @@ type FilaDevolucion = {
   tienda_id: string;
   pedido: {
     estado: string;
+    origen: string | null;
     subtotal: number | string | null;
     iva: number | string | null;
     envio: number | string | null;
@@ -453,7 +454,7 @@ export function useDevolucionesPeriodo(
         leerTodas<FilaDevolucion>((a, b) => {
           let consulta = tabla(supabase, "pedido_devoluciones")
             .select(
-              `id, fecha, importe, tienda_id, pedido_id, pedido:pedidos(estado, subtotal, iva, envio, total, metros_total${camposUv(uv)})`,
+              `id, fecha, importe, tienda_id, pedido_id, pedido:pedidos(estado, origen, subtotal, iva, envio, total, metros_total${camposUv(uv)})`,
             )
             .gte("fecha", tramo.desde)
             .lt("fecha", tramo.hasta);
