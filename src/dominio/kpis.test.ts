@@ -1,3 +1,4 @@
+import { numero } from "@/lib/format";
 import { describe, expect, it } from "vitest";
 import {
   baseConEnvio,
@@ -11,6 +12,7 @@ import {
   topPorMetros,
   variacion,
   formaVariacion,
+  textoVariacion,
   type PedidoResumen,
 } from "./kpis";
 
@@ -443,5 +445,15 @@ describe("formaVariacion", () => {
 
   it("justo por debajo de diez veces sigue en porcentaje", () => {
     expect(formaVariacion(899.9)).toEqual({ tipo: "porcentaje", valor: 899.9 });
+  });
+});
+
+describe("textoVariacion", () => {
+  it("en %, en veces o «—» sin datos", () => {
+    expect(textoVariacion(12.44, numero)).toBe("+12,4\u00A0%");
+    expect(textoVariacion(-3, numero)).toBe("−3,0\u00A0%");
+    expect(textoVariacion(6000, numero)).toBe("×61");
+    expect(textoVariacion(1050, numero)).toBe("×11,5");
+    expect(textoVariacion(null, numero)).toBe("—");
   });
 });

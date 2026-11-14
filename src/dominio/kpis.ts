@@ -254,6 +254,22 @@ export function formaVariacion(
 }
 
 /**
+ * La variación escrita: «+12,4 %», «−3,0 %» o «×61»; «—» sin datos para
+ * comparar. `formatear` es `numero` de lib/format.ts (aquí no se formatea).
+ */
+export function textoVariacion(
+  delta: number | null,
+  formatear: (n: number, decimales: number) => string,
+): string {
+  if (delta === null) return "—";
+  const forma = formaVariacion(delta);
+  if (forma.tipo === "veces") {
+    return `×${formatear(forma.valor, Number.isInteger(forma.valor) ? 0 : 1)}`;
+  }
+  return `${delta >= 0 ? "+" : "−"}${formatear(forma.valor, 1)}\u00A0%`;
+}
+
+/**
  * Total facturado por día, sobre el esqueleto de días que se le pase.
  *
  * Recibe los días en lugar de deducirlos para que los días sin ventas aparezcan
