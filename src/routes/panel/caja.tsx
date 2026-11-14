@@ -137,7 +137,7 @@ function CajaPage() {
   const sinCatalogos = cat && cat.conceptos.filter((c) => c.activo).length === 0;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Caja</h1>

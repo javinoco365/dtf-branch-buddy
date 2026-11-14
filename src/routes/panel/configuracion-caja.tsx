@@ -47,7 +47,7 @@ function ConfiguracionCajaPage() {
   const { data, isLoading } = useQuery({ queryKey: CLAVE, queryFn: () => listar() });
 
   return (
-    <div className="p-6 space-y-4 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
       <Link
         to="/panel/configuracion"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
