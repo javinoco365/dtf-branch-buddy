@@ -9,8 +9,11 @@ import { eur } from "@/lib/format";
 export function IngresosPorTramo({
   datos,
   etiquetaConColor = false,
+  nombre,
 }: {
   datos: { dia: string; total: number }[];
+  /** Cómo se llama la cifra en el recuadro al pasar por encima («Ventas netas»). */
+  nombre?: string;
   /** El texto de la etiqueta del recuadro con el color del tema (Dashboard). */
   etiquetaConColor?: boolean;
 }) {
@@ -29,7 +32,7 @@ export function IngresosPorTramo({
           formatter={(v: number) => eur(v)}
           labelStyle={etiquetaConColor ? { color: "var(--color-foreground)" } : undefined}
         />
-        <Bar dataKey="total" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="total" name={nombre} fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

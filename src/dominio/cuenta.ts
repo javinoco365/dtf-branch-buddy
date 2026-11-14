@@ -977,7 +977,10 @@ export function separarCuenta(
           }),
         };
       });
-    return [...deTiendas, ...sinPedido];
+    return cuadrarColumnas(
+      [...deTiendas, ...sinPedido],
+      calcularCuenta({ ...sinEstructura, sinPedido: e.sinPedido }),
+    );
   }
   if (por === "linea") {
     const columnas: ColumnaCuenta[] = (["dtf", "uv"] as const).map((l) => ({
@@ -997,7 +1000,10 @@ export function separarCuenta(
         cuenta: calcularCuenta({ ...sinEstructura, ventas: textil, devoluciones: [] }),
       });
     }
-    return [...columnas, ...sinPedido];
+    return cuadrarColumnas(
+      [...columnas, ...sinPedido],
+      calcularCuenta({ ...sinEstructura, sinPedido: e.sinPedido }),
+    );
   }
   if (por === "mes" && opciones.rango) {
     return mesesDelRango(opciones.rango).map((m) => {
@@ -1021,6 +1027,86 @@ export function separarCuenta(
     });
   }
   return [];
+}
+
+/**
+ * Unos importes ya redondeados a céntimos que deberían sumar `total` y, por
+ * los medios céntimos, se pasan o se quedan cortos en uno o dos: la
+ * diferencia va al de más valor (donde menos se nota), para que sumen justo.
+ * Una diferencia de más de un céntimo por importe no es de redondeo y no se
+ * toca: esconderla sería inventar.
+ */
+export function cuadrarConTotal(valores: readonly number[], total: number): number[] {
+  const salida = [...valores];
+  if (salida.length === 0) return salida;
+  const diferencia = redondear(total - salida.reduce((s, v) => s + v, 0));
+  if (diferencia === 0 || Math.abs(diferencia) > 0.01 * salida.length + 1e-9) return salida;
+  let mayor = 0;
+  for (let i = 1; i < salida.length; i++) {
+    if (Math.abs(salida[i]) > Math.abs(salida[mayor])) mayor = i;
+  }
+  salida[mayor] = redondear(salida[mayor] + diferencia);
+  return salida;
+}
+
+/**
+ * Las columnas de una cuenta separada, cuadradas con su total cifra a cifra
+ * (cuadrarConTotal): solo las cifras que tienen valor en todas las columnas y
+ * en el total.
+ */
+function cuadrarColumnas(columnas: ColumnaCuenta[], total: Cuenta): ColumnaCuenta[] {
+  if (columnas.length < 2) return columnas;
+  const ajustadas = columnas.map((c) => ({ ...c, cuenta: { ...c.cuenta } }));
+  for (const { clave } of FILAS_RESULTADOS) {
+    const t = total[clave].valor;
+    const valores = ajustadas.map((c) => c.cuenta[clave].valor);
+    if (t === null || valores.some((v) => v === null)) continue;
+    const cuadrados = cuadrarConTotal(valores as number[], t);
+    ajustadas.forEach((c, i) => {
+      if (cuadrados[i] !== valores[i]) {
+        c.cuenta[clave] = { ...c.cuenta[clave], valor: cuadrados[i] };
+      }
+    });
+  }
+  return ajustadas;
+}
+
+/**
+ * Las ventas netas de cada tramo de una gráfica (días o meses), con la regla
+ * de la Cuenta de resultados: sin IVA, tiendas y textil, sin los web sin
+ * pagar, cada venta en el día de su pedido y cada devolución en el suyo, con
+ * los filtros que ya trae la entrada. Lo facturado sin pedido, en el día de su
+ * factura si se da `sinPedidoDe`. Los tramos suman, al céntimo, las ventas
+ * netas de la entrada cuando la cubren entera.
+ */
+export function ventasNetasPorTramo(
+  e: EntradaCuenta,
+  tramos: readonly Rango[],
+  sinPedidoDe?: (r: Rango) => ImportesSinPedido | null,
+): number[] {
+  const base: EntradaCuenta = {
+    ...e,
+    estructura: null,
+    documentado: undefined,
+    dinero: undefined,
+  };
+  const valores = tramos.map((t) => {
+    const desde = diaDeFecha(t.desde);
+    const hasta = diaDeFecha(t.hasta);
+    const enTramo = (dia: string) => dia >= desde && dia <= hasta;
+    return (
+      calcularCuenta({
+        ...base,
+        sinPedido: sinPedidoDe ? sinPedidoDe(t) : undefined,
+        ventas: e.ventas.filter((v) => enTramo(diaDelPedido(v))),
+        devoluciones: e.devoluciones.filter((d) => enTramo(d.fecha.slice(0, 10))),
+      }).ventas_netas.valor ?? 0
+    );
+  });
+  // Por los medios céntimos, los tramos podrían no sumar el total por uno.
+  const total = calcularCuenta({ ...base, sinPedido: sinPedidoDe ? e.sinPedido : undefined })
+    .ventas_netas.valor;
+  return total === null ? valores : cuadrarConTotal(valores, total);
 }
 
 // ---------------------------------------------------------------------------

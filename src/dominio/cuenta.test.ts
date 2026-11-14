@@ -27,6 +27,8 @@ import {
   ventasQueCuentan,
   entradaDeCanalYGrupo,
   MOTIVO_IMPUESTO_POR_MES,
+  cuadrarConTotal,
+  ventasNetasPorTramo,
   sinPedidoDelFiltro,
   type EntradaCuenta,
   type VentaCuenta,
@@ -827,6 +829,75 @@ describe("separar por mes: el impuesto, solo del periodo entero", () => {
       expect(c.cuenta.sociedades).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
       expect(c.cuenta.beneficio_neto).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
       expect(c.cuenta.beneficio_antes_impuestos.valor).not.toBeNull();
+    }
+  });
+});
+
+describe("ventasNetasPorTramo (Inicio, «Ventas netas por día»)", () => {
+  const dias = Array.from({ length: 30 }, (_, i) => ({
+    desde: new Date(2026, 10, i + 1),
+    hasta: new Date(2026, 10, i + 1, 23, 59, 59, 999),
+  }));
+  const pedido = { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 };
+  const e = entrada({
+    ventas: [
+      venta({ id: "a", fecha_pedido: "2026-11-03T10:00:00.000Z" }),
+      // Medio céntimo: 33,335 de base.
+      venta({ id: "b", subtotal: 33.335, iva: 7, envio: 0, total: 40.335 }),
+      venta({ id: "c", subtotal: 33.335, iva: 7, envio: 0, total: 40.335 }),
+      venta({ id: "w", canal: "web", origen: "woocommerce", estado: "pendiente" }),
+      venta({ id: "x", estado: "cancelado" }),
+    ],
+    devoluciones: [{ fecha: "2026-11-20", importe: 13.31, pedido_id: "a", pedido }],
+    sinPedido: { base: 40, iva: 8.4, total: 48.4 },
+  });
+  const sinPedidoDe = (r: { desde: Date; hasta: Date }) =>
+    r.desde.getDate() === 12 ? { base: 40, iva: 8.4, total: 48.4 } : { base: 0, iva: 0, total: 0 };
+
+  it("la suma de los días son las ventas netas del periodo, al céntimo", () => {
+    const netas = ventasNetasPorTramo(e, dias, sinPedidoDe);
+    const total = calcularCuenta({ ...e, estructura: null }).ventas_netas.valor;
+    expect(redondear(netas.reduce((s, v) => s + v, 0))).toBe(total);
+  });
+
+  it("cada cosa en su día: la venta en el de su pedido, la devolución y lo sin pedido en el suyo", () => {
+    const netas = ventasNetasPorTramo(e, dias, sinPedidoDe);
+    expect(netas[2]).toBe(100); // 3 de noviembre: el pedido «a», sin IVA ni portes.
+    expect(netas[11]).toBe(40); // 12: la factura sin pedido.
+    expect(netas[19]).toBe(-11); // 20: la devolución, sin IVA (13,31 × 110 ÷ 133,1).
+    // Ni el web sin pagar ni el cancelado (5 de noviembre) cuentan.
+    expect(netas[4]).toBeCloseTo(66.67, 2);
+  });
+});
+
+describe("cuadrarConTotal (columnas que suman el total)", () => {
+  it("el céntimo de diferencia va a la mayor", () => {
+    expect(cuadrarConTotal([33.34, 33.34, 10], 76.67)).toEqual([33.33, 33.34, 10]);
+    expect(cuadrarConTotal([1, 2], 3)).toEqual([1, 2]);
+  });
+
+  it("una diferencia que no es de redondeo no se esconde", () => {
+    expect(cuadrarConTotal([10, 20], 31)).toEqual([10, 20]);
+  });
+
+  it("al separar por tienda, las columnas suman el total aun con medios céntimos", () => {
+    const v = [
+      venta({ id: "1", tienda_id: "t1", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+      venta({ id: "2", tienda_id: "t2", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+      venta({ id: "3", tienda_id: "t3", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+    ];
+    const e = entrada({ ventas: v, estructura: null });
+    const cols = separarCuenta(e, "tienda", {
+      tiendas: [
+        { id: "t1", nombre: "Uno" },
+        { id: "t2", nombre: "Dos" },
+        { id: "t3", nombre: "Tres" },
+      ],
+    });
+    const total = calcularCuenta(e);
+    for (const k of ["ventas_con_iva", "ventas", "ventas_netas"] as const) {
+      const suma = redondear(cols.reduce((s, c) => s + (c.cuenta[k].valor ?? 0), 0));
+      expect([k, suma]).toEqual([k, total[k].valor]);
     }
   });
 });

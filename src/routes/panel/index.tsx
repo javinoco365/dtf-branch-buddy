@@ -8,7 +8,7 @@ import { useMemo, type ReactNode } from "react";
 import { usePeriodoUrl, useLineaUrl } from "@/lib/filtros-url";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
@@ -23,11 +23,16 @@ import { useCuentaResultados } from "@/lib/cuenta";
 import { useEstadoAvisoAgenda } from "@/hooks/use-agenda";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
 import { ETIQUETA_FILTRO_LINEA, pedidosDeLinea } from "@/dominio/por-linea";
-import { FILTRO_CUENTA_TODO, pedidosPorCobrarHoy, TODAS } from "@/dominio/cuenta";
+import {
+  FILTRO_CUENTA_TODO,
+  pedidosPorCobrarHoy,
+  TODAS,
+  ventasNetasPorTramo,
+} from "@/dominio/cuenta";
 import { infoEstado } from "@/dominio/estados";
 import { pedidosDeHoy } from "@/dominio/hoy";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
-import { agruparPorRangos, topPorMetros } from "@/dominio/kpis";
+import { topPorMetros } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
@@ -188,13 +193,18 @@ function DelPeriodo() {
     [consultaPedidos.data, linea],
   );
 
+  // Las ventas netas de cada día (o mes), con la misma regla que la cifra de
+  // arriba: sin IVA, tiendas y textil, sin los web sin pagar, cada devolución
+  // en su día y lo facturado sin pedido en el de su factura.
+  const { entrada, sinPedidoDe } = lectura;
   const grafica = useMemo(() => {
     const { por, tramos: todos } = tramosGrafica({ desde, hasta });
     // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
     const tramos = tramosHastaHoy(todos, new Date());
-    const totales = agruparPorRangos(pedidosDeLaLinea, tramos);
-    return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
-  }, [pedidosDeLaLinea, desde, hasta]);
+    if (!entrada) return { por, datos: null };
+    const netas = ventasNetasPorTramo(entrada, tramos, sinPedidoDe);
+    return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: netas[i] })) };
+  }, [entrada, sinPedidoDe, desde, hasta]);
 
   const topProductos = useMemo(
     () => topPorMetros(consultaLineas.data ?? [], 6, linea),
@@ -239,8 +249,8 @@ function DelPeriodo() {
           </h2>
           <p className="text-sm text-muted-foreground">
             Tiendas y textil, sin IVA salvo el dinero
-            {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}. La gráfica, los
-            productos y la descarga, solo de las tiendas.{" "}
+            {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}. Los productos y la
+            descarga, solo de las tiendas.{" "}
             <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
               Ver la cuenta de resultados
             </Link>
@@ -301,23 +311,26 @@ function DelPeriodo() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {grafica.por === "dia" ? "Ingresos por día" : "Ingresos por mes"}
+                {grafica.por === "dia" ? "Ventas netas por día" : "Ventas netas por mes"}
               </CardTitle>
+              <CardDescription>
+                Sin IVA, tiendas y textil. Cada devolución resta en su día.
+              </CardDescription>
             </CardHeader>
             <CardContent className="h-72">
-              {consultaPedidos.error ? (
+              {lectura.error ? (
                 <ErrorCarga
                   sinMarco
-                  error={consultaPedidos.error}
-                  onReintentar={consultaPedidos.refetch}
-                  reintentando={consultaPedidos.isRefetching}
-                  que="los pedidos del periodo"
+                  error={lectura.error}
+                  onReintentar={lectura.reintentar}
+                  reintentando={lectura.reintentando}
+                  que="las ventas del periodo"
                 />
-              ) : consultaPedidos.isPending ? (
+              ) : !grafica.datos ? (
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ConGrafica>
-                  <IngresosPorTramo datos={grafica.datos} etiquetaConColor />
+                  <IngresosPorTramo datos={grafica.datos} nombre="Ventas netas" etiquetaConColor />
                 </ConGrafica>
               )}
             </CardContent>
