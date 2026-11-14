@@ -230,6 +230,10 @@ revés obliga a tocarlas dos veces.
 4. Qué hay que probar a mano para verificar que funciona.
 5. Qué te has encontrado por el camino que convenga arreglar (sin arreglarlo).
 
+Todo cambio que se note en la aplicación añade su entrada al principio de `NOVEDADES`
+(`src/dominio/novedades.ts`), en el mismo PR: qué cambia para quien lo usa, corto y sin
+palabras técnicas. La prueba de `novedades.test.ts` lo comprueba.
+
 ## Nota sobre Lovable
 
 Este proyecto nació en Lovable y su historial de `main` son commits del editor. **A partir de

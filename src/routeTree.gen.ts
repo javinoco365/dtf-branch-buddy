@@ -29,6 +29,7 @@ import { Route as PanelConfiguracionPdfRouteImport } from './routes/panel/config
 import { Route as PanelFacturacionGlobalRouteImport } from './routes/panel/facturacion-global'
 import { Route as PanelGerenciaRouteImport } from './routes/panel/gerencia'
 import { Route as PanelInversionRouteImport } from './routes/panel/inversion'
+import { Route as PanelNovedadesRouteImport } from './routes/panel/novedades'
 import { Route as PanelPedidosRouteImport } from './routes/panel/pedidos'
 import { Route as PanelProductosRouteImport } from './routes/panel/productos'
 import { Route as PanelTextilRouteRouteImport } from './routes/panel/textil/route'
@@ -153,6 +154,11 @@ const PanelGerenciaRoute = PanelGerenciaRouteImport.update({
 const PanelInversionRoute = PanelInversionRouteImport.update({
   id: '/inversion',
   path: '/inversion',
+  getParentRoute: () => PanelRouteRoute,
+} as any)
+const PanelNovedadesRoute = PanelNovedadesRouteImport.update({
+  id: '/novedades',
+  path: '/novedades',
   getParentRoute: () => PanelRouteRoute,
 } as any)
 const PanelPedidosRoute = PanelPedidosRouteImport.update({
@@ -302,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/gerencia': typeof PanelGerenciaRoute
   '/panel/inversion': typeof PanelInversionRoute
+  '/panel/novedades': typeof PanelNovedadesRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/productos': typeof PanelProductosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
@@ -345,6 +352,7 @@ export interface FileRoutesByTo {
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/gerencia': typeof PanelGerenciaRoute
   '/panel/inversion': typeof PanelInversionRoute
+  '/panel/novedades': typeof PanelNovedadesRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/productos': typeof PanelProductosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
@@ -390,6 +398,7 @@ export interface FileRoutesById {
   '/panel/facturacion-global': typeof PanelFacturacionGlobalRoute
   '/panel/gerencia': typeof PanelGerenciaRoute
   '/panel/inversion': typeof PanelInversionRoute
+  '/panel/novedades': typeof PanelNovedadesRoute
   '/panel/pedidos': typeof PanelPedidosRoute
   '/panel/productos': typeof PanelProductosRoute
   '/panel/usuarios': typeof PanelUsuariosRoute
@@ -437,6 +446,7 @@ export interface FileRouteTypes {
     | '/panel/facturacion-global'
     | '/panel/gerencia'
     | '/panel/inversion'
+    | '/panel/novedades'
     | '/panel/pedidos'
     | '/panel/productos'
     | '/panel/usuarios'
@@ -480,6 +490,7 @@ export interface FileRouteTypes {
     | '/panel/facturacion-global'
     | '/panel/gerencia'
     | '/panel/inversion'
+    | '/panel/novedades'
     | '/panel/pedidos'
     | '/panel/productos'
     | '/panel/usuarios'
@@ -524,6 +535,7 @@ export interface FileRouteTypes {
     | '/panel/facturacion-global'
     | '/panel/gerencia'
     | '/panel/inversion'
+    | '/panel/novedades'
     | '/panel/pedidos'
     | '/panel/productos'
     | '/panel/usuarios'
@@ -696,6 +708,13 @@ declare module '@tanstack/react-router' {
       path: '/inversion'
       fullPath: '/panel/inversion'
       preLoaderRoute: typeof PanelInversionRouteImport
+      parentRoute: typeof PanelRouteRoute
+    }
+    '/panel/novedades': {
+      id: '/panel/novedades'
+      path: '/novedades'
+      fullPath: '/panel/novedades'
+      preLoaderRoute: typeof PanelNovedadesRouteImport
       parentRoute: typeof PanelRouteRoute
     }
     '/panel/pedidos': {
@@ -935,6 +954,7 @@ interface PanelRouteRouteChildren {
   PanelFacturacionGlobalRoute: typeof PanelFacturacionGlobalRoute
   PanelGerenciaRoute: typeof PanelGerenciaRoute
   PanelInversionRoute: typeof PanelInversionRoute
+  PanelNovedadesRoute: typeof PanelNovedadesRoute
   PanelPedidosRoute: typeof PanelPedidosRoute
   PanelProductosRoute: typeof PanelProductosRoute
   PanelUsuariosRoute: typeof PanelUsuariosRoute
@@ -960,6 +980,7 @@ const PanelRouteRouteChildren: PanelRouteRouteChildren = {
   PanelFacturacionGlobalRoute: PanelFacturacionGlobalRoute,
   PanelGerenciaRoute: PanelGerenciaRoute,
   PanelInversionRoute: PanelInversionRoute,
+  PanelNovedadesRoute: PanelNovedadesRoute,
   PanelPedidosRoute: PanelPedidosRoute,
   PanelProductosRoute: PanelProductosRoute,
   PanelUsuariosRoute: PanelUsuariosRoute,

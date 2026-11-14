@@ -39,6 +39,7 @@ import {
   ReceiptText,
   Settings,
   Shirt,
+  Sparkles,
   ShoppingCart,
   Store,
   Users,
@@ -48,6 +49,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
 import { useAvisoAgenda } from "@/hooks/use-agenda";
+import { useAvisoNovedades } from "@/hooks/use-novedades";
 import {
   ENTRADA_GESTIONAR_TIENDAS,
   MENU_PRINCIPAL,
@@ -81,6 +83,7 @@ const ICONOS: Record<ClaveIcono, LucideIcon> = {
   tiendas: Building2,
   stock: Boxes,
   "compras-textil": FileUp,
+  novedades: Sparkles,
 };
 
 const ESTILO_GRUPO =
@@ -119,6 +122,8 @@ export function AppSidebar() {
   const { data: tiendas = [] } = useTiendasMenu();
   // Mis tareas de hoy, vencidas o nuevas (src/dominio/agenda.ts, resumenDe).
   const avisoAgenda = useAvisoAgenda();
+  // Cambios del CRM que no se han visto en este dispositivo.
+  const avisoNovedades = useAvisoNovedades();
 
   return (
     <Sidebar collapsible="icon">
@@ -256,7 +261,13 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {MENU_SISTEMA.filter((e) => !e.soloAdmin || isAdmin).map((e) => (
-                <Entrada key={e.ruta} entrada={e} pathname={pathname} />
+                <Entrada
+                  key={e.ruta}
+                  entrada={e}
+                  pathname={pathname}
+                  aviso={e.ruta === "/panel/novedades" ? avisoNovedades : 0}
+                  textoAviso={(n) => `${n} ${n === 1 ? "novedad sin ver" : "novedades sin ver"}`}
+                />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -277,16 +288,18 @@ function Entrada({
   entrada,
   pathname,
   aviso = 0,
+  textoAviso: describir = (n) =>
+    `${n} ${n === 1 ? "tarea tuya" : "tareas tuyas"} de hoy, vencidas o nuevas`,
 }: {
   entrada: EntradaMenu;
   pathname: string;
-  /** Un número que pide atención (la Agenda). 0: nada. */
+  /** Un número que pide atención (la Agenda, las Novedades). 0: nada. */
   aviso?: number;
+  /** Qué significa el número, para el lector de pantalla y el tooltip. */
+  textoAviso?: (n: number) => string;
 }) {
   const Icono = ICONOS[entrada.icono];
-  const textoAviso = aviso
-    ? `${aviso} ${aviso === 1 ? "tarea tuya" : "tareas tuyas"} de hoy, vencidas o nuevas`
-    : "";
+  const textoAviso = aviso ? describir(aviso) : "";
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
