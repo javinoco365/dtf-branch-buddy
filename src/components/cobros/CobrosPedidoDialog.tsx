@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -118,7 +119,7 @@ export function CobrosPedidoDialog({
 
   useEffect(() => {
     if (!open) return;
-    setFecha(new Date().toISOString().slice(0, 10));
+    setFecha(diaEnEspana(new Date()));
     setMetodo("efectivo");
     setNotas("");
   }, [open]);

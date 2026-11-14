@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { estadosDe } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -582,7 +583,7 @@ function PedidoDialog({
   loading,
 }: any) {
   const initial = pedido ?? {
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: diaEnEspana(new Date()),
     estado: "pendiente",
     envio: 0,
     marca_id: defaultMarcaId,

@@ -1,4 +1,5 @@
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { usePermisos } from "@/hooks/use-permisos";
@@ -981,7 +982,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                             onClick={() =>
                               setPagando({
                                 compra: c,
-                                fecha: new Date().toISOString().slice(0, 10),
+                                fecha: diaEnEspana(new Date()),
                               })
                             }
                           >

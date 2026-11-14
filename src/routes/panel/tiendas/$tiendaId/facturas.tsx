@@ -1,4 +1,5 @@
 import { CLAVE_EMPRESA, leerEmpresa } from "@/lib/empresa";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { createFileRoute } from "@tanstack/react-router";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
@@ -573,7 +574,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
   const [clienteId, setClienteId] = useState<string | null>(null);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = diaEnEspana(new Date());
   const [fecha, setFecha] = useState(hoy);
   const [vencimiento, setVencimiento] = useState("");
   const [notas, setNotas] = useState("");

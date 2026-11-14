@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -69,7 +70,7 @@ export function CajaFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    setFecha(movimiento?.fecha ?? new Date().toISOString().slice(0, 10));
+    setFecha(movimiento?.fecha ?? diaEnEspana(new Date()));
     setConceptoId(movimiento?.concepto_id ?? "");
     setClienteId(movimiento?.cliente_id ?? SIN_CLIENTE);
     setSocioId(movimiento?.socio_id ?? SIN_SOCIO);

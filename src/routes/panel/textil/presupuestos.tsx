@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
@@ -597,7 +598,7 @@ function PresupuestoDialog({
             : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
         }
       : {
-          fecha: new Date().toISOString().slice(0, 10),
+          fecha: diaEnEspana(new Date()),
           validez_dias: 30,
           marca_id: defaultMarcaId,
           items: lineasIniciales ?? [
