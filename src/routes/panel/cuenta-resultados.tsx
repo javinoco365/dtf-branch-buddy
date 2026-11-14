@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { FileChartColumn } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -13,6 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EstadoVacio } from "@/components/EstadoVacio";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { MarcaEstimado } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
 import { AvisoActualizando } from "@/components/AvisoActualizando";
 import { FiltrosPlegables, SelectFiltro } from "@/components/filtros/Filtros";
@@ -21,24 +22,27 @@ import { SelectorLinea } from "@/components/filtros/SelectorLinea";
 import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
-import { useCuentaResultados } from "@/lib/cuenta";
-import { eur, metros, numero, numeroJusto, porcentaje } from "@/lib/format";
-import { mensajeDeError } from "@/lib/errores";
+import { useCuentaResultados, type EstadoCifra } from "@/lib/cuenta";
+import { eur, metros, numero, porcentaje } from "@/lib/format";
+import { errorLegible } from "@/lib/errores";
 import {
   esSepararPor,
   FILAS_DINERO,
   FILAS_RESULTADOS,
   OPCIONES_SEPARAR,
+  CLAVE_SIN_PEDIDO,
   separarCuenta,
   sobreVentasNetas,
   variacionCifra,
+  DATOS,
   type Cifra,
+  type ClaveDato,
   type Concepto,
   type Cuenta,
 } from "@/dominio/cuenta";
-import { definicionDeConcepto } from "@/dominio/definiciones";
+import { definicionDeConcepto, definicionDeDato } from "@/dominio/definiciones";
 import { esFiltroLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
-import { formaVariacion } from "@/dominio/kpis";
+import { textoVariacion as variacionEscrita } from "@/dominio/kpis";
 import { etiquetaPeriodo, PERIODOS_CUADRO } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
@@ -94,11 +98,16 @@ function CuentaResultados() {
     .filter(Boolean)
     .join(" · ");
 
+  // Nada que contar: ni ventas (tampoco facturas sin pedido), ni
+  // devoluciones, ni gastos, ni dinero cobrado o pendiente.
   const sinDatos =
     !!cuenta &&
     cuenta.pedidos === 0 &&
+    (cuenta.ventas.valor ?? 0) === 0 &&
     (cuenta.devoluciones.valor ?? 0) === 0 &&
-    (cuenta.gastos_estructura.valor ?? 0) === 0;
+    (cuenta.gastos_estructura.valor ?? 0) === 0 &&
+    (cuenta.cobrado.valor ?? 0) === 0 &&
+    (cuenta.pendiente_cobro.valor ?? 0) === 0;
   const frente = separar === "nada" ? comparacion?.etiqueta : undefined;
 
   return (
@@ -139,14 +148,12 @@ function CuentaResultados() {
       <AvisoActualizando activo={lectura.deAntes} />
 
       {lectura.error && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6 text-sm text-destructive">
-            <span>No se ha podido cargar la cuenta: {mensajeDeError(lectura.error)}</span>
-            <Button size="sm" variant="outline" onClick={lectura.reintentar}>
-              Reintentar
-            </Button>
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={lectura.error}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
+          que="la cuenta"
+        />
       )}
 
       {lectura.cargando && (
@@ -175,21 +182,14 @@ function CuentaResultados() {
                 estos filtros.
               </p>
               <dl className="flex flex-wrap gap-x-5 gap-y-1 pt-1 text-sm">
-                <Dato titulo="Pedidos" valor={numero(cuenta.pedidos, 0)} />
+                <Dato clave="pedidos" valor={numero(cuenta.pedidos, 0)} />
                 <Dato
-                  titulo="Ticket medio"
+                  clave="ticket_medio"
                   valor={cuenta.ticketMedio === null ? "—" : eur(cuenta.ticketMedio)}
-                  nota="Ventas netas ÷ pedidos, sin IVA"
                 />
-                <Dato titulo="Metros DTF" valor={metros(cuenta.metros)} />
-                {cuenta.metrosUv > 0 && (
-                  <Dato titulo="Metros DTF UV" valor={metros(cuenta.metrosUv)} />
-                )}
-                <Dato
-                  titulo="Cancelados"
-                  valor={numero(cuenta.cancelados, 0)}
-                  nota="No cuentan en ninguna cifra"
-                />
+                <Dato clave="metros" valor={metros(cuenta.metros)} />
+                {cuenta.metrosUv > 0 && <Dato clave="metros_uv" valor={metros(cuenta.metrosUv)} />}
+                <Dato clave="cancelados" valor={numero(cuenta.cancelados, 0)} />
               </dl>
             </CardHeader>
             <CardContent>
@@ -231,17 +231,35 @@ function CuentaResultados() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <ValorCifra cifra={cuenta[c.clave]} />
+                        <ValorCifra
+                          cifra={cuenta[c.clave]}
+                          estado={
+                            lectura.estadoDinero[c.clave as keyof typeof lectura.estadoDinero]
+                          }
+                          onReintentar={lectura.reintentar}
+                          reintentando={lectura.reintentando}
+                        />
                       </TableCell>
                       {frente && (
                         <TableCell className="text-right">
-                          {c.clave === "cobrado" ? <ValorCifra cifra={previa?.cobrado} /> : "—"}
+                          {c.clave === "cobrado" ? (
+                            <ValorCifra
+                              cifra={previa?.cobrado}
+                              estado={lectura.estadoDinero.cobrado}
+                            />
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                       )}
                       {frente && (
                         <TableCell className="text-right tabular-nums">
                           {c.clave === "cobrado"
-                            ? textoVariacion(variacionCifra(cuenta.cobrado, previa?.cobrado))
+                            ? textoVariacion(
+                                lectura.estadoDinero.cobrado.error
+                                  ? null
+                                  : variacionCifra(cuenta.cobrado, previa?.cobrado),
+                              )
                             : "—"}
                         </TableCell>
                       )}
@@ -269,11 +287,15 @@ function CuentaResultados() {
   );
 }
 
-/** Un dato suelto del periodo: «Pedidos 42». */
-function Dato({ titulo, valor, nota }: { titulo: string; valor: string; nota?: string }) {
+/** Un dato suelto del periodo, con el nombre y la ⓘ de DATOS: «Pedidos 42». */
+function Dato({ clave, valor }: { clave: ClaveDato; valor: string }) {
+  const { nombre } = DATOS[clave];
   return (
-    <div className="flex items-baseline gap-1.5" title={nota}>
-      <dt className="text-muted-foreground">{titulo}</dt>
+    <div className="flex items-center gap-1.5">
+      <dt className="inline-flex items-center gap-1 text-muted-foreground">
+        {nombre}
+        <Explicacion titulo={nombre} definicion={definicionDeDato(clave)} />
+      </dt>
       <dd className="font-medium tabular-nums">{valor}</dd>
     </div>
   );
@@ -297,12 +319,40 @@ function ValorCifra({
   cifra,
   negrita,
   breve,
+  estado,
+  onReintentar,
+  reintentando,
 }: {
   cifra: Cifra | null | undefined;
   negrita?: boolean;
   /** Sin el motivo debajo (en las columnas, donde se repetiría): al pasar el ratón. */
   breve?: boolean;
+  /** Las del bloque de dinero, que se leen aparte: leyéndose o con error. */
+  estado?: EstadoCifra;
+  onReintentar?: () => void;
+  reintentando?: boolean;
 }) {
+  if (estado?.error) {
+    return (
+      <span className="inline-flex flex-col items-end">
+        <span className="text-muted-foreground">—</span>
+        <span className="max-w-[16rem] text-right text-xs text-destructive">
+          {errorLegible(estado.error).texto}
+        </span>
+        {onReintentar && (
+          <button
+            type="button"
+            disabled={reintentando}
+            onClick={onReintentar}
+            className="text-xs font-medium text-destructive underline underline-offset-2 hover:no-underline disabled:opacity-60"
+          >
+            {reintentando ? "Reintentando…" : "Reintentar"}
+          </button>
+        )}
+      </span>
+    );
+  }
+  if (estado?.cargando) return <span className="text-muted-foreground">…</span>;
   if (!cifra) return <span className="text-muted-foreground">—</span>;
   if (cifra.valor === null) {
     return (
@@ -324,8 +374,8 @@ function ValorCifra({
         {eur(cifra.valor)}
       </span>
       {cifra.estimado && (
-        <span className="text-xs text-status-pendiente" title={cifra.nota}>
-          Estimado
+        <span className="text-xs">
+          <MarcaEstimado />
         </span>
       )}
     </span>
@@ -333,13 +383,7 @@ function ValorCifra({
 }
 
 /** «+12,4 %», «−3,0 %» o «×61»; «—» sin datos para comparar. */
-function textoVariacion(delta: number | null): string {
-  if (delta === null) return "—";
-  const forma = formaVariacion(delta);
-  return forma.tipo === "veces"
-    ? `×${numeroJusto(forma.valor, 1)}`
-    : `${delta >= 0 ? "+" : "−"}${numero(forma.valor, 1)}\u00A0%`;
-}
+const textoVariacion = (delta: number | null) => variacionEscrita(delta, numero);
 
 /** La cascada del periodo, frente al anterior, con el peso de cada fila en las ventas netas. */
 function TablaPeriodo({
@@ -421,6 +465,9 @@ function TablaColumnas({
         <p className="mb-3 text-xs text-muted-foreground">
           Cada columna, calculada por separado. Los gastos no son de una tienda ni de una línea:
           salen solo en el total.
+          {columnas.some((c) => c.clave === CLAVE_SIN_PEDIDO)
+            ? " «Sin pedido» es lo facturado a mano, sin pedido: no es de ninguna tienda ni línea."
+            : ""}
         </p>
       )}
       <Table movil="tarjetas">

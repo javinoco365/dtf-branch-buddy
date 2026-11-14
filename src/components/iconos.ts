@@ -1,11 +1,16 @@
 import {
+  Ban,
   BadgePercent,
+  Building,
   Boxes,
   Building2,
   CalendarDays,
   ChartNoAxesCombined,
+  CircleDollarSign,
   Coins,
+  CreditCard,
   Euro,
+  Factory,
   FilePen,
   FileText,
   FileUp,
@@ -23,15 +28,20 @@ import {
   ReceiptEuro,
   ReceiptText,
   Ruler,
+  Scale,
   Settings,
   ShoppingCart,
   Sparkles,
   Tag,
   TrendingUp,
+  Truck,
+  Undo2,
+  UserCog,
   Users,
   Wallet,
 } from "lucide-react";
 import type { ClaveIcono } from "@/dominio/navegacion";
+import type { ClaveConcepto, ClaveDato } from "@/dominio/cuenta";
 
 /**
  * Un concepto, un icono, en toda la aplicación.
@@ -63,7 +73,7 @@ export const ICONOS_PANTALLA: Record<ClaveIcono, LucideIcon> = {
   facturas: FileText,
   facturacion: Receipt,
   ajustes: Settings,
-  usuarios: Users,
+  usuarios: UserCog,
   tiendas: Building2,
   stock: Boxes,
   "compras-textil": FileUp,
@@ -89,10 +99,49 @@ export const ICONO = {
   cobrado: ICONOS_PANTALLA.cobrado,
   /** Lo que falta por cobrar. */
   pendienteCobro: ICONOS_PANTALLA.cobros,
-  caja: ICONOS_PANTALLA.caja,
+  /** Lo que debemos a proveedores. */
+  pendientePago: CreditCard,
   propinas: Gift,
   presupuestos: ICONOS_PANTALLA.presupuestos,
   /** Género en el almacén (stock). */
   almacen: ICONOS_PANTALLA.stock,
-  inversion: ICONOS_PANTALLA.inversion,
+  portes: Truck,
+  devoluciones: Undo2,
+  produccion: Factory,
+  estructura: Building,
+  impuesto: Scale,
+  beneficioNeto: CircleDollarSign,
+  cancelados: Ban,
 } as const satisfies Record<string, LucideIcon>;
+
+/**
+ * El icono de cada cifra de la cuenta de resultados (dominio/cuenta.ts). Las
+ * tarjetas lo sacan de aquí por su clave: no se elige en cada pantalla.
+ */
+export const ICONO_CONCEPTO: Record<ClaveConcepto, LucideIcon> = {
+  ventas_con_iva: ICONO.ventasConIva,
+  iva: ICONO.iva,
+  portes_cobrados: ICONO.portes,
+  ventas: ICONO.ventas,
+  devoluciones: ICONO.devoluciones,
+  ventas_netas: ICONO.vendido,
+  coste_produccion: ICONO.produccion,
+  resultado_portes: ICONO.portes,
+  margen_bruto: ICONO.margen,
+  gastos_estructura: ICONO.estructura,
+  beneficio_antes_impuestos: ICONO.beneficio,
+  sociedades: ICONO.impuesto,
+  beneficio_neto: ICONO.beneficioNeto,
+  cobrado: ICONO.cobrado,
+  pendiente_cobro: ICONO.pendienteCobro,
+  pendiente_pago: ICONO.pendientePago,
+};
+
+/** El icono de cada dato que no es dinero (DATOS de dominio/cuenta.ts). */
+export const ICONO_DATO: Record<ClaveDato, LucideIcon> = {
+  pedidos: ICONO.pedidos,
+  metros: ICONO.metros,
+  metros_uv: ICONO.metros,
+  ticket_medio: ICONO.ticketMedio,
+  cancelados: ICONO.cancelados,
+};

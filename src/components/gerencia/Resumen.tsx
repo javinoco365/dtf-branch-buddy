@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { AlertTriangle, CheckCircle2, Clock, Gauge } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gauge } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -13,10 +13,10 @@ import {
 import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
+import { TarjetaConcepto, TarjetaDato, TarjetaKpi } from "@/components/TarjetaKpi";
 import { useCuentaResultados } from "@/lib/cuenta";
-import { mensajeDeError } from "@/lib/errores";
-import { FILTRO_CUENTA_TODO } from "@/dominio/cuenta";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { FILTRO_CUENTA_TODO, type Cifra } from "@/dominio/cuenta";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import {
   Table,
@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Explicacion } from "@/components/Explicacion";
-import { eur, metros } from "@/lib/format";
+import { eur, metros, numero } from "@/lib/format";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
@@ -57,7 +57,9 @@ import {
   type DatosGerencia,
 } from "./destinos";
 import { Nota, VerDetalle } from "./comun";
-import { ICONO } from "@/components/iconos";
+
+const MOTIVO_SIN_CUENTA =
+  "La cuenta de resultados no separa por canal ni por documentado: quita ese filtro para verla.";
 
 export function Resumen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -108,6 +110,36 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 
   const pedidos = destinoPedidos(d.filtro, d.seleccion);
 
+  // Las ventas netas y el margen bruto, con la cuenta de resultados
+  // (cuenta.ts): el mismo nombre y la misma cuenta que en Inicio y en la
+  // Cuenta de resultados. La cuenta separa por tienda y por línea, no por
+  // canal ni por documentado: con esos filtros no se enseñan.
+  const cuentaAplica = d.filtro.canal === "todos" && d.grupo === "total";
+  const filtroCuenta = useMemo(
+    () => ({ tienda: d.filtro.tienda, linea: d.filtro.linea ?? "todo" }),
+    [d.filtro.tienda, d.filtro.linea],
+  );
+  const lectura = useCuentaResultados({
+    rango: d.rango,
+    previo: d.comparacion?.previo ?? null,
+    filtro: filtroCuenta,
+    gastos: false,
+    dinero: false,
+  });
+  const delaCuenta = (cifra: Cifra | undefined): Cifra | null =>
+    !cuentaAplica ? { valor: null, falta: MOTIVO_SIN_CUENTA } : (cifra ?? null);
+  // Lo cobrado y lo pendiente, de Gerencia: con todos sus filtros.
+  const cifraCobrado: Cifra | null = d.cobrosDisponibles
+    ? { valor: cobrado }
+    : d.cobrosLeidos
+      ? { valor: null, falta: "Esta parte aún no está activada." }
+      : null;
+  const cifraPendiente: Cifra | null = d.pendientesDisponibles
+    ? { valor: pendienteHoy }
+    : d.pendientesLeidos
+      ? { valor: null, falta: "Esta parte aún no está activada." }
+      : null;
+
   return (
     <div className="space-y-4">
       {/* Lo que pide hacer algo, lo primero: antes iba debajo de once
@@ -150,31 +182,32 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         )}
       </section>
 
+      {lectura.error && cuentaAplica && (
+        <ErrorCarga
+          error={lectura.error}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
+          que="las ventas netas y el margen"
+        />
+      )}
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-        <TarjetaKpi
-          titulo="Vendido"
-          explicacion="g_vendido"
-          valor={eur(c.total)}
+        <TarjetaConcepto
+          clave="ventas_netas"
+          cifra={delaCuenta(lectura.cuenta?.ventas_netas)}
+          previa={lectura.previa?.ventas_netas}
           frente={frente}
-          delta={variacion(c.total, p.total)}
-          icon={ICONO.vendido}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
-        <TarjetaKpi
-          titulo="Cobrado"
-          explicacion="g_cobrado"
-          valor={d.cobrosDisponibles ? eur(cobrado) : d.cobrosLeidos ? "—" : "…"}
+        <TarjetaConcepto
+          clave="cobrado"
+          cifra={cifraCobrado}
+          previa={d.cobrosDisponibles ? { valor: cobradoPrev } : undefined}
           frente={frente}
-          delta={d.cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
-          icon={ICONO.cobrado}
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
-        <TarjetaKpi
-          titulo="Pendiente de cobro"
-          explicacion="g_pendiente"
-          valor={d.pendientesDisponibles ? eur(pendienteHoy) : d.pendientesLeidos ? "—" : "…"}
-          delta={null}
-          icon={Clock}
+        <TarjetaConcepto
+          clave="pendiente_cobro"
+          cifra={cifraPendiente}
           pie={
             <span className="flex flex-wrap items-center gap-x-2">
               <span className="text-muted-foreground">
@@ -184,38 +217,49 @@ export function Resumen({ d }: { d: DatosGerencia }) {
             </span>
           }
         />
-        <TarjetaKpi
-          titulo={sinCostes ? "Margen" : "Margen estimado"}
-          explicacion="g_margen"
-          valor={sinCostes ? "—" : eur(c.margen)}
+        <TarjetaConcepto
+          clave="margen_bruto"
+          cifra={delaCuenta(lectura.cuenta?.margen_bruto)}
+          previa={lectura.previa?.margen_bruto}
           frente={frente}
-          delta={sinCostes ? null : variacion(c.margen, p.margen)}
-          icon={ICONO.margen}
         />
-        <TarjetaKpi
-          titulo="Pedidos"
-          explicacion="g_pedidos"
-          valor={String(c.pedidos)}
+        <TarjetaDato
+          clave="pedidos"
+          valor={numero(c.pedidos, 0)}
           frente={frente}
           delta={variacion(c.pedidos, p.pedidos)}
-          icon={ICONO.pedidos}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
-        <TarjetaKpi
-          titulo="Ticket medio"
-          explicacion="g_ticket"
-          valor={eur(c.ticket)}
+        <TarjetaDato
+          clave="ticket_medio"
+          valor={
+            !cuentaAplica
+              ? "—"
+              : !lectura.cuenta
+                ? "…"
+                : lectura.cuenta.ticketMedio === null
+                  ? "—"
+                  : eur(lectura.cuenta.ticketMedio)
+          }
           frente={frente}
-          delta={variacion(c.ticket, p.ticket)}
-          icon={ICONO.ticketMedio}
+          delta={
+            cuentaAplica &&
+            lectura.cuenta?.ticketMedio != null &&
+            lectura.previa?.ticketMedio != null
+              ? variacion(lectura.cuenta.ticketMedio, lectura.previa.ticketMedio)
+              : null
+          }
+          pie={
+            !cuentaAplica ? (
+              <span className="text-muted-foreground">{MOTIVO_SIN_CUENTA}</span>
+            ) : undefined
+          }
         />
-        <TarjetaKpi
-          titulo="Metros vendidos"
-          explicacion="g_metros"
+        <TarjetaDato
+          clave="metros"
           valor={metros(c.metros)}
           frente={frente}
           delta={variacion(c.metros, p.metros)}
-          icon={ICONO.metros}
         />
         <TarjetaKpi
           titulo="€ por metro"
@@ -384,10 +428,12 @@ function BeneficioYObjetivos({
       {hayGastos && d.grupo === "total" && (
         <TarjetaConcepto
           clave="beneficio_antes_impuestos"
-          cifra={lectura.error ? { valor: null, falta: mensajeDeError(lectura.error) } : bai}
+          cifra={bai}
           previa={lectura.previa?.beneficio_antes_impuestos}
           frente={frente}
-          icon={ICONO.beneficio}
+          estado={{ cargando: false, error: lectura.error }}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
           pie={
             <span className="flex flex-wrap items-center gap-x-2">
               {sinCostes && (

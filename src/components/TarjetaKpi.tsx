@@ -2,16 +2,27 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { eur, numero, numeroJusto } from "@/lib/format";
+import { eur, numero } from "@/lib/format";
+import { errorLegible } from "@/lib/errores";
 import { Explicacion } from "@/components/Explicacion";
 import {
   DEFINICIONES,
   definicionDeConcepto,
+  definicionDeDato,
   type ClaveDefinicion,
   type Definicion,
 } from "@/dominio/definiciones";
-import { formaVariacion } from "@/dominio/kpis";
-import { concepto, variacionCifra, type Cifra, type ClaveConcepto } from "@/dominio/cuenta";
+import { textoVariacion } from "@/dominio/kpis";
+import {
+  concepto,
+  DATOS,
+  variacionCifra,
+  type Cifra,
+  type ClaveConcepto,
+  type ClaveDato,
+} from "@/dominio/cuenta";
+import { ICONO_CONCEPTO, ICONO_DATO } from "@/components/iconos";
+import type { EstadoCifra } from "@/lib/cuenta";
 
 /**
  * Una cifra de un cuadro de mando, con su variación frente al periodo con el
@@ -27,8 +38,11 @@ export function TarjetaKpi({
   deltaInverso = false,
   explicacion,
   pie,
+  className,
 }: {
   titulo: string;
+  /** Para la tarjeta: el resaltado al pasar por encima cuando es un enlace. */
+  className?: string;
   /** Debajo de todo: un enlace al detalle, una nota. */
   pie?: ReactNode;
   /**
@@ -50,7 +64,7 @@ export function TarjetaKpi({
   const valorColor = color === "destructive" ? "text-destructive" : "text-foreground";
 
   return (
-    <Card>
+    <Card className={className}>
       {/* En el móvil van dos por fila: más justas y sin el icono, que es
           adorno y les quitaba el sitio a la cifra. */}
       <CardContent className="p-3.5 md:p-5">
@@ -86,17 +100,19 @@ export function TarjetaKpi({
 
 /**
  * Una cifra de la cuenta de resultados (dominio/cuenta.ts) en una tarjeta:
- * con el nombre y la ⓘ del diccionario, «—» y el motivo si no se puede saber,
- * y la marca «Estimado» con lo que se ha supuesto. El mismo nombre y la misma
- * cuenta en todas las pantallas.
+ * con el nombre, el icono y la ⓘ del diccionario, «—» y el motivo si no se
+ * puede saber, y la marca «Estimado» con lo que se ha supuesto. El mismo
+ * nombre y la misma cuenta en todas las pantallas.
  */
 export function TarjetaConcepto({
   clave,
   cifra,
   previa,
   frente,
-  icon,
   pie,
+  estado,
+  onReintentar,
+  reintentando,
 }: {
   clave: ClaveConcepto;
   /** Nula mientras se lee. */
@@ -104,35 +120,109 @@ export function TarjetaConcepto({
   /** La del periodo con el que se compara. */
   previa?: Cifra | null;
   frente?: string;
-  icon: LucideIcon;
   /** Debajo, tras el motivo o la marca de estimado. */
   pie?: ReactNode;
+  /**
+   * Las cifras que se leen aparte (el bloque de dinero): leyéndose, «…»; con
+   * error, «—», el motivo y el botón de reintentar.
+   */
+  estado?: EstadoCifra;
+  onReintentar?: () => void;
+  reintentando?: boolean;
 }) {
   const c = concepto(clave);
-  const valor = cifra?.valor ?? null;
-  const delta = cifra ? variacionCifra(cifra, previa ?? undefined) : null;
+  const cargando = cifra === null || !!estado?.cargando;
+  const error = estado?.error ?? null;
+  const valor = cargando || error ? null : (cifra?.valor ?? null);
+  const delta = cifra && !cargando && !error ? variacionCifra(cifra, previa ?? undefined) : null;
   // Que caiga lo que se debe es buena noticia.
   const inverso = clave === "pendiente_cobro" || clave === "pendiente_pago";
+  const falta = !cargando && !error ? cifra?.falta : undefined;
+  const estimado = !cargando && !error && cifra?.estimado;
   return (
     <TarjetaKpi
       titulo={c.nombre}
       explicacion={definicionDeConcepto(clave)}
-      valor={cifra === null ? "…" : valor === null ? "—" : eur(valor)}
+      valor={cargando && !error ? "…" : valor === null ? "—" : eur(valor)}
       delta={frente ? delta : null}
       frente={frente}
       deltaInverso={inverso}
-      icon={icon}
+      icon={ICONO_CONCEPTO[clave]}
       color={valor !== null && valor < 0 && c.destacado ? "destructive" : "primary"}
       pie={
-        cifra?.falta || cifra?.estimado || pie ? (
+        error || falta || estimado || pie ? (
           <span className="flex flex-col gap-0.5">
-            {cifra?.falta && <span className="text-muted-foreground">{cifra.falta}</span>}
-            {cifra?.estimado && <MarcaEstimado nota={cifra.nota} />}
+            {error && (
+              <ErrorCifra error={error} onReintentar={onReintentar} reintentando={reintentando} />
+            )}
+            {falta && <span className="text-muted-foreground">{falta}</span>}
+            {estimado && <MarcaEstimado nota={cifra?.nota} />}
             {pie}
           </span>
         ) : undefined
       }
     />
+  );
+}
+
+/**
+ * Un dato de la cuenta que no es dinero (pedidos, metros, ticket medio,
+ * cancelados) con el nombre, el icono y la ⓘ de DATOS (dominio/cuenta.ts).
+ */
+export function TarjetaDato({
+  clave,
+  valor,
+  delta = null,
+  frente,
+  deltaInverso,
+  pie,
+}: {
+  clave: ClaveDato;
+  /** Ya formateado; «…» mientras se lee y «—» si no se puede saber. */
+  valor: string;
+  delta?: number | null;
+  frente?: string;
+  deltaInverso?: boolean;
+  pie?: ReactNode;
+}) {
+  return (
+    <TarjetaKpi
+      titulo={DATOS[clave].nombre}
+      explicacion={definicionDeDato(clave)}
+      valor={valor}
+      delta={delta}
+      frente={frente}
+      deltaInverso={deltaInverso}
+      icon={ICONO_DATO[clave]}
+      pie={pie}
+    />
+  );
+}
+
+/** Una cifra que no se pudo leer: por qué y el botón de volver a intentarlo. */
+function ErrorCifra({
+  error,
+  onReintentar,
+  reintentando,
+}: {
+  error: unknown;
+  onReintentar?: () => void;
+  reintentando?: boolean;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 text-destructive">
+      <span>{errorLegible(error, "No se pudo leer").texto}</span>
+      {onReintentar && (
+        <button
+          type="button"
+          disabled={reintentando}
+          onClick={onReintentar}
+          className="font-medium underline underline-offset-2 hover:no-underline disabled:opacity-60"
+        >
+          {reintentando ? "Reintentando…" : "Reintentar"}
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -166,7 +256,6 @@ export function LineaVariacion({
   if (!frente || delta === null) return null;
   const subiendo = delta >= 0;
   const positivo = inverso ? !subiendo : subiendo;
-  const forma = formaVariacion(delta);
   return (
     <div
       className={`mt-1 flex flex-wrap items-center gap-x-1 text-xs font-medium ${
@@ -178,11 +267,7 @@ export function LineaVariacion({
       ) : (
         <TrendingDown aria-hidden className="h-3 w-3 shrink-0" />
       )}
-      <span className="whitespace-nowrap">
-        {forma.tipo === "veces"
-          ? `×${numeroJusto(forma.valor, 1)}`
-          : `${subiendo ? "+" : "−"}${numero(forma.valor, 1)}\u00A0%`}
-      </span>
+      <span className="whitespace-nowrap">{textoVariacion(delta, numero)}</span>
       <span className="font-normal text-muted-foreground">frente a {frente}</span>
     </div>
   );

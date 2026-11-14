@@ -94,7 +94,7 @@ export function AppSidebar() {
                     key={e.ruta}
                     entrada={e}
                     pathname={pathname}
-                    aviso={e.ruta === "/panel/agenda" ? avisoAgenda : 0}
+                    aviso={e.ruta === "/panel/agenda" ? (avisoAgenda ?? 0) : 0}
                   />
                 ))}
               </SidebarMenu>

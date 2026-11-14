@@ -7,29 +7,25 @@ import { metros, numero } from "@/lib/format";
 import { useCuentaResultados } from "@/lib/cuenta";
 import { ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
 import { ESTADO_CANCELADO, variacion } from "@/dominio/kpis";
+import { documentosVigentes, type DocumentoFacturado } from "@/dominio/cuenta";
 import { leerTodas } from "@/lib/paginar";
 import { useLineaUrl } from "@/lib/filtros-url";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
 import { compararCon, rangoDe } from "@/dominio/periodos";
-import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { mensajeDeError } from "@/lib/errores";
+import { TarjetaDato, TarjetaKpi } from "@/components/TarjetaKpi";
+import { CifrasDelPeriodo } from "@/components/CifrasDelPeriodo";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
-import { Clock, FileText } from "lucide-react";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
-import { ICONO } from "@/components/iconos";
+import { ICONOS_PANTALLA } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
 });
 
-function Dashboard() {
-  const { tiendaId } = Route.useParams();
-  const { data: tiendas } = useTiendasMenu();
-  const nombreTienda = tiendas?.find((t) => t.id === tiendaId)?.nombre;
-  const { data } = useQuery({
+/** Los totales de la tienda desde el principio: pedidos, metros y documentos. */
+function useTotalesTienda(tiendaId: string) {
+  return useQuery({
     queryKey: ["tienda-dashboard", tiendaId],
     queryFn: async () => {
       // Todos, por páginas: antes se leía de una vez y Supabase corta en
@@ -49,26 +45,45 @@ function Dashboard() {
         if (!faltaLaColumna(r.error)) return r;
         return leer("id, metros_total");
       };
-      const [pedidos, facturas] = await Promise.all([
-        leerPedidos(),
-        // Solo cuántas: sin bajar las filas (y sin el tope de 1000 de Supabase).
-        supabase
-          .from("facturas")
-          .select("id", { count: "exact", head: true })
-          .eq("tienda_id", tiendaId),
-      ]);
+      // Las facturas y tickets, para contar solo los vigentes: sin borradores
+      // ni anuladas, y un ticket canjeado por factura una sola vez.
+      // sustituye_a_id viene de 20261004100100: sin ella, sin canjes.
+      const leerDocumentos = async () => {
+        const leer = (columnas: string) =>
+          leerTodas<DocumentoFacturado>((a, b) =>
+            tabla(supabase, "facturas")
+              .select(columnas)
+              .eq("tienda_id", tiendaId)
+              .order("id")
+              .range(a, b),
+          );
+        const r = await leer("id, estado, sustituye_a_id");
+        if (!faltaLaColumna(r.error)) return r;
+        return leer("id, estado");
+      };
+      const [pedidos, documentos] = await Promise.all([leerPedidos(), leerDocumentos()]);
+      if (pedidos.error) throw new Error(pedidos.error.message);
+      if (documentos.error) throw new Error(documentos.error.message);
       const filas = (pedidos.data ?? []) as {
         metros_total: number | null;
         metros_uv?: number | null;
       }[];
-      if (pedidos.error) throw new Error(pedidos.error.message);
-      return { pedidos: filas, facturas: facturas.count ?? 0 };
+      return {
+        pedidos: filas.length,
+        // Los metros de cada línea, por separado: no se suman entre sí.
+        metros: filas.reduce((s, p) => s + Number(p.metros_total ?? 0), 0),
+        metrosUv: filas.reduce((s, p) => s + Number(p.metros_uv ?? 0), 0),
+        documentos: documentosVigentes(documentos.data ?? []).length,
+      };
     },
   });
-  const pedidos = data?.pedidos ?? [];
-  // Los metros de cada línea, por separado: no se suman entre sí.
-  const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
-  const mtsUv = pedidos.reduce((s, p) => s + Number(p.metros_uv ?? 0), 0);
+}
+
+function Dashboard() {
+  const { tiendaId } = Route.useParams();
+  const { data: tiendas } = useTiendasMenu();
+  const nombreTienda = tiendas?.find((t) => t.id === tiendaId)?.nombre;
+  const totales = useTotalesTienda(tiendaId);
 
   // El mes en curso con la cuenta de resultados (cuenta.ts) y comparado con
   // el mismo trozo del mes anterior: el día 5, contra del 1 al 5 del mes pasado.
@@ -90,6 +105,8 @@ function Dashboard() {
   });
   const { cuenta, previa } = lectura;
   const frente = comparacion.etiqueta;
+  const deTotal = (n: number | undefined, formato: (n: number) => string) =>
+    n === undefined ? "…" : formato(n);
 
   return (
     <div className="space-y-6">
@@ -110,120 +127,91 @@ function Dashboard() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Este mes</h2>
-        {lectura.error && (
-          <Card>
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6 text-sm text-destructive">
-              <span>No se han podido cargar las cifras: {mensajeDeError(lectura.error)}</span>
-              <Button size="sm" variant="outline" onClick={lectura.reintentar}>
-                Reintentar
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-        {lectura.cargando && (
-          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
-            ))}
-          </div>
-        )}
-        {cuenta && (
-          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-            <TarjetaConcepto
-              clave="ventas_netas"
-              cifra={cuenta.ventas_netas}
-              previa={previa?.ventas_netas}
+        {lectura.error ? (
+          <ErrorCarga
+            error={lectura.error}
+            onReintentar={lectura.reintentar}
+            reintentando={lectura.reintentando}
+            que="las cifras del mes"
+          />
+        ) : (
+          <>
+            <CifrasDelPeriodo
+              lectura={lectura}
               frente={frente}
-              icon={ICONO.vendido}
-              pie={
-                <span className="text-muted-foreground">
-                  {numero(cuenta.pedidos, 0)} {cuenta.pedidos === 1 ? "pedido" : "pedidos"}
-                </span>
-              }
-            />
-            <TarjetaConcepto
-              clave="margen_bruto"
-              cifra={cuenta.margen_bruto}
-              previa={previa?.margen_bruto}
-              frente={frente}
-              icon={ICONO.margen}
-              pie={
-                cuenta.margenPct !== null ? (
+              pieVentas={
+                cuenta ? (
                   <span className="text-muted-foreground">
-                    {numero(cuenta.margenPct, 1)}&nbsp;% de las ventas netas
+                    {numero(cuenta.pedidos, 0)} {cuenta.pedidos === 1 ? "pedido" : "pedidos"}
                   </span>
                 ) : undefined
               }
+              piePendiente="Hoy, sea del mes que sea"
             />
-            <TarjetaConcepto
-              clave="cobrado"
-              cifra={cuenta.cobrado}
-              previa={previa?.cobrado}
-              frente={frente}
-              icon={ICONO.cobrado}
-            />
-            <TarjetaConcepto
-              clave="pendiente_cobro"
-              cifra={cuenta.pendiente_cobro}
-              icon={Clock}
-              pie={<span className="text-muted-foreground">Hoy, sea del mes que sea</span>}
-            />
-            {linea !== "uv" && (
-              <TarjetaKpi
-                titulo="Metros de DTF"
-                explicacion="metros"
-                valor={metros(cuenta.metros)}
-                frente={frente}
-                delta={previa ? variacion(cuenta.metros, previa.metros) : null}
-                icon={ICONO.metros}
-              />
-            )}
-            {(linea === "uv" || cuenta.metrosUv > 0) && (
-              <TarjetaKpi
-                titulo="Metros de DTF UV"
-                explicacion="metros"
-                valor={metros(cuenta.metrosUv)}
-                frente={frente}
-                delta={previa ? variacion(cuenta.metrosUv, previa.metrosUv) : null}
-                icon={ICONO.metros}
-              />
-            )}
-          </div>
+            <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+              {linea !== "uv" && (
+                <TarjetaDato
+                  clave="metros"
+                  valor={cuenta ? metros(cuenta.metros) : "…"}
+                  frente={frente}
+                  delta={cuenta && previa ? variacion(cuenta.metros, previa.metros) : null}
+                />
+              )}
+              {(linea === "uv" || (cuenta?.metrosUv ?? 0) > 0) && (
+                <TarjetaDato
+                  clave="metros_uv"
+                  valor={cuenta ? metros(cuenta.metrosUv) : "…"}
+                  frente={frente}
+                  delta={cuenta && previa ? variacion(cuenta.metrosUv, previa.metrosUv) : null}
+                />
+              )}
+            </div>
+          </>
         )}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Desde el principio</h2>
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-          <TarjetaKpi
-            titulo="Pedidos"
-            valor={String(pedidos.length)}
-            delta={null}
-            icon={ICONO.pedidos}
+        {totales.error ? (
+          <ErrorCarga
+            error={totales.error}
+            onReintentar={totales.refetch}
+            reintentando={totales.isRefetching}
+            que="los totales de la tienda"
           />
-          <TarjetaKpi
-            titulo="Metros"
-            valor={metros(mts)}
-            delta={null}
-            icon={ICONO.metros}
-            pie={
-              mtsUv > 0 ? (
-                <span className="text-muted-foreground">
-                  De DTF. Aparte,{" "}
-                  <span className="font-medium text-violet-700 dark:text-violet-300">
-                    {metros(mtsUv)} de DTF UV
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+            <TarjetaDato
+              clave="pedidos"
+              valor={deTotal(totales.data?.pedidos, (n) => numero(n, 0))}
+            />
+            <TarjetaDato
+              clave="metros"
+              valor={deTotal(totales.data?.metros, metros)}
+              pie={
+                (totales.data?.metrosUv ?? 0) > 0 ? (
+                  <span className="text-muted-foreground">
+                    Aparte,{" "}
+                    <span className="font-medium text-linea-uv-texto">
+                      {metros(totales.data?.metrosUv)} de DTF UV
+                    </span>
                   </span>
+                ) : undefined
+              }
+            />
+            <TarjetaKpi
+              titulo="Facturas y tickets"
+              valor={deTotal(totales.data?.documentos, (n) => numero(n, 0))}
+              delta={null}
+              icon={ICONOS_PANTALLA.facturas}
+              pie={
+                <span className="text-muted-foreground">
+                  Vigentes: sin borradores ni anuladas, y un ticket canjeado por factura, una vez
                 </span>
-              ) : undefined
-            }
-          />
-          <TarjetaKpi
-            titulo="Facturas"
-            valor={String(data?.facturas ?? 0)}
-            delta={null}
-            icon={FileText}
-          />
-        </div>
+              }
+            />
+          </div>
+        )}
       </section>
     </div>
   );

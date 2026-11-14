@@ -57,13 +57,49 @@ export function useAgenda() {
   });
 }
 
-/** El número del menú: mis tareas de hoy, vencidas o nuevas. Sin persona, 0. */
-export function useAvisoAgenda(): number {
-  const { data } = useAgenda();
-  const { persona } = useQuienSoy();
+/**
+ * Mis tareas de hoy, vencidas o nuevas, y por qué no se saben si no se saben:
+ * leyéndose, sin poder leerse o sin saber quién eres. Antes salía 0 en los
+ * tres casos, como si no hubiera nada que hacer.
+ */
+export type AvisoAgenda = {
+  /** Cuántas; nulo si no se sabe. */
+  aviso: number | null;
+  cargando: boolean;
+  error: Error | null;
+  /** Por qué no se sabe sin ser un error: falta elegir quién eres, o no hay nadie. */
+  motivo: string | null;
+  reintentar: () => void;
+};
+
+export function useEstadoAvisoAgenda(): AvisoAgenda {
+  const agenda = useAgenda();
+  const quien = useQuienSoy();
   const hoy = useHoyEnMadrid();
-  return useMemo(
-    () => (data && persona ? resumenDe(data.tareas, persona.id, hoy).aviso : 0),
+  const { data, error, refetch } = agenda;
+  const { persona } = quien;
+  const aviso = useMemo(
+    () => (data && persona ? resumenDe(data.tareas, persona.id, hoy).aviso : null),
     [data, persona, hoy],
   );
+  return {
+    aviso,
+    cargando: (data === undefined && !error) || quien.cargando,
+    error: (error as Error | null) ?? quien.error,
+    motivo:
+      quien.cargando || quien.error || persona
+        ? null
+        : quien.estado.tipo === "elegir"
+          ? "Elige quién eres"
+          : "Nadie dado de alta en la Agenda",
+    reintentar: () => {
+      if (error) void refetch();
+      if (quien.error) quien.reintentar();
+    },
+  };
+}
+
+/** El número del menú: mis tareas de hoy, vencidas o nuevas. Nulo si no se sabe (sin insignia). */
+export function useAvisoAgenda(): number | null {
+  return useEstadoAvisoAgenda().aviso;
 }
