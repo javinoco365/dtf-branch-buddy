@@ -684,10 +684,10 @@ export function RevisarCompraTextil({
       />
 
       {avisos.length > 0 && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
               Los números no cuadran entre sí
             </CardTitle>
           </CardHeader>
@@ -1011,7 +1011,9 @@ export function RevisarCompraTextil({
               value={estado.tipo_iva === null ? "" : String(estado.tipo_iva)}
               onValueChange={(v) => onCambiar({ ...estado, tipo_iva: Number(v) })}
             >
-              <SelectTrigger className={estado.tipo_iva === null ? "border-amber-500" : ""}>
+              <SelectTrigger
+                className={estado.tipo_iva === null ? "border-aviso-atencion-borde" : ""}
+              >
                 <SelectValue placeholder="Elige el tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -1046,10 +1048,10 @@ export function RevisarCompraTextil({
         </p>
       )}
       {descuadre !== null && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="space-y-3 py-4 text-sm">
             <p className="flex gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
               La factura dice {eur(compra.total)} a pagar y el cálculo da {eur(calculado.liquido)} (
               {descuadre > 0 ? "+" : ""}
               {eur(descuadre)}). ¿Cuál vale?
@@ -1259,7 +1261,7 @@ function CeldaVariante({
   if (efectiva.estado === "casada") {
     return (
       <div className="space-y-1">
-        <Badge className="bg-emerald-600 hover:bg-emerald-600">
+        <Badge className="border-aviso-bien-borde bg-aviso-bien text-aviso-bien-texto hover:bg-aviso-bien">
           {ETIQUETA_METODO[efectiva.metodo]}
         </Badge>
         <p className="text-xs">{etiqueta(efectiva.stock_id)}</p>
@@ -1270,7 +1272,7 @@ function CeldaVariante({
   if (efectiva.estado === "sugerida") {
     return (
       <div className="space-y-1">
-        <Badge variant="outline" className="border-amber-500 text-amber-700">
+        <Badge variant="outline" className="border-aviso-atencion-borde text-aviso-atencion-texto">
           Sugerencia
         </Badge>
         <div className="flex flex-col gap-1">
@@ -1294,7 +1296,7 @@ function CeldaVariante({
   }
   return (
     <div className="space-y-1">
-      <Badge variant="outline" className="border-amber-500 text-amber-700">
+      <Badge variant="outline" className="border-aviso-atencion-borde text-aviso-atencion-texto">
         Se crea sola
       </Badge>
       {acciones}
@@ -1323,10 +1325,10 @@ export function TarjetaQueMirar({
   const duplicadoQueBloquea = duplicados.find(bloqueaRegistro);
   const porConfirmar = duplicados.filter((d) => !bloqueaRegistro(d) && !d.borrada);
   return (
-    <Card className={duplicadoQueBloquea ? "border-destructive/60" : "border-amber-500/50"}>
+    <Card className={duplicadoQueBloquea ? "border-destructive/60" : "border-aviso-atencion-borde"}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
           Qué mirar antes de registrarla
         </CardTitle>
       </CardHeader>

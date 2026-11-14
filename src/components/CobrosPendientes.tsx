@@ -309,7 +309,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                           onClick={() => setCobrando(f)}
                           disabled={marcar.isPending}
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" /> Cobrado
+                          <CheckCircle2 className="h-4 w-4 mr-1 text-aviso-bien-texto" /> Cobrado
                         </Button>
                       </SiPuede>
                     </TableCell>
@@ -341,7 +341,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                     colSpan={tiendaId ? 7 : 8}
                     className="text-center py-8 text-muted-foreground"
                   >
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-aviso-bien-texto" />
                     Sin cobros pendientes.
                   </TableCell>
                 </TableRow>

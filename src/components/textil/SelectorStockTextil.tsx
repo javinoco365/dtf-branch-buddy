@@ -299,7 +299,7 @@ export function SelectorStockTextil(props: Props) {
           <DialogFooter className="items-center gap-2">
             {conFalta > 0 && (
               <span
-                className={`text-sm mr-auto ${bloqueado ? "text-destructive" : "text-amber-700"}`}
+                className={`text-sm mr-auto ${bloqueado ? "text-destructive" : "text-aviso-atencion-texto"}`}
               >
                 {bloqueado
                   ? "Un pedido no puede llevar más de lo disponible: baja las cantidades en rojo."

@@ -1326,7 +1326,10 @@ function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
                       </span>
                     )}
                     {m.reconocido && (
-                      <span className="text-emerald-700"> · el CRM lo lee como {m.reconocido}</span>
+                      <span className="text-aviso-bien-texto">
+                        {" "}
+                        · el CRM lo lee como {m.reconocido}
+                      </span>
                     )}
                   </li>
                 ))}

@@ -319,9 +319,9 @@ function StockPage() {
         </SiPuede>
       </div>
       {estadoEscaner && !escaner && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_ESCANER}</p>
           </CardContent>
         </Card>
@@ -1072,7 +1072,7 @@ function RecuentoDialog({ item, onClose, onSave, loading }: any) {
             </div>
             <div
               className={`rounded-md border p-3 text-sm ${
-                diferencia === 0 ? "bg-muted/30" : "border-amber-500/50 bg-amber-500/10"
+                diferencia === 0 ? "bg-muted/30" : "border-aviso-atencion-borde bg-aviso-atencion"
               }`}
             >
               {diferencia === 0
@@ -1211,7 +1211,7 @@ function HistorialDialog({ item, onClose }: any) {
                     <>
                       <TableCell
                         className={`text-right font-medium tabular-nums ${
-                          Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
+                          Number(m.cantidad) > 0 ? "text-aviso-bien-texto" : "text-destructive"
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}

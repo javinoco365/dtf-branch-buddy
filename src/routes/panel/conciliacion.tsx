@@ -306,7 +306,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                           value={elegida}
                           onValueChange={(v) => setElegidas({ ...elegidas, [m.id]: v })}
                         >
-                          <SelectTrigger className={segura ? "" : "border-amber-500/60"}>
+                          <SelectTrigger className={segura ? "" : "border-aviso-atencion-borde"}>
                             <SelectValue placeholder="Sin casar" />
                           </SelectTrigger>
                           <SelectContent>
@@ -339,7 +339,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             contra la propuesta: al cambiarla a mano hay que ver
                             si el importe deja de cuadrar. */}
                           {factura && Math.abs(Number(m.importe) - Number(factura.total)) > 0 && (
-                            <div className="text-xs text-amber-600">
+                            <div className="text-xs text-aviso-atencion-texto">
                               Difiere {eur(Number(m.importe) - Number(factura.total))}
                             </div>
                           )}
@@ -361,7 +361,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             ])
                           }
                         >
-                          <Check className="h-4 w-4 text-emerald-600" />
+                          <Check className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       </TableCell>
                     </TableRow>

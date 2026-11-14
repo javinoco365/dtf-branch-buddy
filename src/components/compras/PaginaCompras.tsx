@@ -645,9 +645,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       </div>
 
       {lector?.disponible === false && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-medium">La lectura automática de facturas no está activada.</p>
               <p className="text-muted-foreground">
@@ -666,9 +666,9 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       )}
 
       {sinGenerales && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>
               Las compras generales aún no están activadas (avisa a Javier). Hasta entonces, las
               compras de textil se registran en Textil › Compras.
@@ -678,18 +678,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       )}
 
       {!general && data && !escaner && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_ESCANER}</p>
           </CardContent>
         </Card>
       )}
 
       {data && !proformas && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_PROFORMAS}</p>
           </CardContent>
         </Card>
@@ -878,7 +878,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     {esProforma(c) && (
                       <Badge
                         variant="outline"
-                        className="mt-0.5 flex w-fit border-amber-500 font-sans text-amber-700"
+                        className="mt-0.5 flex w-fit border-aviso-atencion-borde font-sans text-aviso-atencion-texto"
                       >
                         Proforma
                       </Badge>
@@ -1300,10 +1300,10 @@ function RevisarCompra({
       />
 
       {avisos.length > 0 && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
               Los números no cuadran entre sí
             </CardTitle>
           </CardHeader>
@@ -1333,7 +1333,7 @@ function RevisarCompra({
                 })
               }
             >
-              <SelectTrigger className={sinCategoria ? "border-amber-500" : ""}>
+              <SelectTrigger className={sinCategoria ? "border-aviso-atencion-borde" : ""}>
                 <SelectValue placeholder="Elige la categoría" />
               </SelectTrigger>
               <SelectContent>
@@ -1482,7 +1482,9 @@ function RevisarCompra({
                       value={asignaciones[i] ?? ""}
                       onValueChange={(v) => setAsignacion(i, v || null)}
                     >
-                      <SelectTrigger className={asignaciones[i] ? "" : "border-amber-500"}>
+                      <SelectTrigger
+                        className={asignaciones[i] ? "" : "border-aviso-atencion-borde"}
+                      >
                         <SelectValue placeholder="Sin asignar" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1547,7 +1549,9 @@ function RevisarCompra({
                 value={estado.tipo_iva === null ? "" : String(estado.tipo_iva)}
                 onValueChange={(v) => onCambiar({ ...estado, tipo_iva: Number(v) })}
               >
-                <SelectTrigger className={estado.tipo_iva === null ? "border-amber-500" : ""}>
+                <SelectTrigger
+                  className={estado.tipo_iva === null ? "border-aviso-atencion-borde" : ""}
+                >
                   <SelectValue placeholder="Elige el tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1602,10 +1606,10 @@ function RevisarCompra({
             <span className="font-medium text-foreground">líquido {eur(calculado.liquido)}</span>
           </p>
           {descuadre !== null && (
-            <Card className="border-amber-500/50">
+            <Card className="border-aviso-atencion-borde">
               <CardContent className="space-y-3 py-4 text-sm">
                 <p className="flex gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
                   La factura dice {eur(compra.total)} a pagar y el cálculo da{" "}
                   {eur(calculado.liquido)} ({descuadre > 0 ? "+" : ""}
                   {eur(descuadre)}). ¿Cuál vale?

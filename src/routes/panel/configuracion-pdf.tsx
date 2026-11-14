@@ -438,7 +438,7 @@ function ConfiguracionPdfPage() {
                 </Badge>
               )}
               {sucio && (
-                <Badge className="whitespace-nowrap border-transparent bg-amber-100 font-normal text-amber-900 shadow-none hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-200">
+                <Badge className="whitespace-nowrap border-transparent bg-aviso-atencion font-normal text-aviso-atencion-texto shadow-none hover:bg-aviso-atencion">
                   Cambios sin guardar
                 </Badge>
               )}
@@ -476,11 +476,11 @@ function ConfiguracionPdfPage() {
           </div>
 
           {!disponible && (
-            <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
+            <Card className="border-aviso-atencion-borde bg-aviso-atencion/60">
               <CardHeader className="p-4 pb-1">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" /> Guardar plantillas aún no
-                  está activado
+                  <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" /> Guardar plantillas
+                  aún no está activado
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Avisa a Javier para activarlo. Mientras tanto, los PDF salen con la plantilla por

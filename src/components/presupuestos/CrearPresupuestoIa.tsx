@@ -354,8 +354,8 @@ export function PresupuestoIaDialog({
 /** Las dudas de la IA y lo que hay que mirar, arriba del editor. */
 export function AvisosIa({ avisos }: { avisos: readonly string[] }) {
   return (
-    <Alert className="border-amber-500/40 bg-amber-500/5">
-      <AlertTriangle className="h-4 w-4 !text-amber-600" />
+    <Alert variant="atencion">
+      <AlertTriangle className="h-4 w-4" />
       <AlertTitle>Borrador de la IA: revísalo antes de guardar</AlertTitle>
       <AlertDescription>
         {avisos.length ? (

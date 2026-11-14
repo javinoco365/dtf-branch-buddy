@@ -64,10 +64,10 @@ export function ColaRevision({
   // Lo leído, sin confirmar: da idea de lo pendiente, pero no cuenta en nada.
   const totales = totalesCola(compras);
   return (
-    <Card className="border-amber-500/50">
+    <Card className="border-aviso-atencion-borde">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
           Por revisar ({compras.length})
         </CardTitle>
         <p className="text-xs text-muted-foreground">
@@ -97,7 +97,10 @@ export function ColaRevision({
                   <TableCell className="font-medium">
                     {c.proveedor ?? (error ? "Sin leer" : "—")}
                     {esProforma(c) && (
-                      <Badge variant="outline" className="ml-1 border-amber-500 text-amber-700">
+                      <Badge
+                        variant="outline"
+                        className="ml-1 border-aviso-atencion-borde text-aviso-atencion-texto"
+                      >
                         Proforma
                       </Badge>
                     )}

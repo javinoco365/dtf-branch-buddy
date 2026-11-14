@@ -446,7 +446,7 @@ function Facturas() {
                           disabled={marcarPagada.isPending}
                           title="Marcar como pagada"
                         >
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       )}
                       {escribir && situaciones.get(f.id)?.admite_cambios && (

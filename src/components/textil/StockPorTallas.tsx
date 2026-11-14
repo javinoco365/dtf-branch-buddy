@@ -201,7 +201,7 @@ function BotonesVariante({
             aria-label="Fusionar con…"
             onClick={() => acciones.fusionar(v)}
           >
-            <GitMerge className="h-4 w-4 text-amber-600" />
+            <GitMerge className="h-4 w-4 text-aviso-atencion-texto" />
           </Button>
         </SiPuede>
       )}

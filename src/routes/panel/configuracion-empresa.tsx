@@ -255,7 +255,7 @@ function EmpresaPage() {
                     6.1.a), y los tickets (facturas simplificadas) también van aparte: los tres
                     prefijos tienen que ser distintos.
                   </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                  <p className="text-xs text-aviso-atencion-texto mt-2">
                     Cambiar un prefijo abre una serie nueva que empieza otra vez por 1. No lo toques
                     con facturas ya emitidas este año.
                   </p>
