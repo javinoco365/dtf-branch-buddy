@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Destino } from "./destinos";
 import { SiPuede } from "@/components/SiPuede";
-import { mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** «Ver detalle →», a la pantalla con la lista que hay detrás de una cifra. */
 export function VerDetalle({
@@ -47,15 +47,20 @@ export function CargandoPestana() {
   );
 }
 
-/** Si una lectura falla, se dice cuál y por qué, sin tumbar las demás pestañas. */
-export function ErrorPestana({ que, error }: { que: string; error: Error }) {
-  return (
-    <Card>
-      <CardContent className="py-6 text-sm text-destructive">
-        No se han podido cargar {que}: {mensajeDeError(error)}
-      </CardContent>
-    </Card>
-  );
+/**
+ * Si una lectura falla, se dice cuál y por qué, sin tumbar las demás pestañas,
+ * y se deja volver a intentarlo (sin `onReintentar`, todas las que fallaron).
+ */
+export function ErrorPestana({
+  que,
+  error,
+  onReintentar,
+}: {
+  que: string;
+  error: Error;
+  onReintentar?: () => unknown;
+}) {
+  return <ErrorCarga error={error} onReintentar={onReintentar} que={que} />;
 }
 
 /** Un campo de formulario con su etiqueta encima. */

@@ -38,8 +38,8 @@ import { proformasSinFactura, proformasTextil, resumenProformas } from "@/domini
 import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
-import { mensajeDeError } from "@/lib/errores";
 import { ICONO } from "@/components/iconos";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 const SIN_MARCA = "sin-marca";
 const FILAS = 10;
@@ -307,9 +307,12 @@ export function Textil({ d }: { d: DatosGerencia }) {
               </p>
             )}
             {errorProformas && (
-              <p className="text-xs text-destructive">
-                No se han podido leer las proformas sin factura: {mensajeDeError(errorProformas)}
-              </p>
+              <ErrorCarga
+                compacto
+                className="text-xs"
+                error={errorProformas}
+                que="las proformas sin factura"
+              />
             )}
             {proformas && proformas.proformas > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -467,9 +470,7 @@ function CuentaDelAlmacen({
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer los movimientos del almacén: {mensajeDeError(error)}
-          </p>
+          <ErrorCarga compacto error={error} que="los movimientos del almacén" />
         ) : datos === undefined ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : datos === null || !cuenta ? (
@@ -616,9 +617,7 @@ function ControlesDelAlmacen({
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer los controles: {mensajeDeError(error)}
-          </p>
+          <ErrorCarga compacto error={error} que="los controles" />
         ) : disponible === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : !disponible || !resumen ? (

@@ -52,9 +52,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Download, Receipt, X, TrendingUp, TrendingDown } from "lucide-react";
 import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
-import { mensajeDeError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 import { ICONO } from "@/components/iconos";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
   head: () => ({ meta: [{ title: "Lo cobrado · DTF Culture" }] }),
@@ -374,13 +374,7 @@ function FacturacionGlobal() {
 
       <AvisoActualizando activo={deAntes} />
 
-      {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se ha podido cargar la facturación: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
-      )}
+      {error && <ErrorCarga error={error} que="la facturación" />}
 
       {!disponible && (
         <Card>

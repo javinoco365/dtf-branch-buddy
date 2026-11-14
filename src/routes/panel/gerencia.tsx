@@ -40,6 +40,7 @@ import {
 import { CANALES, type Canal, type FiltroGerencia } from "@/dominio/gerencia";
 import { mensajeDeError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 // Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
 // las once (y la librería de gráficas) para enseñar solo una. Estos módulos se
@@ -389,13 +390,7 @@ function Gerencia() {
         </Card>
       )}
 
-      {ventas.error && !enAjustes && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pedidos: {mensajeDeError(ventas.error)}
-          </CardContent>
-        </Card>
-      )}
+      {ventas.error && !enAjustes && <ErrorCarga error={ventas.error} que="los pedidos" />}
 
       {PESTANAS_MOVIDAS.has(f.pestana) && (
         <Card>

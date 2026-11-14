@@ -9,7 +9,6 @@ import {
   Download,
   Eye,
   FileText,
-  RefreshCw,
   RotateCcw,
   Save,
   Store,
@@ -69,8 +68,9 @@ import { SeccionesPlantilla } from "@/components/plantillas/SeccionesPlantilla";
 import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -365,20 +365,12 @@ function ConfiguracionPdfPage() {
           <Skeleton className="h-64 w-full" />
         </div>
       ) : lista.isError ? (
-        <Card>
-          <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">No se han podido cargar las plantillas</p>
-              <p className="break-words text-sm text-muted-foreground">
-                {mensajeDeError(lista.error, "No se ha podido cargar")}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => void lista.refetch()}>
-              <RefreshCw /> Reintentar
-            </Button>
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={lista.error}
+          onReintentar={lista.refetch}
+          reintentando={lista.isRefetching}
+          que="las plantillas"
+        />
       ) : ambitos.length === 0 ? (
         <EstadoVacio
           icono={Store}

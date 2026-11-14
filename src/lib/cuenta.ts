@@ -10,8 +10,8 @@
  * se vuelve a pedir.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { useReintentarFallidas } from "@/lib/reintentar";
 import {
   useCobrosPeriodo,
   useCosteMetroHoy,
@@ -214,7 +214,6 @@ export function useCuentaResultados({
   gastos = true,
   dinero = true,
 }: OpcionesCuenta): LecturaCuenta {
-  const qc = useQueryClient();
   const hoy = useMemo(() => new Date(), []);
   const tiendaReal =
     filtro.tienda !== TODAS && filtro.tienda !== TIENDA_TEXTIL.id ? filtro.tienda : undefined;
@@ -413,13 +412,7 @@ export function useCuentaResultados({
     (conGastos ? (compras.error as Error | null) : null) ??
     (dinero && filtro.linea !== "todo" ? (soloUv.error as Error | null) : null) ??
     null;
-  const [reintentando, setReintentando] = useState(false);
-  const reintentar = useCallback(() => {
-    setReintentando(true);
-    void qc
-      .refetchQueries({ predicate: (q) => q.state.status === "error" })
-      .finally(() => setReintentando(false));
-  }, [qc]);
+  const { reintentar, reintentando } = useReintentarFallidas();
 
   const pagosActivos = dinero && conEstructura(filtro);
   const estadoDinero = useMemo(

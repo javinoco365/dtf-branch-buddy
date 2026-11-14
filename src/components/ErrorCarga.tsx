@@ -3,13 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { errorLegible } from "@/lib/errores";
+import { useReintentarFallidas } from "@/lib/reintentar";
 import { cn } from "@/lib/utils";
 
 type Props = {
   /** Lo que se lanzó al leer. */
   error: unknown;
-  /** Vuelve a pedir los datos: el `refetch` de la consulta. */
-  onReintentar: () => unknown;
+  /**
+   * Vuelve a pedir los datos: el `refetch` de la consulta. Sin él, se vuelven
+   * a pedir todas las lecturas que han fallado.
+   */
+  onReintentar?: () => unknown;
   /** Mientras se vuelve a pedir: el botón no se pulsa dos veces. */
   reintentando?: boolean;
   /** Qué no se pudo cargar, en minúscula: «los cobros pendientes». */
@@ -18,6 +22,8 @@ type Props = {
   colSpan?: number;
   /** Sin tarjeta alrededor, para meterlo en una que ya hay. */
   sinMarco?: boolean;
+  /** En una línea, dentro de una tarjeta o de una lista: el motivo y «Reintentar». */
+  compacto?: boolean;
   className?: string;
 };
 
@@ -38,9 +44,30 @@ export function ErrorCarga({
   que = "los datos",
   colSpan,
   sinMarco = false,
+  compacto = false,
   className,
 }: Props) {
   const { texto } = errorLegible(error, "Error desconocido");
+  const fallidas = useReintentarFallidas();
+  const alReintentar = onReintentar ?? fallidas.reintentar;
+  const enCurso = onReintentar ? reintentando : fallidas.reintentando;
+
+  if (compacto) {
+    return (
+      <p role="alert" className={cn("text-sm text-destructive", className)}>
+        No se pudieron cargar {que}: {texto}{" "}
+        <button
+          type="button"
+          disabled={enCurso}
+          onClick={() => void alReintentar()}
+          className="font-medium underline underline-offset-2 hover:no-underline disabled:opacity-60"
+        >
+          {enCurso ? "Reintentando…" : "Reintentar"}
+        </button>
+      </p>
+    );
+  }
+
   const contenido = (
     <div
       role="alert"
@@ -56,14 +83,9 @@ export function ErrorCarga({
         <p className="font-medium">No se pudieron cargar {que}</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">{texto}</p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={reintentando}
-        onClick={() => void onReintentar()}
-      >
-        <RotateCw className={cn("mr-1.5 h-4 w-4", reintentando && "animate-spin")} />
-        {reintentando ? "Reintentando…" : "Reintentar"}
+      <Button variant="outline" size="sm" disabled={enCurso} onClick={() => void alReintentar()}>
+        <RotateCw className={cn("mr-1.5 h-4 w-4", enCurso && "animate-spin")} />
+        {enCurso ? "Reintentando…" : "Reintentar"}
       </Button>
     </div>
   );

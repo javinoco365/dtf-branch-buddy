@@ -19,7 +19,7 @@ export function ImagenesPresupuesto({ estado }: { estado: EstadoImagenesPresupue
   if (estado.estado === "error") {
     return (
       <p className="text-xs text-destructive">
-        No se han podido cargar las imágenes ({estado.errorConsulta}).
+        Las imágenes no se pudieron cargar ({estado.errorConsulta}).
         {estado.nuevas.length > 0 &&
           " Al guardar se vuelve a intentar; si sigue fallando, se avisa de las que no se guardan."}
       </p>

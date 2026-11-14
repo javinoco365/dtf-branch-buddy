@@ -81,7 +81,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
@@ -593,9 +593,7 @@ function PedidosPage() {
               <DialogTitle>{editing ? `Editar ${editing.numero}` : "Nuevo pedido"}</DialogTitle>
             </DialogHeader>
             {errorStock ? (
-              <p className="text-sm text-destructive">
-                No se ha podido leer el stock: {mensajeDeError(errorStock)}
-              </p>
+              <ErrorCarga compacto error={errorStock} que="el stock" />
             ) : (
               <p className="text-sm text-muted-foreground">Cargando el stock…</p>
             )}

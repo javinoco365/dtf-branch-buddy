@@ -107,8 +107,8 @@ export function VistaPreviaPdf({
       </div>
       {logoFallido && !error && (
         <p className="text-[11px] text-aviso-atencion-texto">
-          No se ha podido cargar el logo en la vista previa, que sale sin él. Comprueba que es un
-          PNG, JPG o WebP; si es así, súbelo aquí para que el PDF lo lleve seguro.
+          El logo no se ha cargado en la vista previa, que sale sin él. Comprueba que es un PNG, JPG
+          o WebP; si es así, súbelo aquí para que el PDF lo lleve seguro.
         </p>
       )}
       {!llenar && pdf && !error && (

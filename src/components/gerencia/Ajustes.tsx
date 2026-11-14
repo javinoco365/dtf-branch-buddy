@@ -25,7 +25,8 @@ import { eur, metros } from "@/lib/format";
 import { useAjustesGerencia } from "@/lib/gerencia";
 import { borrarObjetivo, guardarAjustesGerencia, guardarObjetivo } from "@/lib/gerencia.functions";
 import type { Objetivo } from "@/dominio/gerencia";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
  * Gerencia › Ajustes: lo que Gerencia necesita saber y solo sabe la empresa.
@@ -37,11 +38,7 @@ export function Ajustes() {
 
   if (isPending) return <p className="text-sm text-muted-foreground">Cargando ajustes…</p>;
   if (error) {
-    return (
-      <p className="text-sm text-destructive">
-        No se han podido leer los ajustes: {mensajeDeError(error)}
-      </p>
-    );
+    return <ErrorCarga error={error} que="los ajustes" />;
   }
   if (!data.disponible) {
     return (

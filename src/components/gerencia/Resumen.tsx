@@ -147,10 +147,12 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       <section aria-label="Avisos" className="space-y-2">
         {/* Un fallo no es «ninguna proforma pendiente». */}
         {errorProformas && (
-          <p className="flex items-start gap-2 rounded-lg border border-status-cancelado/30 bg-status-cancelado/5 px-3 py-2 text-sm text-status-cancelado">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            No se han podido leer las proformas sin factura. Prueba a recargar la página.
-          </p>
+          <ErrorCarga
+            compacto
+            className="rounded-lg border border-status-cancelado/30 bg-status-cancelado/5 px-3 py-2"
+            error={errorProformas}
+            que="las proformas sin factura"
+          />
         )}
         {avisos.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
