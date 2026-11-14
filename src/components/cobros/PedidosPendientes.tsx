@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle2, Clock, Search, Wallet, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Search, X } from "lucide-react";
 import { eur, fechaCorta } from "@/lib/format";
 import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
@@ -44,6 +44,7 @@ import {
   type PedidoPendiente,
 } from "@/dominio/pendientes";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { ICONO } from "@/components/iconos";
 
 /** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
 const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
@@ -119,7 +120,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         <Kpi
-          icon={<Wallet className="h-4 w-4" />}
+          icon={<ICONO.pendienteCobro className="h-4 w-4" />}
           label="Total pendiente"
           value={eur(resumen.pendiente)}
         />

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Clock, HandCoins, Hourglass, Truck, Wallet } from "lucide-react";
+import { Clock, HandCoins, Hourglass, Truck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -31,6 +31,7 @@ import {
 } from "./destinos";
 import { NotaGrupo, VerDetalle } from "./comun";
 import { mensajeDeError } from "@/lib/errores";
+import { ICONO } from "@/components/iconos";
 
 export function Tesoreria({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -62,7 +63,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           valor={d.cobrosDisponibles ? eur(t.cobrado) : "—"}
           frente={frente}
           delta={d.cobrosDisponibles ? variacion(t.cobrado, tPrev.cobrado) : null}
-          icon={Wallet}
+          icon={ICONO.cobrado}
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
         <TarjetaKpi
@@ -88,7 +89,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           valor={eur(t.propina)}
           frente={frente}
           delta={variacion(t.propina, tPrev.propina)}
-          icon={HandCoins}
+          icon={ICONO.propinas}
         />
       </div>
 

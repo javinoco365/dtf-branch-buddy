@@ -16,35 +16,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Boxes,
-  Building2,
-  CalendarDays,
-  ChevronRight,
-  Coins,
-  FilePen,
-  FileText,
-  FileUp,
-  FolderArchive,
-  ChartNoAxesCombined,
-  Gauge,
-  HandCoins,
-  Landmark,
-  LayoutDashboard,
-  type LucideIcon,
-  Package,
-  PiggyBank,
-  Plus,
-  Receipt,
-  ReceiptText,
-  Settings,
-  Shirt,
-  Sparkles,
-  ShoppingCart,
-  Store,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { ChevronRight, Plus, Shirt, Store } from "lucide-react";
+import { ICONOS_PANTALLA } from "@/components/iconos";
 import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
@@ -57,35 +30,11 @@ import {
   SUBMENU_TEXTIL,
   SUBMENU_TIENDA,
   entradaActiva,
-  type ClaveIcono,
   type EntradaMenu,
 } from "@/dominio/navegacion";
 
-const ICONOS: Record<ClaveIcono, LucideIcon> = {
-  inicio: LayoutDashboard,
-  gerencia: Gauge,
-  "cuenta-resultados": ChartNoAxesCombined,
-  agenda: CalendarDays,
-  pedidos: ShoppingCart,
-  clientes: Users,
-  productos: Package,
-  cobros: Wallet,
-  cobrado: HandCoins,
-  compras: ReceiptText,
-  banco: Landmark,
-  caja: Coins,
-  inversion: PiggyBank,
-  archivo: FolderArchive,
-  presupuestos: FilePen,
-  facturas: FileText,
-  facturacion: Receipt,
-  ajustes: Settings,
-  usuarios: Users,
-  tiendas: Building2,
-  stock: Boxes,
-  "compras-textil": FileUp,
-  novedades: Sparkles,
-};
+/** El icono de cada pantalla: el mapa único de src/components/iconos.ts. */
+const ICONOS = ICONOS_PANTALLA;
 
 const ESTILO_GRUPO =
   "uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50";

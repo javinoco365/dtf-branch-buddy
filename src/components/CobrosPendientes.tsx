@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eur, fechaCorta } from "@/lib/format";
 import { toast } from "sonner";
-import { CheckCircle2, AlertTriangle, Clock, Wallet, Search, X } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Clock, Search, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -44,6 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ICONO } from "@/components/iconos";
 
 type Factura = {
   id: string;
@@ -167,7 +168,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         <KPI
-          icon={<Wallet className="h-4 w-4" />}
+          icon={<ICONO.pendienteCobro className="h-4 w-4" />}
           label="Total pendiente"
           value={eur(totalPendiente)}
           tone="default"

@@ -44,8 +44,6 @@ import {
   Phone,
   MapPin,
   FileText,
-  ShoppingCart,
-  Receipt,
   Pencil,
   Trash2,
   Shirt,
@@ -70,6 +68,7 @@ import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
+import { ICONO, ICONOS_PANTALLA } from "@/components/iconos";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -883,7 +882,7 @@ function ClienteDetalle({
 
         <Historial
           titulo="Pedidos de las tiendas"
-          icono={<ShoppingCart className="h-4 w-4" />}
+          icono={<ICONO.pedidos className="h-4 w-4" />}
           vacio="Sin pedidos en las tiendas"
           consultas={[qPedidos]}
           pie={{
@@ -918,7 +917,7 @@ function ClienteDetalle({
         />
         <Historial
           titulo="Facturas"
-          icono={<Receipt className="h-4 w-4" />}
+          icono={<ICONOS_PANTALLA.facturas className="h-4 w-4" />}
           vacio="Sin facturas"
           consultas={[qFacturas, qFacturasTextil]}
           pie={{

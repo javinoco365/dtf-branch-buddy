@@ -50,19 +50,11 @@ import {
   type FiltroConsolidada,
 } from "@/dominio/facturacion";
 import type { LucideIcon } from "lucide-react";
-import {
-  Download,
-  HandCoins,
-  Receipt,
-  Percent,
-  Wallet,
-  X,
-  TrendingUp,
-  TrendingDown,
-} from "lucide-react";
+import { Download, Receipt, X, TrendingUp, TrendingDown } from "lucide-react";
 import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
   head: () => ({ meta: [{ title: "Lo cobrado · DTF Culture" }] }),
@@ -426,7 +418,7 @@ function FacturacionGlobal() {
               explicacion="total_cobrado"
               subtitulo="Con IVA, envíos y propinas"
               valor={eur(totales.total)}
-              icon={Wallet}
+              icon={ICONO.cobrado}
               tono="success"
               delta={variacion(totales.total, totalesPrevios.total)}
               frente={frente}
@@ -436,7 +428,7 @@ function FacturacionGlobal() {
               explicacion="base_cobrada"
               subtitulo={`${totales.pedidos} ${totales.pedidos === 1 ? "pedido" : "pedidos"} · ${totales.cobros} ${totales.cobros === 1 ? "cobro" : "cobros"}`}
               valor={eur(totales.base)}
-              icon={Receipt}
+              icon={ICONO.ventas}
               tono="primary"
               delta={variacion(totales.base, totalesPrevios.base)}
               frente={frente}
@@ -446,7 +438,7 @@ function FacturacionGlobal() {
               explicacion="iva_cobrado"
               subtitulo={`${numero(ivaPct, 1)}\u00A0% sobre la base`}
               valor={eur(totales.iva)}
-              icon={Percent}
+              icon={ICONO.iva}
               tono="info"
               delta={variacion(totales.iva, totalesPrevios.iva)}
               frente={frente}
@@ -456,7 +448,7 @@ function FacturacionGlobal() {
               explicacion="propinas"
               subtitulo="Aparte de lo cobrado a los pedidos"
               valor={eur(totales.propina)}
-              icon={HandCoins}
+              icon={ICONO.propinas}
               tono="warn"
               delta={variacion(totales.propina, totalesPrevios.propina)}
               frente={frente}

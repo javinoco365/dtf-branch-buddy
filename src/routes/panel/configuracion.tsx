@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Building2, Wallet, FileText, CalendarDays } from "lucide-react";
+import { Users, Building2, FileText, CalendarDays } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONOS_PANTALLA } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/configuracion")({
   head: () => ({ meta: [{ title: "Configuración general · DTF Culture" }] }),
@@ -35,7 +36,7 @@ function ConfiguracionPage() {
         />
         <ConfigCard
           to="/panel/configuracion-caja"
-          icon={Wallet}
+          icon={ICONOS_PANTALLA.caja}
           title="Caja"
           desc="Los conceptos del desplegable y los socios que aparecen en los apuntes de caja."
         />

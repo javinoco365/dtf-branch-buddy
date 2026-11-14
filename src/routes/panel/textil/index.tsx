@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent } from "@/components/ui/card";
-import { Boxes, FileSpreadsheet, FileText, ShoppingCart, Users, Settings } from "lucide-react";
+import { Boxes, FileText, Users, Settings } from "lucide-react";
 import { resumenTextilInicio } from "@/lib/textil.functions";
 import { eur as fmtEUR } from "@/lib/format";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/textil/")({
   head: () => ({ meta: [{ title: "Textil Personalizado · DTF Culture" }] }),
@@ -37,13 +38,13 @@ function TextilHome() {
     {
       to: "/panel/textil/pedidos",
       label: "Pedidos",
-      icon: ShoppingCart,
+      icon: ICONO.pedidos,
       value: r?.pedidos ?? 0,
     },
     {
       to: "/panel/textil/presupuestos",
       label: "Presupuestos",
-      icon: FileSpreadsheet,
+      icon: ICONO.presupuestos,
       value: r?.presupuestos ?? 0,
     },
     {

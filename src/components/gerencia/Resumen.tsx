@@ -1,17 +1,5 @@
 import { useMemo } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Euro,
-  Gauge,
-  PiggyBank,
-  Percent,
-  Receipt,
-  Ruler,
-  ShoppingCart,
-  Wallet,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Gauge } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -69,6 +57,7 @@ import {
   type DatosGerencia,
 } from "./destinos";
 import { Nota, VerDetalle } from "./comun";
+import { ICONO } from "@/components/iconos";
 
 export function Resumen({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -168,7 +157,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={eur(c.total)}
           frente={frente}
           delta={variacion(c.total, p.total)}
-          icon={Euro}
+          icon={ICONO.vendido}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
         <TarjetaKpi
@@ -177,7 +166,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={d.cobrosDisponibles ? eur(cobrado) : d.cobrosLeidos ? "—" : "…"}
           frente={frente}
           delta={d.cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
-          icon={Wallet}
+          icon={ICONO.cobrado}
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
         <TarjetaKpi
@@ -201,7 +190,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={sinCostes ? "—" : eur(c.margen)}
           frente={frente}
           delta={sinCostes ? null : variacion(c.margen, p.margen)}
-          icon={Percent}
+          icon={ICONO.margen}
         />
         <TarjetaKpi
           titulo="Pedidos"
@@ -209,7 +198,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={String(c.pedidos)}
           frente={frente}
           delta={variacion(c.pedidos, p.pedidos)}
-          icon={Receipt}
+          icon={ICONO.pedidos}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
         <TarjetaKpi
@@ -218,7 +207,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={eur(c.ticket)}
           frente={frente}
           delta={variacion(c.ticket, p.ticket)}
-          icon={ShoppingCart}
+          icon={ICONO.ticketMedio}
         />
         <TarjetaKpi
           titulo="Metros vendidos"
@@ -226,7 +215,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           valor={metros(c.metros)}
           frente={frente}
           delta={variacion(c.metros, p.metros)}
-          icon={Ruler}
+          icon={ICONO.metros}
         />
         <TarjetaKpi
           titulo="€ por metro"
@@ -397,7 +386,7 @@ function BeneficioYObjetivos({
           cifra={lectura.error ? { valor: null, falta: mensajeDeError(lectura.error) } : bai}
           previa={lectura.previa?.beneficio_antes_impuestos}
           frente={frente}
-          icon={PiggyBank}
+          icon={ICONO.beneficio}
           pie={
             <span className="flex flex-wrap items-center gap-x-2">
               {sinCostes && (

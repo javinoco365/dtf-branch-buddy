@@ -28,17 +28,16 @@ import {
   CalendarCheck,
   Clock,
   Download,
-  Euro,
   Inbox,
   Percent,
   Printer,
   Truck,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
@@ -286,7 +285,7 @@ function DelPeriodo() {
               cifra={cuenta.ventas_netas}
               previa={previa?.ventas_netas}
               frente={frente}
-              icon={Euro}
+              icon={ICONO.vendido}
             />
             <TarjetaConcepto
               clave="margen_bruto"
@@ -307,7 +306,7 @@ function DelPeriodo() {
               cifra={cuenta.cobrado}
               previa={previa?.cobrado}
               frente={frente}
-              icon={Wallet}
+              icon={ICONO.cobrado}
               pie={
                 linea !== "todo" ? (
                   <span className="text-muted-foreground">
