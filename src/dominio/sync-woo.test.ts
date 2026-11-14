@@ -9,6 +9,7 @@ import {
   idsVistosWoo,
   pedidosDesaparecidos,
   totalReembolsado,
+  filasDevolucionWoo,
 } from "./sync-woo";
 
 describe("idsVistosWoo", () => {
@@ -269,5 +270,76 @@ describe("nifsDeClientes", () => {
       (o) => o.cliente,
     );
     expect(r.size).toBe(0);
+  });
+});
+
+describe("filasDevolucionWoo", () => {
+  const embebidos = [
+    { id: 901, total: "-12.10", reason: "Defecto" },
+    { id: 902, total: "-5", reason: "" },
+  ];
+
+  it("guarda la fecha real del reembolso, en UTC", () => {
+    const filas = filasDevolucionWoo("t1", "p1", embebidos, [
+      { id: 901, date_created_gmt: "2026-09-03T22:30:00" },
+      { id: 902, date_created_gmt: "2026-10-01T08:00:00" },
+    ]);
+    expect(filas).toEqual([
+      {
+        tienda_id: "t1",
+        pedido_id: "p1",
+        woo_refund_id: 901,
+        importe: 12.1,
+        motivo: "Defecto",
+        fecha: "2026-09-03T22:30:00.000Z",
+      },
+      {
+        tienda_id: "t1",
+        pedido_id: "p1",
+        woo_refund_id: 902,
+        importe: 5,
+        motivo: null,
+        fecha: "2026-10-01T08:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("sin el detalle no lleva fecha: el upsert no pisa la que hubiera", () => {
+    const filas = filasDevolucionWoo("t1", "p1", embebidos, null);
+    expect(filas.map((f) => "fecha" in f)).toEqual([false, false]);
+    expect(filas.map((f) => f.woo_refund_id)).toEqual([901, 902]);
+  });
+
+  it("la clave idempotente sale de los reembolsos del pedido, no del detalle", () => {
+    // Un reembolso del detalle que no está en el pedido no crea fila.
+    const filas = filasDevolucionWoo(
+      "t1",
+      "p1",
+      [embebidos[0]],
+      [
+        { id: 901, date_created_gmt: "2026-09-03T22:30:00" },
+        { id: 999, date_created_gmt: "2026-09-04T00:00:00" },
+      ],
+    );
+    expect(filas).toHaveLength(1);
+    expect(filas[0].woo_refund_id).toBe(901);
+  });
+
+  it("repetir con el mismo pedido da las mismas filas (idempotente)", () => {
+    const detalle = [{ id: 901, date_created_gmt: "2026-09-03T22:30:00" }];
+    expect(filasDevolucionWoo("t1", "p1", embebidos, detalle)).toEqual(
+      filasDevolucionWoo("t1", "p1", embebidos, detalle),
+    );
+  });
+
+  it("ignora reembolsos sin id y fechas que no lo son", () => {
+    const filas = filasDevolucionWoo(
+      "t1",
+      "p1",
+      [{ total: "-3" }, { id: 7, total: "-3" }],
+      [{ id: 7, date_created_gmt: "no es fecha" }],
+    );
+    expect(filas).toHaveLength(1);
+    expect(filas[0].fecha).toBeUndefined();
   });
 });

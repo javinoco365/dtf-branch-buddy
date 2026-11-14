@@ -36,6 +36,7 @@ import {
   diagnosticoNumeroWoo,
   diagnosticoLineasWoo,
   recuperarEnviosWoo,
+  recuperarFechasReembolsosWoo,
 } from "@/lib/woocommerce.functions";
 import { eur, fechaHora, metros as fmtMetros, numero } from "@/lib/format";
 import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
@@ -329,6 +330,7 @@ function Ajustes() {
           <DiagnosticoLineas tiendaId={tiendaId} />
 
           {escribir && <RecuperarEnvios tiendaId={tiendaId} />}
+          {escribir && <RecuperarFechasReembolsos tiendaId={tiendaId} />}
 
           {isAdmin && (
             <CredencialesCard
@@ -1224,6 +1226,71 @@ function RecuperarEnvios({ tiendaId }: { tiendaId: string }) {
         {progreso && (
           <span className="text-sm text-muted-foreground">
             {progreso.revisados} pedido(s) revisados · {progreso.actualizados} con envío
+          </span>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Una sola vez: la fecha de los reembolsos de WooCommerce guardados antes de
+ * leerla, que se quedaron con la de la sincronización.
+ */
+function RecuperarFechasReembolsos({ tiendaId }: { tiendaId: string }) {
+  const qc = useQueryClient();
+  const recuperar = useServerFn(recuperarFechasReembolsosWoo);
+  const [progreso, setProgreso] = useState<{ revisados: number; actualizados: number } | null>(
+    null,
+  );
+  const [trabajando, setTrabajando] = useState(false);
+
+  async function lanzar() {
+    setTrabajando(true);
+    let revisados = 0;
+    let actualizados = 0;
+    let desde = 0;
+    setProgreso({ revisados, actualizados });
+    try {
+      for (;;) {
+        const r = await recuperar({ data: { tienda_id: tiendaId, desde } });
+        revisados += r.revisados;
+        actualizados += r.actualizados;
+        setProgreso({ revisados, actualizados });
+        if (r.siguiente === null) break;
+        desde = r.siguiente;
+      }
+      toast.success(
+        actualizados
+          ? `${actualizados} devolución(es) con su fecha corregida`
+          : "Todas las devoluciones tenían ya su fecha",
+      );
+    } catch (e) {
+      avisarError(e, "No se ha podido consultar WooCommerce");
+    } finally {
+      void invalidarTrasGuardar(qc);
+      setTrabajando(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Fecha de las devoluciones</CardTitle>
+        <CardDescription>
+          Las devoluciones de WooCommerce sincronizadas antes del 14 de noviembre de 2026 se
+          guardaron con la fecha de la sincronización, no con la del reembolso. Esto pide a
+          WooCommerce la fecha de cada una y la corrige, para que cada devolución reste en su día.
+          Basta con hacerlo una vez; repetirlo no cambia nada.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={lanzar} disabled={trabajando}>
+          {trabajando ? "Corrigiendo…" : "Corregir fechas"}
+        </Button>
+        {progreso && (
+          <span className="text-sm text-muted-foreground">
+            {progreso.revisados} devolución(es) revisadas · {progreso.actualizados} corregidas
           </span>
         )}
       </CardContent>

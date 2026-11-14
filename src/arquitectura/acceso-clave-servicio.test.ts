@@ -113,6 +113,8 @@ export const COMPROBADOS_DE_OTRA_FORMA: Record<string, string> = {
     "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
   "woocommerce.functions.ts:recuperarEnviosWoo":
     "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
+  "woocommerce.functions.ts:recuperarFechasReembolsosWoo":
+    "esMiembroTienda() (is_tienda_member): de la tienda o administrador.",
   "woocommerce.functions.ts:recuperarRealizadoWoo":
     "esAdminActivo(): solo administradores activos.",
 };
