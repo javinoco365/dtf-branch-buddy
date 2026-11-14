@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, ChevronDown, ChevronRight, LogOut } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, LogOut, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { misPersonas } from "@/lib/quien-soy.functions";
@@ -51,7 +51,7 @@ export function QuienSoyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const cuenta = user?.id ?? null;
   const leerPersonas = useServerFn(misPersonas);
-  const { data } = useQuery({
+  const { data, error, refetch, isFetching } = useQuery({
     queryKey: ["quien-soy", cuenta],
     queryFn: () => leerPersonas(),
     enabled: !!cuenta,
@@ -81,9 +81,13 @@ export function QuienSoyProvider({ children }: { children: ReactNode }) {
       estado,
       persona: estado.tipo === "identificado" ? estado.persona : null,
       elegir,
-      cargando: !!cuenta && data === undefined,
+      // Con error deja de «cargar»: si no, la Agenda se quedaría esperando
+      // para siempre. Mientras se reintenta, vuelve a cargar.
+      cargando: !!cuenta && data === undefined && (!error || isFetching),
+      error: data === undefined && error ? error : null,
+      reintentar: () => void refetch(),
     }),
-    [estado, elegir, cuenta, data],
+    [estado, elegir, cuenta, data, error, isFetching, refetch],
   );
   return <QuienSoyContexto.Provider value={value}>{children}</QuienSoyContexto.Provider>;
 }
@@ -180,7 +184,24 @@ export function PantallaQuienEres() {
  * cambiar; con uno, el nombre fijo; sin socios, el correo, como antes.
  */
 export function SelectorPersona({ email }: { email?: string | null }) {
-  const { estado, elegir } = useQuienSoy();
+  const { estado, elegir, error, reintentar, cargando } = useQuienSoy();
+
+  if (error) {
+    return (
+      <button
+        type="button"
+        onClick={reintentar}
+        disabled={cargando}
+        className="flex items-center gap-1.5 rounded-full border border-destructive/40 px-2.5 py-1 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60"
+        title="No se ha podido saber quién eres. Pulsa para reintentar."
+        aria-label="No se ha podido saber quién eres. Reintentar"
+      >
+        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+        <span className="hidden sm:inline">¿Quién eres?</span>
+        <RotateCw className={cn("h-4 w-4", cargando && "animate-spin")} aria-hidden="true" />
+      </button>
+    );
+  }
 
   if (estado.tipo !== "identificado") {
     return email ? (
