@@ -35,7 +35,8 @@ export type ClaveIcono =
   | "usuarios"
   | "tiendas"
   | "stock"
-  | "compras-textil";
+  | "compras-textil"
+  | "novedades";
 
 export interface EntradaMenu {
   ruta: string;
@@ -125,6 +126,7 @@ export const SUBMENU_TEXTIL: EntradaMenu[] = [
 ];
 
 export const MENU_SISTEMA: EntradaMenu[] = [
+  { ruta: "/panel/novedades", etiqueta: "Novedades", icono: "novedades" },
   { ruta: "/panel/configuracion", etiqueta: "Ajustes", icono: "ajustes", prefijo: true },
   { ruta: "/panel/usuarios", etiqueta: "Usuarios", icono: "usuarios", soloAdmin: true },
 ];

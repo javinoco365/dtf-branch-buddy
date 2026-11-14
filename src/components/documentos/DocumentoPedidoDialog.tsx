@@ -61,6 +61,8 @@ export type DocumentoPreparado =
       /** El día del pedido ('yyyy-mm-dd'): la fecha del documento, que no se cambia. */
       fecha_pedido?: string | null;
       limites: LimitesTicket;
+      /** El cliente marcó «Quiero factura» en la web: no hay ticket. */
+      pide_factura?: boolean;
       notas: string | null;
       /** La sociedad, para la vista previa de la factura (solo se enseña). */
       emisor?: EmisorVista;
@@ -189,7 +191,7 @@ export function DocumentoPedidoDialog({
       preparado
         ? decidirDocumento(
             preparado.total,
-            { nombre, nif, tipo_fiscal: tipoFiscal },
+            { nombre, nif, tipo_fiscal: tipoFiscal, pide_factura: preparado.pide_factura },
             preparado.limites,
           )
         : null,
@@ -200,7 +202,11 @@ export function DocumentoPedidoDialog({
   // del pedido al emitir. Aquí solo se enseña.
   const fecha = preparado?.fecha_pedido ?? diaEnEspana(new Date());
 
-  const puedeTicket = !!preparado && cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
+  // Con «Quiero factura» marcado en la web no hay ticket (la base tampoco lo deja).
+  const puedeTicket =
+    !!preparado &&
+    !preparado.pide_factura &&
+    cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
   const puedeFactura = nombre.trim() !== "";
 
   async function emitirDocumento(documento: "ticket" | "factura") {
@@ -398,12 +404,17 @@ export function DocumentoPedidoDialog({
                       </Button>
                     </div>
                   )}
-                  {decision.documento === "pedir_datos" && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Suma {eur(preparado.total)} y el límite es {eur(decision.limite)}. Rellena
-                      abajo el nombre y el NIF.
-                    </p>
-                  )}
+                  {decision.documento === "pedir_datos" &&
+                    (decision.motivo === "pide_factura" ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Rellena abajo el nombre y el NIF del cliente.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Suma {eur(preparado.total)} y el límite es {eur(decision.limite)}. Rellena
+                        abajo el nombre y el NIF.
+                      </p>
+                    ))}
                 </div>
 
                 <div className="space-y-2">

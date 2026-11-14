@@ -60,6 +60,7 @@ import { esEstimado, pedidoConMetrosEstimados } from "@/dominio/metros-woo";
 import { lineasDelPedido, type LineasDelPedido } from "@/dominio/linea-producto";
 import { cn } from "@/lib/utils";
 import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
+import { EtiquetaPideFactura } from "@/components/EtiquetaPideFactura";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { HORA_CORTE_POR_DEFECTO } from "@/dominio/realizado";
 import { HoraPedido, RealizadoEn } from "@/components/pedidos/Realizado";
@@ -155,6 +156,8 @@ export type PedidoFila = {
   cliente_telefono: string | null;
   /** El de la ficha si tiene; si no, el que trajo el pedido. */
   cliente_nif?: string | null;
+  /** Marcó «Quiero factura» en la web: no se le hace ticket. */
+  necesita_factura?: boolean | null;
   direccion_facturacion: Direccion | null;
   direccion_envio: Direccion | null;
   origen: string | null;
@@ -208,6 +211,8 @@ const FILTROS_PEDIDOS = {
   tienda: "todas",
   /** DTF, DTF UV o los dos: ver linea-producto.ts. */
   linea: "todas",
+  /** «Quiero factura» marcado en la web. */
+  factura: "todos",
 };
 
 /**
@@ -389,6 +394,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       // Un pedido mixto (DTF + UV) sale con los dos filtros.
       if (f.linea === "uv" && !["uv", "mixto"].includes(lineasDelPedido(p))) return false;
       if (f.linea === "dtf" && lineasDelPedido(p) === "uv") return false;
+      if (f.factura === "pide" && !p.necesita_factura) return false;
       if (f.cobro !== "todos") {
         // «Pendiente» incluye lo cobrado en parte: es lo que falta por cobrar.
         const e = cobroDe(p).estado;
@@ -403,7 +409,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         p.numero.toLowerCase().includes(q)
       );
     });
-  }, [pedidos, f.q, f.origen, f.linea, f.cobro, estadoFiltro]);
+  }, [pedidos, f.q, f.origen, f.linea, f.cobro, f.factura, estadoFiltro]);
 
   // «Facturar»: los pedidos de lo que se está viendo sin ticket ni factura, del
   // más antiguo al más nuevo. Como mucho 500 de una vez.
@@ -615,6 +621,18 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
               </SelectContent>
             </Select>
           )}
+          <Select value={f.factura} onValueChange={(factura) => cambiar({ factura })}>
+            <SelectTrigger
+              className="w-[170px] max-md:w-[calc(50%-0.25rem)]"
+              aria-label="Quiere factura"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Con o sin factura</SelectItem>
+              <SelectItem value="pide">Quieren factura</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={f.origen} onValueChange={(origen) => cambiar({ origen })}>
             <SelectTrigger className="w-[150px] max-md:w-[calc(50%-0.25rem)]" aria-label="Origen">
               <SelectValue />
@@ -1183,6 +1201,7 @@ const FilaPedido = memo(function FilaPedido({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="font-mono text-sm truncate">{numeroLabel}</div>
             <EtiquetaLineasPedido pedido={pedido} />
+            {pedido.necesita_factura && <EtiquetaPideFactura />}
           </div>
           {mostrarTienda && (
             <div
@@ -1332,6 +1351,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-mono">{numeroVisible(pedido)}</span>
               <EtiquetaLineasPedido pedido={pedido} />
+              {pedido.necesita_factura && <EtiquetaPideFactura />}
               <HoraPedido pedido={pedido} horaCorte={horaCorte} />
               {mostrarTienda && pedido.tienda_nombre && (
                 <span className="truncate">· {pedido.tienda_nombre}</span>
@@ -1602,6 +1622,11 @@ function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
         <div className="font-medium">{pedido.cliente_nombre ?? "—"}</div>
         {pedido.cliente_nif && (
           <div className="text-muted-foreground">NIF: {pedido.cliente_nif}</div>
+        )}
+        {pedido.necesita_factura && (
+          <div className="mt-1">
+            <EtiquetaPideFactura conTexto />
+          </div>
         )}
         {pedido.cliente_email && (
           <div className="text-muted-foreground">{pedido.cliente_email}</div>

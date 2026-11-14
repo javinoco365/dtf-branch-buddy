@@ -25,6 +25,7 @@ import { AJUSTES_POR_DEFECTO } from "@/dominio/gerencia";
 import {
   clientesInvitadosNuevos,
   nifPedidoWoo,
+  pidioFacturaWoo,
   nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
@@ -747,6 +748,10 @@ async function guardarPedidosWoo(
       // aquí como el nombre y el correo: la factura lo usa si no hay ficha o
       // la ficha no tiene NIF.
       cliente_nif: nifPedidoWoo(o),
+      // La casilla «Quiero factura» del checkout (meta `necesita_factura`).
+      // Se reescribe en cada sincronización: si el cliente la quita en la web,
+      // aquí también se quita.
+      necesita_factura: pidioFacturaWoo(o),
       direccion_facturacion: facturacion,
       // Woo manda `shipping` vacío cuando el envío es igual que la
       // facturación. Guardar un objeto de huecos sería peor que no guardar
@@ -795,7 +800,15 @@ async function guardarPedidosWoo(
   // la sincronización parada. Puede faltar más de una: se quitan de una en una.
   // Sin la del DTF UV (20261110100000), los metros de UV vuelven a sumarse
   // a metros_total, como antes de separarlos.
-  const opcionales = ["realizado_en", "cliente_nif", "bruta_uv", "iva_uv", "metros_uv"];
+  // Sin la de «Quiero factura» (20261117100000), igual con necesita_factura.
+  const opcionales = [
+    "realizado_en",
+    "cliente_nif",
+    "bruta_uv",
+    "iva_uv",
+    "metros_uv",
+    "necesita_factura",
+  ];
   let filasAGuardar: Record<string, unknown>[] = filasPedidos;
   for (let intento = 0; intento < opcionales.length && res.error; intento++) {
     const mensaje = res.error.message;
