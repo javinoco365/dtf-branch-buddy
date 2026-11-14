@@ -51,6 +51,11 @@ export type DatosGerencia<TCaja = unknown> = {
   ventasTodas: Venta[];
   /** Los pedidos con factura o ticket vigente; nulo mientras se leen. */
   documentados: ReadonlySet<string> | null;
+  /**
+   * Los del periodo con el que se compara; nulo mientras se leen o sin
+   * comparación (vacío si no hay comparación que leer).
+   */
+  documentadosPrevios: ReadonlySet<string> | null;
   /** Lo que falta por documentar en el periodo; nulo mientras se lee. */
   pendiente: PendienteDocumentar | null;
   filtro: FiltroGerencia;
@@ -165,6 +170,7 @@ export const FUENTE_DEL_CAMPO: Record<keyof DatosGerencia, FuenteGerencia | null
   tiendas: null,
   hoy: null,
   documentados: null,
+  documentadosPrevios: "ventasPrevias",
   pendiente: null,
   ventasTodas: "ventas",
   ventas: "ventas",
@@ -276,6 +282,7 @@ export function montarDatosGerencia<TCaja>(
     grupo,
     ventasTodas: todas,
     documentados: docs ? documentados : null,
+    documentadosPrevios: !e.comparacion || docsPrevios ? documentadosPrevios : null,
     pendiente: montarPendienteDocumentar(e),
     filtro,
     seleccion: e.seleccion,

@@ -806,7 +806,7 @@ async function documentosDe(
  * cuáles se han vendido sin factura ni ticket.
  */
 export function useDocumentosDePedidos(
-  ventas: readonly Venta[],
+  ventas: readonly Pick<Venta, "id" | "canal">[],
   { activo = true }: OpcionesLectura = {},
 ) {
   const tienda = ventas.filter((v) => v.canal !== "textil" && v.id).map((v) => v.id as string);

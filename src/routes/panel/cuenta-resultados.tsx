@@ -72,14 +72,14 @@ function CuentaResultados() {
     previo: separar === "nada" ? (comparacion?.previo ?? null) : null,
     filtro,
   });
-  const { cuenta, previa, entrada, estructuraDe, documentadoDe } = lectura;
+  const { cuenta, previa, entrada, estructuraDe, sinPedidoDe } = lectura;
 
   const columnas = useMemo(
     () =>
       entrada && separar !== "nada"
-        ? separarCuenta(entrada, separar, { tiendas, rango, estructuraDe, documentadoDe })
+        ? separarCuenta(entrada, separar, { tiendas, rango, estructuraDe, sinPedidoDe })
         : [],
-    [entrada, separar, tiendas, rango, estructuraDe, documentadoDe],
+    [entrada, separar, tiendas, rango, estructuraDe, sinPedidoDe],
   );
 
   const opcionesTienda = [

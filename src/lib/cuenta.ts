@@ -39,6 +39,7 @@ import {
   devolucionesDelFiltro,
   estructuraDelPeriodo,
   pendienteDeCobroHoy,
+  sinPedidoDelFiltro,
   TODAS,
   ventasDelFiltro,
   type ClaveConcepto,
@@ -48,6 +49,7 @@ import {
   type EntradaCuenta,
   type EstructuraCuenta,
   type FiltroCuenta,
+  type ImportesSinPedido,
   type VentaCuenta,
 } from "@/dominio/cuenta";
 import { AJUSTES_JORNADA_POR_DEFECTO, ventaDeTienda, type Venta } from "@/dominio/gerencia";
@@ -56,7 +58,7 @@ import { costeAlmacenPeriodo } from "@/dominio/cuenta-almacen";
 import { pagosPendientesProveedores } from "@/dominio/pagos-proveedores";
 import { diaDeFecha, type Rango } from "@/dominio/periodos";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { importesSinPedido, pedidosDocumentados } from "@/dominio/grupos";
+import { pedidosDocumentados } from "@/dominio/grupos";
 import type { DocumentoDePedido, DocumentoFiscal } from "@/dominio/fiscal";
 
 export type OpcionesCuenta = {
@@ -86,8 +88,8 @@ export type LecturaCuenta = {
   entradaPrevia: EntradaCuenta | null;
   /** La estructura de un rango (un mes del periodo), o nula si no se puede saber. */
   estructuraDe: (r: Rango) => EstructuraCuenta | null;
-  /** Lo que tiene factura o ticket en un rango (un mes del periodo), para el impuesto. */
-  documentadoDe: (r: Rango) => DocumentadoCuenta | null;
+  /** Lo facturado sin pedido de un rango (un mes del periodo), con el filtro de la cuenta. */
+  sinPedidoDe: (r: Rango) => ImportesSinPedido | null;
   cargando: boolean;
   error: Error | null;
   /** Vuelve a pedir lo que ha fallado. */
@@ -127,33 +129,54 @@ type LecturaFiscal = {
 };
 
 /**
- * Lo que tiene factura o ticket (en un rango, si se da). undefined: todavía
- * se lee; null: no se puede saber (y el impuesto sale «—»).
+ * Lo que tiene factura o ticket: los pedidos con documento vigente, para el
+ * impuesto. undefined: todavía se lee (o no hace falta: sin gastos no hay
+ * impuesto); null: no se puede saber (y el impuesto sale «—»).
  */
 function documentado(
   conGastos: boolean,
   d: LecturaDocumentos,
-  f: LecturaFiscal,
-  r?: Rango,
 ): DocumentadoCuenta | null | undefined {
   if (!conGastos) return undefined;
-  if (d.isError || f.isError) return null;
-  if (!d.data || !f.data) return undefined;
-  const desde = r ? diaDeFecha(r.desde) : null;
-  const hasta = r ? diaDeFecha(r.hasta) : null;
-  const delRango = r
-    ? f.data.documentos.filter((x) => x.fecha >= desde! && x.fecha <= hasta!)
-    : f.data.documentos;
-  const sinPedido = importesSinPedido(delRango, [
-    ...(f.data.referencias ?? []),
-    ...f.data.documentos,
-  ]);
-  return {
-    pedidos: pedidosDocumentados(d.data),
-    facturadoSinPedido: sinPedido.base,
-    ivaSinPedido: sinPedido.iva,
-    totalSinPedido: sinPedido.total,
-  };
+  if (d.isError) return null;
+  if (!d.data) return undefined;
+  return { pedidos: pedidosDocumentados(d.data) };
+}
+
+/**
+ * Lo facturado sin pedido (en un rango, si se da) con el filtro de la cuenta:
+ * con una tienda, solo los de esa tienda (o los del textil); con una línea,
+ * nada, porque una factura a mano no dice de qué línea es (se dice en la ⓘ de
+ * «Ventas netas»). undefined: todavía se lee; null: no se ha podido leer (la
+ * cuenta sigue sin ello).
+ */
+function sinPedidoDe(
+  f: LecturaFiscal,
+  filtro: FiltroCuenta,
+  r?: Rango,
+): ImportesSinPedido | null | undefined {
+  if (filtro.linea !== "todo") return sinPedidoDelFiltro([], [], filtro);
+  if (f.isError) return null;
+  if (!f.data) return undefined;
+  return sinPedidoDelFiltro(f.data.documentos, f.data.referencias ?? [], filtro, r);
+}
+
+/**
+ * Los pedidos de los que hay que saber si tienen documento: los vendidos en
+ * el periodo y los devueltos en él (de cualquier periodo). Nulo mientras falte
+ * alguna de las dos lecturas.
+ */
+function conDevueltos(
+  ventas: readonly Venta[] | undefined,
+  devoluciones: readonly DevolucionCuenta[] | undefined,
+): Pick<Venta, "id" | "canal">[] | null {
+  if (!ventas || !devoluciones) return null;
+  const vistos = new Set(ventas.map((v) => v.id).filter(Boolean));
+  const devueltos = devoluciones
+    .filter((d) => d.pedido_id && !vistos.has(d.pedido_id))
+    // Las devoluciones son de pedidos de tienda (el textil no tiene).
+    .map((d) => ({ id: d.pedido_id, canal: "web" as const }));
+  return [...ventas, ...devueltos];
 }
 
 /** El rango vacío de las consultas que no hacen falta (no traen nada). */
@@ -236,13 +259,27 @@ export function useCuentaResultados({
   const pagos = usePagosProveedores({ activo: dinero && conEstructura(filtro) });
   // Qué tiene factura o ticket: el Impuesto sobre Sociedades sale solo de ahí
   // (decisión de Javier, 14-11-2026), y lo facturado sin pedido es venta.
-  const fiscal = useFiscal(rango, { activo: conGastos });
-  const fiscalPrevio = useFiscal(rangoPrevio, { activo: conGastos && !!previo });
-  const docs = useDocumentosDePedidos(ventas.data ?? [], {
-    activo: conGastos && !!ventas.data,
+  // Lo facturado sin pedido es venta siempre (con o sin gastos): se lee
+  // siempre, salvo con filtro de línea, que no lo lleva.
+  const conSinPedido = filtro.linea === "todo";
+  const fiscal = useFiscal(rango, { activo: conSinPedido });
+  const fiscalPrevio = useFiscal(rangoPrevio, { activo: conSinPedido && !!previo });
+  // Los documentos de los pedidos vendidos y de los devueltos en el periodo:
+  // una devolución de un pedido documentado de otro periodo también resta en
+  // la base del impuesto.
+  const pedidosDocs = useMemo(
+    () => conDevueltos(ventas.data, devoluciones.data),
+    [ventas.data, devoluciones.data],
+  );
+  const pedidosDocsPrevios = useMemo(
+    () => conDevueltos(ventasPrevias.data, devolucionesPrevias.data),
+    [ventasPrevias.data, devolucionesPrevias.data],
+  );
+  const docs = useDocumentosDePedidos(pedidosDocs ?? [], {
+    activo: conGastos && !!pedidosDocs,
   });
-  const docsPrevios = useDocumentosDePedidos(ventasPrevias.data ?? [], {
-    activo: conGastos && !!previo && !!ventasPrevias.data,
+  const docsPrevios = useDocumentosDePedidos(pedidosDocsPrevios ?? [], {
+    activo: conGastos && !!previo && !!pedidosDocsPrevios,
   });
   const cobros = useCobrosPeriodo(rango, "cobro", tiendaLectura, { activo: dinero });
   const cobrosPrevios = useCobrosPeriodo(rangoPrevio, "cobro", tiendaLectura, {
@@ -287,19 +324,29 @@ export function useCuentaResultados({
   );
 
   const docActual = useMemo(
-    () => documentado(conGastos, docs, fiscal),
+    () => documentado(conGastos, docs),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [conGastos, docs.data, docs.isError, fiscal.data, fiscal.isError],
+    [conGastos, docs.data, docs.isError],
   );
   const docPrevio = useMemo(
-    () => documentado(conGastos, docsPrevios, fiscalPrevio),
+    () => documentado(conGastos, docsPrevios),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [conGastos, docsPrevios.data, docsPrevios.isError, fiscalPrevio.data, fiscalPrevio.isError],
+    [conGastos, docsPrevios.data, docsPrevios.isError],
   );
-  const documentadoDe = useCallback(
-    (r: Rango): DocumentadoCuenta | null => documentado(conGastos, docs, fiscal, r) ?? null,
+  const spActual = useMemo(
+    () => sinPedidoDe(fiscal, filtro),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [conGastos, docs.data, docs.isError, fiscal.data, fiscal.isError],
+    [fiscal.data, fiscal.isError, filtro],
+  );
+  const spPrevio = useMemo(
+    () => sinPedidoDe(fiscalPrevio, filtro),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fiscalPrevio.data, fiscalPrevio.isError, filtro],
+  );
+  const sinPedidoDelRango = useCallback(
+    (r: Rango): ImportesSinPedido | null => sinPedidoDe(fiscal, filtro, r) ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fiscal.data, fiscal.isError, filtro],
   );
 
   const soloUvIds = soloUv.data;
@@ -313,6 +360,7 @@ export function useCuentaResultados({
         { disponible: boolean; cobros: Parameters<typeof cobradoDelPeriodo>[0] } | undefined,
       actual: boolean,
       doc: DocumentadoCuenta | null | undefined,
+      sp: ImportesSinPedido | null | undefined,
     ): EntradaCuenta | null => {
       if (!v || !envios || !devs || costeMetro === undefined) return null;
       if (filtro.linea !== "todo" && dinero && !soloUvIds) return null;
@@ -320,6 +368,8 @@ export function useCuentaResultados({
       const estructura = conGastos ? estructuraDe(r) : null;
       if (conGastos && !estructura) return null;
       if (conGastos && doc === undefined) return null;
+      // Sin lo facturado sin pedido, las ventas netas no serían las de verdad.
+      if (sp === undefined) return null;
       return {
         ventas: ventasDelFiltro(conEnvio(v, envios), filtro),
         devoluciones: devolucionesDelFiltro(devs, filtro),
@@ -328,6 +378,7 @@ export function useCuentaResultados({
         estructura,
         tipoIs,
         documentado: doc ?? null,
+        sinPedido: sp,
         dinero: dinero
           ? {
               cobrado: cobrosLeidos?.disponible
@@ -369,8 +420,18 @@ export function useCuentaResultados({
         cobros.data,
         true,
         docActual,
+        spActual,
       ),
-    [montar, rango, ventas.data, ventas.envios.data, devoluciones.data, cobros.data, docActual],
+    [
+      montar,
+      rango,
+      ventas.data,
+      ventas.envios.data,
+      devoluciones.data,
+      cobros.data,
+      docActual,
+      spActual,
+    ],
   );
   const entradaPrevia = useMemo(
     () =>
@@ -383,6 +444,7 @@ export function useCuentaResultados({
             cobrosPrevios.data,
             false,
             docPrevio,
+            spPrevio,
           )
         : null,
     [
@@ -393,6 +455,7 @@ export function useCuentaResultados({
       devolucionesPrevias.data,
       cobrosPrevios.data,
       docPrevio,
+      spPrevio,
     ],
   );
 
@@ -412,6 +475,8 @@ export function useCuentaResultados({
     (errorCosteMetro as Error | null) ??
     (ajustes.error as Error | null) ??
     (conGastos ? (compras.error as Error | null) : null) ??
+    // Sin las facturas, las ventas netas no llevarían lo facturado sin pedido.
+    (conSinPedido ? (fiscal.error as Error | null) : null) ??
     (dinero && filtro.linea !== "todo" ? (soloUv.error as Error | null) : null) ??
     null;
   const { reintentar, reintentando } = useReintentarFallidas();
@@ -442,7 +507,7 @@ export function useCuentaResultados({
     entrada,
     entradaPrevia,
     estructuraDe,
-    documentadoDe,
+    sinPedidoDe: sinPedidoDelRango,
     cargando: !error && !cuenta,
     error,
     reintentar,

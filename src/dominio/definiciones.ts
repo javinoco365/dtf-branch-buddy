@@ -531,7 +531,7 @@ export function definicionImpuestosTrimestre(
 // solo se añade cómo se calcula y de dónde sale, para no repetir textos.
 
 const CUENTA_PEDIDOS =
-  "Pedidos de las tiendas (web y manuales) y del textil con fecha de pedido en el periodo, sin cancelados y sin los de la web que aún no se han pagado. Con los filtros de tienda y línea de la pantalla.";
+  "Pedidos de las tiendas (web y manuales) y del textil con fecha de pedido en el periodo, sin cancelados y sin los de la web que aún no se han pagado. Con los filtros de tienda y línea de la pantalla. Lo facturado sin pedido (facturas a mano) es venta y suma en su día de factura; con una tienda, el de esa tienda; con una línea (DTF o DTF UV) no va, porque no se sabe de qué línea es.";
 
 const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
   ventas_con_iva: {

@@ -26,6 +26,8 @@ import {
   ventasDelFiltro,
   ventasQueCuentan,
   entradaDeCanalYGrupo,
+  MOTIVO_IMPUESTO_POR_MES,
+  sinPedidoDelFiltro,
   type EntradaCuenta,
   type VentaCuenta,
 } from "./cuenta";
@@ -67,12 +69,7 @@ const entrada = (e: Partial<EntradaCuenta> = {}): EntradaCuenta => ({
     conNominas: true,
   },
   tipoIs: 25,
-  documentado: {
-    pedidos: new Set(["p1"]),
-    facturadoSinPedido: 0,
-    ivaSinPedido: 0,
-    totalSinPedido: 0,
-  },
+  documentado: { pedidos: new Set(["p1"]) },
   ...e,
 });
 
@@ -251,16 +248,7 @@ describe("la cascada", () => {
   });
 
   it("lo facturado sin pedido es venta y cuenta para el impuesto", () => {
-    const c = calcularCuenta(
-      entrada({
-        documentado: {
-          pedidos: new Set(["p1"]),
-          facturadoSinPedido: 40,
-          ivaSinPedido: 8.4,
-          totalSinPedido: 48.4,
-        },
-      }),
-    );
+    const c = calcularCuenta(entrada({ sinPedido: { base: 40, iva: 8.4, total: 48.4 } }));
     expect(c.ventas.valor).toBe(140);
     // La cascada cuadra: ventas con IVA − IVA − portes = ventas.
     expect(c.ventas_con_iva.valor).toBe(181.5);
@@ -614,13 +602,8 @@ describe("separar en columnas", () => {
   });
 
   it("lo facturado sin pedido va en su columna y las columnas suman el total", () => {
-    const documentado = {
-      pedidos: new Set(["p1"]),
-      facturadoSinPedido: 40,
-      ivaSinPedido: 8.4,
-      totalSinPedido: 48.4,
-    };
-    const e = entrada({ ventas: [venta(), venta({ tienda_id: "t2" })], documentado });
+    const sinPedido = { base: 40, iva: 8.4, total: 48.4 };
+    const e = entrada({ ventas: [venta(), venta({ tienda_id: "t2" })], sinPedido });
     const todo = calcularCuenta(e);
     for (const por of ["tienda", "linea"] as const) {
       const cols = separarCuenta(e, por, {
@@ -739,7 +722,7 @@ describe("canal y grupo (filtros de Gerencia)", () => {
   const e = entrada({ ventas: [web, manual], devoluciones: [devWeb, devManual] });
 
   it("por canal: sus ventas y sus devoluciones, sin gastos", () => {
-    const f = entradaDeCanalYGrupo(e, "web", "total", null);
+    const f = entradaDeCanalYGrupo(e, "web", "total", null)!;
     expect(f.ventas.map((v) => v.id)).toEqual(["w"]);
     expect(f.devoluciones).toHaveLength(1);
     expect(calcularCuenta(f).gastos_estructura.valor).toBeNull();
@@ -747,8 +730,8 @@ describe("canal y grupo (filtros de Gerencia)", () => {
 
   it("por grupo: con documento (A) o sin él (B), y A + B = total", () => {
     const docs = new Set(["w"]);
-    const a = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "a", docs));
-    const b = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "b", docs));
+    const a = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "a", docs)!);
+    const b = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "b", docs)!);
     const t = calcularCuenta({ ...e, documentado: null });
     expect((a.ventas_netas.valor ?? 0) + (b.ventas_netas.valor ?? 0)).toBeCloseTo(
       t.ventas_netas.valor ?? 0,
@@ -759,5 +742,91 @@ describe("canal y grupo (filtros de Gerencia)", () => {
 
   it("sin filtros, la misma entrada", () => {
     expect(entradaDeCanalYGrupo(e, "todos", "total", null)).toBe(e);
+  });
+});
+
+describe("lo facturado sin pedido es venta en todas las pantallas", () => {
+  const sinPedido = { base: 40, iva: 8.4, total: 48.4 };
+  const docs = new Set(["w"]);
+  const web = venta({ id: "w", canal: "web" });
+  const manual = venta({ id: "m", canal: "manual" });
+  // La Cuenta de resultados: con gastos y con lo documentado.
+  const completa = entrada({ ventas: [web, manual], sinPedido });
+  // Inicio y el resumen de tienda: sin gastos ni documentos, con lo sin pedido.
+  const inicio: EntradaCuenta = { ...completa, estructura: null, documentado: undefined };
+
+  it("Inicio, la Cuenta de resultados y Gerencia (A + B) dan las mismas ventas netas", () => {
+    const enCuenta = calcularCuenta(completa).ventas_netas.valor;
+    const enInicio = calcularCuenta(inicio).ventas_netas.valor;
+    const a = calcularCuenta(entradaDeCanalYGrupo(inicio, "todos", "a", docs)!);
+    const b = calcularCuenta(entradaDeCanalYGrupo(inicio, "todos", "b", docs)!);
+    expect(enInicio).toBe(enCuenta);
+    expect(redondear((a.ventas_netas.valor ?? 0) + (b.ventas_netas.valor ?? 0))).toBe(enCuenta);
+    // Lo sin pedido está documentado: va en A, no en B.
+    expect(a.ventas.valor).toBe(140);
+    expect(b.ventas.valor).toBe(100);
+  });
+
+  it("con A o B y sin saber aún qué tiene documento, no se calcula nada", () => {
+    expect(entradaDeCanalYGrupo(inicio, "todos", "a", null)).toBeNull();
+    expect(entradaDeCanalYGrupo(inicio, "web", "b", null)).toBeNull();
+    expect(entradaDeCanalYGrupo(inicio, "web", "total", null)).not.toBeNull();
+  });
+
+  it("con un canal no va: no es de ningún canal", () => {
+    const w = calcularCuenta(entradaDeCanalYGrupo(inicio, "web", "total", null)!);
+    expect(w.ventas.valor).toBe(100);
+  });
+
+  const doc = (
+    id: string,
+    tienda_id: string,
+    fecha: string,
+    base: number,
+    pedido_id: string | null = null,
+  ) => ({
+    id,
+    tienda_id,
+    fecha,
+    tipo: "ordinaria" as const,
+    estado: "emitida",
+    base,
+    iva: base * 0.21,
+    total: base * 1.21,
+    pedido_id,
+  });
+  const documentos = [
+    doc("f1", "t1", "2026-11-03", 40),
+    doc("f2", "t2", "2026-11-10", 60),
+    doc("f3", "t1", "2026-11-12", 500, "p1"),
+  ];
+
+  it("con una tienda, solo lo sin pedido de esa tienda; con una línea, nada", () => {
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "todo" }).base).toBe(100);
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "t1", linea: "todo" }).base).toBe(40);
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "dtf" }).base).toBe(0);
+  });
+
+  it("en un rango, solo lo de sus días", () => {
+    const r = { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 5, 23, 59, 59) };
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "todo" }, r).base).toBe(40);
+  });
+});
+
+describe("separar por mes: el impuesto, solo del periodo entero", () => {
+  it("cada mes sin impuesto ni neto, con su motivo; el total sí lo lleva", () => {
+    const v = [venta({ fecha_pedido: "2026-10-05T10:00:00.000Z" }), venta()];
+    const e = entrada({ ventas: v });
+    const total = calcularCuenta(e);
+    expect(total.sociedades.valor).not.toBeNull();
+    const cols = separarCuenta(e, "mes", {
+      rango: { desde: new Date(2026, 9, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) },
+      estructuraDe: () => e.estructura,
+    });
+    for (const c of cols) {
+      expect(c.cuenta.sociedades).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
+      expect(c.cuenta.beneficio_neto).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
+      expect(c.cuenta.beneficio_antes_impuestos.valor).not.toBeNull();
+    }
   });
 });

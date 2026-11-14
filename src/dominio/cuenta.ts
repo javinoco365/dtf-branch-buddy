@@ -49,7 +49,8 @@ import {
   pendientesDeLinea,
   type FiltroLinea,
 } from "./por-linea";
-import { gastosFijosPorGrupo } from "./grupos";
+import { gastosFijosPorGrupo, importesSinPedido } from "./grupos";
+import type { DocumentoFiscal } from "./fiscal";
 import { TIENDA_TEXTIL } from "./cobros";
 import { totalizar, type CobroConsolidado } from "./facturacion";
 import { tiendaDelPendiente, type PedidoPendiente } from "./pendientes";
@@ -341,14 +342,16 @@ export type EstructuraCuenta = {
 };
 
 export type DocumentadoCuenta = {
+  /** Los ids de los pedidos con documento vigente (factura o ticket). */
   pedidos: ReadonlySet<string>;
-  /** Lo facturado sin pedido, sin IVA (grupos.ts, importesSinPedido). */
-  facturadoSinPedido: number;
-  /** Su IVA: se suma a «IVA» para que la cascada cuadre. */
-  ivaSinPedido: number;
-  /** Su total con IVA: se suma a «Ventas con IVA». */
-  totalSinPedido: number;
 };
+
+/**
+ * Lo facturado sin pedido (facturas a mano; grupos.ts, importesSinPedido):
+ * la base (va a «Ventas»), su IVA (a «IVA») y su total (a «Ventas con IVA»),
+ * para que la cascada cuadre.
+ */
+export type ImportesSinPedido = { base: number; iva: number; total: number };
 
 export type EntradaCuenta = {
   /** Las ventas con fecha de pedido en el periodo (las canceladas se quitan aquí). */
@@ -370,13 +373,18 @@ export type EntradaCuenta = {
   tipoIs: number | null;
   /**
    * Lo que tiene factura o ticket (decisión de Javier, 14-11-2026: el
-   * Impuesto sobre Sociedades sale solo de ahí, como en grupos.ts):
-   * `pedidos`, los ids de los pedidos con documento vigente; y
-   * `facturadoSinPedido`, lo facturado sin pedido (facturas manuales), sin
-   * IVA, que además es venta y se suma a «Ventas». Sin esto, el impuesto sale
-   * «—»: no se estima sobre lo que no lleva documento.
+   * Impuesto sobre Sociedades sale solo de ahí, como en grupos.ts): los ids
+   * de los pedidos con documento vigente. Sin esto, el impuesto sale «—»: no
+   * se estima sobre lo que no lleva documento.
    */
   documentado?: DocumentadoCuenta | null;
+  /**
+   * Lo facturado sin pedido del periodo: es venta siempre, con o sin gastos,
+   * para que «Ventas netas» sea la misma en Inicio, en la tienda, en Gerencia
+   * y en la Cuenta de resultados. Con filtro de tienda, el de esa tienda; con
+   * filtro de línea no se sabe de qué línea es y no va. Sin él, 0.
+   */
+  sinPedido?: ImportesSinPedido | null;
   /** El bloque de dinero. Cada cifra, nula si la pantalla no la ha leído. */
   dinero?: {
     cobrado?: number | null;
@@ -461,10 +469,9 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
   // 1-4. Las ventas del periodo, enteras: lo devuelto va en su propio día (5).
   // Las facturas sin pedido (manuales) también son venta: con su IVA y su
   // total, para que «Ventas con IVA» − «IVA» − «Portes» dé «Ventas».
-  const sinPedido = e.documentado?.facturadoSinPedido ?? 0;
-  const conIva =
-    ventas.reduce((s, v) => s + num(v.total), 0) + (e.documentado?.totalSinPedido ?? 0);
-  const iva = ventas.reduce((s, v) => s + num(v.iva), 0) + (e.documentado?.ivaSinPedido ?? 0);
+  const sinPedido = e.sinPedido?.base ?? 0;
+  const conIva = ventas.reduce((s, v) => s + num(v.total), 0) + (e.sinPedido?.total ?? 0);
+  const iva = ventas.reduce((s, v) => s + num(v.iva), 0) + (e.sinPedido?.iva ?? 0);
   const portes = ventas.reduce((s, v) => s + num(v.envio), 0);
   const base = ventas.reduce((s, v) => s + baseConEnvio(v), 0);
   const ventasSinPortes = base - portes + sinPedido;
@@ -769,6 +776,28 @@ export const FILTRO_CUENTA_TODO: FiltroCuenta = { tienda: TODAS, linea: "todo" }
  */
 export const conEstructura = (f: FiltroCuenta) => f.tienda === TODAS && f.linea === "todo";
 
+/**
+ * Lo facturado sin pedido con el filtro de la cuenta (y en un rango, si se
+ * da): con una tienda, solo los documentos de esa tienda (o del textil); con
+ * una línea (DTF o DTF UV), nada, porque una factura a mano no dice de qué
+ * línea es. `referencias`: los documentos de fuera del rango que hacen falta
+ * para casar canjes y rectificativas.
+ */
+export function sinPedidoDelFiltro(
+  documentos: readonly DocumentoFiscal[],
+  referencias: readonly DocumentoFiscal[],
+  f: FiltroCuenta,
+  r?: Rango,
+): ImportesSinPedido {
+  if (f.linea !== "todo") return { base: 0, iva: 0, total: 0 };
+  const desde = r ? diaDeFecha(r.desde) : null;
+  const hasta = r ? diaDeFecha(r.hasta) : null;
+  const delRango =
+    desde && hasta ? documentos.filter((x) => x.fecha >= desde && x.fecha <= hasta) : documentos;
+  const deTienda = f.tienda === TODAS ? delRango : delRango.filter((x) => x.tienda_id === f.tienda);
+  return importesSinPedido(deTienda, [...referencias, ...documentos]);
+}
+
 /** Las ventas de una tienda (o del textil) y de una línea. */
 export function ventasDelFiltro<T extends VentaCuenta>(ventas: readonly T[], f: FiltroCuenta): T[] {
   const deTienda = f.tienda === TODAS ? ventas : ventas.filter((v) => v.tienda_id === f.tienda);
@@ -878,6 +907,21 @@ export type ColumnaCuenta = {
 /** La columna de lo facturado sin pedido al separar por tienda o por línea. */
 export const CLAVE_SIN_PEDIDO = "sin-pedido";
 
+/** Por qué un mes no lleva impuesto: el suelo a cero haría que los meses no sumaran. */
+export const MOTIVO_IMPUESTO_POR_MES = "El impuesto se estima sobre el periodo entero.";
+
+/**
+ * Un mes sin impuesto ni beneficio neto: el Impuesto sobre Sociedades se
+ * estima sobre el periodo entero (un mes en pérdidas daría 0, y los meses no
+ * sumarían el total). Si el mes ya no los tenía (sin estructura, sin tipo), se
+ * deja su motivo.
+ */
+function sinImpuestoDelMes(c: Cuenta): Cuenta {
+  if (c.sociedades.valor === null && c.beneficio_neto.valor === null) return c;
+  const falta = { valor: null, falta: MOTIVO_IMPUESTO_POR_MES };
+  return { ...c, sociedades: falta, beneficio_neto: falta };
+}
+
 export function separarCuenta(
   e: EntradaCuenta,
   por: SepararPor,
@@ -885,21 +929,22 @@ export function separarCuenta(
     tiendas?: readonly { id: string; nombre: string }[];
     rango?: Rango;
     estructuraDe?: (r: Rango) => EstructuraCuenta | null;
-    /** Lo documentado de un mes (lo facturado sin pedido es de ese mes). */
-    documentadoDe?: (r: Rango) => DocumentadoCuenta | null;
+    /** Lo facturado sin pedido de un mes (va en el mes de su factura). */
+    sinPedidoDe?: (r: Rango) => ImportesSinPedido | null;
   } = {},
 ): ColumnaCuenta[] {
   const sinEstructura: EntradaCuenta = {
     ...e,
     estructura: null,
     documentado: undefined,
+    sinPedido: undefined,
     dinero: undefined,
   };
-  // Lo facturado sin pedido (facturas a mano) no es de ninguna tienda ni
-  // línea: va en su columna, para que las columnas sumen el total.
-  const d = e.documentado;
+  // Lo facturado sin pedido (facturas a mano) no es de ninguna línea, ni se
+  // reparte entre tiendas: va en su columna, para que las columnas sumen el total.
+  const sp = e.sinPedido;
   const sinPedido: ColumnaCuenta[] =
-    d && (d.facturadoSinPedido !== 0 || d.totalSinPedido !== 0)
+    sp && (sp.base !== 0 || sp.total !== 0)
       ? [
           {
             clave: CLAVE_SIN_PEDIDO,
@@ -908,7 +953,7 @@ export function separarCuenta(
               ...sinEstructura,
               ventas: [],
               devoluciones: [],
-              documentado: d,
+              sinPedido: sp,
             }),
           },
         ]
@@ -961,14 +1006,16 @@ export function separarCuenta(
       return {
         clave: desde,
         titulo: m.etiqueta,
-        cuenta: calcularCuenta({
-          ...e,
-          dinero: undefined,
-          documentado: opciones.documentadoDe ? opciones.documentadoDe(m) : undefined,
-          ventas: e.ventas.filter((v) => enMes(diaDelPedido(v))),
-          devoluciones: e.devoluciones.filter((d) => enMes(d.fecha.slice(0, 10))),
-          estructura: e.estructura && opciones.estructuraDe ? opciones.estructuraDe(m) : null,
-        }),
+        cuenta: sinImpuestoDelMes(
+          calcularCuenta({
+            ...e,
+            dinero: undefined,
+            sinPedido: opciones.sinPedidoDe ? opciones.sinPedidoDe(m) : undefined,
+            ventas: e.ventas.filter((v) => enMes(diaDelPedido(v))),
+            devoluciones: e.devoluciones.filter((d) => enMes(d.fecha.slice(0, 10))),
+            estructura: e.estructura && opciones.estructuraDe ? opciones.estructuraDe(m) : null,
+          }),
+        ),
       };
     });
   }
@@ -1035,8 +1082,11 @@ export function entradaDeCanalYGrupo(
   canal: "todos" | "web" | "manual" | "textil",
   grupo: "total" | "a" | "b",
   documentados: ReadonlySet<string> | null,
-): EntradaCuenta {
+): EntradaCuenta | null {
   if (canal === "todos" && grupo === "total") return e;
+  // Sin saber qué tiene documento todavía no se puede separar A de B: nada
+  // de un A vacío y un B con todo mientras se lee.
+  if (grupo !== "total" && !documentados) return null;
   const delGrupo = (id: string | undefined | null) =>
     grupo === "total" || (!!id && !!documentados?.has(id)) === (grupo === "a");
   const canalDevolucion = (d: DevolucionCuenta) =>
@@ -1049,6 +1099,9 @@ export function entradaDeCanalYGrupo(
     ),
     estructura: null,
     documentado: null,
+    // Lo facturado sin pedido está documentado: va en el grupo A, no en el B.
+    // No es de ningún canal: solo con todos.
+    sinPedido: canal === "todos" && grupo !== "b" ? e.sinPedido : null,
     dinero: undefined,
   };
 }

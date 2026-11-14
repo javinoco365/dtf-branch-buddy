@@ -129,24 +129,22 @@ export function Resumen({ d }: { d: DatosGerencia }) {
     dinero: false,
   });
   // Con filtro de canal o de grupo (A/B), la misma cuenta sobre esos pedidos.
-  const cuentaFiltrada = useMemo(
-    () =>
-      cuentaAplica || !lectura.entrada
-        ? null
-        : calcularCuenta(
-            entradaDeCanalYGrupo(lectura.entrada, d.filtro.canal, d.grupo, d.documentados),
-          ),
-    [cuentaAplica, lectura.entrada, d.filtro.canal, d.grupo, d.documentados],
-  );
-  const previaFiltrada = useMemo(
-    () =>
-      cuentaAplica || !lectura.entradaPrevia
-        ? null
-        : calcularCuenta(
-            entradaDeCanalYGrupo(lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentados),
-          ),
-    [cuentaAplica, lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentados],
-  );
+  // Con A o B, mientras no se sabe qué tiene documento, «…»: nada calculado.
+  const cuentaFiltrada = useMemo(() => {
+    if (cuentaAplica || !lectura.entrada) return null;
+    const e = entradaDeCanalYGrupo(lectura.entrada, d.filtro.canal, d.grupo, d.documentados);
+    return e ? calcularCuenta(e) : null;
+  }, [cuentaAplica, lectura.entrada, d.filtro.canal, d.grupo, d.documentados]);
+  const previaFiltrada = useMemo(() => {
+    if (cuentaAplica || !lectura.entradaPrevia) return null;
+    const e = entradaDeCanalYGrupo(
+      lectura.entradaPrevia,
+      d.filtro.canal,
+      d.grupo,
+      d.documentadosPrevios,
+    );
+    return e ? calcularCuenta(e) : null;
+  }, [cuentaAplica, lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentadosPrevios]);
   const laCuenta = cuentaAplica ? lectura.cuenta : cuentaFiltrada;
   const laPrevia = cuentaAplica ? lectura.previa : previaFiltrada;
   const delaCuenta = (cifra: Cifra | undefined): Cifra | null => cifra ?? null;

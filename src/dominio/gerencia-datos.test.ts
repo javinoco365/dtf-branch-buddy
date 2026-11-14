@@ -79,6 +79,7 @@ function referencia(e: EntradasGerencia): DatosAntes | null {
     grupo,
     ventasTodas: todas,
     documentados: docs.data ? documentados : null,
+    documentadosPrevios: !periodo.comparacion || docsPrevios.data ? documentadosPrevios : null,
     pendiente: docs.data ? pendienteDocumentar(todas, documentados) : null,
     filtro,
     seleccion: periodo.seleccion,
