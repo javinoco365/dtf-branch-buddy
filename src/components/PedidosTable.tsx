@@ -1646,7 +1646,7 @@ function MenuAcciones({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {escribir && <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>}
-        <DropdownMenuItem onClick={onTracking}>Tracking</DropdownMenuItem>
+        <DropdownMenuItem onClick={onTracking}>Seguimiento</DropdownMenuItem>
         {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}
         {escribir && <DropdownMenuItem onClick={onFacturar}>Ticket o factura</DropdownMenuItem>}
         {borrar && (

@@ -12,6 +12,14 @@ describe("consecuenciasBorrarPedido", () => {
     const r = consecuenciasBorrarPedido(base);
     expect(r.impedimento).toBeNull();
     expect(r.consecuencias[0]).toBe("Sus 2 líneas.");
+    expect(consecuenciasBorrarPedido({ ...base, lineas: 1 }).consecuencias[0]).toBe("Su línea.");
+  });
+
+  it("la factura se queda emitida; el ticket, emitido", () => {
+    const de = (documento: string) =>
+      consecuenciasBorrarPedido({ ...base, documento }).consecuencias.join(" ");
+    expect(de("La factura F-3")).toContain("La factura F-3 no se borra: se queda emitida,");
+    expect(de("El ticket T-1")).toContain("El ticket T-1 no se borra: se queda emitido,");
   });
 
   it("los cobros a mano lo impiden", () => {
@@ -39,16 +47,31 @@ const manual = { estado: "listo", esDeLaWeb: false, clienteEmail: "ana@ejemplo.e
 const web = { ...manual, esDeLaWeb: true };
 
 describe("efectosCambioEstado", () => {
-  it("los cambios internos no se confirman", () => {
+  it("los cambios internos de un pedido manual no se confirman", () => {
     expect(efectosCambioEstado(manual, "imprimiendo")).toEqual({ confirmar: false, efectos: [] });
-    expect(efectosCambioEstado(web, "en_produccion").confirmar).toBe(false);
+  });
+
+  it("cualquier cambio de un pedido de la web se confirma: se cambia allí y puede avisar", () => {
+    for (const nuevo of ["pendiente", "en_produccion", "imprimiendo", "entregado"]) {
+      const r = efectosCambioEstado(web, nuevo);
+      expect([nuevo, r.confirmar]).toEqual([nuevo, true]);
+      expect(r.efectos.join(" ")).toMatch(/cambiará también en la web.*WooCommerce puede avisar/);
+    }
+    expect(efectosCambioEstado(web, "pendiente").efectos[0]).toContain("«en espera»");
+  });
+
+  it("reabrir un cancelado se confirma, también en un pedido manual", () => {
+    const cancelado = { ...manual, estado: "cancelado" };
+    const r = efectosCambioEstado(cancelado, "en_produccion");
+    expect(r.confirmar).toBe(true);
+    expect(r.efectos).toContain("El pedido volverá a contar en ventas y producción.");
   });
 
   it("enviado se confirma y dice a quién va el correo y que se marca en la web", () => {
     const r = efectosCambioEstado(web, "enviado");
     expect(r.confirmar).toBe(true);
     expect(r.efectos[0]).toContain("ana@ejemplo.es");
-    expect(r.efectos.some((e) => e.includes("completado en la web"))).toBe(true);
+    expect(r.efectos.some((e) => e.includes("en la web, a «completado»"))).toBe(true);
   });
 
   it("enviado sin email lo dice en vez de prometer un correo", () => {
@@ -61,7 +84,7 @@ describe("efectosCambioEstado", () => {
   it("cancelado se confirma siempre, y en la web dice que se cancela allí", () => {
     expect(efectosCambioEstado(manual, "cancelado").confirmar).toBe(true);
     const r = efectosCambioEstado(web, "cancelado");
-    expect(r.efectos.some((e) => e.includes("cancelado en la web"))).toBe(true);
+    expect(r.efectos.some((e) => e.includes("en la web, a «cancelado»"))).toBe(true);
   });
 
   it("completado en un pedido de la web se confirma: la web avisa al cliente", () => {

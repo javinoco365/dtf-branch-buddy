@@ -10,8 +10,10 @@
  * correo al cliente y marca el pedido como completado en la web; «Cancelado»
  * lo cancela en la web. Nada de eso tiene vuelta atrás (el correo ya está en
  * el buzón del cliente), así que esos cambios se confirman antes, diciendo
- * qué va a pasar. Los demás son internos: se hacen sin preguntar y se pueden
- * deshacer.
+ * qué va a pasar. En un pedido de la web se confirma cualquier cambio: se
+ * cambia también allí y WooCommerce puede escribir al cliente. Reabrir un
+ * cancelado también se confirma. Los demás son internos: se hacen sin
+ * preguntar y se pueden deshacer.
  *
  * Y después, el aviso dice la verdad: si el correo o la web fallaron, se dice
  * qué no salió en lugar de un «Estado actualizado» a secas.
@@ -40,8 +42,13 @@ export const ESTADO_A_WOO: Record<EstadoPedido, string> = {
   cancelado: "cancelled",
 };
 
-/** Los estados de WooCommerce que el cliente nota (le llega correo de la web). */
-const WOO_CON_EFECTO = new Set(["completed", "cancelled"]);
+/** Cómo llama WooCommerce (en su panel en español) a cada estado. */
+const NOMBRE_WOO: Record<string, string> = {
+  "on-hold": "en espera",
+  processing: "procesando",
+  completed: "completado",
+  cancelled: "cancelado",
+};
 
 export interface PedidoParaCambio {
   estado: string;
@@ -76,21 +83,22 @@ export function efectosCambioEstado(pedido: PedidoParaCambio, nuevo: string): Ef
     );
   }
 
+  // Todo cambio de un pedido de la web sale del CRM: se cambia también allí,
+  // y WooCommerce puede escribir al cliente. Se confirma siempre.
   if (pedido.esDeLaWeb) {
     const woo = ESTADO_A_WOO[nuevo];
-    if (woo === "completed") {
-      efectos.push(
-        "Se marcará como completado en la web; WooCommerce puede mandarle además su propio correo.",
-      );
-    } else if (woo === "cancelled") {
-      efectos.push(
-        "Se marcará como cancelado en la web; WooCommerce puede mandarle además su propio correo.",
-      );
-    }
-    if (WOO_CON_EFECTO.has(woo)) confirmar = true;
+    efectos.push(
+      `Se cambiará también en la web, a «${NOMBRE_WOO[woo] ?? woo}»; WooCommerce puede avisar al cliente con su propio correo.`,
+    );
+    confirmar = true;
   }
 
   if (nuevo === "cancelado") efectos.push("El pedido dejará de contar en ventas y producción.");
+  // Reabrir un cancelado también se confirma: vuelve a contar.
+  if (pedido.estado === "cancelado") {
+    efectos.push("El pedido volverá a contar en ventas y producción.");
+    confirmar = true;
+  }
 
   return { confirmar, efectos };
 }
@@ -178,7 +186,9 @@ export function consecuenciasBorrarPedido(p: PedidoParaBorrar): {
     };
   }
   const consecuencias: string[] = [];
-  if (p.lineas > 0) consecuencias.push(`Sus ${plural(p.lineas, "línea", "líneas")}.`);
+  if (p.lineas > 0) {
+    consecuencias.push(p.lineas === 1 ? "Su línea." : `Sus ${p.lineas} líneas.`);
+  }
   const auto = p.cobros.length;
   if (auto > 0) {
     consecuencias.push(`${plural(auto, "cobro automático", "cobros automáticos")} de la web.`);
@@ -186,7 +196,10 @@ export function consecuenciasBorrarPedido(p: PedidoParaBorrar): {
   if (p.conSeguimiento) consecuencias.push("El seguimiento del envío.");
   consecuencias.push("El registro de correos enviados al cliente.");
   if (p.documento) {
-    consecuencias.push(`${p.documento} no se borra: se queda emitido, sin pedido al que apuntar.`);
+    // «la factura F-3» / «el ticket T-12»: concuerda con lo que es.
+    const emitido = /^la\b/i.test(p.documento.trim()) ? "emitida" : "emitido";
+    const doc = p.documento.charAt(0).toUpperCase() + p.documento.slice(1);
+    consecuencias.push(`${doc} no se borra: se queda ${emitido}, sin pedido al que apuntar.`);
   }
   if (p.esDeLaWeb) consecuencias.push("En la web sigue existiendo: allí no se borra.");
   return { consecuencias, impedimento: null };

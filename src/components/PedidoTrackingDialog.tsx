@@ -96,7 +96,7 @@ export function PedidoTrackingDialog({
       return r;
     },
     onSuccess: () => {
-      toast.success("Tracking guardado");
+      toast.success("Seguimiento guardado");
       onSaved();
     },
     onError: (e: any) => avisarError(e, "Error al guardar tracking"),
@@ -106,7 +106,7 @@ export function PedidoTrackingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tracking de envío · {pedido?.numero}</DialogTitle>
+          <DialogTitle>Seguimiento del envío · {pedido?.numero}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
