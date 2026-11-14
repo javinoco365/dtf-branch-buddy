@@ -44,8 +44,8 @@ import { costeEnvio } from "./resumen-diario";
 import {
   cobrosDeLinea,
   ETIQUETA_FILTRO_LINEA,
+  parteConAlgo,
   partirPedido,
-  partirPedidos,
   pendientesDeLinea,
   type FiltroLinea,
 } from "./por-linea";
@@ -55,6 +55,7 @@ import { totalizar, type CobroConsolidado } from "./facturacion";
 import { tiendaDelPendiente, type PedidoPendiente } from "./pendientes";
 import { diaDelPedido } from "./dia-pedido";
 import { diaDeFecha, type Rango } from "./periodos";
+import { esSoloUv } from "./linea-producto";
 
 type Numerico = number | string | null | undefined;
 const num = (v: Numerico) => Number(v ?? 0) || 0;
@@ -379,7 +380,22 @@ export function ventasDeLaLinea<T extends VentaCuenta>(
   linea: FiltroLinea,
 ): T[] {
   if (linea === "todo") return [...ventas];
-  return partirPedidos(ventas.filter((v) => v.canal !== "textil"))[linea];
+  const partes: T[] = [];
+  for (const v of ventas) {
+    if (v.canal === "textil") continue;
+    const parte = partirPedido(v)[linea];
+    // Solo las partes con algo: un pedido solo de DTF no es un pedido de UV
+    // (ni resta su envío en esa línea).
+    if (!parteConAlgo(parte)) continue;
+    // El envío (lo cobrado y lo que cobra la agencia) va a una sola parte: la
+    // de UV si el pedido es solo de UV (lo envía la subcontrata) y, si no, la
+    // de DTF, que es la que envía la empresa.
+    const llevaEnvio = linea === (esSoloUv(v) ? "uv" : "dtf");
+    partes.push(
+      llevaEnvio ? parte : { ...parte, envio: 0, con_envio: false, coste_envio_real: null },
+    );
+  }
+  return partes;
 }
 
 /**

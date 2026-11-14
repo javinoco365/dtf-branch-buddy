@@ -29,6 +29,7 @@ import {
   type VentaCuenta,
 } from "./cuenta";
 import { cifrasGerencia, type GastoFijo } from "./gerencia";
+import { redondear } from "./importes";
 import type { PedidoPendiente } from "./pendientes";
 import type { CobroConsolidado } from "./facturacion";
 
@@ -315,6 +316,53 @@ describe("por línea", () => {
     expect((dtf.ventas.valor ?? 0) + (uv.ventas.valor ?? 0)).toBe(todo.ventas.valor);
     expect(uv.metrosUv).toBe(1);
     expect(dtf.metros).toBe(2);
+  });
+});
+
+describe("por línea: las partes vacías no cuentan", () => {
+  it("un pedido solo de DTF mirado como UV no es un pedido ni resta su envío", () => {
+    const uv = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([venta()], "uv"), estructura: null }),
+    );
+    expect(uv.pedidos).toBe(0);
+    expect(uv.margen_bruto.valor).toBe(0);
+    expect(uv.resultado_portes.valor).toBe(0);
+  });
+
+  it("un pedido solo de UV mirado como DTF tampoco", () => {
+    const soloUv = venta({ metros_total: 0, metros_uv: 2, coste_uv_snapshot: 15 });
+    const dtf = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([soloUv], "dtf"), estructura: null }),
+    );
+    expect(dtf.pedidos).toBe(0);
+    expect(dtf.margen_bruto.valor).toBe(0);
+  });
+
+  it("en un mixto el envío va solo a la parte de DTF y las dos suman el todo", () => {
+    const mixto = venta({
+      metros_total: 2,
+      metros_uv: 1,
+      coste_uv_snapshot: 15,
+      bruta_uv: 30,
+      iva_uv: 6.3,
+      coste_envio_real: 8,
+    });
+    const [partUv] = ventasDeLaLinea([mixto], "uv");
+    expect(partUv).toMatchObject({ envio: 0, con_envio: false, coste_envio_real: null });
+    const sinEstructura = { estructura: null };
+    const dtf = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([mixto], "dtf"), ...sinEstructura }),
+    );
+    const uv = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([mixto], "uv"), ...sinEstructura }),
+    );
+    const todo = calcularCuenta(entrada({ ventas: [mixto], ...sinEstructura }));
+    expect(dtf.resultado_portes.valor).toBe(2);
+    expect(uv.resultado_portes.valor).toBe(0);
+    expect(redondear((dtf.margen_bruto.valor ?? 0) + (uv.margen_bruto.valor ?? 0))).toBe(
+      todo.margen_bruto.valor,
+    );
+    expect(dtf.pedidos + uv.pedidos).toBe(2);
   });
 });
 
