@@ -42,6 +42,8 @@ import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { leerNumeroEscrito } from "@/dominio/numeros";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
+import { AjusteImporte } from "@/components/cobros/AjusteImporte";
+import { devolucionesTotal, type DevolucionDePedido } from "@/dominio/cobros";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -64,6 +66,14 @@ export type PedidoCobrable = {
   cancelado: boolean;
   /** De WooCommerce: se cobra en la web y su cobro lo pone la sincronización. */
   web?: boolean;
+  /**
+   * Solo pedidos de tienda: reembolsos de la web y la rebaja del importe real,
+   * y el envío con su base para proponer «sin envío». Con ellos sale «Importe
+   * real» (AjusteImporte).
+   */
+  devoluciones?: DevolucionDePedido[];
+  envio?: number | string | null;
+  base?: number;
 };
 
 /** El importe como lo escribe una persona: «12,50» o «12.50» (como en Caja y en Pedidos). */
@@ -100,7 +110,8 @@ export function CobrosPedidoDialog({
   const { escribir } = usePermisos();
   const catalogos = useServerFn(listarCatalogosCaja);
 
-  const resumen = resumenCobros(pedido.total, cobros);
+  const devuelto = devolucionesTotal(pedido.devoluciones);
+  const resumen = resumenCobros(pedido.total, cobros, devuelto);
   const propinas = cobros.reduce((s, c) => s + Number(c.propina ?? 0), 0);
   const admiteCobro = !pedido.cancelado && !pedido.web;
 
@@ -249,7 +260,12 @@ export function CobrosPedidoDialog({
         <div className="grid grid-cols-3 gap-3 rounded-md border p-3 text-sm">
           <div>
             <div className="text-xs text-muted-foreground">Total</div>
-            <div className="font-semibold tabular-nums">{eur(Number(pedido.total))}</div>
+            <div className="font-semibold tabular-nums">{eur(Number(pedido.total) - devuelto)}</div>
+            {devuelto > 0 && (
+              <div className="text-xs text-muted-foreground tabular-nums">
+                de {eur(Number(pedido.total))}, con rebaja o devolución
+              </div>
+            )}
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Cobrado</div>
@@ -269,6 +285,17 @@ export function CobrosPedidoDialog({
             </div>
           </div>
         </div>
+
+        {pedido.tipo === "tienda" && !pedido.cancelado && escribir && pedido.base != null && (
+          <AjusteImporte
+            pedidoId={pedido.id}
+            total={pedido.total}
+            envio={pedido.envio}
+            base={pedido.base}
+            devoluciones={pedido.devoluciones ?? []}
+            cobrado={resumen.cobrado}
+          />
+        )}
 
         {resumen.estado === "excedido" && (
           <p className="text-xs text-status-cancelado">

@@ -4,7 +4,7 @@ import {
   type RegisteredRouter,
   type ValidateLinkOptions,
 } from "@tanstack/react-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { usePeriodoUrl, useLineaUrl } from "@/lib/filtros-url";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -25,12 +25,13 @@ import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
 import { ETIQUETA_FILTRO_LINEA, pedidosDeLinea } from "@/dominio/por-linea";
 import {
   FILTRO_CUENTA_TODO,
-  pedidosPorCobrarHoy,
+  listaPorCobrarHoy,
   TODAS,
   ventasNetasPorTramo,
 } from "@/dominio/cuenta";
 import { infoEstado } from "@/dominio/estados";
-import { pedidosDeHoy } from "@/dominio/hoy";
+import { filasDelTaller, filasPorCobrar, pedidosDeHoy, type FilaPedidoHoy } from "@/dominio/hoy";
+import { PedidosDeHoy } from "@/components/PedidosDeHoy";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
 import { topPorMetros } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
@@ -67,13 +68,34 @@ function Hoy() {
   const pendientes = usePendientesCobro();
   const tareas = useEstadoAvisoAgenda();
   const pedidos = useMemo(() => (taller.data ? pedidosDeHoy(taller.data) : null), [taller.data]);
-  const porCobrar = useMemo(
+  const listaCobrar = useMemo(
     () =>
       pendientes.data?.disponible
-        ? pedidosPorCobrarHoy(pendientes.data.pedidos, FILTRO_CUENTA_TODO)
+        ? listaPorCobrarHoy(pendientes.data.pedidos, FILTRO_CUENTA_TODO)
         : null,
     [pendientes.data],
   );
+  const porCobrar = listaCobrar?.length ?? null;
+  // Al tocar una cifra, la lista de esos mismos pedidos.
+  const [lista, setLista] = useState<"producir" | "enviar" | "cobrar" | null>(null);
+  const filas = useMemo((): FilaPedidoHoy[] => {
+    if (lista === "cobrar") return listaCobrar ? filasPorCobrar(listaCobrar) : [];
+    if (lista && taller.data) return filasDelTaller(taller.data, lista);
+    return [];
+  }, [lista, listaCobrar, taller.data]);
+  const textosLista = {
+    producir: {
+      titulo: "Por producir",
+      descripcion: "Pendientes, en producción o imprimiendo. Sin los de la web sin pagar.",
+      importe: "Total",
+    },
+    enviar: { titulo: "Por enviar", descripcion: "Listos y esperando a salir.", importe: "Total" },
+    cobrar: {
+      titulo: "Pedidos por cobrar",
+      descripcion: "Con algo pendiente de cobro. Sin cancelados ni web sin pagar.",
+      importe: "Pendiente",
+    },
+  } as const;
   const cifraPedidos = (n: number | undefined) =>
     taller.isError ? "—" : n === undefined ? "…" : numero(n, 0);
 
@@ -87,14 +109,14 @@ function Hoy() {
           valor={cifraPedidos(pedidos?.porProducir)}
           detalle={taller.isError ? "No se pudo leer el taller" : "Pedidos sin imprimir"}
           icon={Printer}
-          a={{ to: "/panel/gerencia", search: { pestana: "produccion" } }}
+          onAbrir={pedidos ? () => setLista("producir") : undefined}
         />
         <CifraHoy
           titulo="Por enviar"
           valor={cifraPedidos(pedidos?.porEnviar)}
           detalle={taller.isError ? "No se pudo leer el taller" : "Pedidos listos"}
           icon={Truck}
-          a={{ to: "/panel/pedidos", search: { periodo: "todo", estado: "listo" } }}
+          onAbrir={pedidos ? () => setLista("enviar") : undefined}
         />
         <CifraHoy
           titulo="Pedidos por cobrar"
@@ -113,7 +135,7 @@ function Hoy() {
                 : "Con algo pendiente de cobro"
           }
           icon={ICONO.pendienteCobro}
-          a={{ to: "/panel/cobros" }}
+          onAbrir={listaCobrar ? () => setLista("cobrar") : undefined}
         />
         <CifraHoy
           titulo="Mis tareas"
@@ -127,6 +149,16 @@ function Hoy() {
           a={{ to: "/panel/agenda" }}
         />
       </div>
+      {lista && (
+        <PedidosDeHoy
+          abierto
+          onCerrar={() => setLista(null)}
+          titulo={textosLista[lista].titulo}
+          descripcion={textosLista[lista].descripcion}
+          etiquetaImporte={textosLista[lista].importe}
+          pedidos={filas}
+        />
+      )}
     </section>
   );
 }
@@ -137,27 +169,47 @@ type PropsCifraHoy<TOpciones = unknown> = {
   detalle: ReactNode;
   icon: LucideIcon;
   /** A dónde lleva: la ruta y su búsqueda, comprobadas con los tipos de las rutas. */
-  a: ValidateLinkOptions<RegisteredRouter, TOpciones>;
+  a?: ValidateLinkOptions<RegisteredRouter, TOpciones>;
+  /** O, en vez de llevar a otra pantalla, abre la lista de sus pedidos. */
+  onAbrir?: () => void;
 };
 
-/** Una cifra de «Hoy»: una tarjeta que lleva a su pantalla. */
+const CLASE_CIFRA_HOY =
+  "group rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Una cifra de «Hoy»: una tarjeta que lleva a su pantalla o abre sus pedidos. */
 function CifraHoy<TOpciones>(props: PropsCifraHoy<TOpciones>): ReactNode;
-function CifraHoy({ titulo, valor, detalle, icon, a }: PropsCifraHoy) {
-  return (
-    <Link
-      {...a}
-      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <TarjetaKpi
-        titulo={titulo}
-        valor={valor}
-        delta={null}
-        icon={icon}
-        pie={<span className="text-muted-foreground">{detalle}</span>}
-        className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-accent/40"
-      />
-    </Link>
+function CifraHoy({ titulo, valor, detalle, icon, a, onAbrir }: PropsCifraHoy) {
+  const tarjeta = (
+    <TarjetaKpi
+      titulo={titulo}
+      valor={valor}
+      delta={null}
+      icon={icon}
+      pie={<span className="text-muted-foreground">{detalle}</span>}
+      className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-accent/40"
+    />
   );
+  if (a) {
+    return (
+      <Link {...a} className={CLASE_CIFRA_HOY}>
+        {tarjeta}
+      </Link>
+    );
+  }
+  if (onAbrir) {
+    return (
+      <button
+        type="button"
+        onClick={onAbrir}
+        className={CLASE_CIFRA_HOY}
+        aria-label={`${titulo}: ${valor}. Ver los pedidos`}
+      >
+        {tarjeta}
+      </button>
+    );
+  }
+  return tarjeta;
 }
 
 /**

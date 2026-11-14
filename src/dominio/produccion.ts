@@ -49,6 +49,10 @@ export type PedidoTaller = {
   /** Metros de DTF UV (migración 20261110100000): los imprime la subcontrata. */
   metros_uv?: Numerico;
   total: Numerico;
+  /** Para listarlo: id, número y cliente (solo lo traen las lecturas que lo necesitan). */
+  id?: string;
+  numero?: string | null;
+  cliente_nombre?: string | null;
 };
 
 /**

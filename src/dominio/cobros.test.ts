@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  devolucionesDelPedido,
+  opcionesImporteReal,
   desglosarCobro,
   etiquetaMetodo,
   pasaPorCaja,
@@ -110,5 +112,45 @@ describe("desglosarCobro", () => {
 
   it("sin el pedido no se inventa un IVA: todo a la base", () => {
     expect(desglosarCobro(10, null)).toEqual({ base: 10, iva: 0 });
+  });
+});
+
+describe("importe real del pedido (rebaja)", () => {
+  it("lo devuelto o rebajado ya no se debe: deja de salir «parcial»", () => {
+    expect(resumenCobros(15.72, [{ importe: 7.25 }]).estado).toBe("parcial");
+    expect(resumenCobros(15.72, [{ importe: 7.25 }], 8.47)).toEqual({
+      cobrado: 7.25,
+      pendiente: 0,
+      estado: "cobrado",
+    });
+  });
+
+  it("separa los reembolsos de la web de la rebaja del CRM", () => {
+    expect(
+      devolucionesDelPedido([
+        { importe: 5, woo_refund_id: 123 },
+        { importe: 8.47, woo_refund_id: null, motivo: "Rebaja: recogió en el local" },
+      ]),
+    ).toEqual({ reembolsado: 5, rebaja: 8.47, motivoRebaja: "Rebaja: recogió en el local" });
+    expect(devolucionesDelPedido(null)).toEqual({ reembolsado: 0, rebaja: 0, motivoRebaja: null });
+  });
+
+  it("propone el importe sin envío y lo cobrado (el caso de DCUL-158)", () => {
+    // 7,00 € de producto + 5,99 € de envío, sin IVA; 15,72 € con IVA; cobrados 7,25 €.
+    expect(
+      opcionesImporteReal({
+        total: 15.72,
+        envio: 5.99,
+        base: 12.99,
+        reembolsado: 0,
+        cobrado: 7.25,
+      }),
+    ).toEqual({ maximo: 15.72, sinEnvio: 8.47, loCobrado: 7.25 });
+  });
+
+  it("sin envío o con todo cobrado no propone lo que no cambia nada", () => {
+    expect(
+      opcionesImporteReal({ total: 12.1, envio: 0, base: 10, reembolsado: 0, cobrado: 12.1 }),
+    ).toEqual({ maximo: 12.1, sinEnvio: null, loCobrado: null });
   });
 });

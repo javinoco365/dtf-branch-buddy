@@ -81,7 +81,13 @@ import {
 } from "@/lib/pedidos.functions";
 import { abrirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
-import { resumenCobros, type ResumenCobros } from "@/dominio/cobros";
+import {
+  devolucionesTotal,
+  resumenCobros,
+  type DevolucionDePedido,
+  type ResumenCobros,
+} from "@/dominio/cobros";
+import { baseConEnvio } from "@/dominio/kpis";
 import { claseFilaCobrada } from "@/components/cobros/fila-cobrada";
 import { totalesPedidos, type TotalesPedidos } from "@/dominio/sumatorios";
 import { describirPedidos } from "@/dominio/sumatorios-pedidos";
@@ -163,6 +169,8 @@ export type PedidoFila = {
   cliente_telefono: string | null;
   /** El de la ficha si tiene; si no, el que trajo el pedido. */
   cliente_nif?: string | null;
+  /** Reembolsos de la web y la rebaja del importe real (woo_refund_id nulo). */
+  devoluciones?: DevolucionDePedido[];
   /** Marcó «Quiero factura» en la web: no se le hace ticket. */
   necesita_factura?: boolean | null;
   direccion_facturacion: Direccion | null;
@@ -233,7 +241,7 @@ const cobrosCalculados = new WeakMap<PedidoFila, ResumenCobros>();
 function cobroDe(p: PedidoFila): ResumenCobros {
   let r = cobrosCalculados.get(p);
   if (!r) {
-    r = resumenCobros(p.total, p.cobros ?? []);
+    r = resumenCobros(p.total, p.cobros ?? [], devolucionesTotal(p.devoluciones));
     cobrosCalculados.set(p, r);
   }
   return r;
@@ -1019,6 +1027,10 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                 tipo: "tienda" as const,
                 cancelado: p.estado === "cancelado",
                 web: p.origen === "woocommerce",
+                // Para el importe real: lo devuelto, y el envío con su base.
+                devoluciones: p.devoluciones ?? [],
+                envio: p.envio,
+                base: baseConEnvio(p),
               };
             })()}
             cobros={(pedidos.find((x) => x.id === cobrando.id) ?? cobrando).cobros ?? []}

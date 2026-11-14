@@ -417,10 +417,13 @@ export function useTaller() {
           metros_total: number | string | null;
           metros_uv?: number | string | null;
           total: number | string | null;
+          id: string;
+          numero: string | null;
+          cliente_nombre: string | null;
         }>((a, b) =>
           tabla(supabase, "pedidos")
             .select(
-              `id, fecha_pedido, estado, tienda_id, origen, metros_total, total${conUv ? ", metros_uv" : ""}`,
+              `id, numero, cliente_nombre, fecha_pedido, estado, tienda_id, origen, metros_total, total${conUv ? ", metros_uv" : ""}`,
             )
             .in("estado", [...ESTADOS_ABIERTOS])
             .order("id")
@@ -432,9 +435,16 @@ export function useTaller() {
       };
       const [t, x] = await Promise.all([
         tienda(),
-        leerTodas<{ fecha: string; estado: string; total: number | string | null }>((a, b) =>
+        leerTodas<{
+          id: string;
+          numero: string | null;
+          cliente_nombre: string | null;
+          fecha: string;
+          estado: string;
+          total: number | string | null;
+        }>((a, b) =>
           tabla(supabase, "textil_pedidos")
-            .select("id, fecha, estado, total")
+            .select("id, numero, cliente_nombre, fecha, estado, total")
             .in("estado", [...ESTADOS_ABIERTOS])
             .order("id")
             .range(a, b),
@@ -451,6 +461,9 @@ export function useTaller() {
           metros_total: p.metros_total,
           metros_uv: p.metros_uv ?? 0,
           total: p.total,
+          id: p.id,
+          numero: p.numero,
+          cliente_nombre: p.cliente_nombre,
         })),
         ...x.data.map((p) => ({
           fecha_pedido: `${p.fecha.slice(0, 10)}T12:00:00`,
@@ -459,6 +472,9 @@ export function useTaller() {
           canal: "textil" as const,
           metros_total: 0,
           total: p.total,
+          id: p.id,
+          numero: p.numero,
+          cliente_nombre: p.cliente_nombre,
         })),
       ];
     },
