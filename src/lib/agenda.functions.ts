@@ -17,6 +17,7 @@ import {
   esPrioridad,
   momentosDe,
   nombreCategoriaRepetido,
+  personasDeAgenda,
   validarTarea,
   type BorradorTarea,
   type CategoriaAgenda,
@@ -103,7 +104,11 @@ export type PersonaAgenda = { id: string; nombre: string; activo: boolean };
 export type DatosAgenda = {
   tareas: Tarea[];
   categorias: CategoriaAgenda[];
-  /** Todos los socios, también los desactivados (pueden tener tareas antiguas). */
+  /**
+   * Todos los socios, también los que no se eligen (pueden tener tareas
+   * antiguas). `activo`: socio activo con cuenta en el CRM (socio_cuentas);
+   * solo esos salen en Para, De y los filtros.
+   */
   personas: PersonaAgenda[];
   falta_migracion: boolean;
 };
@@ -113,16 +118,25 @@ export const leerAgenda = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<DatosAgenda> => {
     const sb = context.supabase;
-    const [tareas, categorias, socios] = await Promise.all([
+    const [tareas, categorias, socios, cuentas] = await Promise.all([
       tabla(sb, "agenda_tareas").select(COLUMNAS_TAREA).order("inicio").limit(5000),
       tabla(sb, "agenda_categorias")
         .select("id, nombre, enlace, icono, activa, orden")
         .order("orden"),
       tabla(sb, "caja_socios").select("id, nombre, activo, orden").order("orden").order("nombre"),
+      tabla(sb, "socio_cuentas").select("socio_id"),
     ]);
     if (socios.error) throw new Error(socios.error.message);
-    const personas = ((socios.data ?? []) as { id: string; nombre: string; activo: boolean }[]).map(
-      (s) => ({ id: s.id, nombre: s.nombre, activo: s.activo !== false }),
+    // Sin la tabla de cuentas (migración 20261115100000 sin aplicar), no se sabe
+    // quién usa el CRM: cuentan todos los socios activos, como antes.
+    const sinCuentas = faltaLaTabla(cuentas.error);
+    if (cuentas.error && !sinCuentas) throw new Error(cuentas.error.message);
+    const conCuenta = sinCuentas
+      ? null
+      : new Set(((cuentas.data ?? []) as { socio_id: string }[]).map((c) => c.socio_id));
+    const personas = personasDeAgenda(
+      (socios.data ?? []) as { id: string; nombre: string; activo: boolean | null }[],
+      conCuenta,
     );
     if (faltaLaTabla(tareas.error) || faltaLaTabla(categorias.error)) {
       return { tareas: [], categorias: [], personas, falta_migracion: true };

@@ -490,7 +490,7 @@ function Formulario({
               id="tarea-para"
               etiqueta="Para"
               error={errores.para}
-              vacio="No hay personas activas. Se activan en Ajustes › Caja."
+              vacio="No hay nadie a quien mandarla. Un administrador asigna cada socio a su cuenta en Ajustes › Usuarios."
               opciones={activasPara.map((p) => ({
                 id: p.id,
                 contenido: (
