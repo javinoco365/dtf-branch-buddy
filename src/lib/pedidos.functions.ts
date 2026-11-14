@@ -7,7 +7,7 @@ import { esAdminActivo, esMiembroTienda } from "./acceso";
 import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
-import { ESTADO_A_WOO, ESTADOS_PEDIDO } from "@/dominio/cambio-estado-pedido";
+import { ESTADO_A_WOO, CLAVES_ESTADO_PEDIDO } from "@/dominio/cambio-estado-pedido";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { lineasDeUnPedido } from "@/dominio/por-linea";
 import { normalizarDireccion } from "@/dominio/direcciones";
@@ -15,7 +15,7 @@ import { urlSeguimientoValida } from "@/dominio/transportistas";
 
 // Los estados y su equivalente en WooCommerce viven en el dominio: la
 // pantalla los usa para avisar antes de lo que pasará en la web.
-const ESTADO_VALUES = ESTADOS_PEDIDO;
+const ESTADO_VALUES = CLAVES_ESTADO_PEDIDO;
 const ESTADO_TO_WC = ESTADO_A_WOO;
 
 async function ensureAccess(supabaseAdmin: any, userId: string, tiendaId: string) {

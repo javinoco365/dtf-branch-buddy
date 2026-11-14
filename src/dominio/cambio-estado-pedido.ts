@@ -17,7 +17,7 @@
  * qué no salió en lugar de un «Estado actualizado» a secas.
  */
 
-export const ESTADOS_PEDIDO = [
+export const CLAVES_ESTADO_PEDIDO = [
   "pendiente",
   "en_produccion",
   "imprimiendo",
@@ -27,7 +27,7 @@ export const ESTADOS_PEDIDO = [
   "cancelado",
 ] as const;
 
-export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
+export type EstadoPedido = (typeof CLAVES_ESTADO_PEDIDO)[number];
 
 /** El estado que se pone en WooCommerce para cada estado del CRM. */
 export const ESTADO_A_WOO: Record<EstadoPedido, string> = {
@@ -58,7 +58,7 @@ export interface EfectosCambio {
 }
 
 function esEstado(e: string): e is EstadoPedido {
-  return (ESTADOS_PEDIDO as readonly string[]).includes(e);
+  return (CLAVES_ESTADO_PEDIDO as readonly string[]).includes(e);
 }
 
 /** Qué hará el cambio de estado fuera del CRM, y si hay que confirmarlo. */
