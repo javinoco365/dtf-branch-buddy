@@ -335,7 +335,18 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
               {filtrados.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setDetailId(c.id)}>
                   <TableCell className="font-medium">
-                    {c.nombre}
+                    {/* La fila entera se abre con el ratón; el nombre es un botón
+                        para abrirla también con el teclado. */}
+                    <button
+                      type="button"
+                      className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailId(c.id);
+                      }}
+                    >
+                      {c.nombre}
+                    </button>
                     {c.apodo && (
                       <div className="text-xs font-normal text-muted-foreground">{c.apodo}</div>
                     )}
@@ -354,6 +365,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar"
                         variant="ghost"
                         size="icon"
                         title="Editar"
@@ -364,6 +376,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     </SiPuede>
                     <SiPuede accion="borrar">
                       <Button
+                        aria-label="Borrar"
                         variant="ghost"
                         size="icon"
                         title="Borrar"

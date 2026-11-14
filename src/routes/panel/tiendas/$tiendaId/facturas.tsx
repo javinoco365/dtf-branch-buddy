@@ -430,6 +430,7 @@ function Facturas() {
                         onClick={() => descargar(f)}
                         disabled={generandoId === f.id}
                         title={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
+                        aria-label={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
                       >
                         {generandoId === f.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -444,6 +445,7 @@ function Facturas() {
                           onClick={() => marcarPagada.mutate(f.id)}
                           disabled={marcarPagada.isPending}
                           title="Marcar como pagada"
+                          aria-label="Marcar como pagada"
                         >
                           <CheckCircle2 className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
@@ -468,6 +470,7 @@ function Facturas() {
                             onClick={() => setAnulando(f)}
                             disabled={anular.isPending}
                             title="Anular con una rectificativa"
+                            aria-label="Anular con una rectificativa"
                           >
                             <Undo2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -844,6 +847,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
                 </div>
                 <div className="col-span-1">
                   <Button
+                    aria-label="Quitar la línea"
                     type="button"
                     variant="ghost"
                     size="icon"

@@ -567,6 +567,7 @@ export function PedidoFormDialog({
                     </div>
                     <div className="col-span-1 flex justify-end">
                       <Button
+                        aria-label="Quitar la línea"
                         type="button"
                         variant="ghost"
                         size="icon"

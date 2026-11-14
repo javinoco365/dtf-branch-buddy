@@ -328,6 +328,13 @@ function FacturasPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     <Button
+                      aria-label={
+                        f.pdf_path
+                          ? "Abrir el PDF"
+                          : escribir
+                            ? "Generar el PDF"
+                            : "Todavía sin PDF guardado"
+                      }
                       variant="ghost"
                       size="icon"
                       title={
@@ -374,7 +381,12 @@ function FacturasPage() {
                       </>
                     )}
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
+                      <Button
+                        aria-label="Borrar la factura"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(f)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </SiPuede>

@@ -341,6 +341,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         <Button
+                          aria-label="Marcar como cobrada"
                           variant="ghost"
                           size="icon"
                           title="Marcar como cobrada"
@@ -457,7 +458,13 @@ function ConciliadosTabla({
             <TableCell>{m.concepto || "—"}</TableCell>
             <TableCell className="text-right tabular-nums">{eur(Number(m.importe))}</TableCell>
             <TableCell className="text-right tabular-nums">
-              <Button variant="ghost" size="icon" title="Deshacer" onClick={() => onDeshacer(m.id)}>
+              <Button
+                aria-label="Deshacer"
+                variant="ghost"
+                size="icon"
+                title="Deshacer"
+                onClick={() => onDeshacer(m.id)}
+              >
                 <Undo2 className="h-4 w-4" />
               </Button>
             </TableCell>

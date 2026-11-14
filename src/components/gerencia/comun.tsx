@@ -74,6 +74,7 @@ export function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorra
     <span className="inline-flex items-center gap-1">
       <SiPuede accion="escribir">
         <Button
+          aria-label="Editar"
           type="button"
           variant="ghost"
           size="icon"
@@ -86,6 +87,7 @@ export function Acciones({ onEditar, onBorrar }: { onEditar: () => void; onBorra
       </SiPuede>
       <SiPuede accion="borrar">
         <Button
+          aria-label="Borrar"
           type="button"
           variant="ghost"
           size="icon"

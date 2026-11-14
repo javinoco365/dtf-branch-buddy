@@ -1006,7 +1006,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           !c.proforma_id &&
                           !casadas.has(c.id))) && (
                         <SiPuede accion="borrar">
-                          <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
+                          <Button
+                            aria-label="Borrar la factura de compra"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setBorrando(c)}
+                          >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </SiPuede>

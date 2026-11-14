@@ -354,6 +354,7 @@ function InversionPage() {
                   <TableCell className="text-right tabular-nums">
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar el apunte"
                         variant="ghost"
                         size="icon"
                         onClick={() => {
@@ -365,7 +366,12 @@ function InversionPage() {
                       </Button>
                     </SiPuede>
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
+                      <Button
+                        aria-label="Borrar el apunte"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(m)}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </SiPuede>

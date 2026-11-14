@@ -748,6 +748,7 @@ export function MotorConciliacion({
                     Confirmar
                   </Button>
                   <Button
+                    aria-label="No es esto: deshacer"
                     variant="ghost"
                     size="icon"
                     title="No es esto: deshacer"
@@ -770,6 +771,7 @@ export function MotorConciliacion({
             acciones={(e) =>
               escribir && (
                 <Button
+                  aria-label="Deshacer"
                   variant="ghost"
                   size="icon"
                   title="Deshacer"
@@ -1214,7 +1216,14 @@ function TarjetaResultado({ resultado, alCerrar }: { resultado: Resultado; alCer
             por revisar, {r.traspasos} traspasos
             {r.rehechos > 0 && `, ${r.rehechos} propuestas recalculadas`}.
           </p>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Cerrar" onClick={alCerrar}>
+          <Button
+            aria-label="Cerrar"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Cerrar"
+            onClick={alCerrar}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -1618,6 +1627,7 @@ function HistorialTraspasos({
                   )}
                   {escribir && (
                     <Button
+                      aria-label="No es un traspaso"
                       variant="ghost"
                       size="icon"
                       title="No es un traspaso"

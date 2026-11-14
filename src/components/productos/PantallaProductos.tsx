@@ -316,6 +316,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                     <TableCell>
                       <SiPuede accion="escribir">
                         <Button
+                          aria-label="Editar"
                           variant="ghost"
                           size="icon"
                           title="Editar"
@@ -326,6 +327,7 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       </SiPuede>
                       <SiPuede accion="borrar">
                         <Button
+                          aria-label="Borrar"
                           variant="ghost"
                           size="icon"
                           title="Borrar"

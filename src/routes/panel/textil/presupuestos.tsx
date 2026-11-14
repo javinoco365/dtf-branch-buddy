@@ -473,6 +473,7 @@ function PresupuestosPage() {
                       p.estado !== "facturado" &&
                       p.estado !== "rechazado" && (
                         <Button
+                          aria-label="Confirmar: crear el pedido"
                           variant="ghost"
                           size="icon"
                           title="Confirmar: crear el pedido"
@@ -483,6 +484,9 @@ function PresupuestosPage() {
                         </Button>
                       )}
                     <Button
+                      aria-label={
+                        !escribir ? "Ver" : p.pedido_id ? "Ya es un pedido: no se cambia" : "Editar"
+                      }
                       variant="ghost"
                       size="icon"
                       title={
@@ -500,7 +504,12 @@ function PresupuestosPage() {
                       {escribir ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                      <Button
+                        aria-label="Borrar el presupuesto"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(p)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </SiPuede>

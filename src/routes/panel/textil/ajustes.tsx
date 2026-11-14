@@ -176,6 +176,7 @@ function AjustesPage() {
                 <div className="flex gap-1">
                   <SiPuede accion="escribir">
                     <Button
+                      aria-label="Editar la marca"
                       size="icon"
                       variant="ghost"
                       onClick={() => {
@@ -188,6 +189,7 @@ function AjustesPage() {
                   </SiPuede>
                   <SiPuede accion="borrar">
                     <Button
+                      aria-label="Borrar la marca"
                       size="icon"
                       variant="ghost"
                       onClick={() => {

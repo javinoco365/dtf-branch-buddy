@@ -1302,7 +1302,22 @@ const FilaPedido = memo(function FilaPedido({
     <>
       <TableRow className={claseFilaCobrada(cobro.estado, cancelado)}>
         <TableCell className="cursor-pointer" onClick={onToggle}>
-          {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {/* Un botón de verdad, para abrir el detalle también con el teclado
+              (Tab e Intro o espacio) y que el lector de pantalla lo anuncie. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            aria-expanded={abierta}
+            aria-label={
+              abierta ? `Ocultar el detalle de ${numeroLabel}` : `Ver el detalle de ${numeroLabel}`
+            }
+            className="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:size-11"
+          >
+            {abierta ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
         </TableCell>
         <TableCell>
           {/* El número entero, como siempre; la hora va debajo, junto al ticket. */}
@@ -1389,6 +1404,11 @@ const FilaPedido = memo(function FilaPedido({
         </TableCell>
         <TableCell>
           <Button
+            aria-label={
+              pedido.tracking?.codigo_seguimiento
+                ? `Tracking: ${pedido.tracking.codigo_seguimiento}`
+                : "Añadir tracking del envío"
+            }
             variant="ghost"
             size="icon"
             className="h-8 w-8"
@@ -1616,7 +1636,7 @@ function MenuAcciones({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button aria-label="Más acciones" variant="ghost" size="icon" className="h-8 w-8">
           <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>

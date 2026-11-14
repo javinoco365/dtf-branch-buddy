@@ -149,6 +149,7 @@ export function ColaRevision({
                       )}
                       {c.fichero_ruta && (
                         <Button
+                          aria-label="Ver el fichero"
                           variant="ghost"
                           size="icon"
                           title="Ver el fichero"
@@ -160,6 +161,7 @@ export function ColaRevision({
                       {c.fichero_ruta && (
                         <SiPuede accion="escribir">
                           <Button
+                            aria-label="Volver a leer con IA"
                             variant="ghost"
                             size="icon"
                             title="Volver a leer con IA"
@@ -172,6 +174,7 @@ export function ColaRevision({
                       )}
                       <SiPuede accion="borrar">
                         <Button
+                          aria-label="Descartar"
                           variant="ghost"
                           size="icon"
                           title="Descartar"
