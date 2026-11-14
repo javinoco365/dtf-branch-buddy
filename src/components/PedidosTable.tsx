@@ -1851,10 +1851,7 @@ function MetrosPedido({ pedido, enLinea }: { pedido: PedidoFila; enLinea?: boole
 function MetrosUv({ m, enLinea }: { m: number; enLinea?: boolean }) {
   return (
     <span
-      className={cn(
-        "whitespace-nowrap text-violet-700 dark:text-violet-300",
-        enLinea ? "ml-1" : "block text-xs",
-      )}
+      className={cn("whitespace-nowrap text-linea-uv-texto", enLinea ? "ml-1" : "block text-xs")}
       title="Metros de DTF UV (subcontratado)"
     >
       {enLinea ? "+ " : ""}

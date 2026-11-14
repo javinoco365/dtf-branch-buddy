@@ -1249,7 +1249,7 @@ function CeldaVariante({
     const n = efectiva.nueva;
     return (
       <div className="space-y-1">
-        <Badge className="bg-blue-600 hover:bg-blue-600">Nueva</Badge>
+        <Badge>Nueva</Badge>
         <p className="text-xs">
           {[n.producto?.marca, n.producto?.nombre, n.color, n.talla].filter(Boolean).join(" · ") ||
             "Variante nueva"}

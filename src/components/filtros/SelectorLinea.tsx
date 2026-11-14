@@ -32,8 +32,7 @@ export function SelectorLinea({
           key={l}
           value={l}
           className={cn(
-            l === "uv" &&
-              "data-[state=on]:bg-violet-500/15 data-[state=on]:text-violet-700 dark:data-[state=on]:text-violet-300",
+            l === "uv" && "data-[state=on]:bg-linea-uv-fondo data-[state=on]:text-linea-uv-texto",
           )}
         >
           {ETIQUETA_FILTRO_LINEA[l]}

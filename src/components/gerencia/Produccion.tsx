@@ -88,7 +88,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
             <span className="text-muted-foreground">
               Hoy · {metros(metrosTaller)} por hacer o por enviar
               {abiertos.subcontrata.pedidos > 0 && (
-                <span className="block font-medium text-violet-700 dark:text-violet-300">
+                <span className="block font-medium text-linea-uv-texto">
                   Aparte, {abiertos.subcontrata.pedidos} de DTF UV (
                   {metros(abiertos.subcontrata.metros)}) en la subcontrata
                 </span>

@@ -21,8 +21,7 @@ export function DesgloseLinea({
       </span>
       <span aria-hidden>·</span>
       <span>
-        UV{" "}
-        <span className="font-medium tabular-nums text-violet-700 dark:text-violet-300">{uv}</span>
+        UV <span className="font-medium tabular-nums text-linea-uv-texto">{uv}</span>
       </span>
     </div>
   );

@@ -182,7 +182,7 @@ export function Ventas({ d }: { d: DatosGerencia }) {
                     <TableCell className="text-right font-bold tabular-nums">
                       {linea === "uv" ? metros(metrosProductosUv) : metros(metrosProductos)}
                       {linea === "todo" && metrosProductosUv > 0 && (
-                        <span className="block text-xs font-medium text-violet-700 dark:text-violet-300">
+                        <span className="block text-xs font-medium text-linea-uv-texto">
                           Aparte, {metros(metrosProductosUv)} de DTF UV
                         </span>
                       )}
