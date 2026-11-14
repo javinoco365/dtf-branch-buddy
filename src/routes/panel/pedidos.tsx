@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 // Con lazy(), como en PedidosTable: el mismo módulo importado de las dos
 // maneras rompe el servidor de producción (ver importaciones-mixtas.test.ts).
@@ -40,15 +41,14 @@ export const Route = createFileRoute("/panel/pedidos")({
 function PedidosGlobal() {
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-          <p className="text-sm text-muted-foreground">Todos los pedidos de todas las tiendas.</p>
-        </div>
-        <SiPuede accion="escribir">
-          <NuevoPedidoConTienda />
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Todos los pedidos de todas las tiendas."
+        acciones={
+          <SiPuede accion="escribir">
+            <NuevoPedidoConTienda />
+          </SiPuede>
+        }
+      />
       <PedidosErrorBoundary>
         <PedidosTable />
       </PedidosErrorBoundary>

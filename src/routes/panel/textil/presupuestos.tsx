@@ -92,6 +92,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -301,24 +302,21 @@ function PresupuestosPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between max-md:flex-wrap max-md:gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Presupuestos</h1>
-          <p className="text-sm text-muted-foreground">
-            Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido.
-          </p>
-        </div>
-        <NuevoPresupuestoMenu
-          onManual={() => {
-            setEditing(null);
-            setLineasIniciales(null);
-            setBorrador(null);
-            setImagenesIa([]);
-            setOpen(true);
-          }}
-          onIa={setModoIa}
-        />
-      </div>
+      <CabeceraPantalla
+        subtitulo="Crea presupuestos y, cuando el cliente los acepte, confírmalos: se crea el pedido."
+        acciones={
+          <NuevoPresupuestoMenu
+            onManual={() => {
+              setEditing(null);
+              setLineasIniciales(null);
+              setBorrador(null);
+              setImagenesIa([]);
+              setOpen(true);
+            }}
+            onIa={setModoIa}
+          />
+        }
+      />
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}

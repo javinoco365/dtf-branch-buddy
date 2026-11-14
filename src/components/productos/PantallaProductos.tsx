@@ -41,6 +41,7 @@ import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export type Producto = {
   id: string;
@@ -204,24 +205,21 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {tiendaId ? "Catálogo" : "Productos generales"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {tiendaId
-              ? "Los productos de esta tienda y los generales, que salen en todas."
-              : "Productos de la empresa, disponibles en todas las tiendas para pedidos y presupuestos."}
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo producto
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo={
+          tiendaId
+            ? "Los productos de esta tienda y los generales, que salen en todas."
+            : "Productos de la empresa, disponibles en todas las tiendas para pedidos y presupuestos."
+        }
+        acciones={
+          <SiPuede accion="escribir">
+            <Button onClick={() => setEditing(empty(tiendaId ?? null))}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo producto
+            </Button>
+          </SiPuede>
+        }
+      />
 
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative max-w-sm flex-1 min-w-[200px]">

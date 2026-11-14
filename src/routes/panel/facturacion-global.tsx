@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import { CobradoPorSemana, ComparativaTiendas, ConGrafica } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/facturacion-global")({
   head: () => ({ meta: [{ title: "Lo cobrado · DTF Culture" }] }),
@@ -268,28 +269,24 @@ function FacturacionGlobal() {
   return (
     <div className="space-y-6">
       {/* Cabecera */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Lo cobrado</h1>
-          <p className="text-muted-foreground">
-            Todo lo cobrado, de las tiendas y del textil, con su método de cobro
-          </p>
-        </div>
+      <CabeceraPantalla
+        subtitulo="Todo lo cobrado, de las tiendas y del textil, con su método de cobro"
+        acciones={
+          <>
+            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
-
-          <Button
-            onClick={exportar}
-            size="sm"
-            variant="outline"
-            disabled={cobros.length === 0 || deAntes}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Descargar Excel
-          </Button>
-        </div>
-      </div>
+            <Button
+              onClick={exportar}
+              size="sm"
+              variant="outline"
+              disabled={cobros.length === 0 || deAntes}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Descargar Excel
+            </Button>
+          </>
+        }
+      />
 
       {/* Filtros */}
       <Card>

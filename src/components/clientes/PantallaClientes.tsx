@@ -68,6 +68,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -253,30 +254,19 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
     onError: (e: Error) => avisarError(e),
   });
 
-  const titulo =
-    contexto.tipo === "textil"
-      ? "Clientes textil"
-      : contexto.tipo === "tienda"
-        ? "Clientes de la tienda"
-        : "Clientes";
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{titulo}</h1>
-          <p className="text-sm text-muted-foreground">
-            Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la
-            misma lista.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button onClick={() => setEditing({ ...vacio })}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo cliente
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la misma lista."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button onClick={() => setEditing({ ...vacio })}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo cliente
+            </Button>
+          </SiPuede>
+        }
+      />
 
       <div className="flex flex-wrap gap-3">
         <div className="relative w-full max-w-sm">

@@ -39,6 +39,7 @@ import {
 } from "@/dominio/gerencia-datos";
 import { CANALES, type Canal, type FiltroGerencia } from "@/dominio/gerencia";
 import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 // Cada pestaña en su propio trozo, cargado al abrirla: antes se descargaban
 // las once (y la librería de gráficas) para enseñar solo una. Estos módulos se
@@ -302,10 +303,9 @@ function Gerencia() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <h1 className="text-2xl font-bold">Gerencia</h1>
-          <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full">
+      <CabeceraPantalla
+        acciones={
+          <>
             <PendienteDocumentar
               pendiente={ventas.isPlaceholderData ? null : pendiente}
               tiendas={tiendas}
@@ -316,8 +316,9 @@ function Gerencia() {
               objetivos={ajustes.data?.objetivos ?? []}
               alCambiarAbierto={setResumenAbierto}
             />
-          </div>
-        </div>
+          </>
+        }
+      >
         <p className="text-muted-foreground max-md:hidden">
           {filtro.linea === "dtf"
             ? "Solo DTF: la impresión propia de las tiendas, sin DTF UV ni textil."
@@ -334,7 +335,7 @@ function Gerencia() {
           </Link>
           .
         </p>
-      </div>
+      </CabeceraPantalla>
 
       <FiltrosPlegables resumen={resumenFiltros} className={enAjustes ? "hidden" : undefined}>
         <Card>

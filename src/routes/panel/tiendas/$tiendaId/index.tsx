@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { mensajeDeError } from "@/lib/errores";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
 import { Clock, Euro, FileText, Package, Percent, Ruler, ShoppingCart, Wallet } from "lucide-react";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
@@ -91,19 +92,20 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Resumen{nombreTienda ? ` · ${nombreTienda}` : ""}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
-          totales de la tienda.
-          {linea !== "todo"
-            ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
-            : ""}
-        </p>
+      <CabeceraPantalla
+        tienda={nombreTienda}
+        subtitulo={
+          <>
+            El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
+            totales de la tienda.
+            {linea !== "todo"
+              ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
+              : ""}
+          </>
+        }
+      >
         <SelectorLinea valor={linea} alCambiar={cambiarLinea} className="mt-2" />
-      </div>
+      </CabeceraPantalla>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Este mes</h2>

@@ -70,6 +70,7 @@ import { VistaPreviaPdf } from "@/components/plantillas/VistaPreviaPdf";
 import { useVistaPrevia } from "@/components/plantillas/use-vista-previa";
 import { useConsultaMedia } from "@/components/plantillas/use-consulta-media";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Ajustes generales → PDF de presupuestos.
@@ -339,22 +340,24 @@ function ConfiguracionPdfPage() {
         sucio && !dosColumnas && "pb-20",
       )}
     >
-      <div className="space-y-1">
-        <Link
-          to="/panel/configuracion"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
-        </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <FileText className="h-6 w-6 text-primary" /> PDF de presupuestos
-        </h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          La plantilla con la que sale el PDF de cada presupuesto: se usa sola cada vez que se crea
-          o se descarga uno. Hay una por tienda y otra para el textil personalizado; sin plantilla
-          guardada, sale la de por defecto.
-        </p>
-      </div>
+      <CabeceraPantalla
+        antes={
+          <Link
+            to="/panel/configuracion"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
+          </Link>
+        }
+        icono={<FileText className="h-6 w-6 text-primary" />}
+        subtitulo={
+          <p className="max-w-3xl">
+            La plantilla con la que sale el PDF de cada presupuesto: se usa sola cada vez que se
+            crea o se descarga uno. Hay una por tienda y otra para el textil personalizado; sin
+            plantilla guardada, sale la de por defecto.
+          </p>
+        }
+      />
 
       {lista.isLoading ? (
         <div className="space-y-4">

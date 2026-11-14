@@ -58,6 +58,7 @@ import {
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/ajustes")({
   component: Ajustes,
@@ -265,12 +266,10 @@ function Ajustes() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ajustes de la tienda</h1>
-        <p className="text-sm text-muted-foreground">
-          Configuración de WooCommerce, datos fiscales, facturación y correos.
-        </p>
-      </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Configuración de WooCommerce, datos fiscales, facturación y correos."
+      />
 
       <Tabs defaultValue="woo">
         <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full md:w-auto max-md:h-auto">

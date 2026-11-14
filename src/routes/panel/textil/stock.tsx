@@ -78,6 +78,7 @@ import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -299,25 +300,21 @@ function StockPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Stock textil</h1>
-          <p className="text-sm text-muted-foreground">
-            Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado
-            para pedidos.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado para pedidos."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+            </Button>
+          </SiPuede>
+        }
+      />
       {estadoEscaner && !escaner && (
         <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">

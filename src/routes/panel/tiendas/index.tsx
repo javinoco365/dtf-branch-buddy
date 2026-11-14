@@ -44,6 +44,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { avisarError } from "@/lib/errores";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
@@ -161,28 +162,27 @@ function TiendasIndex() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tiendas</h1>
-          <p className="text-muted-foreground">Tus tiendas online</p>
-        </div>
-        {isAdmin && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva tienda
-              </Button>
-            </DialogTrigger>
-            <NuevaTiendaWizard
-              onDone={() => {
-                setOpen(false);
-                refrescar();
-              }}
-            />
-          </Dialog>
-        )}
-      </div>
+      <CabeceraPantalla
+        subtitulo="Tus tiendas online"
+        acciones={
+          isAdmin && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva tienda
+                </Button>
+              </DialogTrigger>
+              <NuevaTiendaWizard
+                onDone={() => {
+                  setOpen(false);
+                  refrescar();
+                }}
+              />
+            </Dialog>
+          )
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {tiendas.map((t: any) => (

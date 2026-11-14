@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -185,28 +186,25 @@ function FacturacionTienda() {
   return (
     <div className="space-y-6">
       {/* Barra de herramientas */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">Facturación</h2>
-          <p className="text-sm text-muted-foreground">
-            Vista contable filtrada a {tienda?.nombre ?? "esta tienda"}
-          </p>
-        </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo={`Vista contable filtrada a ${tienda?.nombre ?? "esta tienda"}`}
+        acciones={
+          <>
+            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
-
-          <Button
-            onClick={exportar}
-            size="sm"
-            variant="outline"
-            disabled={pedidos.length === 0 || deAntes}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Descargar Excel
-          </Button>
-        </div>
-      </div>
+            <Button
+              onClick={exportar}
+              size="sm"
+              variant="outline"
+              disabled={pedidos.length === 0 || deAntes}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Descargar Excel
+            </Button>
+          </>
+        }
+      />
 
       <AvisoActualizando activo={deAntes} />
 

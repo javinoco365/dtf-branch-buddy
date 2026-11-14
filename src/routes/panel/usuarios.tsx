@@ -74,6 +74,7 @@ import {
   type SocioConCuenta,
 } from "@/lib/quien-soy.functions";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -132,24 +133,22 @@ function Usuarios() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
+      <CabeceraPantalla
+        antes={
           <Link
             to="/panel/configuracion"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Ajustes
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Usuarios y permisos</h1>
-          <p className="text-sm text-muted-foreground">
-            Quién entra en el CRM y qué puede hacer. Desactivar no borra: lo que hizo cada uno se
-            conserva en la auditoría.
-          </p>
-        </div>
-        <Button onClick={() => setAlta(true)}>
-          <UserPlus className="h-4 w-4" /> Nuevo usuario
-        </Button>
-      </div>
+        }
+        subtitulo="Quién entra en el CRM y qué puede hacer. Desactivar no borra: lo que hizo cada uno se conserva en la auditoría."
+        acciones={
+          <Button onClick={() => setAlta(true)}>
+            <UserPlus className="h-4 w-4" /> Nuevo usuario
+          </Button>
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-3">
         {NIVELES.map((n) => (

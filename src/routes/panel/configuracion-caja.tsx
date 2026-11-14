@@ -26,6 +26,7 @@ import {
 } from "@/lib/caja.functions";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/configuracion-caja")({
   head: () => ({ meta: [{ title: "Caja · Ajustes · DTF Culture" }] }),
@@ -48,12 +49,16 @@ function ConfiguracionCajaPage() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <Link
-        to="/panel/configuracion"
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Ajustes
-      </Link>
+      <CabeceraPantalla
+        antes={
+          <Link
+            to="/panel/configuracion"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" /> Ajustes
+          </Link>
+        }
+      />
 
       <Card>
         <CardHeader>

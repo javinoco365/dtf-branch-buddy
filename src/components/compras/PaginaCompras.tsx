@@ -137,6 +137,7 @@ import { invalidarTrasGuardar } from "@/lib/cache";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -580,69 +581,66 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-[260px] flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {general ? "Facturas de compra" : "Compras"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {general
-              ? "Las facturas de tus proveedores: tinta, film, mensajería, máquinas, servicios… Cada una cuenta en Gerencia según lo que sea, y su IVA va al 303."
-              : "Sube la factura del proveedor y da el género de alta en el stock."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <DescargarPdfs
-            docs={docsFiltrados}
-            etiqueta="Descargar ficheros"
-            nombreZip={nombreZip(
-              periodo.seleccion,
-              periodo.rango,
-              general ? "Compras" : "Compras_textil",
+      <CabeceraPantalla
+        subtitulo={
+          general
+            ? "Las facturas de tus proveedores: tinta, film, mensajería, máquinas, servicios… Cada una cuenta en Gerencia según lo que sea, y su IVA va al 303."
+            : "Sube la factura del proveedor y da el género de alta en el stock."
+        }
+        acciones={
+          <>
+            <DescargarPdfs
+              docs={docsFiltrados}
+              etiqueta="Descargar ficheros"
+              nombreZip={nombreZip(
+                periodo.seleccion,
+                periodo.rango,
+                general ? "Compras" : "Compras_textil",
+              )}
+            />
+            {!cola && escribir && (
+              <>
+                <input
+                  ref={ficheroRef}
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) leer.mutate(f);
+                  }}
+                />
+                <Button
+                  onClick={() => ficheroRef.current?.click()}
+                  disabled={leer.isPending || lector?.disponible === false || sinGenerales}
+                >
+                  {leer.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileUp className="h-4 w-4 mr-2" />
+                  )}
+                  {leer.isPending ? "Leyendo…" : "Subir factura"}
+                </Button>
+              </>
             )}
-          />
-          {!cola && escribir && (
-            <>
-              <input
-                ref={ficheroRef}
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) leer.mutate(f);
-                }}
-              />
+            <SiPuede accion="escribir">
               <Button
-                onClick={() => ficheroRef.current?.click()}
-                disabled={leer.isPending || lector?.disponible === false || sinGenerales}
+                variant="outline"
+                disabled={sinGenerales}
+                onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
               >
-                {leer.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4 mr-2" />
-                )}
-                {leer.isPending ? "Leyendo…" : "Subir factura"}
+                A mano
               </Button>
-            </>
-          )}
-          <SiPuede accion="escribir">
-            <Button
-              variant="outline"
-              disabled={sinGenerales}
-              onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
-            >
-              A mano
-            </Button>
-          </SiPuede>
-          {escaner && (
-            <Button variant="outline" onClick={() => setViendoProveedores(true)}>
-              <Users className="h-4 w-4 mr-2" /> Proveedores
-            </Button>
-          )}
-        </div>
-      </div>
+            </SiPuede>
+            {escaner && (
+              <Button variant="outline" onClick={() => setViendoProveedores(true)}>
+                <Users className="h-4 w-4 mr-2" /> Proveedores
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {lector?.disponible === false && (
         <Card className="border-aviso-atencion-borde">

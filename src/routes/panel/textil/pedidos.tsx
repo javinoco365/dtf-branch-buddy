@@ -83,6 +83,7 @@ import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -290,23 +291,22 @@ function PedidosPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Pedidos textil</h1>
-          <p className="text-sm text-muted-foreground">Pedidos manuales del módulo textil.</p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setLineasIniciales(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Pedidos manuales del módulo textil."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setLineasIniciales(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+            </Button>
+          </SiPuede>
+        }
+      />
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">

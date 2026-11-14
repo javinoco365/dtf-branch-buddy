@@ -76,6 +76,7 @@ import {
 import { totalesPresupuestos } from "@/dominio/sumatorios-facturas";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/presupuestos")({
   component: PresupuestosTienda,
@@ -189,25 +190,21 @@ function PresupuestosTienda() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Presupuestos · {tienda?.nombre ?? "Tienda"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Presupuestos de esta tienda, con productos del catálogo o líneas libres.
-          </p>
-        </div>
-        <NuevoPresupuestoMenu
-          disabled={data?.disponible === false}
-          onManual={() => {
-            setBorrador(null);
-            setImagenesIa([]);
-            setNuevo(true);
-          }}
-          onIa={setModoIa}
-        />
-      </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Presupuestos de esta tienda, con productos del catálogo o líneas libres."
+        acciones={
+          <NuevoPresupuestoMenu
+            disabled={data?.disponible === false}
+            onManual={() => {
+              setBorrador(null);
+              setImagenesIa([]);
+              setNuevo(true);
+            }}
+            onIa={setModoIa}
+          />
+        }
+      />
 
       {data?.disponible === false && (
         <Card>

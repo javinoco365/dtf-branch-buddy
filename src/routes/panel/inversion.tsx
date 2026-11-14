@@ -38,6 +38,7 @@ import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/inversion")({
   head: () => ({ meta: [{ title: "Inversión · DTF Culture" }] }),
@@ -113,31 +114,29 @@ function InversionPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Inversión</h1>
-          <p className="text-sm text-muted-foreground">
-            Lo que ha puesto cada socio y lo que ha recuperado. Desde el principio, sin filtro de
-            fechas.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Descargar Excel
-          </Button>
-          <SiPuede accion="escribir">
-            <Button
-              onClick={() => {
-                setEditando(undefined);
-                setAbierto(true);
-              }}
-              disabled={sinSocios}
-            >
-              <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+      <CabeceraPantalla
+        subtitulo={
+          "Lo que ha puesto cada socio y lo que ha recuperado. Desde el principio, sin filtro de fechas."
+        }
+        acciones={
+          <>
+            <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
+              <Download className="h-4 w-4 mr-2" /> Descargar Excel
             </Button>
-          </SiPuede>
-        </div>
-      </div>
+            <SiPuede accion="escribir">
+              <Button
+                onClick={() => {
+                  setEditando(undefined);
+                  setAbierto(true);
+                }}
+                disabled={sinSocios}
+              >
+                <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+              </Button>
+            </SiPuede>
+          </>
+        }
+      />
 
       {sinSocios && (
         <Card>

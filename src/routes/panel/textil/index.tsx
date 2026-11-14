@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Boxes, FileSpreadsheet, FileText, ShoppingCart, Users, Settings } from "lucide-react";
 import { resumenTextilInicio } from "@/lib/textil.functions";
 import { eur as fmtEUR } from "@/lib/format";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/")({
   head: () => ({ meta: [{ title: "Textil Personalizado · DTF Culture" }] }),
@@ -64,9 +65,7 @@ function TextilHome() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Textil Personalizado</h1>
-      </div>
+      <CabeceraPantalla />
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {cards.map((c) => (
           <Link key={c.to} to={c.to as any} className="block">
