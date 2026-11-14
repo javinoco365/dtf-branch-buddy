@@ -24,6 +24,7 @@ import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/pagina
 import { leerPorIds } from "@/lib/leer-por-ids";
 import {
   camposUv,
+  useCosteMetroHoy,
   usePedidosPeriodo,
   type NivelUv,
   type OpcionesLectura,
@@ -202,25 +203,8 @@ export function useBancoPeriodo(rango: RangoFechas, { activo = true }: OpcionesL
  * El coste por metro de hoy (consumibles + packaging + electricidad). Misma
  * consulta y misma caché que el dashboard.
  */
-export function useCosteMetroActual({ activo = true }: OpcionesLectura = {}): number {
-  const { data } = useQuery({
-    queryKey: ["empresa_costes"],
-    enabled: activo,
-    queryFn: async () => {
-      const { data } = await tabla(supabase, "empresas")
-        .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-        .eq("activa", true)
-        .order("created_at")
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-  });
-  return (
-    Number(data?.coste_consumibles_metro ?? 0) +
-    Number(data?.coste_packaging_metro ?? 0) +
-    Number(data?.coste_electricidad_metro ?? 0)
-  );
+export function useCosteMetroActual(opciones: OpcionesLectura = {}): number {
+  return useCosteMetroHoy(opciones).costeMetro ?? 0;
 }
 
 /** Gastos fijos, objetivos y ajustes de Gerencia. */
@@ -947,9 +931,10 @@ const CAMPOS_MOV_ESCANER = "fecha, compra_id";
  * compra registrada hoy puede llevar la fecha de una factura de hace un mes.
  * Nulo sin la tabla de movimientos.
  */
-export function useMovimientosAlmacen() {
+export function useMovimientosAlmacen({ activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["almacen-movimientos"],
+    enabled: activo,
     queryFn: async (): Promise<DatosMovimientosAlmacen | null> => {
       const leer = (campos: string) =>
         leerTodas<MovimientoAlmacen>((a, b) =>
@@ -1219,9 +1204,10 @@ const CAMPOS_PAGO_PROVEEDOR =
  * fecha y categoría. Nulo sin la migración 20261014100000 (sin `estado_pago`)
  * o sin la tabla de compras.
  */
-export function usePagosProveedores() {
+export function usePagosProveedores({ activo = true }: OpcionesLectura = {}) {
   return useQuery({
     queryKey: ["gerencia-pagos-proveedores"],
+    enabled: activo,
     queryFn: async (): Promise<CompraPendiente[] | null> => {
       const leer = (campos: string) =>
         leerTodas<CompraPendiente>((a, b) =>
