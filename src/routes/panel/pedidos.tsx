@@ -128,7 +128,11 @@ function NuevoPedidoConTienda() {
             open={!!tiendaId}
             onOpenChange={(o) => !o && setTiendaId(null)}
             tiendaId={tiendaId}
-            onSaved={() => queryClient.invalidateQueries({ queryKey: ["pedidos"] })}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+              // Creado: se cierra (y lo escrito se va con él), para no crearlo dos veces.
+              setTiendaId(null);
+            }}
           />
         )}
       </Suspense>
