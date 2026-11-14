@@ -99,6 +99,14 @@ describe("la cascada", () => {
     expect(c.beneficio_neto).toMatchObject({ valor: 30, estimado: true });
     expect(c.margenPct).toBe(80);
     expect(c.ticketMedio).toBe(100);
+    expect(c.cancelados).toBe(0);
+  });
+
+  it("los cancelados se cuentan aparte y no suman en nada", () => {
+    const c = calcularCuenta(entrada({ ventas: [venta(), venta({ estado: "cancelado" })] }));
+    expect(c.cancelados).toBe(1);
+    expect(c.pedidos).toBe(1);
+    expect(c.ventas.valor).toBe(100);
   });
 
   it("cuadra con el margen de Gerencia cuando el envío cuesta lo cobrado y no hay devoluciones", () => {

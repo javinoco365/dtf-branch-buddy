@@ -337,6 +337,8 @@ export type Cuenta = Record<ClaveConcepto, Cifra> & {
   margenPct: number | null;
   /** Ventas netas ÷ pedidos, sin IVA. Nulo sin pedidos. */
   ticketMedio: number | null;
+  /** Pedidos cancelados del periodo: no cuentan en ninguna cifra, se dicen aparte. */
+  cancelados: number;
 };
 
 /**
@@ -506,6 +508,7 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
     ),
     margenPct: valorNetas > 0 ? redondear((valorMargen / valorNetas) * 100, 1) : null,
     ticketMedio: ventas.length > 0 ? redondear(netas / ventas.length) : null,
+    cancelados: e.ventas.filter((v) => v.estado === ESTADO_CANCELADO).length,
   };
 }
 

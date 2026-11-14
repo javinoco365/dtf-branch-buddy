@@ -22,7 +22,7 @@ import { propsDatosDeAntes } from "@/lib/datos-de-antes";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { useCuentaResultados } from "@/lib/cuenta";
-import { eur, numero, numeroJusto, porcentaje } from "@/lib/format";
+import { eur, metros, numero, numeroJusto, porcentaje } from "@/lib/format";
 import { mensajeDeError } from "@/lib/errores";
 import {
   esSepararPor,
@@ -176,9 +176,26 @@ function CuentaResultados() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Resultados</CardTitle>
               <p className="text-xs text-muted-foreground">
-                {cuenta.pedidos} {cuenta.pedidos === 1 ? "pedido" : "pedidos"} · lo marcado como
-                «Estimado» lleva algo supuesto; «—», lo que no se puede saber con estos filtros.
+                Lo marcado como «Estimado» lleva algo supuesto; «—», lo que no se puede saber con
+                estos filtros.
               </p>
+              <dl className="flex flex-wrap gap-x-5 gap-y-1 pt-1 text-sm">
+                <Dato titulo="Pedidos" valor={numero(cuenta.pedidos, 0)} />
+                <Dato
+                  titulo="Ticket medio"
+                  valor={cuenta.ticketMedio === null ? "—" : eur(cuenta.ticketMedio)}
+                  nota="Ventas netas ÷ pedidos, sin IVA"
+                />
+                <Dato titulo="Metros DTF" valor={metros(cuenta.metros)} />
+                {cuenta.metrosUv > 0 && (
+                  <Dato titulo="Metros DTF UV" valor={metros(cuenta.metrosUv)} />
+                )}
+                <Dato
+                  titulo="Cancelados"
+                  valor={numero(cuenta.cancelados, 0)}
+                  nota="No cuentan en ninguna cifra"
+                />
+              </dl>
             </CardHeader>
             <CardContent>
               {separar === "nada" ? (
@@ -253,6 +270,16 @@ function CuentaResultados() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Un dato suelto del periodo: «Pedidos 42». */
+function Dato({ titulo, valor, nota }: { titulo: string; valor: string; nota?: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5" title={nota}>
+      <dt className="text-muted-foreground">{titulo}</dt>
+      <dd className="font-medium tabular-nums">{valor}</dd>
     </div>
   );
 }
