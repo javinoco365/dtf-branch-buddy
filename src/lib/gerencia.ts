@@ -40,7 +40,7 @@ import {
   type PedidoTextilResumen,
   type Venta,
 } from "@/dominio/gerencia";
-import type { PedidoPendiente } from "@/dominio/pendientes";
+import { pendientesVivos, type PedidoPendiente } from "@/dominio/pendientes";
 import type { VentaCliente } from "@/dominio/clientela";
 import type { PresupuestoResumen } from "@/dominio/comercial";
 import { ESTADOS_ABIERTOS, type EnvioPedido, type PedidoTaller } from "@/dominio/produccion";
@@ -191,7 +191,7 @@ export function usePendientesCobro({ activo = true }: OpcionesLectura = {}) {
       );
       if (faltaLaTabla(error)) return { disponible: false, pedidos: [] };
       if (error) throw error;
-      return { disponible: true, pedidos: (data ?? []) as PedidoPendiente[] };
+      return { disponible: true, pedidos: pendientesVivos((data ?? []) as PedidoPendiente[]) };
     },
   });
 }

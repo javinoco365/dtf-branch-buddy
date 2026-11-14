@@ -36,6 +36,7 @@ import {
   ORIGENES_PENDIENTE,
   diasDesde,
   filtrarPendientes,
+  pendientesVivos,
   ordenarPendientes,
   origenPendiente,
   etiquetaOrigenPendiente,
@@ -83,7 +84,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
       });
       if (faltaLaTabla(error)) return { disponible: false, pedidos: [] };
       if (error) throw error;
-      return { disponible: true, pedidos: (data ?? []) as PedidoPendiente[] };
+      return { disponible: true, pedidos: pendientesVivos((data ?? []) as PedidoPendiente[]) };
     },
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  pendientesVivos,
   FILTRO_PENDIENTES_TODO,
   diasDesde,
   filtrarPendientes,
@@ -131,5 +132,17 @@ describe("etiquetaOrigenPendiente", () => {
     expect(etiquetaOrigenPendiente({ tipo: "tienda", origen: "manual", cobrado: 5 })).toBe(
       "Pedido manual",
     );
+  });
+});
+
+describe("pendientesVivos", () => {
+  it("quita los pedidos cancelados", () => {
+    expect(
+      pendientesVivos([
+        { estado: "pendiente" },
+        { estado: "cancelado" },
+        { estado: "enviado" },
+      ]).map((p) => p.estado),
+    ).toEqual(["pendiente", "enviado"]);
   });
 });

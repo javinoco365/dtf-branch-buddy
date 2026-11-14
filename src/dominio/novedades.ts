@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-pendientes-sin-cancelados",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Pendientes sin pedidos cancelados",
+    resumen: "Un pedido cancelado ya no cuenta como deuda en ningún sitio.",
+    puntos: [
+      "Ni en pedidos pendientes de cobro ni en el total pendiente.",
+      "Tampoco la factura de un pedido cancelado en Cobros pendientes.",
+    ],
+    enlace: { ruta: "/panel/cobros", texto: "Ir a Cobros pendientes" },
+  },
+  {
     id: "2026-11-14-textil-sin-ropa",
     fecha: "2026-11-14",
     tipo: "arreglo",
