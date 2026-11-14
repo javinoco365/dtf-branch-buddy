@@ -76,6 +76,8 @@ import {
 import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -92,7 +94,13 @@ function StockPage() {
   const listFn = useServerFn(listStock);
   const upsertFn = useServerFn(upsertStockItem);
   const delFn = useServerFn(deleteStockItem);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error: errorStock,
+    refetch: recargarStock,
+    isFetching: recargandoStock,
+  } = useQuery({
     queryKey: ["textil-stock"],
     queryFn: () => listFn(),
   });
@@ -171,6 +179,7 @@ function StockPage() {
   const [recuento, setRecuento] = useState<Item | null>(null);
   const [historial, setHistorial] = useState<Item | null>(null);
   const [fusionando, setFusionando] = useState<VarianteCatalogo | null>(null);
+  const [borrandoVariante, setBorrandoVariante] = useState<VarianteCatalogo | null>(null);
   // Variantes marcadas para crear un presupuesto o un pedido con ellas.
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const marcar = (ids: readonly string[], si: boolean) =>
@@ -246,6 +255,7 @@ function StockPage() {
           ? "La variante tiene movimientos, así que se ha desactivado en vez de borrarla"
           : "Variante eliminada",
       );
+      setBorrandoVariante(null);
     },
     onError: (e: any) => avisarError(e),
   });
@@ -273,21 +283,7 @@ function StockPage() {
       setEditing(it);
       setOpen(true);
     },
-    borrar: (v) => {
-      if (
-        confirm(
-          `¿Seguro que quieres eliminar "${etiquetaVariante(v)}"?\n\n` +
-            "Si tiene movimientos de stock no se borrará: se desactivará, " +
-            "porque su historia explica el coste de lo que ya vendiste." +
-            // Con la migración del escáner, solo a 0 unidades.
-            (escaner && v.cantidad !== 0
-              ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
-                "merma o un recuento que la deje a 0, o fusiónala con la buena."
-              : ""),
-        )
-      )
-        del.mutate(v.id);
-    },
+    borrar: (v) => setBorrandoVariante(v),
     fusionar: (v) => setFusionando(v),
   };
   const propsCurva = {
@@ -374,7 +370,14 @@ function StockPage() {
           </CardContent>
         </Card>
       )}
-      {isLoading || data.length === 0 || curva.filas.length === 0 ? (
+      {!isLoading && errorStock ? (
+        <ErrorCarga
+          error={errorStock}
+          que="las existencias"
+          onReintentar={recargarStock}
+          reintentando={recargandoStock}
+        />
+      ) : isLoading || data.length === 0 || curva.filas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             {isLoading ? (
@@ -459,6 +462,23 @@ function StockPage() {
           loading={fusionar.isPending}
         />
       )}
+
+      <ConfirmarBorrado
+        abierto={!!borrandoVariante}
+        que={borrandoVariante ? `«${etiquetaVariante(borrandoVariante)}»` : "la variante"}
+        consecuencias={[
+          "Si tiene movimientos de stock no se borra: se desactiva, porque su historia explica el coste de lo que ya vendiste.",
+        ]}
+        // Con la migración del escáner, solo a 0 unidades.
+        impedimento={
+          escaner && borrandoVariante && borrandoVariante.cantidad !== 0
+            ? "Todavía tiene unidades: para retirarla, antes anota una merma o un recuento que la deje a 0, o fusiónala con la buena."
+            : null
+        }
+        cargando={del.isPending}
+        onCerrar={() => !del.isPending && setBorrandoVariante(null)}
+        onConfirmar={() => borrandoVariante && del.mutate(borrandoVariante.id)}
+      />
 
       <HistorialDialog item={historial} onClose={() => setHistorial(null)} />
     </div>
@@ -1119,7 +1139,13 @@ const conSigno = (n: number) => `${n > 0 ? "+" : ""}${numero(n || 0, 0)}`;
 /** El libro de una variante: de dónde sale cada unidad que tiene o tuvo. */
 function HistorialDialog({ item, onClose }: any) {
   const listFn = useServerFn(listMovimientosStock);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["stock-movimientos", item?.id],
     queryFn: () => listFn({ data: { stock_id: item.id } }),
     enabled: !!item,
@@ -1142,6 +1168,14 @@ function HistorialDialog({ item, onClose }: any) {
         )}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : error ? (
+          <ErrorCarga
+            error={error}
+            que="los movimientos"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         ) : data.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin movimientos.</p>
         ) : (

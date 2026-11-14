@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -30,6 +31,8 @@ import {
   type SocioCaja,
 } from "@/lib/caja.functions";
 import { avisarError } from "@/lib/errores";
+import { leerNumeroEscrito } from "@/dominio/pedido-formulario";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 const SIN_CLIENTE = "__sin_cliente__";
 const SIN_SOCIO = "__sin_socio__";
@@ -67,15 +70,35 @@ export function CajaFormDialog({
   const [observaciones, setObservaciones] = useState("");
   const [nuevoClienteAbierto, setNuevoClienteAbierto] = useState(false);
 
+  // Lo que había al abrir: con cambios, cerrar (la X, Escape, un toque fuera
+  // o «Cancelar») pregunta antes de perderlos.
+  const [inicial, setInicial] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
-    setFecha(movimiento?.fecha ?? new Date().toISOString().slice(0, 10));
-    setConceptoId(movimiento?.concepto_id ?? "");
-    setClienteId(movimiento?.cliente_id ?? SIN_CLIENTE);
-    setSocioId(movimiento?.socio_id ?? SIN_SOCIO);
-    setImporte(movimiento ? String(movimiento.importe) : "");
-    setObservaciones(movimiento?.observaciones ?? "");
+    const valores = {
+      fecha: movimiento?.fecha ?? diaEnEspana(new Date()),
+      conceptoId: movimiento?.concepto_id ?? "",
+      clienteId: movimiento?.cliente_id ?? SIN_CLIENTE,
+      socioId: movimiento?.socio_id ?? SIN_SOCIO,
+      importe: movimiento ? String(movimiento.importe).replace(".", ",") : "",
+      observaciones: movimiento?.observaciones ?? "",
+    };
+    setFecha(valores.fecha);
+    setConceptoId(valores.conceptoId);
+    setClienteId(valores.clienteId);
+    setSocioId(valores.socioId);
+    setImporte(valores.importe);
+    setObservaciones(valores.observaciones);
+    setInicial(JSON.stringify(valores));
   }, [open, movimiento]);
+
+  const cambiado =
+    inicial !== null &&
+    JSON.stringify({ fecha, conceptoId, clienteId, socioId, importe, observaciones }) !== inicial;
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cambiado, () =>
+    onOpenChange(false),
+  );
 
   // Al editar, un concepto desactivado tiene que seguir apareciendo en la
   // lista: si no, el desplegable saldría vacío y guardar cambiaría el concepto
@@ -107,7 +130,7 @@ export function CajaFormDialog({
   const mut = useMutation({
     mutationFn: async () => {
       if (!conceptoId) throw new Error("Elige un concepto");
-      const n = Number(String(importe).replace(",", "."));
+      const n = leerNumeroEscrito(importe);
       if (!Number.isFinite(n) || n <= 0) throw new Error("El importe tiene que ser mayor que cero");
       return guardar({
         data: {
@@ -131,7 +154,7 @@ export function CajaFormDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar apunte" : "Nuevo apunte de caja"}</DialogTitle>
@@ -245,7 +268,7 @@ export function CajaFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={pedirCierre}>
             Cancelar
           </Button>
           <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
@@ -253,6 +276,7 @@ export function CajaFormDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {avisoDescartar}
 
       <NuevoClienteDialog
         open={nuevoClienteAbierto}

@@ -100,6 +100,7 @@ import { incidenciasConciliacion, type Incidencia } from "@/dominio/incidencias-
 import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useCuentasBanco } from "./useCuentasBanco";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export type DatosConciliacion = {
   /** Los movimientos sin conciliar (ni traspaso) de la ventana. */
@@ -220,10 +221,11 @@ export function MotorConciliacion({
 
   // Lo que hay que resolver: lo que ya está cargado más lo que pide el servidor.
   const incidenciasFn = useServerFn(verIncidencias);
-  const { data: extra } = useQuery({
+  const consultaExtra = useQuery({
     queryKey: [CLAVE_HISTORIAL, "incidencias"],
     queryFn: () => incidenciasFn(),
   });
+  const extra = consultaExtra.data;
   const incidencias = useMemo(
     () =>
       incidenciasConciliacion({
@@ -527,8 +529,24 @@ export function MotorConciliacion({
           <TabsTrigger value="traspasos">Traspasos ({cuantos.traspasos})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="resolver">
-          <ListaIncidencias incidencias={incidencias} escribir={escribir} resolver={resolver} />
+        <TabsContent value="resolver" className="space-y-3">
+          {/* Sin lo que pide el servidor (diferencias, recibos), la lista se
+              queda corta: no se dice «nada que resolver» sin haberlo leído. */}
+          {consultaExtra.error && (
+            <ErrorCarga
+              error={consultaExtra.error}
+              que="las diferencias y los recibos por revisar"
+              onReintentar={consultaExtra.refetch}
+              reintentando={consultaExtra.isFetching}
+            />
+          )}
+          {consultaExtra.isLoading && incidencias.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Cargando…</p>
+          ) : (
+            (!consultaExtra.error || incidencias.length > 0) && (
+              <ListaIncidencias incidencias={incidencias} escribir={escribir} resolver={resolver} />
+            )
+          )}
         </TabsContent>
 
         <TabsContent value="pendientes" className="space-y-3">

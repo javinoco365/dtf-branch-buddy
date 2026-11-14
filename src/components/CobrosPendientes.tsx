@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SiPuede } from "@/components/SiPuede";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,11 +28,22 @@ import {
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { useServerFn } from "@tanstack/react-start";
 import { cambiarEstadoCobro } from "@/lib/facturas.functions";
 import { leerPorIds } from "@/lib/leer-por-ids";
 import { tabla } from "@/lib/rpc";
 import { pendienteDeFactura } from "@/dominio/cuenta";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Factura = {
   id: string;
@@ -69,7 +80,13 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   const [busqueda, setBusqueda] = useTextoDiferido(filtros.fq, (fq) => cambiar({ fq }));
   const { data: tiendasLista = [] } = useTiendas();
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["cobros-pendientes", tiendaId ?? "global"],
     queryFn: async () => {
       let q = supabase
@@ -110,11 +127,15 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   // Por el servidor y factura_cambiar_estado_cobro(), como el ✓ de Tienda ›
   // Facturas. Antes escribía en `facturas` desde el navegador, que no tiene ese
   // permiso desde 20260902130000_motor_facturacion.sql: el botón siempre fallaba.
+  // Con un toque se marcaba pagada la factura que no era: ahora se confirma,
+  // con la factura y lo que falta por cobrar a la vista.
+  const [cobrando, setCobrando] = useState<Factura | null>(null);
   const cambiarEstadoFn = useServerFn(cambiarEstadoCobro);
   const marcar = useMutation({
     mutationFn: (id: string) => cambiarEstadoFn({ data: { factura_id: id, estado: "pagada" } }),
     onSuccess: () => {
       toast.success("Marcada como cobrada");
+      setCobrando(null);
       qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
       qc.invalidateQueries({ queryKey: ["facturas"] });
     },
@@ -285,7 +306,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => marcar.mutate(f.id)}
+                          onClick={() => setCobrando(f)}
                           disabled={marcar.isPending}
                         >
                           <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" /> Cobrado
@@ -295,7 +316,26 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                   </TableRow>
                 );
               })}
-              {!isLoading && filtradas.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell
+                    colSpan={tiendaId ? 7 : 8}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {error && !isLoading && (
+                <ErrorCarga
+                  error={error}
+                  que="los cobros pendientes"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={tiendaId ? 7 : 8}
+                />
+              )}
+              {!isLoading && !error && filtradas.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={tiendaId ? 7 : 8}
@@ -321,6 +361,50 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={!!cobrando}
+        onOpenChange={(o) => !o && !marcar.isPending && setCobrando(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Marcar como cobrada la factura{" "}
+              {cobrando ? `${cobrando.serie}-${String(cobrando.numero).padStart(5, "0")}` : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {cobrando && (
+                  <p>
+                    {cobrando.cliente_nombre ?? "Sin cliente"} · emitida el{" "}
+                    {fechaCorta(cobrando.fecha)}
+                    {cobrando.tiendas?.nombre ? ` · ${cobrando.tiendas.nombre}` : ""}
+                  </p>
+                )}
+                <p>
+                  Queda pendiente{" "}
+                  <span className="font-semibold text-foreground">
+                    {eur(cobrando ? Number(cobrando.total) : 0)}
+                  </span>
+                  . Al confirmar, la factura pasa a pagada y deja de salir aquí.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={marcar.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={marcar.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (cobrando) marcar.mutate(cobrando.id);
+              }}
+            >
+              {marcar.isPending ? "Marcando…" : "Sí, está cobrada"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

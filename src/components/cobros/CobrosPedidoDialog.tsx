@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -38,6 +39,8 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { leerNumeroEscrito } from "@/dominio/pedido-formulario";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, { texto: string; clase: string }> = {
   pendiente: { texto: "Pendiente", clase: "text-status-pendiente" },
@@ -62,10 +65,12 @@ export type PedidoCobrable = {
   web?: boolean;
 };
 
-/** El importe como lo escribe una persona: «12,50» o «12.50». */
-function leerImporte(texto: string): number {
-  return Number(texto.trim().replace(",", "."));
-}
+/** El importe como lo escribe una persona: «12,50» o «12.50» (como en Caja y en Pedidos). */
+const leerImporte = leerNumeroEscrito;
+
+/** Lo que se propone cobrar: lo pendiente, con coma. */
+const importePropuesto = (pendiente: number) =>
+  pendiente > 0 ? String(pendiente).replace(".", ",") : "";
 
 /**
  * Los cobros de un pedido, y el alta de uno nuevo.
@@ -116,18 +121,27 @@ export function CobrosPedidoDialog({
     [cat],
   );
 
+  // La fecha y el método con los que se abrió (o con los que se registró el
+  // último cobro): si se cambian, o se escribe algo, hay un cobro a medias.
+  const [base, setBase] = useState<{ fecha: string; metodo: MetodoCobroManual }>({
+    fecha: "",
+    metodo: "efectivo",
+  });
+
   useEffect(() => {
     if (!open) return;
-    setFecha(new Date().toISOString().slice(0, 10));
+    const hoy = diaEnEspana(new Date());
+    setFecha(hoy);
     setMetodo("efectivo");
     setNotas("");
+    setBase({ fecha: hoy, metodo: "efectivo" });
   }, [open]);
 
   // Por defecto se cobra lo que queda. Se recalcula al abrir y cada vez que un
   // cobro nuevo o uno borrado cambian lo pendiente, ya con los datos recargados.
   useEffect(() => {
     if (!open) return;
-    setImporte(resumen.pendiente > 0 ? String(resumen.pendiente).replace(".", ",") : "");
+    setImporte(importePropuesto(resumen.pendiente));
     setEsPropina(false);
   }, [open, resumen.pendiente]);
 
@@ -186,6 +200,7 @@ export function CobrosPedidoDialog({
         pasaPorCaja(metodo) ? "Cobro registrado y apuntado en Caja" : "Cobro registrado",
       );
       setNotas("");
+      setBase({ fecha, metodo });
       refrescar();
     },
     onError: (e: Error) => avisarError(e, "No se ha podido registrar el cobro"),
@@ -203,8 +218,21 @@ export function CobrosPedidoDialog({
 
   const etiqueta = ETIQUETA_ESTADO_COBRO[resumen.estado];
 
+  // Un cobro a medias no se pierde por un toque fuera o un Escape: se pregunta.
+  const cobroAMedias =
+    admiteCobro &&
+    escribir &&
+    (notas.trim() !== "" ||
+      esPropina ||
+      fecha !== base.fecha ||
+      metodo !== base.metodo ||
+      importe.trim() !== importePropuesto(resumen.pendiente));
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cobroAMedias, () =>
+    onOpenChange(false),
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent
         className="max-w-xl max-h-[90vh] overflow-y-auto"
         // Sin esto el foco cae en la papelera del primer cobro.
@@ -445,6 +473,7 @@ export function CobrosPedidoDialog({
           onConfirmar={() => borrando && baja.mutate(borrando.id)}
         />
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }

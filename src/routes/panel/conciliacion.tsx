@@ -40,6 +40,7 @@ import { MotorConciliacion } from "@/components/banco/MotorConciliacion";
 import { verConciliacion } from "@/lib/conciliacion.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -55,7 +56,13 @@ const ETIQUETA_MOTIVO: Record<string, string> = {
 function ConciliacionPage() {
   const qc = useQueryClient();
   const verFn = useServerFn(verConciliacion);
-  const { data: motor, isLoading } = useQuery({
+  const {
+    data: motor,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["conciliacion-motor"],
     queryFn: () => verFn(),
   });
@@ -78,7 +85,14 @@ function ConciliacionPage() {
         </p>
       </div>
       <CuentasExtractos alImportar={refrescar} />
-      {isLoading || !motor ? (
+      {!isLoading && error ? (
+        <ErrorCarga
+          error={error}
+          que="los movimientos por conciliar"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
+      ) : isLoading || !motor ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <MotorConciliacion datos={motor} alCambiar={refrescar} />
@@ -97,7 +111,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
   const [elegidas, setElegidas] = useState<Record<string, string>>({});
 
   const proponerFn = useServerFn(proponerConciliacion);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["conciliacion"],
     queryFn: () => proponerFn(),
   });
@@ -258,7 +272,16 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                     <TableCell colSpan={6}>Cargando…</TableCell>
                   </TableRow>
                 )}
-                {!isLoading && movimientos.length === 0 && (
+                {!isLoading && error && (
+                  <ErrorCarga
+                    error={error}
+                    que="los ingresos por conciliar"
+                    onReintentar={refetch}
+                    reintentando={isFetching}
+                    colSpan={6}
+                  />
+                )}
+                {!isLoading && !error && movimientos.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No hay ingresos sin conciliar. Sube el extracto del banco para empezar.
@@ -380,7 +403,12 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
 /** Lo ya casado, para poder deshacerlo. */
 function MovimientosConciliados({ onDeshacer }: { onDeshacer: (id: string) => void }) {
   const listFn = useServerFn(listMovimientosBanco);
-  const { data = [] } = useQuery({
+  const {
+    data = [],
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["banco-movimientos"],
     queryFn: () => listFn(),
   });
@@ -391,7 +419,15 @@ function MovimientosConciliados({ onDeshacer }: { onDeshacer: (id: string) => vo
       <summary className="cursor-pointer text-muted-foreground">
         Ya conciliados ({casados.length})
       </summary>
-      {casados.length === 0 ? (
+      {error ? (
+        <ErrorCarga
+          error={error}
+          que="los movimientos conciliados"
+          onReintentar={refetch}
+          reintentando={isFetching}
+          sinMarco
+        />
+      ) : casados.length === 0 ? (
         <p className="text-muted-foreground py-3">Todavía no has conciliado nada.</p>
       ) : (
         <ConciliadosTabla casados={casados} onDeshacer={onDeshacer} />

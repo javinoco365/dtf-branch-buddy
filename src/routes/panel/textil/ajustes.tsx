@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/ajustes")({
   head: () => ({ meta: [{ title: "Ajustes textil · DTF Culture" }] }),
@@ -50,7 +51,13 @@ function AjustesPage() {
   const delFn = useServerFn(deleteMarca);
   const setDefFn = useServerFn(setMarcaPredeterminada);
   const empFn = useServerFn(getEmpresaGlobal);
-  const { data: marcas = [] } = useQuery({ queryKey: ["textil-marcas"], queryFn: () => listFn() });
+  const {
+    data: marcas = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-marcas"], queryFn: () => listFn() });
   const { data: empresa } = useQuery({ queryKey: ["empresa-global"], queryFn: () => empFn() });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -140,7 +147,17 @@ function AjustesPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {marcas.length === 0 && (
+        {isLoading && <div className="text-muted-foreground text-sm">Cargando…</div>}
+        {!isLoading && error && (
+          <ErrorCarga
+            className="md:col-span-2 lg:col-span-3"
+            error={error}
+            que="las marcas"
+            onReintentar={refetch}
+            reintentando={isFetching}
+          />
+        )}
+        {!isLoading && !error && marcas.length === 0 && (
           <div className="text-muted-foreground text-sm">No hay marcas creadas.</div>
         )}
         {marcas.map((m: any) => (

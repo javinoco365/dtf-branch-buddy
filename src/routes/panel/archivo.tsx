@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { mensajeDeError } from "@/lib/errores";
 import { EtiquetaTono } from "@/components/EtiquetaEstado";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -34,6 +33,7 @@ import { esNavegable, moverSeleccion } from "@/dominio/periodos";
 import { normalizarTexto } from "@/dominio/clientes";
 import { CLASES_ARCHIVO, nombreZip, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
 import { totalesArchivo } from "@/dominio/sumatorios-facturas";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/archivo")({
   head: () => ({ meta: [{ title: "Archivo · DTF Culture" }] }),
@@ -67,7 +67,7 @@ function ArchivoPage() {
   const hasta = periodo.rango ? dia(periodo.rango.hasta) : null;
 
   const listarFn = useServerFn(listarArchivo);
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["archivo", desde, hasta],
     queryFn: () => listarFn({ data: { desde, hasta } }),
   });
@@ -196,11 +196,13 @@ function ArchivoPage() {
                 </TableRow>
               )}
               {error && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-destructive">
-                    {mensajeDeError(error, "No se pudo leer el archivo")}
-                  </TableCell>
-                </TableRow>
+                <ErrorCarga
+                  error={error}
+                  que="los documentos del archivo"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
               )}
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>

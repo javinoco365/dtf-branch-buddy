@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ export function InversionFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    setFecha(movimiento?.fecha ?? new Date().toISOString().slice(0, 10));
+    setFecha(movimiento?.fecha ?? diaEnEspana(new Date()));
     setSocioId(movimiento?.socio_id ?? "");
     setTipo(movimiento?.tipo ?? "aportacion");
     setImporte(movimiento ? String(movimiento.importe) : "");

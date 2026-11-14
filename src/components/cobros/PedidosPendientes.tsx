@@ -43,7 +43,7 @@ import {
   type FiltroPendientes,
   type PedidoPendiente,
 } from "@/dominio/pendientes";
-import { mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
 const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
@@ -72,7 +72,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
   );
   const [cobrando, setCobrando] = useState<PedidoPendiente | null>(null);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["cobros-pendientes-pedidos", tiendaId ?? "todas"],
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoPendiente[] }> => {
       // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
@@ -193,11 +193,12 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
       </Card>
 
       {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pendientes: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={error}
+          que="los pedidos pendientes de cobro"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
       )}
 
       <Card>

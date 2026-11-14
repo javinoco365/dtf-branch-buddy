@@ -32,6 +32,14 @@ import { createPedidoManual, updatePedido } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
+import {
+  escribirNumero,
+  leerNumeroEscrito,
+  leerPedidoEscrito,
+  lineasParaTotales,
+  type LineaEscrita,
+} from "@/dominio/pedido-formulario";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 import { mismaDireccion, normalizarDireccion, type Direccion } from "@/dominio/direcciones";
 import { avisarError } from "@/lib/errores";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,17 +49,25 @@ import {
   type ClienteTextil,
 } from "@/components/textil/SelectorClienteTextil";
 
-type Linea = {
-  descripcion: string;
-  cantidad: number;
-  precio_unitario: number;
-  iva_rate: number;
-  /** DTF o DTF UV (lo imprime la subcontrata): sus metros y su coste van aparte. */
-  linea: "dtf" | "uv";
-};
+/**
+ * Una línea del formulario. Los números van como texto («12,5»): se leen al
+ * guardar con leerPedidoEscrito() (src/dominio/pedido-formulario.ts), que dice
+ * lo que no se entiende en vez de convertirlo en 0. `linea`: DTF o DTF UV (lo
+ * imprime la subcontrata): sus metros y su coste van aparte.
+ */
+type Linea = LineaEscrita;
 
 /** El tipo con el que nace una línea nueva. El DTF va todo al 21 %. */
 const IVA_GENERAL = 21;
+
+/** La línea con la que nace el formulario o «Añadir línea». */
+const lineaNueva = (iva: number = IVA_GENERAL): Linea => ({
+  descripcion: "",
+  cantidad: "1",
+  precio_unitario: "0",
+  iva_rate: String(iva),
+  linea: "dtf",
+});
 
 const PAGOS = [
   "Transferencia bancaria directa",
@@ -100,6 +116,9 @@ function aFormulario(d: Direccion | null | undefined): DireccionForm {
   return salida;
 }
 
+/** El formulario entero en una cadena, para comparar con lo que había al abrir. */
+const instantanea = (v: unknown) => JSON.stringify(v);
+
 export function PedidoFormDialog({
   open,
   onOpenChange,
@@ -120,14 +139,12 @@ export function PedidoFormDialog({
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
   const [pago, setPago] = useState<string>("Transferencia bancaria directa");
-  const [envio, setEnvio] = useState<number>(0);
+  const [envio, setEnvio] = useState("0");
   const [notas, setNotas] = useState("");
   const [facturacion, setFacturacion] = useState<DireccionForm>(DIRECCION_VACIA);
   const [entrega, setEntrega] = useState<DireccionForm>(DIRECCION_VACIA);
   const [envioIgual, setEnvioIgual] = useState(true);
-  const [lineas, setLineas] = useState<Linea[]>([
-    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
-  ]);
+  const [lineas, setLineas] = useState<Linea[]>([lineaNueva()]);
   // Para exportación y para operaciones intracomunitarias con inversión del
   // sujeto pasivo (arts. 21 y 25 LIVA): el pedido no lleva IVA. Un interruptor
   // por pedido, no por línea — el DTF va todo al mismo tipo, así que mezclar
@@ -142,7 +159,7 @@ export function PedidoFormDialog({
       setEmail(pedido.cliente_email ?? "");
       setTelefono(pedido.cliente_telefono ?? "");
       setPago(pedido.metodo_pago ?? "Transferencia bancaria directa");
-      setEnvio(Number(pedido.envio ?? 0));
+      setEnvio(escribirNumero(Number(pedido.envio ?? 0)));
       setNotas(pedido.notas ?? "");
       setFacturacion(aFormulario(pedido.direccion_facturacion));
       setEntrega(aFormulario(pedido.direccion_envio));
@@ -156,44 +173,92 @@ export function PedidoFormDialog({
       const lineasIniciales: Linea[] = pedido.items.length
         ? pedido.items.map((it) => ({
             descripcion: it.descripcion,
-            cantidad: Number(it.cantidad),
-            precio_unitario: Number(it.precio_unitario),
+            cantidad: escribirNumero(Number(it.cantidad)),
+            precio_unitario: escribirNumero(Number(it.precio_unitario)),
             // El tipo que tenía la línea, no el general: abrir un pedido con
             // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
             // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
-            iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
+            iva_rate: escribirNumero(it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate)),
             linea: it.linea === "uv" ? ("uv" as const) : ("dtf" as const),
           }))
-        : [
-            {
-              descripcion: "",
-              cantidad: 1,
-              precio_unitario: 0,
-              iva_rate: IVA_GENERAL,
-              linea: "dtf",
-            },
-          ];
+        : [lineaNueva()];
       setLineas(lineasIniciales);
       // Si el pedido ya estaba entero sin IVA, el interruptor nace apagado:
       // si no, reabrirlo y guardarlo sin tocar nada le habría puesto el 21 %.
-      setAplicaIva(lineasIniciales.some((l) => l.iva_rate > 0));
+      const conIva = lineasIniciales.some((l) => leerNumeroEscrito(l.iva_rate) > 0);
+      setAplicaIva(conIva);
+      setInicial(
+        instantanea({
+          clienteId: pedido.cliente_id ?? null,
+          cliente: pedido.cliente_nombre ?? "",
+          email: pedido.cliente_email ?? "",
+          telefono: pedido.cliente_telefono ?? "",
+          pago: pedido.metodo_pago ?? "Transferencia bancaria directa",
+          envio: escribirNumero(Number(pedido.envio ?? 0)),
+          notas: pedido.notas ?? "",
+          facturacion: aFormulario(pedido.direccion_facturacion),
+          entrega: aFormulario(pedido.direccion_envio),
+          envioIgual:
+            mismaDireccion(pedido.direccion_envio, pedido.direccion_facturacion) ||
+            !pedido.direccion_envio,
+          lineas: lineasIniciales,
+          aplicaIva: conIva,
+        }),
+      );
     } else {
       setClienteId(null);
       setCliente("");
       setEmail("");
       setTelefono("");
       setPago("Transferencia bancaria directa");
-      setEnvio(0);
+      setEnvio("0");
       setNotas("");
       setFacturacion(DIRECCION_VACIA);
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
-      setLineas([
-        { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
-      ]);
+      setLineas([lineaNueva()]);
       setAplicaIva(true);
+      setInicial(
+        instantanea({
+          clienteId: null,
+          cliente: "",
+          email: "",
+          telefono: "",
+          pago: "Transferencia bancaria directa",
+          envio: "0",
+          notas: "",
+          facturacion: DIRECCION_VACIA,
+          entrega: DIRECCION_VACIA,
+          envioIgual: true,
+          lineas: [lineaNueva()],
+          aplicaIva: true,
+        }),
+      );
     }
   }, [open, pedido]);
+
+  // Lo que había al abrir, para saber si hay algo sin guardar: con cambios,
+  // cerrar (la X, Escape, un toque fuera o «Cancelar») pregunta antes.
+  const [inicial, setInicial] = useState<string | null>(null);
+  const cambiado =
+    inicial !== null &&
+    instantanea({
+      clienteId,
+      cliente,
+      email,
+      telefono,
+      pago,
+      envio,
+      notas,
+      facturacion,
+      entrega,
+      envioIgual,
+      lineas,
+      aplicaIva,
+    }) !== inicial;
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cambiado, () =>
+    onOpenChange(false),
+  );
 
   // Los mismos que en el presupuesto: la ficha única de clientes de la empresa.
   const { data: clientes = [] } = useQuery({
@@ -247,8 +312,11 @@ export function PedidoFormDialog({
 
   const mut = useMutation({
     mutationFn: async () => {
-      const itemsValidos = lineas.filter((l) => l.descripcion.trim() && l.cantidad > 0);
-      if (itemsValidos.length === 0) throw new Error("Añade al menos una línea");
+      // Nada se descarta en silencio: una línea con algo escrito y sin
+      // descripción, o un «12,5» que no se entiende, se dice (pedido-formulario.ts).
+      const leido = leerPedidoEscrito(lineas, envio);
+      if (!leido.ok) throw new Error(leido.errores.join(" "));
+      const itemsValidos = leido.lineas;
       const comunes = {
         cliente_id: clienteId,
         cliente_nombre: cliente,
@@ -257,7 +325,7 @@ export function PedidoFormDialog({
         direccion_facturacion: direcciones.facturacion,
         direccion_envio: direcciones.envio,
         metodo_pago: pago,
-        envio,
+        envio: leido.envio,
         notas: notas || null,
         items: itemsValidos,
       };
@@ -283,14 +351,18 @@ export function PedidoFormDialog({
   // llevando un 21 % en cada línea.
   function alternarIva(v: boolean) {
     setAplicaIva(v);
-    setLineas((prev) => prev.map((l) => ({ ...l, iva_rate: v ? IVA_GENERAL : 0 })));
+    setLineas((prev) => prev.map((l) => ({ ...l, iva_rate: String(v ? IVA_GENERAL : 0) })));
   }
 
   // El envío entra en la base imponible y tributa, que es lo que dice el
   // artículo 78 de la Ley del IVA: los gastos de transporte repercutidos al
   // cliente forman parte de la contraprestación. Antes se sumaba DESPUÉS del
   // IVA, o sea que no tributaba.
-  const totales = calcularTotales(lineas, { envio });
+  // En pantalla, lo que aún no se lee cuenta 0; al guardar se avisa.
+  const envioLeido = leerNumeroEscrito(envio);
+  const totales = calcularTotales(lineasParaTotales(lineas), {
+    envio: Number.isFinite(envioLeido) ? envioLeido : 0,
+  });
   const total = totales.total;
 
   // El resumen que se lee con el bloque plegado, para no tener que abrirlo solo
@@ -307,7 +379,7 @@ export function PedidoFormDialog({
   })();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar pedido" : "Nuevo pedido manual"}</DialogTitle>
@@ -366,10 +438,10 @@ export function PedidoFormDialog({
             <div className="space-y-1">
               <Label>Gastos de envío (€)</Label>
               <Input
-                type="number"
-                step="0.01"
+                inputMode="decimal"
                 value={envio}
-                onChange={(e) => setEnvio(Number(e.target.value) || 0)}
+                onChange={(e) => setEnvio(e.target.value)}
+                placeholder="0,00"
               />
             </div>
           </div>
@@ -418,18 +490,7 @@ export function PedidoFormDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setLineas([
-                    ...lineas,
-                    {
-                      descripcion: "",
-                      cantidad: 1,
-                      precio_unitario: 0,
-                      iva_rate: aplicaIva ? IVA_GENERAL : 0,
-                      linea: "dtf",
-                    },
-                  ])
-                }
+                onClick={() => setLineas([...lineas, lineaNueva(aplicaIva ? IVA_GENERAL : 0)])}
               >
                 <Plus className="h-4 w-4 mr-1" /> Añadir línea
               </Button>
@@ -480,31 +541,26 @@ export function PedidoFormDialog({
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs">Cantidad</Label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      inputMode="decimal"
                       value={l.cantidad}
-                      onChange={(e) => setLinea(i, { cantidad: Number(e.target.value) || 0 })}
+                      onChange={(e) => setLinea(i, { cantidad: e.target.value })}
                     />
                   </div>
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs">Precio</Label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      inputMode="decimal"
                       value={l.precio_unitario}
-                      onChange={(e) =>
-                        setLinea(i, { precio_unitario: Number(e.target.value) || 0 })
-                      }
+                      onChange={(e) => setLinea(i, { precio_unitario: e.target.value })}
                     />
                   </div>
                   <div className="col-span-1 space-y-1">
                     <Label className="text-xs">IVA %</Label>
                     <Input
-                      type="number"
-                      step="1"
+                      inputMode="decimal"
                       value={l.iva_rate}
                       disabled={!aplicaIva}
-                      onChange={(e) => setLinea(i, { iva_rate: Number(e.target.value) || 0 })}
+                      onChange={(e) => setLinea(i, { iva_rate: e.target.value })}
                     />
                   </div>
                   <div className="col-span-1 flex justify-end">
@@ -541,7 +597,7 @@ export function PedidoFormDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={pedirCierre}>
             Cancelar
           </Button>
           <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
@@ -549,6 +605,7 @@ export function PedidoFormDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }

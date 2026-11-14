@@ -75,6 +75,7 @@ import {
 } from "@/dominio/presupuestos";
 import { totalesPresupuestos } from "@/dominio/sumatorios-facturas";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/presupuestos")({
   component: PresupuestosTienda,
@@ -115,7 +116,7 @@ function PresupuestosTienda() {
       (await supabase.from("tiendas").select("nombre").eq("id", tiendaId).maybeSingle()).data,
   });
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["presupuestos", tiendaId],
     queryFn: () => listar({ data: { tiendaId } }),
   });
@@ -217,11 +218,12 @@ function PresupuestosTienda() {
       )}
 
       {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los presupuestos: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={error}
+          que="los presupuestos"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
       )}
 
       <Card>

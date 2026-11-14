@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
@@ -90,6 +91,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/presupuestos")({
   head: () => ({ meta: [{ title: "Presupuestos textil · DTF Culture" }] }),
@@ -119,7 +121,13 @@ function PresupuestosPage() {
   const empFn = useServerFn(getEmpresaGlobal);
   const stockFn = useServerFn(listStock);
 
-  const { data = [] } = useQuery({ queryKey: ["textil-presupuestos"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-presupuestos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl({ q: "", estado: "todos" });
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -350,10 +358,21 @@ function PresupuestosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtrados.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="los presupuestos"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
+              )}
+              {(isLoading || (!error && filtrados.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? (
+                    {isLoading ? (
+                      "Cargando…"
+                    ) : data.length === 0 ? (
                       <>
                         Todavía no hay presupuestos.
                         {escribir && (
@@ -625,7 +644,7 @@ function PresupuestoDialog({
             : [{ descripcion: "", cantidad: 1, precio_unitario: 0, iva_pct: 21 }],
         }
       : {
-          fecha: new Date().toISOString().slice(0, 10),
+          fecha: diaEnEspana(new Date()),
           validez_dias: 30,
           marca_id: defaultMarcaId,
           items: lineasIniciales ?? [

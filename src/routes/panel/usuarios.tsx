@@ -67,12 +67,13 @@ import {
   listarUsuarios,
   type UsuarioListado,
 } from "@/lib/usuarios.functions";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
 import {
   fijarSociosDeCuenta,
   sociosYCuentas,
   type SocioConCuenta,
 } from "@/lib/quien-soy.functions";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -174,7 +175,13 @@ function Usuarios() {
           {usuarios.isLoading ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : usuarios.error ? (
-            <p className="text-sm text-destructive">{mensajeDeError(usuarios.error)}</p>
+            <ErrorCarga
+              error={usuarios.error}
+              que="los usuarios"
+              onReintentar={usuarios.refetch}
+              reintentando={usuarios.isFetching}
+              sinMarco
+            />
           ) : lista.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay usuarios.</p>
           ) : (

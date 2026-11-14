@@ -127,7 +127,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import {
+  consecuenciasBorrarPedido,
+  efectosCambioEstado,
+  resumenCambioEstado,
+} from "@/dominio/cambio-estado-pedido";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export type { Direccion };
 
@@ -316,7 +323,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading, error, isPlaceholderData } = useQuery({
+  const { data, isLoading, error, isPlaceholderData, refetch, isFetching } = useQuery({
     queryKey,
     // Al cambiar de periodo, los pedidos del anterior hasta que llegan los
     // nuevos: avisados, atenuados y sin poder actuar sobre ellos (abajo). Al
@@ -347,16 +354,52 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
     ? (data.realizadosPorDia ?? {})
     : null;
 
+  // El cambio de estado. Los que salen del CRM (correo al cliente, la web) se
+  // confirman antes; los internos se hacen sin preguntar y se pueden deshacer
+  // desde el aviso. Y el aviso dice lo que no salió (ver cambio-estado-pedido).
+  const [confirmarEstado, setConfirmarEstado] = useState<{
+    pedido: PedidoFila;
+    nuevo: string;
+    efectos: string[];
+  } | null>(null);
   const estadoMut = useMutation({
-    mutationFn: (vars: { id: string; estado: string }) =>
-      setEstadoFn({ data: { id: vars.id, estado: vars.estado as any } }),
-    onSuccess: (res) => {
+    mutationFn: (vars: CambioEstado) =>
+      setEstadoFn({ data: { id: vars.pedido.id, estado: vars.nuevo as any } }),
+    onSuccess: (res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["pedidos"] });
-      if (res?.woo_synced) toast.success("Estado actualizado y sincronizado con WooCommerce");
-      else toast.success("Estado actualizado");
+      setConfirmarEstado(null);
+      const etiqueta = infoEstado("pedido", vars.nuevo).etiqueta;
+      const r = resumenCambioEstado(etiqueta, res, esDeLaWeb(vars.pedido));
+      const anterior = vars.pedido.estado;
+      // Deshacer solo si volver atrás también es interno: si no, el deshacer
+      // mandaría un correo o cambiaría la web sin preguntar.
+      const sePuedeDeshacer =
+        !vars.deshaciendo &&
+        !efectosCambioEstado({ ...datosParaCambio(vars.pedido), estado: vars.nuevo }, anterior)
+          .confirmar &&
+        !efectosCambioEstado(datosParaCambio(vars.pedido), vars.nuevo).confirmar;
+      const accion = sePuedeDeshacer
+        ? {
+            label: "Deshacer",
+            onClick: () =>
+              mutarEstadoRef({
+                pedido: { ...vars.pedido, estado: vars.nuevo },
+                nuevo: anterior,
+                deshaciendo: true,
+              }),
+          }
+        : undefined;
+      const opciones = {
+        description: r.detalles.length ? r.detalles.join(" ") : undefined,
+        action: accion,
+        duration: r.tono === "aviso" ? 20_000 : accion ? 8_000 : undefined,
+      };
+      if (r.tono === "aviso") toast.warning(r.titulo, opciones);
+      else toast.success(r.titulo, opciones);
     },
-    onError: (e: any) => avisarError(e, "Error al actualizar estado"),
+    onError: (e: any) => avisarError(e, "No se pudo cambiar el estado"),
   });
+  const mutarEstadoRef = estadoMut.mutate;
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
@@ -375,7 +418,12 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
   const acciones = useMemo<AccionesPedido>(
     () => ({
       alternar: (id) => setExpandida((actual) => (actual === id ? null : id)),
-      cambiarEstado: (id, estado) => mutarEstado({ id, estado }),
+      cambiarEstado: (pedido, nuevo) => {
+        if (nuevo === pedido.estado) return;
+        const { confirmar, efectos } = efectosCambioEstado(datosParaCambio(pedido), nuevo);
+        if (confirmar) setConfirmarEstado({ pedido, nuevo, efectos });
+        else mutarEstado({ pedido, nuevo });
+      },
       editar: setEditar,
       verTracking: setTracking,
       borrar: setBorrar,
@@ -551,7 +599,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                       ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "la tienda")
                       : "todas las tiendas"}
                     , de todas las fechas, con líneas, cobros y documentos, en un JSON que se
-                    explica solo (para Claude)
+                    explica solo
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -672,8 +720,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
-            Hasta que se aplique, no se pueden registrar.
+            Esta parte aún no está activada. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -690,12 +737,12 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         {/* Si la lectura falla se dice, en vez de «Sin pedidos en este
             periodo», que parecería que no hay ventas. */}
         {error && (
-          <Card>
-            <CardContent className="py-6 text-sm text-destructive">
-              {data ? "No se han podido actualizar" : "No se han podido cargar"} los pedidos:{" "}
-              {mensajeDeError(error)}
-            </CardContent>
-          </Card>
+          <ErrorCarga
+            error={error}
+            que={data ? "los pedidos al día (se ven los de antes)" : "los pedidos"}
+            onReintentar={refetch}
+            reintentando={isFetching}
+          />
         )}
         {!isLoading && !error && grupos.length === 0 && (
           <Card>
@@ -786,7 +833,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   cabecera se montaba encima de la de Tienda. Por eso la tienda
                   va debajo del número y el método de pago debajo del total.
                   Si se añade una columna, que le quite el sitio a otra:
-                  Metros se lo quitó a Nº Pedido, Estado y Env., que tenían de
+                  Metros se lo quitó a Nº Pedido, Estado y Envío, que tenían de
                   sobra, y a Cliente.
 
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
@@ -808,7 +855,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                         <TableHead className="w-28 text-right max-[1440px]:w-24">
                           Pendiente
                         </TableHead>
-                        <TableHead className="w-12">Env.</TableHead>
+                        <TableHead className="w-16">Envío</TableHead>
                         <TableHead className="w-12" />
                       </TableRow>
                     </TableHeader>
@@ -872,7 +919,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     <TableHead>Total</TableHead>
                     <TableHead>Cobrado</TableHead>
                     <TableHead>Pendiente</TableHead>
-                    <TableHead>Env.</TableHead>
+                    <TableHead>Envío</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -974,22 +1021,71 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           />
         )}
       </Suspense>
-      <AlertDialog open={!!borrar} onOpenChange={(o) => !o && setBorrar(null)}>
+      <AlertDialog
+        open={!!confirmarEstado}
+        onOpenChange={(o) => !o && !estadoMut.isPending && setConfirmarEstado(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Borrar pedido {borrar?.numero}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminarán también las líneas asociadas.
+            <AlertDialogTitle>
+              ¿Marcar el pedido {confirmarEstado?.pedido.numero} como{" "}
+              {confirmarEstado ? infoEstado("pedido", confirmarEstado.nuevo).etiqueta : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Esto sale del CRM y no se puede deshacer desde aquí:</p>
+                <ul className="list-disc space-y-0.5 pl-5">
+                  {confirmarEstado?.efectos.map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ul>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => borrar && deleteMut.mutate(borrar.id)}>
-              Borrar
+            <AlertDialogCancel disabled={estadoMut.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={estadoMut.isPending}
+              className={
+                confirmarEstado?.nuevo === "cancelado"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirmarEstado) {
+                  estadoMut.mutate({
+                    pedido: confirmarEstado.pedido,
+                    nuevo: confirmarEstado.nuevo,
+                  });
+                }
+              }}
+            >
+              {estadoMut.isPending
+                ? "Cambiando…"
+                : `Sí, marcar como ${confirmarEstado ? infoEstado("pedido", confirmarEstado.nuevo).etiqueta : ""}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {borrar && (
+        <ConfirmarBorrado
+          que={`el pedido ${borrar.numero}`}
+          {...consecuenciasBorrarPedido({
+            lineas: borrar.items?.length ?? 0,
+            cobros: borrar.cobros ?? [],
+            conSeguimiento: !!borrar.tracking,
+            documento: borrar.documento
+              ? `${borrar.documento.tipo === "simplificada" ? "El ticket" : "La factura"} ${borrar.documento.referencia}`
+              : null,
+            esDeLaWeb: esDeLaWeb(borrar),
+          })}
+          abierto
+          cargando={deleteMut.isPending}
+          onCerrar={() => !deleteMut.isPending && setBorrar(null)}
+          onConfirmar={() => deleteMut.mutate(borrar.id)}
+        />
+      )}
     </div>
   );
 }
@@ -1011,7 +1107,7 @@ function ColumnasPedidos() {
       <col className="w-28 max-[1440px]:w-24" />
       <col className="w-28 max-[1440px]:w-24" />
       <col className="w-28 max-[1440px]:w-24" />
-      <col className="w-12" />
+      <col className="w-16" />
       <col className="w-12" />
     </colgroup>
   );
@@ -1065,10 +1161,22 @@ function FilaTotales({
   );
 }
 
+/** Un cambio de estado pedido desde la lista. */
+type CambioEstado = { pedido: PedidoFila; nuevo: string; deshaciendo?: boolean };
+
+/** El pedido vino de la web y tiene número allí: los cambios llegan a WooCommerce. */
+function esDeLaWeb(p: PedidoFila) {
+  return !!p.woo_order_id && p.origen === "woocommerce";
+}
+
+function datosParaCambio(p: PedidoFila) {
+  return { estado: p.estado, esDeLaWeb: esDeLaWeb(p), clienteEmail: p.cliente_email };
+}
+
 /** Lo que se puede hacer con un pedido de la lista. Las mismas funciones siempre. */
 type AccionesPedido = {
   alternar: (id: string) => void;
-  cambiarEstado: (id: string, estado: string) => void;
+  cambiarEstado: (p: PedidoFila, estado: string) => void;
   editar: (p: PedidoFila) => void;
   verTracking: (p: PedidoFila) => void;
   borrar: (p: PedidoFila) => void;
@@ -1096,7 +1204,7 @@ type PropsPedido = {
 function accionesDeFila(pedido: PedidoFila, conCobros: boolean, a: AccionesPedido) {
   return {
     onToggle: () => a.alternar(pedido.id),
-    onEstadoChange: (estado: string) => a.cambiarEstado(pedido.id, estado),
+    onEstadoChange: (estado: string) => a.cambiarEstado(pedido, estado),
     onEditar: () => a.editar(pedido),
     onTracking: () => a.verTracking(pedido),
     onBorrar: () => a.borrar(pedido),

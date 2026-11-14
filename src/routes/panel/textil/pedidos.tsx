@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { estadosDe } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -81,6 +82,7 @@ import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -113,7 +115,13 @@ function PedidosPage() {
   const empFn = useServerFn(getEmpresaGlobal);
   const stockFn = useServerFn(listStock);
 
-  const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS_TEXTIL);
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -354,10 +362,21 @@ function PedidosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtrados.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="los pedidos"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={9}
+                />
+              )}
+              {(isLoading || (!error && filtrados.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? (
+                    {isLoading ? (
+                      "Cargando…"
+                    ) : data.length === 0 ? (
                       <>
                         Todavía no hay pedidos.
                         {escribir && (
@@ -609,7 +628,7 @@ function PedidoDialog({
   loading,
 }: any) {
   const initial = pedido ?? {
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: diaEnEspana(new Date()),
     estado: "pendiente",
     envio: 0,
     marca_id: defaultMarcaId,

@@ -40,6 +40,7 @@ import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export type Producto = {
   id: string;
@@ -104,7 +105,13 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
   const [editing, setEditing] = useState<Partial<Producto> | null>(null);
   const [borrando, setBorrando] = useState<Producto | null>(null);
 
-  const { data: productos = [] } = useQuery({
+  const {
+    data: productos = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["productos", tiendaId ?? "generales"],
     queryFn: async () => {
       const base = tabla(supabase, "productos").select("*").order("nombre");
@@ -332,10 +339,19 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                   </TableRow>
                 );
               })}
-              {filtered.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="los productos"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
+              )}
+              {(isLoading || (!error && filtered.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Sin productos
+                    {isLoading ? "Cargando…" : "Sin productos"}
                   </TableCell>
                 </TableRow>
               )}

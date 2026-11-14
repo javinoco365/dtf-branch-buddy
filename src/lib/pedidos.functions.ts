@@ -7,31 +7,16 @@ import { esAdminActivo, esMiembroTienda } from "./acceso";
 import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
 import { avisarPedidoEnviado, type ResultadoAviso } from "./correos.functions";
+import { ESTADO_A_WOO, ESTADOS_PEDIDO } from "@/dominio/cambio-estado-pedido";
 import { calcularLinea, calcularTotales } from "@/dominio/importes";
 import { lineasDeUnPedido } from "@/dominio/por-linea";
 import { normalizarDireccion } from "@/dominio/direcciones";
 import { urlSeguimientoValida } from "@/dominio/transportistas";
 
-const ESTADO_VALUES = [
-  "pendiente",
-  "en_produccion",
-  "imprimiendo",
-  "listo",
-  "enviado",
-  "entregado",
-  "cancelado",
-] as const;
-type Estado = (typeof ESTADO_VALUES)[number];
-
-const ESTADO_TO_WC: Record<Estado, string> = {
-  pendiente: "on-hold",
-  en_produccion: "processing",
-  imprimiendo: "processing",
-  listo: "processing",
-  enviado: "completed",
-  entregado: "completed",
-  cancelado: "cancelled",
-};
+// Los estados y su equivalente en WooCommerce viven en el dominio: la
+// pantalla los usa para avisar antes de lo que pasará en la web.
+const ESTADO_VALUES = ESTADOS_PEDIDO;
+const ESTADO_TO_WC = ESTADO_A_WOO;
 
 async function ensureAccess(supabaseAdmin: any, userId: string, tiendaId: string) {
   if (!(await esMiembroTienda(supabaseAdmin, userId, tiendaId))) {
@@ -346,7 +331,8 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
     }
 
     let woo_synced = false;
-    if (pedido.woo_order_id && pedido.origen === "woocommerce") {
+    const woo_aplica = !!pedido.woo_order_id && pedido.origen === "woocommerce";
+    if (woo_aplica) {
       const creds = await getWooCreds(supabaseAdmin, pedido.tienda_id);
       if (creds) {
         try {
@@ -361,7 +347,7 @@ export const updatePedidoEstado = createServerFn({ method: "POST" })
         }
       }
     }
-    return { ok: true, woo_synced, aviso };
+    return { ok: true, woo_synced, woo_aplica, aviso };
   });
 
 export const updatePedido = createServerFn({ method: "POST" })

@@ -1,4 +1,5 @@
 import { CLAVE_EMPRESA, leerEmpresa } from "@/lib/empresa";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { createFileRoute } from "@tanstack/react-router";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
@@ -84,6 +85,8 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -128,7 +131,13 @@ function Facturas() {
       (await supabase.from("tiendas").select("*").eq("id", tiendaId).maybeSingle()).data,
   });
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error: errorFacturas,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["facturas", tiendaId],
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     queryFn: async () =>
@@ -230,6 +239,7 @@ function Facturas() {
   const sePuedeBorrar = (f: any) =>
     impedimentoBorrado(f, ultimos, referenciaFactura(f.serie, f.ejercicio, f.numero)) === null;
   const [borrando, setBorrando] = useState<any>(null);
+  const [anulando, setAnulando] = useState<any>(null);
   const borrarFn = useServerFn(borrarUltimaFactura);
   const borrar = useMutation({
     mutationFn: (id: string) => borrarFn({ data: { tipo: "tienda", factura_id: id } }),
@@ -259,6 +269,7 @@ function Facturas() {
       }),
     onSuccess: (r: any) => {
       toast.success(`Anulada con la rectificativa ${r.referencia}`);
+      setAnulando(null);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => avisarError(e, "No se pudo anular"),
@@ -455,15 +466,7 @@ function Facturas() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
-                                )
-                              ) {
-                                anular.mutate({ id: f.id, tipo: f.tipo });
-                              }
-                            }}
+                            onClick={() => setAnulando(f)}
                             disabled={anular.isPending}
                             title="Anular con una rectificativa"
                           >
@@ -488,7 +491,23 @@ function Facturas() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && facturas.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isLoading && errorFacturas && (
+                <ErrorCarga
+                  error={errorFacturas}
+                  que="las facturas"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={8}
+                />
+              )}
+              {!isLoading && !errorFacturas && facturas.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -523,6 +542,18 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarRectificativa
+        abierto={!!anulando}
+        que={
+          anulando
+            ? `${anulando.tipo === "simplificada" ? "el ticket" : "la factura"} ${referenciaFactura(anulando.serie, anulando.ejercicio, anulando.numero)}`
+            : "el documento"
+        }
+        cargando={anular.isPending}
+        onCerrar={() => setAnulando(null)}
+        onConfirmar={() => anulando && anular.mutate({ id: anulando.id, tipo: anulando.tipo })}
+      />
 
       <ConfirmarBorrado
         abierto={!!borrando}
@@ -573,7 +604,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
   const [clienteId, setClienteId] = useState<string | null>(null);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = diaEnEspana(new Date());
   const [fecha, setFecha] = useState(hoy);
   const [vencimiento, setVencimiento] = useState("");
   const [notas, setNotas] = useState("");
