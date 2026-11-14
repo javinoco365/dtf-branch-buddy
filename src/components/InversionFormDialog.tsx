@@ -25,6 +25,7 @@ import { guardarInversion, type MovimientoInversion } from "@/lib/inversion.func
 import type { SocioCaja } from "@/lib/caja.functions";
 import type { TipoInversion } from "@/dominio/inversion";
 import { avisarError } from "@/lib/errores";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export function InversionFormDialog({
   open,
@@ -93,74 +94,75 @@ export function InversionFormDialog({
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar apunte" : "Nuevo apunte de inversión"}</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Importe (€)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={importe}
+                  onChange={(e) => setImporte(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
             </div>
+
             <div className="space-y-1">
-              <Label>Importe (€)</Label>
-              <Input
-                inputMode="decimal"
-                value={importe}
-                onChange={(e) => setImporte(e.target.value)}
-                placeholder="0,00"
+              <Label>Socio</Label>
+              <Select value={socioId} onValueChange={setSocioId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elige un socio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibles.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.nombre}
+                      {!s.activo && (
+                        <span className="text-muted-foreground text-xs ml-2">desactivado</span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Tipo</Label>
+              <Select value={tipo} onValueChange={(v) => setTipo(v as TipoInversion)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aportacion">Aportación — el socio mete dinero</SelectItem>
+                  <SelectItem value="retirada">Retirada — recupera o se reparte</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Observaciones</Label>
+              <Textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
               />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label>Socio</Label>
-            <Select value={socioId} onValueChange={setSocioId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige un socio" />
-              </SelectTrigger>
-              <SelectContent>
-                {visibles.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.nombre}
-                    {!s.activo && (
-                      <span className="text-muted-foreground text-xs ml-2">desactivado</span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label>Tipo</Label>
-            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoInversion)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="aportacion">Aportación — el socio mete dinero</SelectItem>
-                <SelectItem value="retirada">Retirada — recupera o se reparte</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label>Observaciones</Label>
-            <Textarea
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              rows={2}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

@@ -75,6 +75,7 @@ import {
 } from "@/lib/quien-soy.functions";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export const Route = createFileRoute("/panel/usuarios")({
   head: () => ({ meta: [{ title: "Usuarios · DTF Culture" }] }),
@@ -526,86 +527,97 @@ function AltaUsuario({
             Entra con su correo. Elige qué puede hacer; se puede cambiar después.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="alta-nombre">Nombre</Label>
-              <Input id="alta-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <FormularioDialogo
+          alEnviar={() => {
+            if (!problema) m.mutate();
+          }}
+          ocupado={m.isPending}
+        >
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="alta-nombre">Nombre</Label>
+                <Input
+                  id="alta-nombre"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="alta-email">Correo</Label>
+                <Input
+                  id="alta-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="alta-email">Correo</Label>
-              <Input
-                id="alta-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Nivel</Label>
-            <RadioGroup value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
-              {NIVELES.map((n) => (
-                <label key={n} className="flex items-start gap-2 text-sm">
-                  <RadioGroupItem value={n} className="mt-0.5" />
-                  <span>
-                    <span className="font-medium">{ETIQUETA_NIVEL[n]}</span>
-                    <span className="block text-muted-foreground">{DESCRIPCION_NIVEL[n]}</span>
-                  </span>
+            <div className="space-y-2">
+              <Label>Nivel</Label>
+              <RadioGroup value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
+                {NIVELES.map((n) => (
+                  <label key={n} className="flex items-start gap-2 text-sm">
+                    <RadioGroupItem value={n} className="mt-0.5" />
+                    <span>
+                      <span className="font-medium">{ETIQUETA_NIVEL[n]}</span>
+                      <span className="block text-muted-foreground">{DESCRIPCION_NIVEL[n]}</span>
+                    </span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Acceso</Label>
+              <RadioGroup value={modo} onValueChange={(v) => setModo(v as typeof modo)}>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="contrasena" /> Le pongo una contraseña inicial
                 </label>
-              ))}
-            </RadioGroup>
-          </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="enlace" /> Genero un enlace para que la elija él
+                </label>
+              </RadioGroup>
+              {modo === "contrasena" ? (
+                <Input
+                  type="password"
+                  placeholder="Al menos 8 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Al crearlo verás el enlace para copiarlo y mandárselo. Caduca en unas horas.
+                </p>
+              )}
+            </div>
 
-          <div className="space-y-2">
-            <Label>Acceso</Label>
-            <RadioGroup value={modo} onValueChange={(v) => setModo(v as typeof modo)}>
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="contrasena" /> Le pongo una contraseña inicial
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="enlace" /> Genero un enlace para que la elija él
-              </label>
-            </RadioGroup>
-            {modo === "contrasena" ? (
-              <Input
-                type="password"
-                placeholder="Al menos 8 caracteres"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Al crearlo verás el enlace para copiarlo y mandárselo. Caduca en unas horas.
-              </p>
+            {nivel !== "admin" && (
+              <div className="space-y-2">
+                <Label>Tiendas que ve</Label>
+                <SelectorTiendas
+                  tiendas={tiendas}
+                  seleccion={tiendasElegidas}
+                  onCambio={setSeleccion}
+                />
+              </div>
             )}
           </div>
-
-          {nivel !== "admin" && (
-            <div className="space-y-2">
-              <Label>Tiendas que ve</Label>
-              <SelectorTiendas
-                tiendas={tiendas}
-                seleccion={tiendasElegidas}
-                onCambio={setSeleccion}
-              />
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => m.mutate()}
-            disabled={!!problema || m.isPending}
-            title={problema ?? undefined}
-          >
-            {m.isPending ? "Creando…" : "Crear usuario"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onCerrar}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={!!problema || m.isPending}
+              title={problema ?? undefined}
+            >
+              {m.isPending ? "Creando…" : "Crear usuario"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

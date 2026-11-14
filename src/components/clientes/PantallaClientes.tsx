@@ -69,6 +69,7 @@ import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -560,92 +561,98 @@ function ClienteForm({
         <DialogHeader>
           <DialogTitle>{cliente.id ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label>Nombre *</Label>
-            <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
-              WooCommerce ni se cambia solo.
-            </p>
+        <FormularioDialogo alEnviar={onSave} ocupado={saving}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Nombre *</Label>
+              <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
+                WooCommerce ni se cambia solo.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <Label>Apodo</Label>
+              <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí»
+                para «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una
+                factura.
+              </p>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={cliente.email ?? ""}
+                onChange={(e) => set("email", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Teléfono</Label>
+              <Input
+                value={cliente.telefono ?? ""}
+                onChange={(e) => set("telefono", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>NIF / CIF</Label>
+              <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
+            </div>
+            <div>
+              <Label>Empresa</Label>
+              <Input
+                value={cliente.empresa ?? ""}
+                onChange={(e) => set("empresa", e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Dirección</Label>
+              <Input
+                value={cliente.direccion ?? ""}
+                onChange={(e) => set("direccion", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Código postal</Label>
+              <Input
+                value={cliente.codigo_postal ?? ""}
+                onChange={(e) => set("codigo_postal", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Ciudad</Label>
+              <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
+            </div>
+            <div>
+              <Label>Provincia</Label>
+              <Input
+                value={cliente.provincia ?? ""}
+                onChange={(e) => set("provincia", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>País</Label>
+              <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Notas</Label>
+              <Textarea
+                rows={3}
+                value={cliente.notas ?? ""}
+                onChange={(e) => set("notas", e.target.value)}
+              />
+            </div>
           </div>
-          <div className="col-span-2">
-            <Label>Apodo</Label>
-            <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí» para
-              «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una factura.
-            </p>
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={cliente.email ?? ""}
-              onChange={(e) => set("email", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Teléfono</Label>
-            <Input
-              value={cliente.telefono ?? ""}
-              onChange={(e) => set("telefono", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>NIF / CIF</Label>
-            <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
-          </div>
-          <div>
-            <Label>Empresa</Label>
-            <Input value={cliente.empresa ?? ""} onChange={(e) => set("empresa", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Dirección</Label>
-            <Input
-              value={cliente.direccion ?? ""}
-              onChange={(e) => set("direccion", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Código postal</Label>
-            <Input
-              value={cliente.codigo_postal ?? ""}
-              onChange={(e) => set("codigo_postal", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Ciudad</Label>
-            <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
-          </div>
-          <div>
-            <Label>Provincia</Label>
-            <Input
-              value={cliente.provincia ?? ""}
-              onChange={(e) => set("provincia", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>País</Label>
-            <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Notas</Label>
-            <Textarea
-              rows={3}
-              value={cliente.notas ?? ""}
-              onChange={(e) => set("notas", e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

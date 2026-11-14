@@ -27,6 +27,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 export const Route = createFileRoute("/panel/configuracion-caja")({
   head: () => ({ meta: [{ title: "Caja · Ajustes · DTF Culture" }] }),
@@ -130,7 +131,13 @@ function Conceptos({ conceptos }: { conceptos: ConceptoCaja[] }) {
         <Grupo titulo="Gastos" items={gastos} mut={mut} />
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 border-t pt-3">
+      <FormularioDialogo
+        className="flex flex-wrap items-end gap-2 border-t pt-3"
+        alEnviar={() => {
+          if (nombre.trim()) mut.mutate({ nombre, categoria });
+        }}
+        ocupado={mut.isPending}
+      >
         <div className="space-y-1 flex-1 min-w-48">
           <Label className="text-xs">Nuevo concepto</Label>
           <Input
@@ -152,14 +159,11 @@ function Conceptos({ conceptos }: { conceptos: ConceptoCaja[] }) {
           </Select>
         </div>
         <SiPuede accion="escribir">
-          <Button
-            onClick={() => mut.mutate({ nombre, categoria })}
-            disabled={!nombre.trim() || mut.isPending}
-          >
+          <Button type="submit" disabled={!nombre.trim() || mut.isPending}>
             <Plus className="h-4 w-4 mr-1" /> Añadir
           </Button>
         </SiPuede>
-      </div>
+      </FormularioDialogo>
     </div>
   );
 }
@@ -237,17 +241,23 @@ function Socios({ socios }: { socios: SocioCaja[] }) {
         </div>
       ))}
 
-      <div className="flex flex-wrap items-end gap-2 border-t pt-3">
+      <FormularioDialogo
+        className="flex flex-wrap items-end gap-2 border-t pt-3"
+        alEnviar={() => {
+          if (nombre.trim()) mut.mutate({ nombre });
+        }}
+        ocupado={mut.isPending}
+      >
         <div className="space-y-1 flex-1 min-w-48">
           <Label className="text-xs">Nuevo socio</Label>
           <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
         </div>
         <SiPuede accion="escribir">
-          <Button onClick={() => mut.mutate({ nombre })} disabled={!nombre.trim() || mut.isPending}>
+          <Button type="submit" disabled={!nombre.trim() || mut.isPending}>
             <Plus className="h-4 w-4 mr-1" /> Añadir
           </Button>
         </SiPuede>
-      </div>
+      </FormularioDialogo>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -346,7 +347,14 @@ export function CobrosPedidoDialog({
             cuando WooCommerce lo da por pagado.
           </p>
         ) : !escribir ? null : (
-          <div className="space-y-3 rounded-md border p-3">
+          <FormularioDialogo
+            className="block space-y-3 rounded-md border p-3"
+            alEnviar={() => {
+              // Con exceso, hasta confirmar que es propina no se registra.
+              if (!(hayExceso && !esPropina)) alta.mutate();
+            }}
+            ocupado={alta.isPending}
+          >
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
               Registrar cobro
             </Label>
@@ -442,14 +450,11 @@ export function CobrosPedidoDialog({
                 : "Cuenta en «Lo cobrado». No pasa por Caja."}
             </p>
             <div className="flex justify-end">
-              <Button
-                onClick={() => alta.mutate()}
-                disabled={alta.isPending || (hayExceso && !esPropina)}
-              >
+              <Button type="submit" disabled={alta.isPending || (hayExceso && !esPropina)}>
                 {alta.isPending ? "Registrando…" : "Registrar cobro"}
               </Button>
             </div>
-          </div>
+          </FormularioDialogo>
         )}
 
         <ConfirmarBorrado
