@@ -797,7 +797,7 @@ export function MotorConciliacion({
       </p>
 
       <Dialog open={!!conciliar} onOpenChange={(o) => !o && setConciliar(null)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {conciliar && conciliar.length > 1
@@ -1720,7 +1720,7 @@ function ListaSugerencias({
     );
   }
   return (
-    <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+    <div className="max-h-[60dvh] space-y-2 overflow-y-auto">
       {lista.map((s) => (
         <div
           key={claveDoc(s.documento)}
@@ -1856,7 +1856,7 @@ function BuscarDocumentos({
         </p>
       )}
       {lista.length > 0 && (
-        <ul className="max-h-[40vh] divide-y overflow-y-auto rounded-md border text-sm">
+        <ul className="max-h-[40dvh] divide-y overflow-y-auto rounded-md border text-sm">
           {lista.map((d) => {
             const clave = claveDoc(d);
             const exacto = coincideImporte(suma, queda(d));
@@ -1941,7 +1941,7 @@ function DesgloseRecibo({ recibo, alCerrar }: { recibo: Movimiento | null; alCer
   });
   return (
     <Dialog open={!!recibo} onOpenChange={(o) => !o && alCerrar()}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Compras de este recibo</DialogTitle>
           <DialogDescription>

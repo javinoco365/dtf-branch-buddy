@@ -565,7 +565,7 @@ function StockDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item ? "Editar artículo" : "Nuevo artículo"}</DialogTitle>
         </DialogHeader>
@@ -1155,7 +1155,7 @@ function HistorialDialog({ item, onClose }: any) {
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Historial de movimientos</DialogTitle>
         </DialogHeader>

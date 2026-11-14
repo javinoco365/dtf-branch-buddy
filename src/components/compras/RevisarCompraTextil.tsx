@@ -658,7 +658,7 @@ export function RevisarCompraTextil({
   const sumaCostes = reparto.ok ? sumarImportes(reparto.entradas, (e) => e.coste_total) : null;
 
   return (
-    <DialogContent className="max-w-[min(96vw,90rem)] max-h-[92vh] overflow-y-auto">
+    <DialogContent className="max-w-[min(96vw,90rem)] max-h-[92dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>
           {esProformaRev

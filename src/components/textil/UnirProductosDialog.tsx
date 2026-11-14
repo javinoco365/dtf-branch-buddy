@@ -104,7 +104,7 @@ function UnirProductosDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !unir.isPending && onCerrar()}>
-      <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Unir los productos de una misma prenda</DialogTitle>
           <DialogDescription>

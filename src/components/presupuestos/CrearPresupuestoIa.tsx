@@ -234,7 +234,7 @@ export function PresupuestoIaDialog({
 
   return (
     <Dialog open={!!modo} onOpenChange={(o) => !o && !montar.isPending && onCerrar()}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />

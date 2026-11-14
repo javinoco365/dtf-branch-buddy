@@ -508,7 +508,7 @@ function NuevaTiendaWizard({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Nueva tienda</DialogTitle>
         <DialogDescription>

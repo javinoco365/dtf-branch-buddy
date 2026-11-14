@@ -234,7 +234,7 @@ export function CobrosPedidoDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent
-        className="max-w-xl max-h-[90vh] overflow-y-auto"
+        className="max-w-xl max-h-[90dvh] overflow-y-auto"
         // Sin esto el foco cae en la papelera del primer cobro.
         onOpenAutoFocus={(e) => e.preventDefault()}
       >

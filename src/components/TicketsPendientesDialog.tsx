@@ -222,7 +222,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
         )}
 
         {data && !resultado && (
-          <div className="max-h-[50vh] space-y-4 overflow-y-auto text-sm">
+          <div className="max-h-[50dvh] space-y-4 overflow-y-auto text-sm">
             <Bloque
               titulo={`Van en ticket (${data.tickets.length})`}
               vacio="Ningún pedido cobrado sin documento en estas fechas."

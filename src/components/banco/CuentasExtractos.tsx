@@ -324,7 +324,7 @@ export function CuentasExtractos({ alImportar }: { alImportar: () => void }) {
 
       <Dialog open={!!revision} onOpenChange={(o) => !o && setRevision(null)}>
         {revision && a && (
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Antes de importar: {revision.fichero.name}</DialogTitle>
               <DialogDescription>
