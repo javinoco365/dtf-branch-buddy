@@ -92,13 +92,17 @@ export const AVISO_SIN_ACTIVAR = "Esta parte aún no está activada. Avisa a Jav
 const REGLAS_BASE: Regla[] = [
   {
     // Los avisos de la propia app que nombran el fichero de la migración
-    // («Falta aplicar la migración 20261027100000_…»): el nombre, solo de detalle.
-    patron: /migraci[oó]n|\b20\d{12}(?:_\w+)?(?:\.sql)?\b/i,
+    // («Falta aplicar la migración 20261027100000_…»): el nombre, solo de
+    // detalle. Solo esos: un mensaje que dice «migración» o lleva un número
+    // largo por otra razón se enseña tal cual.
+    patron: /\bmigraci[oó]n\s+20\d{12}(?:_\w+)?(?:\.sql)?\b/i,
     texto: AVISO_SIN_ACTIVAR,
   },
   {
+    // Tabla, función o columna que no existe todavía: Postgres (42P01, 42883,
+    // 42703) y PostgREST (PGRST202 función, PGRST204 columna, PGRST205 tabla).
     patron:
-      /could not find the (?:table|function|column)|schema cache|PGRST20[25]|(?:relation|function|column) \S+ does not exist|(?:code|código|sqlstate)\W{0,4}(?:42P01|42883|42703)/i,
+      /could not find the (?:table|function|column|'[^']*' column)\b.*schema cache|\bPGRST20[245]\b|(?:relation|function|column) \S+ does not exist|(?:code|código|sqlstate)\W{0,4}(?:42P01|42883|42703)\b/i,
     texto: AVISO_SIN_ACTIVAR,
   },
   {

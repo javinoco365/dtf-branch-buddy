@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { errorDeValidacion, errorLecturaParaPersonas, errorParaPersonas } from "./errores";
+import {
+  AVISO_SIN_ACTIVAR,
+  errorDeValidacion,
+  errorLecturaParaPersonas,
+  errorParaPersonas,
+} from "./errores";
 
 describe("errorParaPersonas", () => {
   it("los mensajes ya pensados para personas se dejan como están", () => {
@@ -134,6 +139,30 @@ describe("errores de PostgREST", () => {
       texto: "Esta parte aún no está activada. Avisa a Javier.",
       detalle: m,
     });
+  });
+
+  it("una columna que aún no existe (PGRST204) y los códigos de Postgres", () => {
+    expect(
+      errorParaPersonas("Could not find the 'metros_uv' column of 'pedidos' in the schema cache")
+        .texto,
+    ).toMatch(/aún no está activada/);
+    expect(errorParaPersonas("PGRST202: función no encontrada").texto).toMatch(
+      /aún no está activada/,
+    );
+    expect(errorParaPersonas("código 42703: no existe").texto).toMatch(/aún no está activada/);
+  });
+
+  it("decir «migración» o llevar un número largo no basta: el mensaje se enseña tal cual", () => {
+    const normales = [
+      "La migración de datos de la tienda ha terminado con 3 avisos.",
+      "El pedido 20261027100000 ya está facturado.",
+      "No se puede borrar: la factura 20261027100000 está conciliada.",
+    ];
+    for (const m of normales) {
+      expect(errorParaPersonas(m)).toEqual({ texto: m, detalle: null });
+    }
+    const otra = "Las imágenes necesitan la migración 20261020100000_imagenes.";
+    expect(errorParaPersonas(otra).texto).toBe(AVISO_SIN_ACTIVAR);
   });
 
   it("no hay fila cuando se esperaba una", () => {
