@@ -250,8 +250,8 @@ function Agenda() {
     return (
       <EstadoVacio
         icono={CalendarDays}
-        titulo="La Agenda todavía no está en la base"
-        descripcion="Falta aplicar la migración 20261116100000_agenda. Cuando esté, aquí saldrán las tareas."
+        titulo="La Agenda todavía no está activada"
+        descripcion="Esta parte aún no está activada. Avisa a Javier."
       />
     );
   }
