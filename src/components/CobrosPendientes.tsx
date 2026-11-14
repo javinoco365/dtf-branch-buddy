@@ -118,10 +118,25 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
       for (const c of cobros) {
         cobradoDe.set(c.pedido_id, (cobradoDe.get(c.pedido_id) ?? 0) + Number(c.importe));
       }
-      return filas.map((f): Factura => {
-        const cobrado = f.pedido_id ? (cobradoDe.get(f.pedido_id) ?? 0) : 0;
-        return { ...f, cobrado, pendiente: pendienteDeFactura({ ...f, cobrado }) };
-      });
+      // Los pedidos cancelados no se deben: su factura no sale en pendientes.
+      const { data: cancelados, error: errCancelados } = await leerPorIds<{ id: string }>(
+        pedidos,
+        (trozo, a, b) =>
+          tabla(supabase, "pedidos")
+            .select("id")
+            .in("id", trozo)
+            .eq("estado", "cancelado")
+            .order("id")
+            .range(a, b),
+      );
+      if (errCancelados) throw new Error(errCancelados.message);
+      const pedidoCancelado = new Set(cancelados.map((p) => p.id));
+      return filas
+        .filter((f) => !f.pedido_id || !pedidoCancelado.has(f.pedido_id))
+        .map((f): Factura => {
+          const cobrado = f.pedido_id ? (cobradoDe.get(f.pedido_id) ?? 0) : 0;
+          return { ...f, cobrado, pendiente: pendienteDeFactura({ ...f, cobrado }) };
+        });
     },
   });
 

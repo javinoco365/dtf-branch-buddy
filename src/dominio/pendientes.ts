@@ -93,6 +93,17 @@ export const FILTRO_PENDIENTES_TODO: FiltroPendientes = {
   soloParciales: false,
 };
 
+/**
+ * Solo los pedidos vivos: un pedido cancelado no se debe, aunque la vista lo
+ * traiga (un cancelado sin fecha de cancelación se colaba). Decisión de
+ * Javier (14-11-2026): ni en pedidos pendientes ni en cobros pendientes.
+ */
+export function pendientesVivos<T extends Pick<PedidoPendiente, "estado">>(
+  pedidos: readonly T[],
+): T[] {
+  return pedidos.filter((p) => p.estado !== "cancelado");
+}
+
 export function filtrarPendientes<T extends PedidoPendiente>(
   pedidos: readonly T[],
   f: FiltroPendientes,

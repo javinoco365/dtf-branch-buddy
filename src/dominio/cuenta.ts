@@ -40,7 +40,7 @@ import {
   variacion,
   type PedidoResumen,
 } from "./kpis";
-import type { GastoFijo, Venta } from "./gerencia";
+import { textilSinCosteDeRopa, type GastoFijo, type Venta } from "./gerencia";
 import { costeEnvio } from "./resumen-diario";
 import {
   cobrosDeLinea,
@@ -486,9 +486,8 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
   const netas = ventasSinPortes - devuelto;
 
   // 7. Producción: DTF y UV con su coste congelado, y la ropa del textil.
-  const textilSinCoste = ventas.filter(
-    (v) => v.canal === "textil" && v.coste_textil == null,
-  ).length;
+  // Solo los que llevan ropa del almacén: uno sin prendas propias no tiene coste de ropa.
+  const textilSinCoste = ventas.filter(textilSinCosteDeRopa).length;
   const produccion =
     costeProduccion(ventas, e.costeMetroActual, e.costeUvActual ?? COSTE_UV_POR_DEFECTO) +
     ventas.reduce((s, v) => s + num(v.coste_textil), 0);

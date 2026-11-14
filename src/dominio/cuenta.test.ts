@@ -901,3 +901,33 @@ describe("cuadrarConTotal (columnas que suman el total)", () => {
     }
   });
 });
+
+describe("textil sin ropa del almacén", () => {
+  const textil = (lleva_ropa?: boolean) =>
+    venta({
+      id: "tx",
+      canal: "textil",
+      metros_total: 0,
+      coste_textil: null,
+      envio: 0,
+      subtotal: 50,
+      iva: 10.5,
+      total: 60.5,
+      ...(lleva_ropa === undefined ? {} : { lleva_ropa }),
+    });
+
+  it("si no se marcó ninguna prenda, no falta coste: el margen no es estimado", () => {
+    const c = calcularCuenta(entrada({ ventas: [textil(false)] }));
+    expect(c.coste_produccion).toEqual({ valor: 0 });
+    expect(c.margen_bruto.estimado).toBeFalsy();
+  });
+
+  it("si lleva prendas y aún no han salido del almacén, sí es estimado", () => {
+    const c = calcularCuenta(entrada({ ventas: [textil(true)] }));
+    expect(c.coste_produccion.estimado).toBe(true);
+  });
+
+  it("sin saberlo, se supone que lleva (como antes)", () => {
+    expect(calcularCuenta(entrada({ ventas: [textil()] })).coste_produccion.estimado).toBe(true);
+  });
+});

@@ -40,7 +40,7 @@ import {
   type PedidoTextilResumen,
   type Venta,
 } from "@/dominio/gerencia";
-import type { PedidoPendiente } from "@/dominio/pendientes";
+import { pendientesVivos, type PedidoPendiente } from "@/dominio/pendientes";
 import type { VentaCliente } from "@/dominio/clientela";
 import type { PresupuestoResumen } from "@/dominio/comercial";
 import { ESTADOS_ABIERTOS, type EnvioPedido, type PedidoTaller } from "@/dominio/produccion";
@@ -124,7 +124,34 @@ function useTextilPeriodo(rango: RangoFechas, { activo = true }: OpcionesLectura
         movs.push(...((r.data ?? []) as MovimientoCoste[]));
       }
       const costes = costePorPedido(movs);
-      return data.map((p) => ({ ...p, coste: conAlmacen ? (costes.get(p.id) ?? null) : null }));
+
+      // Qué pedidos llevan ropa: alguna línea con una prenda del almacén
+      // elegida. Los que no, no tienen coste de ropa (no es que falte).
+      const conPrenda = await enParalelo(
+        trozos(data.map((p) => p.id)),
+        PETICIONES_A_LA_VEZ,
+        async (trozo) =>
+          await tabla(supabase, "textil_pedido_items")
+            .select("pedido_id")
+            .in("pedido_id", trozo)
+            .not("stock_id", "is", null),
+      );
+      const conRopa = new Set<string>();
+      let sabeRopa = true;
+      for (const r of conPrenda) {
+        if (r.error) {
+          // Sin poder saberlo, se supone que lleva (como antes): el margen
+          // sale estimado en vez de darse por bueno sin coste.
+          sabeRopa = false;
+          break;
+        }
+        for (const f of (r.data ?? []) as { pedido_id: string }[]) conRopa.add(f.pedido_id);
+      }
+      return data.map((p) => ({
+        ...p,
+        coste: conAlmacen ? (costes.get(p.id) ?? null) : null,
+        ...(sabeRopa ? { lleva_ropa: conRopa.has(p.id) } : {}),
+      }));
     },
   });
 }
@@ -164,7 +191,7 @@ export function usePendientesCobro({ activo = true }: OpcionesLectura = {}) {
       );
       if (faltaLaTabla(error)) return { disponible: false, pedidos: [] };
       if (error) throw error;
-      return { disponible: true, pedidos: (data ?? []) as PedidoPendiente[] };
+      return { disponible: true, pedidos: pendientesVivos((data ?? []) as PedidoPendiente[]) };
     },
   });
 }
