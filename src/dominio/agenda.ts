@@ -97,6 +97,16 @@ export function horaDeMadrid(instante: string | Date): string {
   return partesMadrid(new Date(instante)).hora;
 }
 
+/**
+ * La franja de una tarea con hora: «10:00–11:00», o «10:00» si no tiene fin.
+ * Null si es de todo el día (cada pantalla lo dice a su manera).
+ */
+export function franjaDeTarea(t: Pick<Tarea, "todoElDia" | "inicio" | "fin">): string | null {
+  if (t.todoElDia) return null;
+  const inicio = horaDeMadrid(t.inicio);
+  return t.fin ? `${inicio}–${horaDeMadrid(t.fin)}` : inicio;
+}
+
 const DIA = /^(\d{4})-(\d{2})-(\d{2})$/;
 const HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -147,6 +157,15 @@ export function lunesDe(dia: string): string {
   if (!m) throw new Error(`Día no válido: ${dia}`);
   const semana = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
   return sumarDias(dia, -((semana + 6) % 7));
+}
+
+/**
+ * Milisegundos que faltan, desde `ahora`, para que empiece el día siguiente en
+ * Madrid. Con eso la Agenda cambia «hoy» a medianoche aunque siga abierta.
+ */
+export function msHastaMananaEnMadrid(ahora: Date): number {
+  const manana = sumarDias(diaDeMadrid(ahora), 1);
+  return Math.max(0, Date.parse(instanteDeMadrid(manana)) - ahora.getTime());
 }
 
 /** Días entre dos días (b - a). */
@@ -438,4 +457,50 @@ export function nombreCategoriaRepetido(
 ): boolean {
   const n = normalizar(nombre.trim());
   return categorias.some((c) => c.id !== exceptoId && normalizar(c.nombre.trim()) === n);
+}
+
+// ---------------------------------------------------------------------------
+// Personas y quién puede crear
+// ---------------------------------------------------------------------------
+
+/**
+ * Las personas de la Agenda: los socios, con `activo` = se le pueden mandar
+ * tareas y sale en los filtros. Solo cuenta quien usa el CRM: socio activo y
+ * con una cuenta asignada (socio_cuentas). Un socio sin cuenta (p. ej. uno que
+ * no entra al CRM) sigue en la lista para poner nombre a sus tareas antiguas,
+ * pero no se elige. `conCuenta` null: aún no se sabe qué socios tienen cuenta
+ * (falta la migración); entonces cuenta solo si el socio está activo.
+ */
+export function personasDeAgenda(
+  socios: { id: string; nombre: string; activo: boolean | null }[],
+  conCuenta: ReadonlySet<string> | null,
+): { id: string; nombre: string; activo: boolean }[] {
+  return socios.map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    activo: s.activo !== false && (conCuenta === null || conCuenta.has(s.id)),
+  }));
+}
+
+/** En qué punto está «¿Quién eres?», visto desde la Agenda. */
+export type SituacionPersona = "identificado" | "elegir" | "sin-personas" | "error";
+
+/**
+ * Por qué no se puede crear una tarea, o null si se puede. Sin persona no hay
+ * quién la firme (decisión de Javier): el botón sale desactivado con esto.
+ * Si el nivel no deja escribir también hay motivo; la pantalla decide si
+ * enseña el botón.
+ */
+export function motivoSinCrear(puedeEscribir: boolean, situacion: SituacionPersona): string | null {
+  if (!puedeEscribir) return "Tu nivel de acceso no deja crear tareas.";
+  switch (situacion) {
+    case "identificado":
+      return null;
+    case "elegir":
+      return "Elige quién eres (arriba a la derecha) para crear tareas.";
+    case "error":
+      return "No se ha podido saber quién eres. Reintenta para crear tareas.";
+    case "sin-personas":
+      return "Tu cuenta no tiene una persona asignada. Pide al administrador que te asigne en Ajustes › Usuarios.";
+  }
 }
