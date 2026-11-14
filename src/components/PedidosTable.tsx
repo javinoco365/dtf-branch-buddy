@@ -599,7 +599,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                       ? (tiendasLista.find((t) => t.id === tiendaConsulta)?.nombre ?? "la tienda")
                       : "todas las tiendas"}
                     , de todas las fechas, con líneas, cobros y documentos, en un JSON que se
-                    explica solo (para Claude)
+                    explica solo
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -720,8 +720,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
-            Hasta que se aplique, no se pueden registrar.
+            Esta parte aún no está activada. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -834,7 +833,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                   cabecera se montaba encima de la de Tienda. Por eso la tienda
                   va debajo del número y el método de pago debajo del total.
                   Si se añade una columna, que le quite el sitio a otra:
-                  Metros se lo quitó a Nº Pedido, Estado y Env., que tenían de
+                  Metros se lo quitó a Nº Pedido, Estado y Envío, que tenían de
                   sobra, y a Cliente.
 
                   Estos anchos se repiten en ColumnasPedidos, para la tabla
@@ -856,7 +855,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                         <TableHead className="w-28 text-right max-[1440px]:w-24">
                           Pendiente
                         </TableHead>
-                        <TableHead className="w-12">Env.</TableHead>
+                        <TableHead className="w-16">Envío</TableHead>
                         <TableHead className="w-12" />
                       </TableRow>
                     </TableHeader>
@@ -920,7 +919,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
                     <TableHead>Total</TableHead>
                     <TableHead>Cobrado</TableHead>
                     <TableHead>Pendiente</TableHead>
-                    <TableHead>Env.</TableHead>
+                    <TableHead>Envío</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -1108,7 +1107,7 @@ function ColumnasPedidos() {
       <col className="w-28 max-[1440px]:w-24" />
       <col className="w-28 max-[1440px]:w-24" />
       <col className="w-28 max-[1440px]:w-24" />
-      <col className="w-12" />
+      <col className="w-16" />
       <col className="w-12" />
     </colgroup>
   );
