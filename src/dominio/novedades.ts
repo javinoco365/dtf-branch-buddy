@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-nada-sin-querer",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Nada se pierde ni se hace sin querer",
+    resumen: "Lo que avisa al cliente o no tiene vuelta atrás se confirma antes.",
+    puntos: [
+      "Enviado o cancelado pregunta antes; si el correo o la web fallan, se avisa.",
+      "Si una lista no carga, lo dice y deja reintentar, en vez de salir vacía.",
+      "Cerrar un pedido, apunte o cobro a medias pregunta antes de descartarlo.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-quiere-factura",
     fecha: "2026-11-14",
     tipo: "nuevo",
