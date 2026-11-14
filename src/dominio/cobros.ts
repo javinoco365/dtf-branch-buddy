@@ -76,8 +76,14 @@ const num = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
 export function resumenCobros(
   total: number | string | null | undefined,
   cobros: readonly { importe: number | string | null | undefined }[],
+  /**
+   * Lo que ya no se debe: reembolsos de la web y la rebaja del importe real
+   * (pedido_devoluciones). Sin él, un pedido rebajado o reembolsado seguía
+   * saliendo como cobrado en parte.
+   */
+  devuelto: number | string | null | undefined = 0,
 ): ResumenCobros {
-  const t = redondear(num(total));
+  const t = redondear(num(total) - num(devuelto));
   const cobrado = redondear(cobros.reduce((s, c) => s + num(c.importe), 0));
   const pendiente = redondear(t - cobrado);
 
@@ -124,3 +130,65 @@ export function desglosarCobro(
 
 /** El identificador con el que el textil aparece entre las tiendas. */
 export const TIENDA_TEXTIL = { id: "textil-personalizado", nombre: "Textil personalizado" };
+
+// ---------------------------------------------------------------------------
+// El importe real de un pedido (rebaja)
+// ---------------------------------------------------------------------------
+
+/** Una devolución de un pedido: de la web (con su id de reembolso) o la rebaja. */
+export type DevolucionDePedido = {
+  importe: number | string | null;
+  motivo?: string | null;
+  woo_refund_id?: number | string | null;
+};
+
+/** Lo devuelto de un pedido, separado: reembolsos de la web y la rebaja del CRM. */
+export function devolucionesDelPedido(devs: readonly DevolucionDePedido[] | null | undefined): {
+  reembolsado: number;
+  rebaja: number;
+  motivoRebaja: string | null;
+} {
+  let reembolsado = 0;
+  let rebaja = 0;
+  let motivoRebaja: string | null = null;
+  for (const d of devs ?? []) {
+    if (d.woo_refund_id == null) {
+      rebaja += num(d.importe);
+      if (num(d.importe) > 0) motivoRebaja = d.motivo ?? null;
+    } else reembolsado += num(d.importe);
+  }
+  return { reembolsado: redondear(reembolsado), rebaja: redondear(rebaja), motivoRebaja };
+}
+
+/**
+ * Lo que se puede proponer como importe real (con IVA) de un pedido: el
+ * máximo (el total menos los reembolsos de la web), sin el envío (quien lo
+ * recogió en el local) y lo ya cobrado. Las propuestas que no cambian nada o
+ * no caben no salen.
+ */
+export function opcionesImporteReal(p: {
+  total: number | string | null | undefined;
+  /** El envío sin IVA, y la base con el envío dentro, para ponerle su IVA. */
+  envio: number | string | null | undefined;
+  base: number;
+  reembolsado: number;
+  cobrado: number;
+}): { maximo: number; sinEnvio: number | null; loCobrado: number | null } {
+  const total = num(p.total);
+  const maximo = redondear(total - p.reembolsado);
+  const envio = num(p.envio);
+  const envioConIva = envio > 0 && p.base > 0 ? redondear((envio * total) / p.base) : 0;
+  const sinEnvio = envioConIva > 0 ? redondear(maximo - envioConIva) : null;
+  const cobrado = redondear(p.cobrado);
+  return {
+    maximo,
+    sinEnvio: sinEnvio !== null && sinEnvio >= 0 && sinEnvio < maximo ? sinEnvio : null,
+    loCobrado: cobrado > 0 && cobrado < maximo ? cobrado : null,
+  };
+}
+
+/** Todo lo devuelto o rebajado de un pedido (lo que ya no se debe). */
+export function devolucionesTotal(devs: readonly DevolucionDePedido[] | null | undefined): number {
+  const d = devolucionesDelPedido(devs);
+  return redondear(d.reembolsado + d.rebaja);
+}

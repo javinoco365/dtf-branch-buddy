@@ -102,6 +102,7 @@ describe("leerListaPedidos", () => {
               _lineas: todas.slice(0, 1000),
               _cobros: [],
               _envios: [],
+              _devoluciones: [],
               _cliente: null,
               _tienda: { nombre: "Tienda Uno" },
               _docs: [],
@@ -111,6 +112,7 @@ describe("leerListaPedidos", () => {
               _lineas: lineas("p2", 3),
               _cobros: [],
               _envios: [],
+              _devoluciones: [],
               _cliente: null,
               _tienda: { nombre: "Tienda Uno" },
               _docs: [],
@@ -164,6 +166,7 @@ describe("leerListaPedidos", () => {
                 _cobros:
                   "cobros" in cambio ? Array.from({ length: cambio.cobros }, () => ({})) : [],
                 _envios: [],
+                _devoluciones: [],
                 _cliente: null,
                 _tienda: null,
                 _docs:
@@ -227,6 +230,7 @@ describe("leerListaPedidos", () => {
               _lineas: [],
               _cobros: [],
               _envios: [],
+              _devoluciones: [],
               _cliente: null,
               _tienda: null,
               _docs: docs,

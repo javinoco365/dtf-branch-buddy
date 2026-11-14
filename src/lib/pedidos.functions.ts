@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ivaDePedidoValido } from "@/dominio/pedido-formulario";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeBorrar, exigeEscribir } from "./permisos-middleware";
-import { faltaLaColumna, llamarRpc, tabla } from "./rpc";
+import { faltaLaColumna, faltaLaFuncion, llamarRpc, llamarRpcConError, tabla } from "./rpc";
 import { esAdminActivo, esMiembroTienda } from "./acceso";
 import { leerListaPedidos } from "./pedidos-lista";
 import { leerCredencialesWoo, autorizacionWoo } from "./woo-credenciales";
@@ -569,4 +569,39 @@ export const listTiendasParaPedidos = createServerFn({ method: "GET" })
       .order("nombre");
     if (error) throw error;
     return { tiendas: data ?? [] };
+  });
+
+/**
+ * Fija el importe real (con IVA) de un pedido de tienda con una rebaja: el
+ * envío que no se cobró porque se recogió en el local, un precio acordado…
+ * Lo hace la base (pedido_ajustar_importe, 20261119110000): una rebaja por
+ * pedido, con su motivo y la fecha del pedido. WooCommerce no se toca.
+ */
+export const ajustarImportePedido = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d) =>
+    z
+      .object({
+        pedido_id: z.string().uuid(),
+        importe_real: z.number().nonnegative().max(1_000_000),
+        motivo: z.string().trim().min(1, "Di por qué cambia el importe").max(200),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error, data: rebaja } = await llamarRpcConError<number>(
+      context.supabase,
+      "pedido_ajustar_importe",
+      {
+        _usuario_id: context.userId,
+        _pedido_id: data.pedido_id,
+        _importe_real: data.importe_real,
+        _motivo: data.motivo,
+      },
+    );
+    if (faltaLaFuncion(error)) {
+      throw new Error("Esta parte aún no está activada. Avisa a Javier.");
+    }
+    if (error) throw new Error(error.message);
+    return { rebaja: Number(rebaja ?? 0) };
   });

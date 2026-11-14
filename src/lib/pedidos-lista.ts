@@ -211,6 +211,7 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
     { data: tracking },
     { data: cobros, error: errCobros },
     documentos,
+    { data: devoluciones },
   ] = await Promise.all([
     lineasDePedidos(supabase, ids),
     supabase.from("tiendas").select("id, nombre").in("id", tiendaIds),
@@ -240,6 +241,13 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
         .range(a, b),
     ),
     documentosDePedidos(supabase, ids),
+    leerPorIds<any>(ids, (trozo, a, b) =>
+      tabla(supabase, "pedido_devoluciones")
+        .select("pedido_id, importe, motivo, woo_refund_id")
+        .in("pedido_id", trozo)
+        .order("id")
+        .range(a, b),
+    ),
   ]);
 
   // Sin la migración de cobros, la lista sigue saliendo; solo sin cobros.
@@ -248,6 +256,7 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
 
   const lineasDe = porPedido<any>(items);
   const seguimientoDe = porPedido<any>(tracking);
+  const devolucionesDe = porPedido<any>(devoluciones);
   const cobrosDe = porPedido(cobros);
   const fichas = new Map<string, any>(clientes.map((c) => [c.id, c]));
   const nombresTienda = new Map<string, string>(
@@ -268,6 +277,7 @@ export async function leerListaPedidosPorPartes(supabase: any, data: FiltroLista
         items: lineasDe.get(p.id) ?? [],
         tracking: seguimientoDe.get(p.id)?.[0] ?? null,
         cobros: cobrosDe.get(p.id) ?? [],
+        devoluciones: devolucionesDe.get(p.id) ?? [],
         documento: documentos.get(p.id) ?? null,
       };
     }),
@@ -287,6 +297,8 @@ const CAMPOS_CON_RELACIONES = [
   "*",
   "_lineas:pedido_items(*)",
   "_cobros:cobros(*)",
+  // Reembolsos de la web y la rebaja del importe real: lo que ya no se debe.
+  "_devoluciones:pedido_devoluciones(importe, motivo, woo_refund_id)",
   "_envios:enlaces_seguimiento(id, pedido_id, transportista, url, codigo_seguimiento)",
   "_cliente:clientes(id, nombre, email)",
   "_tienda:tiendas(nombre)",
@@ -362,7 +374,7 @@ export async function leerListaPedidos(supabase: any, data: FiltroListaPedidos) 
   // tope, como antes: nunca una lista con cobros o documentos de menos.
   const incompleto = pedidos.some(
     (p) =>
-      ![p._lineas, p._cobros, p._envios, p._docs].every(Array.isArray) ||
+      ![p._lineas, p._cobros, p._envios, p._docs, p._devoluciones].every(Array.isArray) ||
       lleno(p._cobros) ||
       lleno(p._docs) ||
       p._docs.some((d) => !Array.isArray(d._rect) || lleno(d._rect)),
@@ -391,7 +403,7 @@ export async function leerListaPedidos(supabase: any, data: FiltroListaPedidos) 
 
   return {
     pedidos: pedidos.map((fila) => {
-      const { _lineas, _cobros, _envios, _cliente, _tienda, _docs, ...resto } = fila;
+      const { _lineas, _cobros, _envios, _cliente, _tienda, _docs, _devoluciones, ...resto } = fila;
       // Las columnas del pedido, con el mismo tipo que en la lectura por partes.
       const p = resto as FechaPedido & Record<string, any>;
       return {
@@ -402,6 +414,7 @@ export async function leerListaPedidos(supabase: any, data: FiltroListaPedidos) 
         items: lineasDe.get(p.id) ?? _lineas ?? [],
         tracking: _envios?.[0] ?? null,
         cobros: _cobros ?? [],
+        devoluciones: _devoluciones ?? [],
         documento: documentoDeLista(_docs ?? []),
       };
     }),

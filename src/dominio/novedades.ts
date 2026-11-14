@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-importe-real",
+    fecha: "2026-11-14",
+    tipo: "nuevo",
+    titulo: "Ajustar el importe real de un pedido",
+    resumen: "Si la venta real no es el total (sin envío, precio acordado), lo dices tú.",
+    puntos: [
+      "Toca «Parcial» o «Cobros» del pedido y pulsa «Ajustar importe».",
+      "Botones rápidos: «Sin envío» y «Lo cobrado». Pide un motivo.",
+      "Baja la venta y lo pendiente; la web no se toca.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-hoy-con-lista",
     fecha: "2026-11-14",
     tipo: "mejora",
