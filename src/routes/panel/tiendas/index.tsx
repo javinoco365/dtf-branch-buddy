@@ -42,6 +42,7 @@ import {
 } from "@/lib/tiendas.functions";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/tiendas/")({
   head: () => ({ meta: [{ title: "Tiendas · DTF Culture" }] }),
@@ -105,7 +106,13 @@ function TiendasIndex() {
   const [editando, setEditando] = useState<any>(null);
   const [borrando, setBorrando] = useState<any>(null);
 
-  const { data: tiendas = [] } = useQuery({
+  const {
+    data: tiendas = [],
+    isLoading: cargandoTiendas,
+    error: errorTiendas,
+    refetch: recargarTiendas,
+    isFetching: recargandoTiendas,
+  } = useQuery({
     queryKey: ["tiendas"],
     queryFn: async () => {
       const { data, error } = await supabase.from("tiendas").select("*").order("nombre");
@@ -243,7 +250,21 @@ function TiendasIndex() {
             </CardContent>
           </Card>
         ))}
-        {tiendas.length === 0 && (
+        {cargandoTiendas && (
+          <Card className="md:col-span-2 lg:col-span-3">
+            <CardContent className="text-center py-12 text-muted-foreground">Cargando…</CardContent>
+          </Card>
+        )}
+        {!cargandoTiendas && errorTiendas && (
+          <ErrorCarga
+            className="md:col-span-2 lg:col-span-3"
+            error={errorTiendas}
+            que="las tiendas"
+            onReintentar={recargarTiendas}
+            reintentando={recargandoTiendas}
+          />
+        )}
+        {!cargandoTiendas && !errorTiendas && tiendas.length === 0 && (
           <Card className="md:col-span-2 lg:col-span-3">
             <CardContent className="text-center py-12 text-muted-foreground">
               No hay tiendas. {isAdmin && "Crea la primera."}

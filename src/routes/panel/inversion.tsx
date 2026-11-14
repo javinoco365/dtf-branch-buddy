@@ -36,7 +36,8 @@ import { listarCatalogosCaja } from "@/lib/caja.functions";
 import { InversionFormDialog } from "@/components/InversionFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/inversion")({
   head: () => ({ meta: [{ title: "Inversión · DTF Culture" }] }),
@@ -53,7 +54,7 @@ function InversionPage() {
   const catalogos = useServerFn(listarCatalogosCaja);
   const borrar = useServerFn(borrarInversion);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["inversion"],
     queryFn: () => listar(),
   });
@@ -173,7 +174,7 @@ function InversionPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {socios.length === 0 && (
+              {!isLoading && !error && socios.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Todavía no hay ninguna inversión anotada.
@@ -284,11 +285,13 @@ function InversionPage() {
                 </TableRow>
               )}
               {error && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-destructive py-8">
-                    {mensajeDeError(error)}
-                  </TableCell>
-                </TableRow>
+                <ErrorCarga
+                  error={error}
+                  que="los apuntes de inversión"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={6}
+                />
               )}
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>

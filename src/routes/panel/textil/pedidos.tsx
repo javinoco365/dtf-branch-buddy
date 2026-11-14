@@ -82,6 +82,7 @@ import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -114,7 +115,13 @@ function PedidosPage() {
   const empFn = useServerFn(getEmpresaGlobal);
   const stockFn = useServerFn(listStock);
 
-  const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS_TEXTIL);
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -356,10 +363,23 @@ function PedidosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtrados.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="los pedidos"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={9}
+                />
+              )}
+              {(isLoading || (!error && filtrados.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? "Sin pedidos." : "Ningún pedido cumple los filtros."}
+                    {isLoading
+                      ? "Cargando…"
+                      : data.length === 0
+                        ? "Sin pedidos."
+                        : "Ningún pedido cumple los filtros."}
                   </TableCell>
                 </TableRow>
               )}

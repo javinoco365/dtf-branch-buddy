@@ -76,6 +76,7 @@ import {
 import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -92,7 +93,13 @@ function StockPage() {
   const listFn = useServerFn(listStock);
   const upsertFn = useServerFn(upsertStockItem);
   const delFn = useServerFn(deleteStockItem);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error: errorStock,
+    refetch: recargarStock,
+    isFetching: recargandoStock,
+  } = useQuery({
     queryKey: ["textil-stock"],
     queryFn: () => listFn(),
   });
@@ -374,7 +381,14 @@ function StockPage() {
           </CardContent>
         </Card>
       )}
-      {isLoading || data.length === 0 || curva.filas.length === 0 ? (
+      {!isLoading && errorStock ? (
+        <ErrorCarga
+          error={errorStock}
+          que="las existencias"
+          onReintentar={recargarStock}
+          reintentando={recargandoStock}
+        />
+      ) : isLoading || data.length === 0 || curva.filas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             {isLoading
@@ -1096,7 +1110,13 @@ const conSigno = (n: number) => `${n > 0 ? "+" : ""}${numero(n || 0, 0)}`;
 /** El libro de una variante: de dónde sale cada unidad que tiene o tuvo. */
 function HistorialDialog({ item, onClose }: any) {
   const listFn = useServerFn(listMovimientosStock);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["stock-movimientos", item?.id],
     queryFn: () => listFn({ data: { stock_id: item.id } }),
     enabled: !!item,
@@ -1119,6 +1139,14 @@ function HistorialDialog({ item, onClose }: any) {
         )}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : error ? (
+          <ErrorCarga
+            error={error}
+            que="los movimientos"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         ) : data.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin movimientos.</p>
         ) : (

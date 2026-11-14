@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { faltaLaColumna, tabla } from "@/lib/rpc";
@@ -67,6 +67,7 @@ import {
 } from "@/dominio/sumatorios-pedidos";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -146,7 +147,13 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [borrando, setBorrando] = useState<Cliente | null>(null);
 
-  const { data: clientes = [], isLoading } = useQuery({
+  const {
+    data: clientes = [],
+    isLoading,
+    error: errorClientes,
+    refetch: recargarClientes,
+    isFetching: recargandoClientes,
+  } = useQuery({
     queryKey: ["clientes-empresa"],
     queryFn: async () => {
       // tabla() y no .from(): types.ts está generado y todavía no conoce
@@ -374,7 +381,23 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && filtrados.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isLoading && errorClientes && (
+                <ErrorCarga
+                  error={errorClientes}
+                  que="los clientes"
+                  onReintentar={recargarClientes}
+                  reintentando={recargandoClientes}
+                  colSpan={7}
+                />
+              )}
+              {!isLoading && !errorClientes && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {clientes.length === 0
@@ -632,7 +655,7 @@ function ClienteDetalle({
     },
   });
 
-  const { data: pedidos = [] } = useQuery({
+  const qPedidos = useQuery({
     queryKey: ["cliente-pedidos", clienteId],
     queryFn: async (): Promise<PedidoDelCliente[]> => {
       // Con lo del DTF UV, para separar lo comprado de cada línea (camposUv):
@@ -658,10 +681,11 @@ function ClienteDetalle({
   });
   // Lo comprado de cada línea (por-linea.ts): sin cancelados, DTF + UV = lo de
   // las tiendas; con el textil, «Total pedidos».
+  const pedidos = useMemo(() => qPedidos.data ?? [], [qPedidos.data]);
   const porLinea = useMemo(() => cifrasPorLinea(pedidos), [pedidos]);
 
   // El mismo cliente, sus pedidos del textil: es la razón de tener una sola ficha.
-  const { data: pedidosTextil = [] } = useQuery({
+  const qPedidosTextil = useQuery({
     queryKey: ["cliente-pedidos-textil", clienteId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -674,7 +698,7 @@ function ClienteDetalle({
     },
   });
 
-  const { data: facturas = [] } = useQuery({
+  const qFacturas = useQuery({
     queryKey: ["cliente-facturas", clienteId],
     queryFn: async () => {
       // sustituye_a_id y rectifica_a_id, para que el total no cuente dos veces
@@ -708,7 +732,7 @@ function ClienteDetalle({
 
   // Sus facturas y tickets del textil, con los mismos enlaces de canje y
   // rectificación: suman en la misma tabla y con las mismas reglas.
-  const { data: facturasTextil = [] } = useQuery({
+  const qFacturasTextil = useQuery({
     queryKey: ["cliente-facturas-textil", clienteId],
     queryFn: async () => {
       const { data, error } = await leerTodas<{
@@ -731,6 +755,9 @@ function ClienteDetalle({
       return data;
     },
   });
+  const pedidosTextil = qPedidosTextil.data ?? [];
+  const facturas = qFacturas.data ?? [];
+  const facturasTextil = qFacturasTextil.data ?? [];
 
   if (!cliente) return null;
 
@@ -834,6 +861,7 @@ function ClienteDetalle({
           titulo="Pedidos de las tiendas"
           icono={<ShoppingCart className="h-4 w-4" />}
           vacio="Sin pedidos en las tiendas"
+          consultas={[qPedidos]}
           pie={{
             texto: describirPedidos(totales.tienda.pedidos, totales.tienda.cancelados),
             total: totales.tienda.total,
@@ -851,6 +879,7 @@ function ClienteDetalle({
           titulo="Pedidos del textil"
           icono={<Shirt className="h-4 w-4" />}
           vacio="Sin pedidos del textil"
+          consultas={[qPedidosTextil]}
           pie={{
             texto: describirPedidos(totales.textil.pedidos, totales.textil.cancelados),
             total: totales.textil.total,
@@ -867,6 +896,7 @@ function ClienteDetalle({
           titulo="Facturas"
           icono={<Receipt className="h-4 w-4" />}
           vacio="Sin facturas"
+          consultas={[qFacturas, qFacturasTextil]}
           pie={{
             texto: describirDocumentos(totales.facturas),
             total: totales.facturas.total,
@@ -902,12 +932,15 @@ function Historial({
   titulo,
   icono,
   vacio,
+  consultas,
   pie,
   filas,
 }: {
   titulo: string;
   icono: React.ReactNode;
   vacio: string;
+  /** Las lecturas de las que salen las filas: cargando, error o vacío. */
+  consultas: Pick<UseQueryResult, "isLoading" | "error" | "refetch" | "isFetching">[];
   /**
    * El total de la tabla, ya calculado con las reglas de cada lista: no es la
    * suma de las filas a secas (los cancelados y los borradores se ven pero no
@@ -924,6 +957,8 @@ function Historial({
     etiqueta?: React.ReactNode;
   }[];
 }) {
+  const cargando = consultas.some((c) => c.isLoading);
+  const fallida = consultas.find((c) => c.error);
   return (
     <div>
       <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
@@ -954,7 +989,23 @@ function Historial({
                   <TableCell className="text-right tabular-nums">{eur(f.total)}</TableCell>
                 </TableRow>
               ))}
-              {filas.length === 0 && (
+              {cargando && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!cargando && fallida && (
+                <ErrorCarga
+                  error={fallida.error}
+                  que={titulo.toLowerCase()}
+                  onReintentar={() => consultas.forEach((c) => c.error && c.refetch())}
+                  reintentando={consultas.some((c) => c.isFetching)}
+                  colSpan={4}
+                />
+              )}
+              {!cargando && !fallida && filas.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
                     {vacio}

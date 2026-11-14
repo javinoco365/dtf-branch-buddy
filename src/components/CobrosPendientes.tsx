@@ -28,6 +28,7 @@ import {
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { useServerFn } from "@tanstack/react-start";
 import { cambiarEstadoCobro } from "@/lib/facturas.functions";
 
@@ -61,7 +62,13 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   const [busqueda, setBusqueda] = useTextoDiferido(filtros.fq, (fq) => cambiar({ fq }));
   const { data: tiendasLista = [] } = useTiendas();
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["cobros-pendientes", tiendaId ?? "global"],
     queryFn: async () => {
       let q = supabase
@@ -249,7 +256,26 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                   </TableRow>
                 );
               })}
-              {!isLoading && filtradas.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell
+                    colSpan={tiendaId ? 7 : 8}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {error && !isLoading && (
+                <ErrorCarga
+                  error={error}
+                  que="los cobros pendientes"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={tiendaId ? 7 : 8}
+                />
+              )}
+              {!isLoading && !error && filtradas.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={tiendaId ? 7 : 8}

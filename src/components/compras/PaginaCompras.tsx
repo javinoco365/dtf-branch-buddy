@@ -136,6 +136,7 @@ import { totalesCompras } from "@/dominio/sumatorios-facturas";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -199,7 +200,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       setAbriendoRevision(null);
     }
   }
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["compras", modo],
     queryFn: () => listFn({ data: { soloTextil: !general } }),
   });
@@ -837,7 +838,16 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                   <TableCell colSpan={general ? 8 : 7}>Cargando…</TableCell>
                 </TableRow>
               )}
-              {!isLoading && compras.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="las compras"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={general ? 8 : 7}
+                />
+              )}
+              {!isLoading && !error && compras.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={general ? 8 : 7}
@@ -1813,7 +1823,10 @@ function textoRegistrada(r: {
 function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
   const qc = useQueryClient();
   const listFn = useServerFn(listProveedores);
-  const { data, isLoading } = useQuery({ queryKey: ["proveedores"], queryFn: () => listFn() });
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ["proveedores"],
+    queryFn: () => listFn(),
+  });
   const guardarFn = useServerFn(guardarProveedor);
   const [editando, setEditando] = useState<{
     id: string;
@@ -1846,6 +1859,14 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
         </DialogHeader>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : error ? (
+          <ErrorCarga
+            error={error}
+            que="los proveedores"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         ) : data?.disponible === false ? (
           <p className="text-sm text-muted-foreground">{AVISO_MIGRACION_ESCANER}</p>
         ) : proveedores.length === 0 ? (

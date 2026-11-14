@@ -29,6 +29,7 @@ import {
   type PedidoParaTicket,
 } from "@/lib/facturas.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** De cuántos en cuántos se emite, como en «Facturar» de Pedidos. */
 const TANDA = 20;
@@ -66,7 +67,7 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
   const [resultado, setResultado] = useState<ResultadoTandas | null>(null);
 
   const clave = ["pedidos-sin-documento", tiendaId, desde, hasta] as const;
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: clave,
     queryFn: () => listarFn({ data: { tienda_id: tiendaId, desde, hasta } }),
     enabled: abierto && desde <= hasta,
@@ -178,9 +179,13 @@ export function TicketsPendientesDialog({ tiendaId }: { tiendaId: string }) {
 
         {isLoading && <p className="py-4 text-center text-sm text-muted-foreground">Buscando…</p>}
         {error && (
-          <p className="py-4 text-center text-sm text-destructive">
-            {(error as Error).message || "No se pudo leer los pedidos"}
-          </p>
+          <ErrorCarga
+            error={error}
+            que="los pedidos sin ticket"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         )}
 
         {resultado && (

@@ -127,13 +127,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import {
   consecuenciasBorrarPedido,
   efectosCambioEstado,
   resumenCambioEstado,
 } from "@/dominio/cambio-estado-pedido";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export type { Direccion };
 
@@ -322,7 +323,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
 
   const queryKey = ["pedidos", tiendaConsulta ?? "all", desde.toISOString(), hasta.toISOString()];
 
-  const { data, isLoading, error, isPlaceholderData } = useQuery({
+  const { data, isLoading, error, isPlaceholderData, refetch, isFetching } = useQuery({
     queryKey,
     // Al cambiar de periodo, los pedidos del anterior hasta que llegan los
     // nuevos: avisados, atenuados y sin poder actuar sobre ellos (abajo). Al
@@ -737,12 +738,12 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
         {/* Si la lectura falla se dice, en vez de «Sin pedidos en este
             periodo», que parecería que no hay ventas. */}
         {error && (
-          <Card>
-            <CardContent className="py-6 text-sm text-destructive">
-              {data ? "No se han podido actualizar" : "No se han podido cargar"} los pedidos:{" "}
-              {mensajeDeError(error)}
-            </CardContent>
-          </Card>
+          <ErrorCarga
+            error={error}
+            que={data ? "los pedidos al día (se ven los de antes)" : "los pedidos"}
+            onReintentar={refetch}
+            reintentando={isFetching}
+          />
         )}
         {!isLoading && !error && grupos.length === 0 && (
           <Card>

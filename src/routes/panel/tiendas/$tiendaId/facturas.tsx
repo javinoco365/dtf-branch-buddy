@@ -85,6 +85,7 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -129,7 +130,13 @@ function Facturas() {
       (await supabase.from("tiendas").select("*").eq("id", tiendaId).maybeSingle()).data,
   });
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error: errorFacturas,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["facturas", tiendaId],
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     queryFn: async () =>
@@ -489,7 +496,23 @@ function Facturas() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && facturas.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isLoading && errorFacturas && (
+                <ErrorCarga
+                  error={errorFacturas}
+                  que="las facturas"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={8}
+                />
+              )}
+              {!isLoading && !errorFacturas && facturas.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />

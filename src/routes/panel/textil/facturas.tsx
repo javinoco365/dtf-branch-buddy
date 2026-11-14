@@ -50,6 +50,7 @@ import { totalesDocumentos } from "@/dominio/sumatorios";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -61,7 +62,13 @@ function FacturasPage() {
   const listFn = useServerFn(listTextilFacturas);
   const [borrando, setBorrando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
-  const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
   // Por dónde va cada serie: solo la última se puede borrar.
   const contadoresFn = useServerFn(contadoresDeSerie);
   const { data: contadores = [] } = useQuery({
@@ -254,10 +261,19 @@ function FacturasPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="las facturas"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
+              )}
+              {(isLoading || (!error && data.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Sin facturas.
+                    {isLoading ? "Cargando…" : "Sin facturas."}
                   </TableCell>
                 </TableRow>
               )}
