@@ -21,7 +21,7 @@ describe("celdaSegura", () => {
   });
 
   it("no toca números ni texto que solo es un número", () => {
-    expect(celdaSegura(-12.5)).toBe("-12.5");
+    expect(celdaSegura(-12.5)).toBe("-12,5");
     expect(celdaSegura("-12,50")).toBe("-12,50");
     expect(celdaSegura("+34")).toBe("+34");
     expect(celdaSegura("-1.234,56 €")).toBe("-1.234,56 €");
@@ -46,6 +46,10 @@ describe("celdaCSV y filasCSV", () => {
         ["Nombre", "Total"],
         ["=MAL()", -3],
       ]),
-    ).toBe(`"Nombre","Total"\n"'=MAL()","-3"`);
+    ).toBe(`"Nombre";"Total"\n"'=MAL()";"-3"`);
+  });
+
+  it("con punto y coma y coma decimal, como lo abre Excel en español", () => {
+    expect(filasCSV([["Base", 1234.5]])).toBe(`"Base";"1234,5"`);
   });
 });

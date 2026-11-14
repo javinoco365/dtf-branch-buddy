@@ -19,10 +19,13 @@
 const INICIO_PELIGROSO = /^[=+\-@\t\r]/;
 const SOLO_NUMERO = /^[+-]?\d[\d.,\s]*(%|\s?€)?$/;
 
-/** El texto de la celda, neutralizado si podría leerse como fórmula. */
+/**
+ * El texto de la celda, neutralizado si podría leerse como fórmula. Los
+ * números, con coma decimal: es lo que entiende Excel en español.
+ */
 export function celdaSegura(valor: string | number | null | undefined): string {
   if (valor === null || valor === undefined) return "";
-  if (typeof valor === "number") return String(valor);
+  if (typeof valor === "number") return String(valor).replace(".", ",");
   if (!INICIO_PELIGROSO.test(valor)) return valor;
   if (SOLO_NUMERO.test(valor)) return valor;
   return `'${valor}`;
@@ -33,7 +36,13 @@ export function celdaCSV(valor: string | number | null | undefined): string {
   return `"${celdaSegura(valor).replace(/"/g, '""')}"`;
 }
 
-/** Las filas como texto CSV (sin BOM), separadas por coma y salto de línea. */
+/**
+ * El separador de columnas: punto y coma, el de Excel en español (con la coma
+ * decimal, una coma separando columnas partía cada importe en dos).
+ */
+export const SEPARADOR_CSV = ";";
+
+/** Las filas como texto CSV (sin BOM), separadas por punto y coma y salto de línea. */
 export function filasCSV(filas: (string | number | null | undefined)[][]): string {
-  return filas.map((f) => f.map(celdaCSV).join(",")).join("\n");
+  return filas.map((f) => f.map(celdaCSV).join(SEPARADOR_CSV)).join("\n");
 }
