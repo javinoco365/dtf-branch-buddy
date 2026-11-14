@@ -11,6 +11,7 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
+import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { eur } from "@/lib/format";
 
 /** Lo cobrado cada semana; la última, la actual, en color lleno. */
@@ -18,27 +19,22 @@ export function CobradoPorSemana({ datos }: { datos: { semana: string; total: nu
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={datos}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid {...REJILLA} />
         <XAxis
+          {...EJE}
           dataKey="semana"
-          tick={{ fontSize: 10 }}
+          tick={{ ...TEXTO_EJE, fontSize: 10 }}
           interval={0}
           angle={-30}
           textAnchor="end"
           height={50}
         />
         <YAxis
-          tick={{ fontSize: 11 }}
+          {...EJE}
+          tick={TEXTO_EJE}
           tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
         />
-        <Tooltip
-          formatter={(v: number) => eur(v)}
-          contentStyle={{
-            background: "var(--color-card)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-          }}
-        />
+        <Tooltip {...BOCADILLO} formatter={(v: number) => eur(v)} />
         <Bar dataKey="total" radius={[6, 6, 0, 0]}>
           {datos.map((_, i) => (
             <Cell

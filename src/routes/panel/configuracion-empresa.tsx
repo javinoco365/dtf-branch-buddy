@@ -14,6 +14,7 @@ import { useMutation } from "@tanstack/react-query";
 import { leerEstadoSeries, fijarInicioSerie, type EstadoSerie } from "@/lib/facturas.functions";
 import { useAuth } from "@/lib/auth-context";
 import { avisarError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/configuracion-empresa")({
   head: () => ({ meta: [{ title: "Datos de la empresa · DTF Culture" }] }),
@@ -155,16 +156,10 @@ function EmpresaPage() {
         </Button>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Building2 className="h-6 w-6" />
-          Datos de la empresa
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Estos datos son únicos para toda la SL. Se aplican automáticamente a todas las tiendas
-          (sucursales) que crees, así como a sus facturas.
-        </p>
-      </div>
+      <CabeceraPantalla
+        icono={<Building2 className="h-6 w-6" />}
+        subtitulo="Estos datos son únicos para toda la SL. Se aplican automáticamente a todas las tiendas (sucursales) que crees, así como a sus facturas."
+      />
 
       <Card>
         <CardHeader>
@@ -255,7 +250,7 @@ function EmpresaPage() {
                     6.1.a), y los tickets (facturas simplificadas) también van aparte: los tres
                     prefijos tienen que ser distintos.
                   </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                  <p className="text-xs text-aviso-atencion-texto mt-2">
                     Cambiar un prefijo abre una serie nueva que empieza otra vez por 1. No lo toques
                     con facturas ya emitidas este año.
                   </p>

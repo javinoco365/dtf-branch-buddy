@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { mensajeDeError } from "@/lib/errores";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -23,7 +24,7 @@ export class PedidosErrorBoundary extends Component<
         <Card>
           <CardContent className="p-6 space-y-3">
             <p className="text-sm font-medium">No se pudo cargar la tabla de pedidos.</p>
-            <p className="text-xs text-muted-foreground">{this.state.error.message}</p>
+            <p className="text-xs text-muted-foreground">{mensajeDeError(this.state.error)}</p>
             <Button size="sm" variant="outline" onClick={() => this.setState({ error: null })}>
               Reintentar
             </Button>

@@ -32,6 +32,24 @@ import { createPedidoManual, updatePedido } from "@/lib/pedidos.functions";
 import type { PedidoFila } from "@/components/PedidosTable";
 import { eur } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  avisosAntesDeGuardar,
+  leerPedidoEscrito,
+  lineasParaTotales,
+  type LineaEscrita,
+} from "@/dominio/pedido-formulario";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 import { mismaDireccion, normalizarDireccion, type Direccion } from "@/dominio/direcciones";
 import { avisarError } from "@/lib/errores";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,18 +58,27 @@ import {
   SelectorClienteTextil,
   type ClienteTextil,
 } from "@/components/textil/SelectorClienteTextil";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
-type Linea = {
-  descripcion: string;
-  cantidad: number;
-  precio_unitario: number;
-  iva_rate: number;
-  /** DTF o DTF UV (lo imprime la subcontrata): sus metros y su coste van aparte. */
-  linea: "dtf" | "uv";
-};
+/**
+ * Una línea del formulario. Los números van como texto («12,5»): se leen al
+ * guardar con leerPedidoEscrito() (src/dominio/pedido-formulario.ts), que dice
+ * lo que no se entiende en vez de convertirlo en 0. `linea`: DTF o DTF UV (lo
+ * imprime la subcontrata): sus metros y su coste van aparte.
+ */
+type Linea = LineaEscrita;
 
 /** El tipo con el que nace una línea nueva. El DTF va todo al 21 %. */
 const IVA_GENERAL = 21;
+
+/** La línea con la que nace el formulario o «Añadir línea». */
+const lineaNueva = (iva: number = IVA_GENERAL): Linea => ({
+  descripcion: "",
+  cantidad: "1",
+  precio_unitario: "0",
+  iva_rate: String(iva),
+  linea: "dtf",
+});
 
 const PAGOS = [
   "Transferencia bancaria directa",
@@ -100,6 +127,9 @@ function aFormulario(d: Direccion | null | undefined): DireccionForm {
   return salida;
 }
 
+/** El formulario entero en una cadena, para comparar con lo que había al abrir. */
+const instantanea = (v: unknown) => JSON.stringify(v);
+
 export function PedidoFormDialog({
   open,
   onOpenChange,
@@ -120,14 +150,12 @@ export function PedidoFormDialog({
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
   const [pago, setPago] = useState<string>("Transferencia bancaria directa");
-  const [envio, setEnvio] = useState<number>(0);
+  const [envio, setEnvio] = useState("0");
   const [notas, setNotas] = useState("");
   const [facturacion, setFacturacion] = useState<DireccionForm>(DIRECCION_VACIA);
   const [entrega, setEntrega] = useState<DireccionForm>(DIRECCION_VACIA);
   const [envioIgual, setEnvioIgual] = useState(true);
-  const [lineas, setLineas] = useState<Linea[]>([
-    { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
-  ]);
+  const [lineas, setLineas] = useState<Linea[]>([lineaNueva()]);
   // Para exportación y para operaciones intracomunitarias con inversión del
   // sujeto pasivo (arts. 21 y 25 LIVA): el pedido no lleva IVA. Un interruptor
   // por pedido, no por línea — el DTF va todo al mismo tipo, así que mezclar
@@ -142,7 +170,7 @@ export function PedidoFormDialog({
       setEmail(pedido.cliente_email ?? "");
       setTelefono(pedido.cliente_telefono ?? "");
       setPago(pedido.metodo_pago ?? "Transferencia bancaria directa");
-      setEnvio(Number(pedido.envio ?? 0));
+      setEnvio(escribirNumero(Number(pedido.envio ?? 0)));
       setNotas(pedido.notas ?? "");
       setFacturacion(aFormulario(pedido.direccion_facturacion));
       setEntrega(aFormulario(pedido.direccion_envio));
@@ -156,44 +184,92 @@ export function PedidoFormDialog({
       const lineasIniciales: Linea[] = pedido.items.length
         ? pedido.items.map((it) => ({
             descripcion: it.descripcion,
-            cantidad: Number(it.cantidad),
-            precio_unitario: Number(it.precio_unitario),
+            cantidad: escribirNumero(Number(it.cantidad)),
+            precio_unitario: escribirNumero(Number(it.precio_unitario)),
             // El tipo que tenía la línea, no el general: abrir un pedido con
             // una línea al 10 % y guardarlo la pasaba al 21 % sin decir nada.
             // El 21 solo se usa si la línea no trae tipo (pedidos antiguos).
-            iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
+            iva_rate: escribirNumero(it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate)),
             linea: it.linea === "uv" ? ("uv" as const) : ("dtf" as const),
           }))
-        : [
-            {
-              descripcion: "",
-              cantidad: 1,
-              precio_unitario: 0,
-              iva_rate: IVA_GENERAL,
-              linea: "dtf",
-            },
-          ];
+        : [lineaNueva()];
       setLineas(lineasIniciales);
       // Si el pedido ya estaba entero sin IVA, el interruptor nace apagado:
       // si no, reabrirlo y guardarlo sin tocar nada le habría puesto el 21 %.
-      setAplicaIva(lineasIniciales.some((l) => l.iva_rate > 0));
+      const conIva = lineasIniciales.some((l) => leerNumeroEscrito(l.iva_rate) > 0);
+      setAplicaIva(conIva);
+      setInicial(
+        instantanea({
+          clienteId: pedido.cliente_id ?? null,
+          cliente: pedido.cliente_nombre ?? "",
+          email: pedido.cliente_email ?? "",
+          telefono: pedido.cliente_telefono ?? "",
+          pago: pedido.metodo_pago ?? "Transferencia bancaria directa",
+          envio: escribirNumero(Number(pedido.envio ?? 0)),
+          notas: pedido.notas ?? "",
+          facturacion: aFormulario(pedido.direccion_facturacion),
+          entrega: aFormulario(pedido.direccion_envio),
+          envioIgual:
+            mismaDireccion(pedido.direccion_envio, pedido.direccion_facturacion) ||
+            !pedido.direccion_envio,
+          lineas: lineasIniciales,
+          aplicaIva: conIva,
+        }),
+      );
     } else {
       setClienteId(null);
       setCliente("");
       setEmail("");
       setTelefono("");
       setPago("Transferencia bancaria directa");
-      setEnvio(0);
+      setEnvio("0");
       setNotas("");
       setFacturacion(DIRECCION_VACIA);
       setEntrega(DIRECCION_VACIA);
       setEnvioIgual(true);
-      setLineas([
-        { descripcion: "", cantidad: 1, precio_unitario: 0, iva_rate: IVA_GENERAL, linea: "dtf" },
-      ]);
+      setLineas([lineaNueva()]);
       setAplicaIva(true);
+      setInicial(
+        instantanea({
+          clienteId: null,
+          cliente: "",
+          email: "",
+          telefono: "",
+          pago: "Transferencia bancaria directa",
+          envio: "0",
+          notas: "",
+          facturacion: DIRECCION_VACIA,
+          entrega: DIRECCION_VACIA,
+          envioIgual: true,
+          lineas: [lineaNueva()],
+          aplicaIva: true,
+        }),
+      );
     }
   }, [open, pedido]);
+
+  // Lo que había al abrir, para saber si hay algo sin guardar: con cambios,
+  // cerrar (la X, Escape, un toque fuera o «Cancelar») pregunta antes.
+  const [inicial, setInicial] = useState<string | null>(null);
+  const cambiado =
+    inicial !== null &&
+    instantanea({
+      clienteId,
+      cliente,
+      email,
+      telefono,
+      pago,
+      envio,
+      notas,
+      facturacion,
+      entrega,
+      envioIgual,
+      lineas,
+      aplicaIva,
+    }) !== inicial;
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cambiado, () =>
+    onOpenChange(false),
+  );
 
   // Los mismos que en el presupuesto: la ficha única de clientes de la empresa.
   const { data: clientes = [] } = useQuery({
@@ -247,8 +323,11 @@ export function PedidoFormDialog({
 
   const mut = useMutation({
     mutationFn: async () => {
-      const itemsValidos = lineas.filter((l) => l.descripcion.trim() && l.cantidad > 0);
-      if (itemsValidos.length === 0) throw new Error("Añade al menos una línea");
+      // Nada se descarta en silencio: una línea con algo escrito y sin
+      // descripción, o un «12,5» que no se entiende, se dice (pedido-formulario.ts).
+      const leido = leerPedidoEscrito(lineas, envio);
+      if (!leido.ok) throw new Error(leido.errores.join(" "));
+      const itemsValidos = leido.lineas;
       const comunes = {
         cliente_id: clienteId,
         cliente_nombre: cliente,
@@ -257,7 +336,7 @@ export function PedidoFormDialog({
         direccion_facturacion: direcciones.facturacion,
         direccion_envio: direcciones.envio,
         metodo_pago: pago,
-        envio,
+        envio: leido.envio,
         notas: notas || null,
         items: itemsValidos,
       };
@@ -274,6 +353,16 @@ export function PedidoFormDialog({
     onError: (e: any) => avisarError(e, "Error al guardar"),
   });
 
+  // Cifras que conviene confirmar antes de guardar (punto de miles, líneas de
+  // más de 10.000 €): se enseñan con la cifra leída y se guarda solo si se acepta.
+  const [porConfirmar, setPorConfirmar] = useState<string[] | null>(null);
+  function enviar() {
+    const leido = leerPedidoEscrito(lineas, envio);
+    const avisos = leido.ok ? avisosAntesDeGuardar(lineas) : [];
+    if (avisos.length) setPorConfirmar(avisos);
+    else mut.mutate();
+  }
+
   function setLinea(i: number, patch: Partial<Linea>) {
     setLineas((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -283,14 +372,18 @@ export function PedidoFormDialog({
   // llevando un 21 % en cada línea.
   function alternarIva(v: boolean) {
     setAplicaIva(v);
-    setLineas((prev) => prev.map((l) => ({ ...l, iva_rate: v ? IVA_GENERAL : 0 })));
+    setLineas((prev) => prev.map((l) => ({ ...l, iva_rate: String(v ? IVA_GENERAL : 0) })));
   }
 
   // El envío entra en la base imponible y tributa, que es lo que dice el
   // artículo 78 de la Ley del IVA: los gastos de transporte repercutidos al
   // cliente forman parte de la contraprestación. Antes se sumaba DESPUÉS del
   // IVA, o sea que no tributaba.
-  const totales = calcularTotales(lineas, { envio });
+  // En pantalla, lo que aún no se lee cuenta 0; al guardar se avisa.
+  const envioLeido = leerNumeroEscrito(envio);
+  const totales = calcularTotales(lineasParaTotales(lineas), {
+    envio: Number.isFinite(envioLeido) ? envioLeido : 0,
+  });
   const total = totales.total;
 
   // El resumen que se lee con el bloque plegado, para no tener que abrirlo solo
@@ -307,248 +400,261 @@ export function PedidoFormDialog({
   })();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
+      <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar pedido" : "Nuevo pedido manual"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Cliente</Label>
-              <SelectorClienteTextil
-                clientes={clientes}
-                valor={clienteId}
-                tiendaId={tiendaId}
-                claveLista={["presupuesto-clientes"]}
-                onElegir={elegirCliente}
-              />
-              {clienteId ? (
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                  onClick={() => setClienteId(null)}
-                >
-                  Quitar la ficha y escribir el nombre
-                </button>
-              ) : (
-                <Input
-                  aria-label="Nombre del cliente, sin ficha"
-                  placeholder="O escribe el nombre, sin ficha"
-                  value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
+        <FormularioDialogo alEnviar={enviar} ocupado={mut.isPending}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Cliente</Label>
+                <SelectorClienteTextil
+                  clientes={clientes}
+                  valor={clienteId}
+                  tiendaId={tiendaId}
+                  claveLista={["presupuesto-clientes"]}
+                  onElegir={elegirCliente}
                 />
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Teléfono</Label>
-              <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Método de pago</Label>
-              <Select value={pago} onValueChange={setPago}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAGOS.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Gastos de envío (€)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={envio}
-                onChange={(e) => setEnvio(Number(e.target.value) || 0)}
-              />
-            </div>
-          </div>
-
-          <Accordion type="single" collapsible className="border rounded-md px-3">
-            <AccordionItem value="direcciones" className="border-none">
-              <AccordionTrigger className="hover:no-underline py-3">
-                <div className="flex flex-col items-start text-left min-w-0 flex-1">
-                  <span className="text-sm font-medium">Direcciones</span>
-                  <span className="text-xs text-muted-foreground font-normal truncate max-w-full">
-                    {resumenDirecciones}
-                  </span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="space-y-4 pb-4">
-                <BloqueDireccion
-                  titulo="Facturación"
-                  nota={`El nombre y el email se toman de los datos del cliente si se dejan en blanco.`}
-                  valores={facturacion}
-                  onChange={setFacturacion}
-                />
-
-                <div className="flex items-center gap-2 pt-1 border-t">
-                  <Checkbox
-                    id="envio-igual"
-                    checked={envioIgual}
-                    onCheckedChange={(v) => setEnvioIgual(v === true)}
-                    className="mt-3"
+                {clienteId ? (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => setClienteId(null)}
+                  >
+                    Quitar la ficha y escribir el nombre
+                  </button>
+                ) : (
+                  <Input
+                    aria-label="Nombre del cliente, sin ficha"
+                    placeholder="O escribe el nombre, sin ficha"
+                    value={cliente}
+                    onChange={(e) => setCliente(e.target.value)}
                   />
-                  <Label htmlFor="envio-igual" className="font-normal mt-3 cursor-pointer">
-                    El envío va a la misma dirección
-                  </Label>
-                </div>
-
-                {!envioIgual && (
-                  <BloqueDireccion titulo="Envío" valores={entrega} onChange={setEntrega} />
                 )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Líneas</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setLineas([
-                    ...lineas,
-                    {
-                      descripcion: "",
-                      cantidad: 1,
-                      precio_unitario: 0,
-                      iva_rate: aplicaIva ? IVA_GENERAL : 0,
-                      linea: "dtf",
-                    },
-                  ])
-                }
-              >
-                <Plus className="h-4 w-4 mr-1" /> Añadir línea
-              </Button>
+              </div>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Teléfono</Label>
+                <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Método de pago</Label>
+                <Select value={pago} onValueChange={setPago}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGOS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Gastos de envío (€)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={envio}
+                  onChange={(e) => setEnvio(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="aplica-iva"
-                checked={aplicaIva}
-                onCheckedChange={(v) => alternarIva(v === true)}
-              />
-              <Label htmlFor="aplica-iva" className="font-normal cursor-pointer">
-                Aplicar IVA ({IVA_GENERAL}&nbsp;%)
-              </Label>
-            </div>
-            {!aplicaIva && (
-              <p className="text-xs text-muted-foreground">
-                Exportación o entrega intracomunitaria: el pedido se guarda sin IVA en ninguna
-                línea.
-              </p>
-            )}
+            <Accordion type="single" collapsible className="border rounded-md px-3">
+              <AccordionItem value="direcciones" className="border-none">
+                <AccordionTrigger className="hover:no-underline py-3">
+                  <div className="flex flex-col items-start text-left min-w-0 flex-1">
+                    <span className="text-sm font-medium">Direcciones</span>
+                    <span className="text-xs text-muted-foreground font-normal truncate max-w-full">
+                      {resumenDirecciones}
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pb-4">
+                  <BloqueDireccion
+                    titulo="Facturación"
+                    nota={`El nombre y el email se toman de los datos del cliente si se dejan en blanco.`}
+                    valores={facturacion}
+                    onChange={setFacturacion}
+                  />
+
+                  <div className="flex items-center gap-2 pt-1 border-t">
+                    <Checkbox
+                      id="envio-igual"
+                      checked={envioIgual}
+                      onCheckedChange={(v) => setEnvioIgual(v === true)}
+                      className="mt-3"
+                    />
+                    <Label htmlFor="envio-igual" className="font-normal mt-3 cursor-pointer">
+                      El envío va a la misma dirección
+                    </Label>
+                  </div>
+
+                  {!envioIgual && (
+                    <BloqueDireccion titulo="Envío" valores={entrega} onChange={setEntrega} />
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <div className="space-y-2">
-              {lineas.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-4 space-y-1">
-                    <Label className="text-xs">Producto</Label>
-                    <Input
-                      value={l.descripcion}
-                      onChange={(e) => setLinea(i, { descripcion: e.target.value })}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Línea</Label>
-                    <Select
-                      value={l.linea}
-                      onValueChange={(v) => setLinea(i, { linea: v === "uv" ? "uv" : "dtf" })}
-                    >
-                      <SelectTrigger aria-label="Línea de producto">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dtf">DTF</SelectItem>
-                        <SelectItem value="uv">DTF UV</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Cantidad</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={l.cantidad}
-                      onChange={(e) => setLinea(i, { cantidad: Number(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Precio</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={l.precio_unitario}
-                      onChange={(e) =>
-                        setLinea(i, { precio_unitario: Number(e.target.value) || 0 })
-                      }
-                    />
-                  </div>
-                  <div className="col-span-1 space-y-1">
-                    <Label className="text-xs">IVA %</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      value={l.iva_rate}
-                      disabled={!aplicaIva}
-                      onChange={(e) => setLinea(i, { iva_rate: Number(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setLineas(lineas.filter((_, idx) => idx !== i))}
-                      disabled={lineas.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+              <div className="flex items-center justify-between">
+                <Label>Líneas</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLineas([...lineas, lineaNueva(aplicaIva ? IVA_GENERAL : 0)])}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Añadir línea
+                </Button>
+              </div>
 
-          <div className="grid grid-cols-3 gap-3 text-sm pt-2 border-t">
-            <div>
-              Subtotal: <span className="font-medium">{eur(totales.base_imponible)}</span>
-            </div>
-            <div>
-              IVA: <span className="font-medium">{eur(totales.iva_total)}</span>
-            </div>
-            <div>
-              Total: <span className="font-semibold">{eur(total)}</span>
-            </div>
-          </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="aplica-iva"
+                  checked={aplicaIva}
+                  onCheckedChange={(v) => alternarIva(v === true)}
+                />
+                <Label htmlFor="aplica-iva" className="font-normal cursor-pointer">
+                  Aplicar IVA ({IVA_GENERAL}&nbsp;%)
+                </Label>
+              </div>
+              {!aplicaIva && (
+                <p className="text-xs text-muted-foreground">
+                  Exportación o entrega intracomunitaria: el pedido se guarda sin IVA en ninguna
+                  línea.
+                </p>
+              )}
 
-          <div className="space-y-1">
-            <Label>Notas</Label>
-            <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} />
+              <div className="space-y-2">
+                {lineas.map((l, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-4 space-y-1">
+                      <Label className="text-xs">Producto</Label>
+                      <Input
+                        value={l.descripcion}
+                        onChange={(e) => setLinea(i, { descripcion: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Línea</Label>
+                      <Select
+                        value={l.linea}
+                        onValueChange={(v) => setLinea(i, { linea: v === "uv" ? "uv" : "dtf" })}
+                      >
+                        <SelectTrigger aria-label="Línea de producto">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dtf">DTF</SelectItem>
+                          <SelectItem value="uv">DTF UV</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Cantidad</Label>
+                      <Input
+                        inputMode="decimal"
+                        value={l.cantidad}
+                        onChange={(e) => setLinea(i, { cantidad: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Precio</Label>
+                      <Input
+                        inputMode="decimal"
+                        value={l.precio_unitario}
+                        onChange={(e) => setLinea(i, { precio_unitario: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-1 space-y-1">
+                      <Label className="text-xs">IVA %</Label>
+                      <Input
+                        inputMode="decimal"
+                        value={l.iva_rate}
+                        disabled={!aplicaIva}
+                        onChange={(e) => setLinea(i, { iva_rate: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        aria-label="Quitar la línea"
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setLineas(lineas.filter((_, idx) => idx !== i))}
+                        disabled={lineas.length === 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-sm pt-2 border-t">
+              <div>
+                Subtotal: <span className="font-medium">{eur(totales.base_imponible)}</span>
+              </div>
+              <div>
+                IVA: <span className="font-medium">{eur(totales.iva_total)}</span>
+              </div>
+              <div>
+                Total: <span className="font-semibold">{eur(total)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Notas</Label>
+              <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} />
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={pedirCierre}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
+      <AlertDialog open={porConfirmar !== null} onOpenChange={(o) => !o && setPorConfirmar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Son correctas estas cifras?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <ul className="list-disc pl-5 space-y-1">
+                {(porConfirmar ?? []).map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Corregir</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setPorConfirmar(null);
+                mut.mutate();
+              }}
+            >
+              Sí, guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

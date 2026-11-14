@@ -31,7 +31,7 @@ const base = {
   alcance: "Tienda Uno",
   tiendas: [{ id: T1, nombre: "Tienda Uno" }],
   costesMetro: { consumibles: 1, packaging: 0.5, electricidad: 0.5 },
-  ajustes: { precio_metro: 7, web_sin_pagar_cuenta: true, de_fabrica: false },
+  ajustes: { precio_metro: 7, de_fabrica: false },
 };
 
 const exportar = (

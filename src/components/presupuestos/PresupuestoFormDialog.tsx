@@ -39,6 +39,7 @@ import { ImagenesPresupuesto } from "./ImagenesPresupuesto";
 import { useImagenesPresupuesto } from "./useImagenesPresupuesto";
 import { AvisosIa } from "./CrearPresupuestoIa";
 import { avisarError } from "@/lib/errores";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 
 const LIBRE = "__libre__";
 
@@ -76,7 +77,31 @@ const LINEA_VACIA: LineaForm = {
 
 const aLinea = (v: unknown): "dtf" | "uv" => (v === "uv" ? "uv" : "dtf");
 
-const aNumero = (t: string) => Number(String(t).trim().replace(",", ".")) || 0;
+/** Para los totales en pantalla: lo que no se lee cuenta 0 hasta corregirlo (al guardar, se dice). */
+const aNumero = (t: string) => {
+  const n = leerNumeroEscrito(t);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/** Lo escrito que no es un número: al guardar se dice, no se guarda como 0. */
+function numerosMalEscritos(
+  lineas: readonly LineaForm[],
+  envio: string,
+  validez: string,
+): string[] {
+  const mal = (t: string) => String(t).trim() !== "" && !Number.isFinite(leerNumeroEscrito(t));
+  const errores: string[] = [];
+  lineas.forEach((l, i) => {
+    if (mal(l.cantidad))
+      errores.push(`Línea ${i + 1}: la cantidad «${l.cantidad}» no es un número.`);
+    if (mal(l.precio_unitario)) {
+      errores.push(`Línea ${i + 1}: el precio «${l.precio_unitario}» no es un número.`);
+    }
+  });
+  if (mal(envio)) errores.push(`Envío: «${envio}» no es un importe.`);
+  if (mal(validez)) errores.push(`Validez: «${validez}» no es un número de días.`);
+  return errores;
+}
 const aTexto = (n: number) => String(n).replace(".", ",");
 
 function hoy() {
@@ -268,6 +293,8 @@ export function PresupuestoFormDialog({
 
   const alta = useMutation({
     mutationFn: async () => {
+      const malEscritos = numerosMalEscritos(lineas, envio, validez);
+      if (malEscritos.length) throw new Error(malEscritos.join(" "));
       const validas = lineasCalculables.filter((l) => l.descripcion || l.precio_unitario > 0);
       if (validas.length === 0) throw new Error("Añade al menos una línea");
       if (validas.some((l) => !l.descripcion)) {
@@ -309,7 +336,7 @@ export function PresupuestoFormDialog({
   const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {presupuesto ? `Presupuesto ${presupuesto.numero}` : "Nuevo presupuesto"}

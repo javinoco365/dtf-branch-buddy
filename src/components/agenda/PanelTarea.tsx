@@ -17,6 +17,7 @@ import {
   diaDeTarea,
   esVencida,
   ETIQUETA_ESTADO,
+  franjaDeTarea,
   horaDeMadrid,
   LARGO_NOTAS,
   LARGO_TITULO,
@@ -70,7 +71,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { Avatar, EtiquetaPrioridad, EtiquetaRealizada } from "./piezas";
-import { CLASES_PRIORIDAD, iconoDeCategoria } from "./estilos";
+import { CLASES_PRIORIDAD, CLASES_REALIZADA, iconoDeCategoria } from "./estilos";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 export type QuePanel = { modo: "nueva"; dia?: string } | { modo: "ver"; id: string } | null;
 
@@ -218,7 +220,6 @@ function Formulario({
   const [b, setB] = useState<BorradorTarea>(inicial);
   const [enlaceTexto, setEnlaceTexto] = useState<string | null>(tarea?.enlaceTexto ?? null);
   const [errores, setErrores] = useState<ErroresTarea>({});
-  const [descartar, setDescartar] = useState(false);
   const [cancelar, setCancelar] = useState(false);
   const [pasarA, setPasarA] = useState("");
   const tituloRef = useRef<HTMLInputElement>(null);
@@ -246,10 +247,22 @@ function Formulario({
     }
   };
 
-  function cerrar() {
-    if (editable && cambiado) setDescartar(true);
-    else onCerrar();
-  }
+  // Con cambios a medias, cerrar pregunta antes (hooks/use-cerrar-sin-perder).
+  const { pedirCierre: cerrar, aviso: avisoDescartar } = useCerrarSinPerder(
+    editable && cambiado,
+    onCerrar,
+    tarea
+      ? {
+          titulo: "¿Salir sin guardar los cambios?",
+          descripcion: "Lo que has escrito se perderá.",
+          descartar: "Salir sin guardar",
+        }
+      : {
+          titulo: "¿Descartar esta tarea?",
+          descripcion: "Lo que has escrito se perderá.",
+          descartar: "Descartar",
+        },
+  );
   registrarCierre(cerrar);
 
   // Al abrir una tarea que me han mandado, deja de salir como nueva.
@@ -303,7 +316,9 @@ function Formulario({
             ? "Cambios guardados"
             : paraOtro
               ? `Tarea mandada a ${nombre(b.paraSocioId)}. Le saldrá como nueva.`
-              : `Tarea creada en la Agenda de ${b.paraSocioId === yo ? "ti" : nombre(b.paraSocioId)}`,
+              : b.paraSocioId === yo
+                ? "Tarea creada en tu Agenda"
+                : `Tarea creada en la Agenda de ${nombre(b.paraSocioId)}`,
         );
         onCerrar();
       },
@@ -341,10 +356,7 @@ function Formulario({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <EtiquetaPrioridad prioridad={tarea.prioridad} />
               <span>
-                {diaLargo(diaDeTarea(tarea))} ·{" "}
-                {tarea.todoElDia
-                  ? "todo el día"
-                  : `${horaDeMadrid(tarea.inicio)}–${tarea.fin ? horaDeMadrid(tarea.fin) : ""}`}
+                {diaLargo(diaDeTarea(tarea))} · {franjaDeTarea(tarea) ?? "todo el día"}
               </span>
               {tarea.estado === "hecha" ? (
                 <EtiquetaRealizada />
@@ -431,7 +443,11 @@ function Formulario({
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="border-status-completado/50 text-status-completado hover:text-status-completado"
+                      className={cn(
+                        "border-status-completado/50",
+                        CLASES_REALIZADA.texto,
+                        "hover:text-realizada-texto",
+                      )}
                       disabled={ocupado || !!bloqueoAcciones}
                       onClick={() => acciones.onCambiarEstado(tarea, "hecha", onCerrar)}
                     >
@@ -490,7 +506,7 @@ function Formulario({
               id="tarea-para"
               etiqueta="Para"
               error={errores.para}
-              vacio="No hay personas activas. Se activan en Ajustes › Caja."
+              vacio="No hay nadie a quien mandarla. Un administrador asigna cada socio a su cuenta en Ajustes › Usuarios."
               opciones={activasPara.map((p) => ({
                 id: p.id,
                 contenido: (
@@ -707,22 +723,7 @@ function Formulario({
         )}
       </div>
 
-      <AlertDialog open={descartar} onOpenChange={setDescartar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {tarea ? "¿Salir sin guardar los cambios?" : "¿Descartar esta tarea?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>Lo que has escrito se perderá.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
-            <AlertDialogAction onClick={onCerrar}>
-              {tarea ? "Salir sin guardar" : "Descartar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {avisoDescartar}
 
       {tarea && (
         <AlertDialog open={cancelar} onOpenChange={setCancelar}>

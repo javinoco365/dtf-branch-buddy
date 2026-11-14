@@ -14,6 +14,7 @@ import {
   type VariablePlantilla,
 } from "@/dominio/plantilla-presupuesto";
 import { aDecima, acotar } from "./limites";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 
 /**
  * Los campos del editor de plantillas. Todos son controlados: reciben el
@@ -45,7 +46,8 @@ export function Campo({
   );
 }
 
-const leerNumero = (t: string) => Number(t.trim().replace(",", "."));
+/** Con coma, con punto o con puntos de miles: la lectura de todos los formularios. */
+const leerNumero = (t: string) => leerNumeroEscrito(t);
 
 /**
  * Un número con su unidad (mm, pt). Se escribe con coma o con punto. Mientras

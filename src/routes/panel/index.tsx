@@ -1,55 +1,47 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { tabla } from "@/lib/rpc";
-import { useMemo } from "react";
-import { usePeriodoUrl } from "@/lib/filtros-url";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  createFileRoute,
+  Link,
+  type RegisteredRouter,
+  type ValidateLinkOptions,
+} from "@tanstack/react-router";
+import { useMemo, type ReactNode } from "react";
+import { usePeriodoUrl, useLineaUrl } from "@/lib/filtros-url";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EstadoVacio } from "@/components/EstadoVacio";
-import { eur, metros } from "@/lib/format";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { numero } from "@/lib/format";
 import { descargarCSV } from "@/lib/csv";
 import { AvisoActualizando } from "@/components/AvisoActualizando";
 import { propsDatosDeAntes } from "@/lib/datos-de-antes";
+import { useLineasPeriodo, usePedidosPeriodo } from "@/lib/periodo";
+import { usePendientesCobro, useTaller } from "@/lib/gerencia";
+import { useCuentaResultados } from "@/lib/cuenta";
+import { useEstadoAvisoAgenda } from "@/hooks/use-agenda";
+import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
+import { ETIQUETA_FILTRO_LINEA, pedidosDeLinea } from "@/dominio/por-linea";
 import {
-  useCobrosPeriodo,
-  usePedidosPeriodo,
-  useLineasPeriodo,
-  usePedidosSoloUv,
-} from "@/lib/periodo";
-import { useLineaUrl } from "@/lib/filtros-url";
-import {
-  cifrasPorLinea,
-  cobrosDeLinea,
-  ETIQUETA_FILTRO_LINEA,
-  pedidosDeLinea,
-} from "@/dominio/por-linea";
-import { TIENDA_TEXTIL } from "@/dominio/cobros";
+  FILTRO_CUENTA_TODO,
+  pedidosPorCobrarHoy,
+  TODAS,
+  ventasNetasPorTramo,
+} from "@/dominio/cuenta";
+import { infoEstado } from "@/dominio/estados";
+import { pedidosDeHoy } from "@/dominio/hoy";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
-import { DesgloseLinea } from "@/components/DesgloseLinea";
-import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
-import { agruparPorRangos, topPorMetros, variacion } from "@/dominio/kpis";
+import { topPorMetros } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
-import {
-  Download,
-  Euro,
-  Receipt,
-  ShoppingCart,
-  Ruler,
-  XCircle,
-  Percent,
-  Inbox,
-  Undo2,
-  Wallet,
-} from "lucide-react";
+import { CifrasDelPeriodo } from "@/components/CifrasDelPeriodo";
+import { CalendarCheck, Download, Inbox, Printer, Truck, type LucideIcon } from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
-import { mensajeDeError } from "@/lib/errores";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/")({
   head: () => ({ meta: [{ title: "Inicio · DTF Culture" }] }),
@@ -57,84 +49,162 @@ export const Route = createFileRoute("/panel/")({
 });
 
 function DashboardGlobal() {
+  return (
+    <div className="space-y-6">
+      <Hoy />
+      <DelPeriodo />
+    </div>
+  );
+}
+
+/**
+ * Lo que hay que hacer hoy, en cuatro números que llevan a su pantalla. No
+ * depende del periodo ni de la línea: es la foto de ahora. Son cuántos, no
+ * cuánto: el importe pendiente está abajo, en «Pendiente de cobro».
+ */
+function Hoy() {
+  const taller = useTaller();
+  const pendientes = usePendientesCobro();
+  const tareas = useEstadoAvisoAgenda();
+  const pedidos = useMemo(() => (taller.data ? pedidosDeHoy(taller.data) : null), [taller.data]);
+  const porCobrar = useMemo(
+    () =>
+      pendientes.data?.disponible
+        ? pedidosPorCobrarHoy(pendientes.data.pedidos, FILTRO_CUENTA_TODO)
+        : null,
+    [pendientes.data],
+  );
+  const cifraPedidos = (n: number | undefined) =>
+    taller.isError ? "—" : n === undefined ? "…" : numero(n, 0);
+
+  return (
+    <section aria-labelledby="titulo-hoy" className="space-y-3">
+      {/* «Hoy» y no «Inicio»: es lo primero que se ve al entrar, y lo que dice. */}
+      <CabeceraPantalla id="titulo-hoy" titulo="Hoy" />
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+        <CifraHoy
+          titulo="Por producir"
+          valor={cifraPedidos(pedidos?.porProducir)}
+          detalle={taller.isError ? "No se pudo leer el taller" : "Pedidos sin imprimir"}
+          icon={Printer}
+          a={{ to: "/panel/gerencia", search: { pestana: "produccion" } }}
+        />
+        <CifraHoy
+          titulo="Por enviar"
+          valor={cifraPedidos(pedidos?.porEnviar)}
+          detalle={taller.isError ? "No se pudo leer el taller" : "Pedidos listos"}
+          icon={Truck}
+          a={{ to: "/panel/pedidos", search: { periodo: "todo", estado: "listo" } }}
+        />
+        <CifraHoy
+          titulo="Pedidos por cobrar"
+          valor={
+            porCobrar !== null
+              ? numero(porCobrar, 0)
+              : pendientes.isError || pendientes.data
+                ? "—"
+                : "…"
+          }
+          detalle={
+            pendientes.isError
+              ? "No se pudo leer lo pendiente"
+              : pendientes.data && !pendientes.data.disponible
+                ? "Esta parte aún no está activada"
+                : "Con algo pendiente de cobro"
+          }
+          icon={ICONO.pendienteCobro}
+          a={{ to: "/panel/cobros" }}
+        />
+        <CifraHoy
+          titulo="Mis tareas"
+          valor={tareas.aviso !== null ? numero(tareas.aviso, 0) : tareas.cargando ? "…" : "—"}
+          detalle={
+            tareas.error
+              ? "No se pudo leer la Agenda"
+              : (tareas.motivo ?? "De hoy, vencidas o nuevas")
+          }
+          icon={CalendarCheck}
+          a={{ to: "/panel/agenda" }}
+        />
+      </div>
+    </section>
+  );
+}
+
+type PropsCifraHoy<TOpciones = unknown> = {
+  titulo: string;
+  valor: string;
+  detalle: ReactNode;
+  icon: LucideIcon;
+  /** A dónde lleva: la ruta y su búsqueda, comprobadas con los tipos de las rutas. */
+  a: ValidateLinkOptions<RegisteredRouter, TOpciones>;
+};
+
+/** Una cifra de «Hoy»: una tarjeta que lleva a su pantalla. */
+function CifraHoy<TOpciones>(props: PropsCifraHoy<TOpciones>): ReactNode;
+function CifraHoy({ titulo, valor, detalle, icon, a }: PropsCifraHoy) {
+  return (
+    <Link
+      {...a}
+      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <TarjetaKpi
+        titulo={titulo}
+        valor={valor}
+        delta={null}
+        icon={icon}
+        pie={<span className="text-muted-foreground">{detalle}</span>}
+        className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-accent/40"
+      />
+    </Link>
+  );
+}
+
+/**
+ * Las cuatro cifras del periodo, con el nombre y la cuenta de la Cuenta de
+ * resultados: ventas netas, margen bruto, cobrado y pendiente de cobro. El
+ * resto (ticket medio, devoluciones, cancelados…) está en esa pantalla.
+ */
+function DelPeriodo() {
   // El periodo va en la dirección: sobrevive a recargar y se comparte.
   const periodo = usePeriodoUrl("mes");
   const { comparacion } = periodo;
   // Sin «todo» en la lista, siempre hay rango.
-  const { desde, hasta } = periodo.rango!;
-
-  const { data: empresa } = useQuery({
-    queryKey: ["empresa_costes"],
-    queryFn: async () => {
-      const { data } = await tabla(supabase, "empresas")
-        .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-        .eq("activa", true)
-        .order("created_at")
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-  });
-  const costeMetro =
-    Number(empresa?.coste_consumibles_metro ?? 0) +
-    Number(empresa?.coste_packaging_metro ?? 0) +
-    Number(empresa?.coste_electricidad_metro ?? 0);
-
-  const consultaPedidos = usePedidosPeriodo({ desde, hasta });
-  // Sin comparación se pide un rango vacío: la consulta existe igual (los
-  // ganchos no pueden ser condicionales) pero no trae nada.
-  const ant = comparacion?.previo ?? { desde: hasta, hasta: desde };
-  const consultaAnterior = usePedidosPeriodo({ desde: ant.desde, hasta: ant.hasta });
-  const consultaLineas = useLineasPeriodo({ desde, hasta });
-  // Lo cobrado va por la fecha del cobro: el dinero que entró en el periodo,
-  // fuera de cuándo se hizo el pedido.
-  const consultaCobros = useCobrosPeriodo({ desde, hasta }, "cobro");
-  const consultaCobrosAnt = useCobrosPeriodo(ant, "cobro");
-
-  const pedidos = useMemo(() => consultaPedidos.data ?? [], [consultaPedidos.data]);
-  const pedidosAnt = useMemo(() => consultaAnterior.data ?? [], [consultaAnterior.data]);
-
-  // La línea de producto: las dos, DTF o DTF UV (por-linea.ts). Las cifras de
-  // cada una suman las de «Todo»; los metros van siempre separados.
+  const rango = periodo.rango!;
+  const { desde, hasta } = rango;
+  // La línea de producto: las dos, DTF o DTF UV (por-linea.ts).
   const [linea, cambiarLinea] = useLineaUrl();
-  const lineas = useMemo(() => cifrasPorLinea(pedidos, costeMetro), [pedidos, costeMetro]);
-  const lineasPrev = useMemo(
-    () => cifrasPorLinea(pedidosAnt, costeMetro),
-    [pedidosAnt, costeMetro],
+  const filtro = useMemo(() => ({ tienda: TODAS, linea }), [linea]);
+  const { data: tiendas } = useTiendasMenu();
+
+  const lectura = useCuentaResultados({
+    rango,
+    previo: comparacion?.previo ?? null,
+    filtro,
+    gastos: false,
+  });
+  const { cuenta } = lectura;
+
+  // Para la gráfica, los productos y la descarga: los pedidos de las tiendas.
+  const consultaPedidos = usePedidosPeriodo({ desde, hasta });
+  const consultaLineas = useLineasPeriodo({ desde, hasta });
+  const pedidosDeLaLinea = useMemo(
+    () => (consultaPedidos.data ? pedidosDeLinea(consultaPedidos.data, linea) : []),
+    [consultaPedidos.data, linea],
   );
-  const k = lineas[linea];
-  const kPrev = lineasPrev[linea];
-  // Los metros de la línea: con «Todo», los de DTF (los del UV, debajo).
-  const metrosDe = (c: typeof k) => (linea === "uv" ? c.metrosUv : c.metros);
 
-  // Lo cobrado, por pedido: los de pedidos solo de UV, al UV.
-  // Solo hace falta con una línea elegida: con «Todo» van todos.
-  const soloUv = usePedidosSoloUv(undefined, { enabled: linea !== "todo" });
-  const cobrosDisponibles =
-    (consultaCobros.data?.disponible ?? false) && (linea === "todo" || !!soloUv.data);
-  const cobradoDe = (cobros: Parameters<typeof cobrosDeTiendas>[0]) =>
-    totalizar(
-      cobrosDeLinea(cobrosDeTiendas(cobros), linea, soloUv.data ?? new Set(), TIENDA_TEXTIL.id),
-    ).cobrado;
-  const cobrado = cobradoDe(consultaCobros.data?.cobros ?? []);
-  const cobradoPrev = cobradoDe(consultaCobrosAnt.data?.cobros ?? []);
-
-  // Cada pedido con el coste que tenía al crearse; los de antes de congelarlo,
-  // con el de hoy. El DTF UV, con lo que cobra la subcontrata. El envío no
-  // entra: la bruta ya va sin él, y lo que se cobra al cliente es lo que se
-  // paga a la agencia.
-  const margenPer = k.ganancia;
-  const margenPrev = kPrev.ganancia;
-  // Sin ningún coste, ni de hoy ni congelado, el «margen» sería la bruta.
-  const sinCostes = costeMetro === 0 && k.coste === 0;
-
+  // Las ventas netas de cada día (o mes), con la misma regla que la cifra de
+  // arriba: sin IVA, tiendas y textil, sin los web sin pagar, cada devolución
+  // en su día y lo facturado sin pedido en el de su factura.
+  const { entrada, sinPedidoDe } = lectura;
   const grafica = useMemo(() => {
     const { por, tramos: todos } = tramosGrafica({ desde, hasta });
     // Sin los días que aún no han llegado: no dejan medio gráfico vacío.
     const tramos = tramosHastaHoy(todos, new Date());
-    const totales = agruparPorRangos(pedidosDeLinea(pedidos, linea), tramos);
-    return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: totales[i].total })) };
-  }, [pedidos, linea, desde, hasta]);
+    if (!entrada) return { por, datos: null };
+    const netas = ventasNetasPorTramo(entrada, tramos, sinPedidoDe);
+    return { por, datos: tramos.map((t, i) => ({ dia: t.etiqueta, total: netas[i] })) };
+  }, [entrada, sinPedidoDe, desde, hasta]);
 
   const topProductos = useMemo(
     () => topPorMetros(consultaLineas.data ?? [], 6, linea),
@@ -142,24 +212,21 @@ function DashboardGlobal() {
   );
 
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
-  // se atenúan y no se exportan.
-  const deAntes =
-    consultaPedidos.isPlaceholderData ||
-    consultaAnterior.isPlaceholderData ||
-    consultaCobros.isPlaceholderData ||
-    consultaCobrosAnt.isPlaceholderData;
-  const cargando = consultaPedidos.isPending;
-  const error = consultaPedidos.error;
-  const sinDatos = !cargando && !error && pedidos.length === 0;
+  // se atenúan y no se descargan.
+  const deAntes = lectura.deAntes || consultaPedidos.isPlaceholderData;
+  const sinPedidos = !!cuenta && cuenta.pedidos === 0 && (cuenta.devoluciones.valor ?? 0) === 0;
+  const frente = comparacion?.etiqueta;
 
-  function exportar() {
+  function descargar() {
+    const nombreTienda = new Map((tiendas ?? []).map((t) => [t.id, t.nombre]));
     const filas: (string | number)[][] = [
       ["Fecha", "Tienda", "Estado", "Metros DTF", "Metros UV", "Base", "IVA", "Envío", "Total"],
-      // El día del pedido, el de su ticket y el de la lista de pedidos.
-      ...pedidos.map((p) => [
+      // El día del pedido, el de su ticket y el de la lista de pedidos. Con
+      // la línea elegida: de un pedido mixto, solo su parte.
+      ...pedidosDeLaLinea.map((p) => [
         diaDelPedido(p),
-        p.tienda_id,
-        p.estado,
+        nombreTienda.get(p.tienda_id) ?? p.tienda_id,
+        infoEstado("pedido", p.estado).etiqueta,
         Number(p.metros_total ?? 0),
         Number(p.metros_uv ?? 0),
         Number(p.subtotal ?? 0),
@@ -168,209 +235,135 @@ function DashboardGlobal() {
         Number(p.total ?? 0),
       ]),
     ];
-    const nombre = `dashboard-global_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}.csv`;
+    const deLinea = linea !== "todo" ? `_${linea}` : "";
+    const nombre = `inicio_${format(desde, "yyyyMMdd")}_${format(hasta, "yyyyMMdd")}${deLinea}.csv`;
     descargarCSV(nombre, filas);
   }
 
   return (
-    <div className="space-y-6">
-      {/* Cabecera */}
+    <section aria-labelledby="titulo-periodo" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Inicio</h1>
-          <p className="text-muted-foreground">
-            Las cifras del periodo, de todas las tiendas
-            {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}
+          <h2 id="titulo-periodo" className="text-xl font-bold">
+            El periodo
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Tiendas y textil, sin IVA salvo el dinero
+            {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}. Los productos y la
+            descarga, solo de las tiendas.{" "}
+            <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
+              Ver la cuenta de resultados
+            </Link>
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
           <SelectorLinea valor={linea} alCambiar={cambiarLinea} />
-
-          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
+          <Button
+            onClick={descargar}
+            size="sm"
+            variant="outline"
+            disabled={pedidosDeLaLinea.length === 0 || deAntes}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Descargar Excel
           </Button>
         </div>
       </div>
 
       <AvisoActualizando activo={deAntes} />
 
-      {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pedidos: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
-      )}
-
-      {cargando && (
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
-          ))}
+      {lectura.error ? (
+        <ErrorCarga
+          error={lectura.error}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
+          que="las cifras del periodo"
+        />
+      ) : (
+        // Las cuatro, siempre: sin pedidos en el periodo puede haber cobros
+        // de pedidos de antes, y lo pendiente es de hoy.
+        <div {...propsDatosDeAntes(deAntes)}>
+          <CifrasDelPeriodo
+            lectura={lectura}
+            frente={frente}
+            pieCobrado={
+              linea !== "todo" ? (
+                <span className="text-muted-foreground">
+                  Por pedido: los de pedidos mixtos (DTF y DTF UV), con el DTF.
+                </span>
+              ) : undefined
+            }
+            piePendiente="Hoy, sea del periodo que sea"
+          />
         </div>
       )}
 
-      {sinDatos && (
+      {sinPedidos ? (
         <EstadoVacio
           icono={Inbox}
           titulo="Sin pedidos en este periodo"
           descripcion={`No hay ningún pedido registrado entre el ${format(desde, "d 'de' MMMM", { locale: es })} y el ${format(hasta, "d 'de' MMMM 'de' yyyy", { locale: es })}. Cambia de periodo o sincroniza una tienda para ver datos aquí.`}
         />
-      )}
-
-      {!cargando && !error && !sinDatos && (
-        <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
-          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-            <TarjetaKpi
-              titulo="Vendido"
-              explicacion="vendido"
-              valor={eur(k.total)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.total, kPrev.total)}
-              icon={Euro}
-              pie={
-                linea === "todo" && lineas.uv.pedidos > 0 ? (
-                  <DesgloseLinea dtf={eur(lineas.dtf.total)} uv={eur(lineas.uv.total)} />
-                ) : undefined
-              }
-            />
-            <TarjetaKpi
-              titulo="Facturación bruta"
-              explicacion="bruta"
-              valor={eur(k.bruta)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.bruta, kPrev.bruta)}
-              icon={Receipt}
-              pie={
-                linea === "todo" && lineas.uv.pedidos > 0 ? (
-                  <DesgloseLinea dtf={eur(lineas.dtf.bruta)} uv={eur(lineas.uv.bruta)} />
-                ) : k.envios > 0 ? (
-                  <span className="text-muted-foreground">
-                    Aparte, {eur(k.envios)} de envíos cobrados
-                  </span>
-                ) : undefined
-              }
-            />
-            <TarjetaKpi
-              titulo="Cobrado"
-              explicacion="cobrado"
-              valor={cobrosDisponibles ? eur(cobrado) : "—"}
-              frente={comparacion?.etiqueta}
-              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
-              icon={Wallet}
-              pie={
-                linea !== "todo" ? (
-                  <span className="text-muted-foreground">
-                    Por pedido: los de pedidos mixtos (DTF y DTF UV), con el DTF.
-                  </span>
-                ) : undefined
-              }
-            />
-            <TarjetaKpi
-              titulo={sinCostes ? "Margen" : "Margen estimado"}
-              explicacion="margen"
-              valor={sinCostes ? "—" : eur(margenPer)}
-              delta={sinCostes ? null : variacion(margenPer, margenPrev)}
-              frente={comparacion?.etiqueta}
-              icon={Percent}
-              pie={
-                !sinCostes && linea === "todo" && lineas.uv.pedidos > 0 ? (
-                  <DesgloseLinea dtf={eur(lineas.dtf.ganancia)} uv={eur(lineas.uv.ganancia)} />
-                ) : undefined
-              }
-            />
-            <TarjetaKpi
-              titulo="Ticket medio"
-              explicacion="ticket"
-              valor={eur(k.ticket)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.ticket, kPrev.ticket)}
-              icon={ShoppingCart}
-            />
-            <TarjetaKpi
-              titulo={linea === "uv" ? "Metros de DTF UV" : "Metros vendidos"}
-              explicacion="metros"
-              valor={metros(metrosDe(k))}
-              frente={comparacion?.etiqueta}
-              delta={variacion(metrosDe(k), metrosDe(kPrev))}
-              icon={Ruler}
-              pie={
-                linea === "todo" && k.metrosUv > 0 ? (
-                  <span className="text-xs text-muted-foreground">
-                    De DTF. Aparte,{" "}
-                    <span className="font-medium text-violet-700 dark:text-violet-300">
-                      {metros(k.metrosUv)} de DTF UV
-                    </span>
-                  </span>
-                ) : undefined
-              }
-            />
-            <TarjetaKpi
-              titulo="Devoluciones"
-              explicacion="devoluciones"
-              valor={eur(k.devuelto)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.devuelto, kPrev.devuelto)}
-              icon={Undo2}
-              deltaInverso
-            />
-            <TarjetaKpi
-              titulo="Cancelados"
-              explicacion="cancelados"
-              valor={String(k.cancelados)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.cancelados, kPrev.cancelados)}
-              icon={XCircle}
-              color="destructive"
-              deltaInverso
-            />
-          </div>
-
-          {sinCostes && (
-            <p className="-mt-2 text-xs text-muted-foreground">
-              Configura los costes por metro en Ajustes › Datos de la empresa para calcular el
-              margen.
-            </p>
-          )}
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {grafica.por === "dia" ? "Ingresos por día" : "Ingresos por mes"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-72">
+      ) : (
+        <div {...propsDatosDeAntes(deAntes, "grid gap-4 lg:grid-cols-2")}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {grafica.por === "dia" ? "Ventas netas por día" : "Ventas netas por mes"}
+              </CardTitle>
+              <CardDescription>
+                Sin IVA, tiendas y textil. Cada devolución resta en su día.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-72">
+              {lectura.error ? (
+                <ErrorCarga
+                  sinMarco
+                  error={lectura.error}
+                  onReintentar={lectura.reintentar}
+                  reintentando={lectura.reintentando}
+                  que="las ventas del periodo"
+                />
+              ) : !grafica.datos ? (
+                <Skeleton className="h-full w-full" />
+              ) : (
                 <ConGrafica>
-                  <IngresosPorTramo datos={grafica.datos} etiquetaConColor />
+                  <IngresosPorTramo datos={grafica.datos} nombre="Ventas netas" etiquetaConColor />
                 </ConGrafica>
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Top productos por metros</CardTitle>
-              </CardHeader>
-              <CardContent className="h-72">
-                {consultaLineas.isPending ? (
-                  <Skeleton className="h-full w-full" />
-                ) : topProductos.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Los pedidos de este periodo no tienen líneas de detalle.
-                  </div>
-                ) : (
-                  <ConGrafica>
-                    <TopProductosMetros datos={topProductos} />
-                  </ConGrafica>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Top productos por metros</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              {consultaLineas.error ? (
+                <ErrorCarga
+                  sinMarco
+                  error={consultaLineas.error}
+                  onReintentar={consultaLineas.refetch}
+                  reintentando={consultaLineas.isRefetching}
+                  que="las líneas de los pedidos"
+                />
+              ) : consultaLineas.isPending ? (
+                <Skeleton className="h-full w-full" />
+              ) : topProductos.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Los pedidos de este periodo no tienen líneas de detalle.
+                </div>
+              ) : (
+                <ConGrafica>
+                  <TopProductosMetros datos={topProductos} />
+                </ConGrafica>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
-    </div>
+    </section>
   );
 }

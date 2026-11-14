@@ -5,6 +5,7 @@ import {
   diasDelMesDe,
   esVista,
   moverReferencia,
+  referenciaDelMes,
   prioridadMasAlta,
   rangoDeVista,
   semanaDe,
@@ -169,5 +170,22 @@ describe("tituloDeVista", () => {
   it("esVista", () => {
     expect(esVista("mes")).toBe(true);
     expect(esVista("trimestre")).toBe(false);
+  });
+});
+
+describe("moverReferencia con hoy", () => {
+  it("al llegar al mes de hoy, se queda en hoy; a otro mes, el día 1", () => {
+    expect(moverReferencia("2026-10-01", "mes", 1, "2026-11-14")).toBe("2026-11-14");
+    expect(moverReferencia("2026-11-14", "mes", 1, "2026-11-14")).toBe("2026-12-01");
+    expect(moverReferencia("2026-12-01", "mes", -1, "2026-11-14")).toBe("2026-11-14");
+  });
+  it("al llegar al año de hoy, se queda en hoy", () => {
+    expect(moverReferencia("2025-03-10", "anio", 1, "2026-11-14")).toBe("2026-11-14");
+    expect(moverReferencia("2026-11-14", "anio", 1, "2026-11-14")).toBe("2027-11-14");
+  });
+  it("referenciaDelMes: hoy si es su mes, si no el día 1", () => {
+    expect(referenciaDelMes("2026-11-01", "2026-11-14")).toBe("2026-11-14");
+    expect(referenciaDelMes("2026-12-20", "2026-11-14")).toBe("2026-12-01");
+    expect(referenciaDelMes("2026-12-20")).toBe("2026-12-01");
   });
 });

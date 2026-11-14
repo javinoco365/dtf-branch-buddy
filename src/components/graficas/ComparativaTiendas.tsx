@@ -11,6 +11,7 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
+import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { eur } from "@/lib/format";
 
 /** Lo cobrado por cada tienda, una barra de un color por tienda. */
@@ -24,20 +25,14 @@ export function ComparativaTiendas({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={datos}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="tienda" tick={{ fontSize: 12 }} />
+        <CartesianGrid {...REJILLA} />
+        <XAxis {...EJE} dataKey="tienda" tick={{ ...TEXTO_EJE, fontSize: 12 }} />
         <YAxis
-          tick={{ fontSize: 11 }}
+          {...EJE}
+          tick={TEXTO_EJE}
           tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
         />
-        <Tooltip
-          formatter={(v: number) => eur(v)}
-          contentStyle={{
-            background: "var(--color-card)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-          }}
-        />
+        <Tooltip {...BOCADILLO} formatter={(v: number) => eur(v)} />
         <Bar dataKey="total" name="Total cobrado" radius={[6, 6, 0, 0]}>
           {datos.map((_, i) => (
             <Cell key={i} fill={colores[i % colores.length]} />

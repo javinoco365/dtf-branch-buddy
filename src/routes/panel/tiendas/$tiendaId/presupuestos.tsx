@@ -75,6 +75,8 @@ import {
 } from "@/dominio/presupuestos";
 import { totalesPresupuestos } from "@/dominio/sumatorios-facturas";
 import { avisarError, mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/presupuestos")({
   component: PresupuestosTienda,
@@ -115,7 +117,7 @@ function PresupuestosTienda() {
       (await supabase.from("tiendas").select("nombre").eq("id", tiendaId).maybeSingle()).data,
   });
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["presupuestos", tiendaId],
     queryFn: () => listar({ data: { tiendaId } }),
   });
@@ -188,41 +190,37 @@ function PresupuestosTienda() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Presupuestos · {tienda?.nombre ?? "Tienda"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Presupuestos de esta tienda, con productos del catálogo o líneas libres.
-          </p>
-        </div>
-        <NuevoPresupuestoMenu
-          disabled={data?.disponible === false}
-          onManual={() => {
-            setBorrador(null);
-            setImagenesIa([]);
-            setNuevo(true);
-          }}
-          onIa={setModoIa}
-        />
-      </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Presupuestos de esta tienda, con productos del catálogo o líneas libres."
+        acciones={
+          <NuevoPresupuestoMenu
+            disabled={data?.disponible === false}
+            onManual={() => {
+              setBorrador(null);
+              setImagenesIa([]);
+              setNuevo(true);
+            }}
+            onIa={setModoIa}
+          />
+        }
+      />
 
       {data?.disponible === false && (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
-            Los presupuestos de tienda necesitan la migración{" "}
-            <code>20261001100000_presupuestos_tiendas.sql</code>.
+            Los presupuestos de tienda aún no están activados. Avisa a Javier.
           </CardContent>
         </Card>
       )}
 
       {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los presupuestos: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={error}
+          que="los presupuestos"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
       )}
 
       <Card>
@@ -271,11 +269,32 @@ function PresupuestosTienda() {
       {!isLoading && !error && data?.disponible !== false && filtrados.length === 0 ? (
         <EstadoVacio
           icono={FileText}
-          titulo={hayFiltro ? "Nada con estos filtros" : "Todavía no hay presupuestos"}
+          titulo={
+            hayFiltro ? "Ningún presupuesto cumple los filtros" : "Todavía no hay presupuestos"
+          }
           descripcion={
             hayFiltro
-              ? "Ningún presupuesto cumple los filtros elegidos."
-              : "Crea el primero con «Nuevo presupuesto»."
+              ? "Quita los filtros o elige otras fechas."
+              : escribir
+                ? "Crea el primero."
+                : "Cuando alguien cree uno, saldrá aquí."
+          }
+          accion={
+            hayFiltro ? (
+              <Button variant="outline" onClick={() => quitar()}>
+                <X className="h-4 w-4 mr-1" /> Quitar filtros
+              </Button>
+            ) : escribir ? (
+              <Button
+                onClick={() => {
+                  setBorrador(null);
+                  setImagenesIa([]);
+                  setNuevo(true);
+                }}
+              >
+                Nuevo presupuesto
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -325,7 +344,12 @@ function PresupuestosTienda() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              aria-label="Más acciones"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

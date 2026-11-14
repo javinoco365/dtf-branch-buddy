@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 // tabla empezaba a pedir los pedidos un viaje más tarde.
 import { PedidosTable } from "@/components/PedidosTable";
 import { PedidosErrorBoundary } from "@/components/pedidos/PedidosErrorBoundary";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/pedidos")({
   component: Pedidos,
@@ -26,14 +27,10 @@ function Pedidos() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Pedidos · {tienda?.nombre ?? "Tienda"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Pedidos sincronizados con WooCommerce y manuales.
-        </p>
-      </div>
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Pedidos sincronizados con WooCommerce y manuales."
+      />
       <PedidosErrorBoundary>
         <PedidosTable tiendaId={tiendaId} />
       </PedidosErrorBoundary>

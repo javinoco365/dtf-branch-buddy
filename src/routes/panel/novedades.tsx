@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { cn } from "@/lib/utils";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/novedades")({
   head: () => ({ meta: [{ title: "Novedades · DTF Culture" }] }),
@@ -66,12 +67,7 @@ function Novedades() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Novedades</h1>
-        <p className="text-sm text-muted-foreground">
-          Lo que ha cambiado en el CRM. Lo más nuevo, arriba.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="Lo que ha cambiado en el CRM. Lo más nuevo, arriba." />
 
       <div
         role="group"

@@ -1,4 +1,5 @@
 import { CLAVE_EMPRESA, leerEmpresa } from "@/lib/empresa";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { createFileRoute } from "@tanstack/react-router";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
@@ -84,6 +85,9 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Lo que necesita la lista, sin los snapshots de emisor y líneas ni el
@@ -128,7 +132,13 @@ function Facturas() {
       (await supabase.from("tiendas").select("*").eq("id", tiendaId).maybeSingle()).data,
   });
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error: errorFacturas,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["facturas", tiendaId],
     // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
     queryFn: async () =>
@@ -230,6 +240,7 @@ function Facturas() {
   const sePuedeBorrar = (f: any) =>
     impedimentoBorrado(f, ultimos, referenciaFactura(f.serie, f.ejercicio, f.numero)) === null;
   const [borrando, setBorrando] = useState<any>(null);
+  const [anulando, setAnulando] = useState<any>(null);
   const borrarFn = useServerFn(borrarUltimaFactura);
   const borrar = useMutation({
     mutationFn: (id: string) => borrarFn({ data: { tipo: "tienda", factura_id: id } }),
@@ -259,6 +270,7 @@ function Facturas() {
       }),
     onSuccess: (r: any) => {
       toast.success(`Anulada con la rectificativa ${r.referencia}`);
+      setAnulando(null);
       qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
     },
     onError: (e: any) => avisarError(e, "No se pudo anular"),
@@ -294,45 +306,41 @@ function Facturas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Facturas · {tienda?.nombre ?? "Tienda"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Numeración única de la sociedad. El número lo asigna la base al emitir.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <DescargarPdfs
-            docs={docsFiltrados}
-            nombreZip={nombreZip(
-              periodo.seleccion,
-              periodo.rango,
-              `Facturas_${tienda?.nombre ?? "tienda"}`,
-            )}
-          />
-          {escribir && <TicketsPendientesDialog tiendaId={tiendaId} />}
-          <Dialog open={abierto} onOpenChange={setAbierto}>
-            {/* El permiso, por fuera del disparador: dentro, <SiPuede> se
-                tragaba el clic y el diálogo no se abría. */}
-            {escribir && (
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" /> Nueva factura
-                </Button>
-              </DialogTrigger>
-            )}
-            <NuevaFacturaDialog
-              tiendaId={tiendaId}
-              onDone={() => {
-                setAbierto(false);
-                qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
-              }}
+      <CabeceraPantalla
+        tienda={tienda?.nombre}
+        subtitulo="Facturas y tickets de esta tienda"
+        acciones={
+          <>
+            <DescargarPdfs
+              docs={docsFiltrados}
+              nombreZip={nombreZip(
+                periodo.seleccion,
+                periodo.rango,
+                `Facturas_${tienda?.nombre ?? "tienda"}`,
+              )}
             />
-          </Dialog>
-        </div>
-      </div>
+            {escribir && <TicketsPendientesDialog tiendaId={tiendaId} />}
+            <Dialog open={abierto} onOpenChange={setAbierto}>
+              {/* El permiso, por fuera del disparador: dentro, <SiPuede> se
+                tragaba el clic y el diálogo no se abría. */}
+              {escribir && (
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" /> Nueva factura
+                  </Button>
+                </DialogTrigger>
+              )}
+              <NuevaFacturaDialog
+                tiendaId={tiendaId}
+                onDone={() => {
+                  setAbierto(false);
+                  qc.invalidateQueries({ queryKey: ["facturas", tiendaId] });
+                }}
+              />
+            </Dialog>
+          </>
+        }
+      />
 
       <BarraFiltros>
         <CampoBusqueda
@@ -409,10 +417,12 @@ function Facturas() {
                   <TableCell>
                     <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
-                  <TableCell className="text-right">{eur(f.base_imponible)}</TableCell>
-                  <TableCell className="text-right">{eur(f.iva_total)}</TableCell>
-                  <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">{eur(f.base_imponible)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{eur(f.iva_total)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {eur(f.total)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     <div className="inline-flex gap-1">
                       <Button
                         size="sm"
@@ -420,6 +430,7 @@ function Facturas() {
                         onClick={() => descargar(f)}
                         disabled={generandoId === f.id}
                         title={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
+                        aria-label={f.pdf_url ? "Descargar PDF" : "Generar y descargar PDF"}
                       >
                         {generandoId === f.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -434,8 +445,9 @@ function Facturas() {
                           onClick={() => marcarPagada.mutate(f.id)}
                           disabled={marcarPagada.isPending}
                           title="Marcar como pagada"
+                          aria-label="Marcar como pagada"
                         >
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       )}
                       {escribir && situaciones.get(f.id)?.admite_cambios && (
@@ -455,17 +467,10 @@ function Facturas() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Se emitirá una factura rectificativa que anula la ${referenciaFactura(f.serie, f.ejercicio, f.numero)}. La original no se borra ni se modifica. ¿Continuar?`,
-                                )
-                              ) {
-                                anular.mutate({ id: f.id, tipo: f.tipo });
-                              }
-                            }}
+                            onClick={() => setAnulando(f)}
                             disabled={anular.isPending}
                             title="Anular con una rectificativa"
+                            aria-label="Anular con una rectificativa"
                           >
                             <Undo2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -488,7 +493,23 @@ function Facturas() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && facturas.length === 0 && (
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isLoading && errorFacturas && (
+                <ErrorCarga
+                  error={errorFacturas}
+                  que="las facturas"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={8}
+                />
+              )}
+              {!isLoading && !errorFacturas && facturas.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -523,6 +544,18 @@ function Facturas() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmarRectificativa
+        abierto={!!anulando}
+        que={
+          anulando
+            ? `${anulando.tipo === "simplificada" ? "el ticket" : "la factura"} ${referenciaFactura(anulando.serie, anulando.ejercicio, anulando.numero)}`
+            : "el documento"
+        }
+        cargando={anular.isPending}
+        onCerrar={() => setAnulando(null)}
+        onConfirmar={() => anulando && anular.mutate({ id: anulando.id, tipo: anulando.tipo })}
+      />
 
       <ConfirmarBorrado
         abierto={!!borrando}
@@ -573,7 +606,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   const emitirFacturaFn = useServerFn(emitirFactura);
   const [cliente, setCliente] = useState({ nombre: "", nif: "", direccion: "" });
   const [clienteId, setClienteId] = useState<string | null>(null);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = diaEnEspana(new Date());
   const [fecha, setFecha] = useState(hoy);
   const [vencimiento, setVencimiento] = useState("");
   const [notas, setNotas] = useState("");
@@ -684,7 +717,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
   }
 
   return (
-    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Nueva factura</DialogTitle>
       </DialogHeader>
@@ -814,6 +847,7 @@ function NuevaFacturaDialog({ tiendaId, onDone }: { tiendaId: string; onDone: ()
                 </div>
                 <div className="col-span-1">
                   <Button
+                    aria-label="Quitar la línea"
                     type="button"
                     variant="ghost"
                     size="icon"

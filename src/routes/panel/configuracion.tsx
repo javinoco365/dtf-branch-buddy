@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Building2, Wallet, FileText, CalendarDays } from "lucide-react";
+import { Users, Building2, FileText, CalendarDays } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { ICONOS_PANTALLA } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/configuracion")({
   head: () => ({ meta: [{ title: "Configuración general · DTF Culture" }] }),
@@ -13,14 +15,9 @@ function ConfiguracionPage() {
   const { isAdmin } = useAuth();
   return (
     <div className="space-y-8 max-w-6xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ajustes generales</h1>
-        <p className="text-sm text-muted-foreground">
-          Configura los parámetros globales que afectan al funcionamiento del CRM.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="Los datos de la empresa, los PDF, la caja, la agenda y los usuarios." />
 
-      <Section title="Configuración" desc="Parámetros globales del sistema">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {/* Los ve cualquier nivel; cambiarlos es de administrador (la
             pantalla los enseña de solo lectura a los demás). */}
         <ConfigCard
@@ -28,18 +25,18 @@ function ConfiguracionPage() {
           icon={Building2}
           title="Datos de la empresa"
           desc="Razón social, CIF, dirección, contacto fiscal y costes de producción por metro."
-          badge={isAdmin ? "Admin" : "Solo lectura"}
+          badge={isAdmin ? "Administrador" : "Solo lectura"}
         />
         <ConfigCard
           to="/panel/configuracion-pdf"
           icon={FileText}
           title="PDF de presupuestos"
           desc="La plantilla del PDF de cada tienda y del textil: logo, nombre comercial, cabecera, textos y pie con los datos fiscales."
-          badge={isAdmin ? "Admin" : "Solo lectura"}
+          badge={isAdmin ? "Administrador" : "Solo lectura"}
         />
         <ConfigCard
           to="/panel/configuracion-caja"
-          icon={Wallet}
+          icon={ICONOS_PANTALLA.caja}
           title="Caja"
           desc="Los conceptos del desplegable y los socios que aparecen en los apuntes de caja."
         />
@@ -55,30 +52,10 @@ function ConfiguracionPage() {
             icon={Users}
             title="Usuarios y permisos"
             desc="Crea usuarios, elige su nivel (administrador, editor o solo lectura) y desactívalos sin perder su historial."
-            badge="Admin"
+            badge="Administrador"
           />
         )}
-      </Section>
-    </div>
-  );
-}
-
-function Section({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
       </div>
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{children}</div>
     </div>
   );
 }

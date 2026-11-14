@@ -22,6 +22,7 @@
  */
 
 import { normalizarNif } from "./clientes";
+import { fechaGmtWoo } from "./cursor-woo";
 
 /** Lo mínimo de un pedido de WooCommerce que hace falta para estas cuentas. */
 export type PedidoWooResumen = {
@@ -80,6 +81,75 @@ export function totalReembolsado(refunds: unknown): number {
     const n = Number((rf as { total?: unknown } | null)?.total);
     return Number.isFinite(n) ? suma + Math.abs(n) : suma;
   }, 0);
+}
+
+/** Un reembolso tal como viene dentro de un pedido de `/orders` (sin fecha). */
+export type ReembolsoEmbebidoWoo = {
+  id?: number | string | null;
+  total?: string | number | null;
+  reason?: string | null;
+};
+
+/** Un reembolso de `/orders/{id}/refunds`: este sí trae su fecha. */
+export type ReembolsoDetalleWoo = {
+  id?: number | string | null;
+  date_created_gmt?: string | null;
+};
+
+/** Una fila de `pedido_devoluciones` lista para el upsert. */
+export type FilaDevolucionWoo = {
+  tienda_id: string;
+  pedido_id: string;
+  woo_refund_id: number;
+  importe: number;
+  motivo: string | null;
+  /**
+   * Cuándo se hizo el reembolso en WooCommerce, en UTC. Solo está si se
+   * conoce: sin ella, el upsert no toca la fecha que ya hubiera (y una fila
+   * nueva se queda con la de hoy, que es lo menos malo).
+   */
+  fecha?: string;
+};
+
+/**
+ * Las filas de devolución de un pedido de WooCommerce.
+ *
+ * La lista de `/orders` trae los reembolsos sin fecha (solo id, motivo e
+ * importe). La fecha sale de `/orders/{id}/refunds` (`date_created_gmt`), que
+ * se pide aparte solo para los pedidos con reembolsos. La clave idempotente es
+ * `(tienda_id, woo_refund_id)`: repetir la sincronización no duplica nada, y
+ * como la fecha va en la fila, un reembolso guardado antes con la fecha de la
+ * sincronización se corrige solo la próxima vez que se sincroniza su pedido.
+ */
+export function filasDevolucionWoo(
+  tiendaId: string,
+  pedidoId: string,
+  embebidos: readonly ReembolsoEmbebidoWoo[] | null | undefined,
+  detalle: readonly ReembolsoDetalleWoo[] | null | undefined,
+): FilaDevolucionWoo[] {
+  const fechaPorId = new Map<number, string>();
+  for (const d of detalle ?? []) {
+    const id = Number(d?.id);
+    const fecha = fechaGmtWoo(d?.date_created_gmt);
+    if (Number.isFinite(id) && fecha) fechaPorId.set(id, fecha);
+  }
+  const filas: FilaDevolucionWoo[] = [];
+  for (const rf of embebidos ?? []) {
+    if (rf?.id == null) continue;
+    const id = Number(rf.id);
+    if (!Number.isFinite(id)) continue;
+    const fila: FilaDevolucionWoo = {
+      tienda_id: tiendaId,
+      pedido_id: pedidoId,
+      woo_refund_id: id,
+      importe: Math.abs(Number(rf.total || 0)) || 0,
+      motivo: rf.reason || null,
+    };
+    const fecha = fechaPorId.get(id);
+    if (fecha) fila.fecha = fecha;
+    filas.push(fila);
+  }
+  return filas;
 }
 
 /** A cuánto hay que dejar `estado_pago`, o `null` si no hay nada que cambiar. */

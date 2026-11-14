@@ -1,18 +1,46 @@
 import { describe, expect, it } from "vitest";
 import {
   CONCEPTOS,
+  FILAS_DINERO,
+  FILAS_RESULTADOS,
+  FILTRO_CUENTA_TODO,
   calcularCuenta,
+  cobradoDelPeriodo,
+  conEstructura,
+  costeMetroDeEmpresa,
   devolucionSinIva,
-  pendienteDeCobro,
+  devolucionesDeLaLinea,
+  devolucionesDelFiltro,
+  devolucionesQueCuentan,
+  estructuraDelPeriodo,
+  mesesDelRango,
+  pctIva,
+  pedidosPorCobrarHoy,
+  pendienteDeFactura,
+  documentosVigentes,
+  pendienteDeCobroHoy,
+  separarCuenta,
+  sobreVentasNetas,
+  variacionCifra,
   ventasDeLaLinea,
+  ventasDelFiltro,
   ventasQueCuentan,
+  entradaDeCanalYGrupo,
+  MOTIVO_IMPUESTO_POR_MES,
+  cuadrarConTotal,
+  ventasNetasPorTramo,
+  sinPedidoDelFiltro,
   type EntradaCuenta,
   type VentaCuenta,
 } from "./cuenta";
-import { cifrasGerencia } from "./gerencia";
+import { cifrasGerencia, type GastoFijo } from "./gerencia";
+import { redondear } from "./importes";
+import type { PedidoPendiente } from "./pendientes";
+import type { CobroConsolidado } from "./facturacion";
 
 /** Un pedido de tienda: 100 € de trabajo + 10 € de envío, IVA 21 %. */
 const venta = (v: Partial<VentaCuenta> = {}): VentaCuenta => ({
+  id: "p1",
   fecha_pedido: "2026-11-05T10:00:00.000Z",
   tienda_id: "t1",
   estado: "entregado",
@@ -34,8 +62,16 @@ const entrada = (e: Partial<EntradaCuenta> = {}): EntradaCuenta => ({
   devoluciones: [],
   costeMetroActual: 4,
   costeEnvioDefecto: 6,
-  estructura: { fijos: 30, compras: 5, amortizacion: 3, almacen: 2, conNominas: true },
+  estructura: {
+    fijos: 30,
+    fijosConJustificante: 30,
+    compras: 5,
+    amortizacion: 3,
+    almacen: 2,
+    conNominas: true,
+  },
   tipoIs: 25,
+  documentado: { pedidos: new Set(["p1"]) },
   ...e,
 });
 
@@ -80,6 +116,14 @@ describe("la cascada", () => {
     expect(c.beneficio_neto).toMatchObject({ valor: 30, estimado: true });
     expect(c.margenPct).toBe(80);
     expect(c.ticketMedio).toBe(100);
+    expect(c.cancelados).toBe(0);
+  });
+
+  it("los cancelados se cuentan aparte y no suman en nada", () => {
+    const c = calcularCuenta(entrada({ ventas: [venta(), venta({ estado: "cancelado" })] }));
+    expect(c.cancelados).toBe(1);
+    expect(c.pedidos).toBe(1);
+    expect(c.ventas.valor).toBe(100);
   });
 
   it("cuadra con el margen de Gerencia cuando el envío cuesta lo cobrado y no hay devoluciones", () => {
@@ -143,7 +187,14 @@ describe("la cascada", () => {
   it("sin nóminas, la estructura está incompleta y lo dice", () => {
     const c = calcularCuenta(
       entrada({
-        estructura: { fijos: 30, compras: 0, amortizacion: 0, almacen: 0, conNominas: false },
+        estructura: {
+          fijos: 30,
+          fijosConJustificante: 30,
+          compras: 0,
+          amortizacion: 0,
+          almacen: 0,
+          conNominas: false,
+        },
       }),
     );
     expect(c.gastos_estructura).toMatchObject({ valor: 30, estimado: true });
@@ -160,7 +211,14 @@ describe("la cascada", () => {
   it("con pérdidas no hay impuesto", () => {
     const c = calcularCuenta(
       entrada({
-        estructura: { fijos: 200, compras: 0, amortizacion: 0, almacen: 0, conNominas: true },
+        estructura: {
+          fijos: 200,
+          fijosConJustificante: 200,
+          compras: 0,
+          amortizacion: 0,
+          almacen: 0,
+          conNominas: true,
+        },
       }),
     );
     expect(c.beneficio_antes_impuestos.valor).toBe(-120);
@@ -168,10 +226,74 @@ describe("la cascada", () => {
     expect(c.beneficio_neto.valor).toBe(-120);
   });
 
-  it("el impuesto sobre la base que se le dé (lo documentado)", () => {
-    const c = calcularCuenta(entrada({ baseSociedades: 20 }));
-    expect(c.sociedades.valor).toBe(5);
-    expect(c.beneficio_neto.valor).toBe(35);
+  it("el impuesto sale solo de lo que tiene factura o ticket", () => {
+    // Dos pedidos iguales (80 € de margen cada uno); solo p1 tiene documento.
+    // Gastos: 30 fijos, de los que 20 con justificante, + 5 + 3 + 2.
+    const c = calcularCuenta(
+      entrada({
+        ventas: [venta(), venta({ id: "p2" })],
+        estructura: {
+          fijos: 30,
+          fijosConJustificante: 20,
+          compras: 5,
+          amortizacion: 3,
+          almacen: 2,
+          conNominas: true,
+        },
+      }),
+    );
+    expect(c.beneficio_antes_impuestos.valor).toBe(120);
+    // Base: 80 − 20 − 5 − 3 − 2 = 50 → 25 % = 12,5.
+    expect(c.sociedades).toMatchObject({ valor: 12.5, estimado: true });
+    expect(c.sociedades.nota).toMatch(/factura o ticket/);
+    expect(c.beneficio_neto.valor).toBe(107.5);
+  });
+
+  it("lo facturado sin pedido es venta y cuenta para el impuesto", () => {
+    const c = calcularCuenta(entrada({ sinPedido: { base: 40, iva: 8.4, total: 48.4 } }));
+    expect(c.ventas.valor).toBe(140);
+    // La cascada cuadra: ventas con IVA − IVA − portes = ventas.
+    expect(c.ventas_con_iva.valor).toBe(181.5);
+    expect(c.iva.valor).toBe(31.5);
+    expect(
+      redondear(
+        (c.ventas_con_iva.valor ?? 0) - (c.iva.valor ?? 0) - (c.portes_cobrados.valor ?? 0),
+      ),
+    ).toBe(c.ventas.valor);
+    expect(c.beneficio_antes_impuestos.valor).toBe(80);
+    expect(c.sociedades.valor).toBe(20);
+  });
+
+  it("sin saber qué tiene documento, no hay impuesto", () => {
+    const c = calcularCuenta(entrada({ documentado: null }));
+    expect(c.beneficio_antes_impuestos.valor).toBe(40);
+    expect(c.sociedades.valor).toBeNull();
+    expect(c.sociedades.falta).toMatch(/factura o ticket/);
+  });
+
+  it("sin coste por metro en Ajustes y sin coste congelado, la producción no se sabe", () => {
+    const c = calcularCuenta(
+      entrada({ costeMetroActual: 0, ventas: [venta({ coste_metro_snapshot: null })] }),
+    );
+    expect(c.coste_produccion.valor).toBeNull();
+    expect(c.coste_produccion.falta).toBe("Sin coste por metro en Ajustes: 1 pedido va sin coste.");
+    expect(c.margen_bruto.valor).toBeNull();
+    expect(c.beneficio_neto.valor).toBeNull();
+    expect(c.margenPct).toBeNull();
+    expect(c.ventas.valor).toBe(100);
+  });
+
+  it("sin coste por metro pero con algunos congelados, va estimado y lo dice", () => {
+    const c = calcularCuenta(
+      entrada({
+        costeMetroActual: 0,
+        ventas: [venta(), venta({ id: "p2", coste_metro_snapshot: null })],
+      }),
+    );
+    expect(c.coste_produccion).toMatchObject({ valor: 20, estimado: true });
+    expect(c.coste_produccion.nota).toMatch(/Sin coste por metro en Ajustes: 1 pedido va/);
+    expect(c.margen_bruto.estimado).toBe(true);
+    expect(c.beneficio_antes_impuestos.estimado).toBe(true);
   });
 
   it("sin ventas, ni margen % ni ticket medio", () => {
@@ -233,15 +355,549 @@ describe("por línea", () => {
   });
 });
 
-describe("pendiente de cobro", () => {
-  it("total − cobrado − devuelto por pedido, sin bajar de cero ni contar cancelados", () => {
+describe("por línea: las partes vacías no cuentan", () => {
+  it("un pedido solo de DTF mirado como UV no es un pedido ni resta su envío", () => {
+    const uv = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([venta()], "uv"), estructura: null }),
+    );
+    expect(uv.pedidos).toBe(0);
+    expect(uv.margen_bruto.valor).toBe(0);
+    expect(uv.resultado_portes.valor).toBe(0);
+  });
+
+  it("un pedido solo de UV mirado como DTF tampoco", () => {
+    const soloUv = venta({ metros_total: 0, metros_uv: 2, coste_uv_snapshot: 15 });
+    const dtf = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([soloUv], "dtf"), estructura: null }),
+    );
+    expect(dtf.pedidos).toBe(0);
+    expect(dtf.margen_bruto.valor).toBe(0);
+  });
+
+  it("en un mixto el envío va solo a la parte de DTF y las dos suman el todo", () => {
+    const mixto = venta({
+      metros_total: 2,
+      metros_uv: 1,
+      coste_uv_snapshot: 15,
+      bruta_uv: 30,
+      iva_uv: 6.3,
+      coste_envio_real: 8,
+    });
+    const [partUv] = ventasDeLaLinea([mixto], "uv");
+    expect(partUv).toMatchObject({ envio: 0, con_envio: false, coste_envio_real: null });
+    const sinEstructura = { estructura: null };
+    const dtf = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([mixto], "dtf"), ...sinEstructura }),
+    );
+    const uv = calcularCuenta(
+      entrada({ ventas: ventasDeLaLinea([mixto], "uv"), ...sinEstructura }),
+    );
+    const todo = calcularCuenta(entrada({ ventas: [mixto], ...sinEstructura }));
+    expect(dtf.resultado_portes.valor).toBe(2);
+    expect(uv.resultado_portes.valor).toBe(0);
+    expect(redondear((dtf.margen_bruto.valor ?? 0) + (uv.margen_bruto.valor ?? 0))).toBe(
+      todo.margen_bruto.valor,
+    );
+    expect(dtf.pedidos + uv.pedidos).toBe(2);
+  });
+});
+
+describe("pendiente de una factura", () => {
+  it("resta lo cobrado de su pedido y no cuenta borradores", () => {
+    expect(pendienteDeFactura({ estado: "emitida", total: 100, cobrado: 0 })).toBe(100);
+    expect(pendienteDeFactura({ estado: "emitida", total: 100, cobrado: 40 })).toBe(60);
+    expect(pendienteDeFactura({ estado: "vencida", total: 100, cobrado: 150 })).toBe(0);
+    expect(pendienteDeFactura({ estado: "borrador", total: 100, cobrado: 0 })).toBe(0);
+  });
+});
+
+describe("los documentos vigentes", () => {
+  it("un ticket canjeado cuenta una vez; sin borradores ni anuladas", () => {
     expect(
-      pendienteDeCobro([
-        { estado: "entregado", total: 100, cobrado: 40 },
-        { estado: "entregado", total: 100, cobrado: 130 },
-        { estado: "entregado", total: 100, devuelto: 100, cobrado: 0 },
-        { estado: "cancelado", total: 100, cobrado: 0 },
-      ]),
-    ).toBe(60);
+      documentosVigentes([
+        { id: "t", estado: "emitida" },
+        { id: "f", estado: "emitida", sustituye_a_id: "t" },
+        { id: "b", estado: "borrador" },
+        { id: "a", estado: "anulada" },
+        { id: "r", estado: "emitida" },
+      ]).map((d) => d.id),
+    ).toEqual(["f", "r"]);
+  });
+
+  it("si la factura del canje se anula, vuelve a contar el ticket", () => {
+    expect(
+      documentosVigentes([
+        { id: "t", estado: "emitida" },
+        { id: "f", estado: "anulada", sustituye_a_id: "t" },
+      ]).map((d) => d.id),
+    ).toEqual(["t"]);
+  });
+});
+
+describe("devoluciones", () => {
+  const pedido = { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 };
+
+  it("la de un pedido cancelado no resta: ese pedido no es venta", () => {
+    const d = { fecha: "2026-11-20", importe: 66.55, pedido: { ...pedido, estado: "cancelado" } };
+    expect(devolucionesQueCuentan([d])).toHaveLength(0);
+    expect(calcularCuenta(entrada({ devoluciones: [d] })).devoluciones.valor).toBe(0);
+  });
+
+  it("la de un pedido mixto se reparte por línea en la proporción de su total", () => {
+    const mixto = { ...pedido, metros_total: 2, metros_uv: 1, bruta_uv: 30, iva_uv: 6.3 };
+    const d = { fecha: "2026-11-20", importe: 133.1, pedido: mixto, tienda_id: "t1" };
+    const [uv] = devolucionesDeLaLinea([d], "uv");
+    const [dtf] = devolucionesDeLaLinea([d], "dtf");
+    expect(Number(uv.importe)).toBeCloseTo(36.3, 6);
+    expect(Number(dtf.importe)).toBeCloseTo(96.8, 6);
+    // Sin IVA, las dos partes suman la devolución entera.
+    expect(devolucionSinIva(uv) + devolucionSinIva(dtf)).toBeCloseTo(devolucionSinIva(d), 6);
+  });
+
+  it("la de un pedido sin UV no va a la línea UV", () => {
+    const d = { fecha: "2026-11-20", importe: 10, pedido: { ...pedido, metros_total: 3 } };
+    expect(devolucionesDeLaLinea([d], "uv")).toHaveLength(0);
+    expect(devolucionesDeLaLinea([d], "dtf")).toHaveLength(1);
+  });
+});
+
+describe("filtros", () => {
+  const textil = venta({ canal: "textil", tienda_id: "textil-personalizado", metros_total: 0 });
+  const sinIva = { subtotal: 1, iva: 0, envio: 0, total: 1 };
+
+  it("el textil solo sale en «Todo»", () => {
+    expect(ventasDeLaLinea([venta(), textil], "dtf")).toHaveLength(1);
+    expect(ventasDeLaLinea([venta(), textil], "todo")).toHaveLength(2);
+  });
+
+  it("por tienda, las ventas y las devoluciones de esa tienda", () => {
+    const v = [venta(), venta({ tienda_id: "t2" }), textil];
+    expect(ventasDelFiltro(v, { tienda: "t2", linea: "todo" })).toHaveLength(1);
+    expect(ventasDelFiltro(v, { tienda: "textil-personalizado", linea: "todo" })).toHaveLength(1);
+    expect(ventasDelFiltro(v, FILTRO_CUENTA_TODO)).toHaveLength(3);
+    const d = [
+      { fecha: "2026-11-02", importe: 5, tienda_id: "t1", pedido: sinIva },
+      { fecha: "2026-11-02", importe: 5, tienda_id: "t2", pedido: sinIva },
+    ];
+    expect(devolucionesDelFiltro(d, { tienda: "t1", linea: "todo" })).toHaveLength(1);
+  });
+
+  it("solo sin filtros hay estructura", () => {
+    expect(conEstructura(FILTRO_CUENTA_TODO)).toBe(true);
+    expect(conEstructura({ tienda: "t1", linea: "todo" })).toBe(false);
+    expect(conEstructura({ tienda: "todas", linea: "uv" })).toBe(false);
+  });
+});
+
+describe("estructura del periodo", () => {
+  const gasto = (g: Partial<GastoFijo>): GastoFijo => ({
+    id: "g",
+    concepto: "Alquiler",
+    importe_mensual: 300,
+    desde: "2026-01-01",
+    hasta: null,
+    ...g,
+  });
+  const noviembre = { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) };
+
+  it("los gastos fijos del periodo y el almacén; sin nóminas, lo dice", () => {
+    const e = estructuraDelPeriodo([gasto({})], noviembre, 7);
+    expect(e.fijos).toBe(300);
+    expect(e.compras).toBe(0);
+    expect(e.almacen).toBe(7);
+    expect(e.conNominas).toBe(false);
+  });
+
+  it("con una nómina dada de alta, está completa", () => {
+    const e = estructuraDelPeriodo([gasto({ tipo: "nomina" })], noviembre, 0);
+    expect(e.conNominas).toBe(true);
+  });
+});
+
+describe("dinero", () => {
+  const pendiente = (p: Partial<PedidoPendiente>): PedidoPendiente => ({
+    tipo: "tienda",
+    id: "p",
+    tienda_id: "t1",
+    numero: "1",
+    fecha: "2026-11-01",
+    cliente_id: null,
+    cliente_nombre: null,
+    origen: "manual",
+    estado: "entregado",
+    total: 100,
+    cobrado: 0,
+    pendiente: 100,
+    ultimo_cobro: null,
+    ...p,
+  });
+
+  it("lo pendiente de cobro no cuenta la web sin pagar", () => {
+    const lista = [
+      pendiente({}),
+      pendiente({ id: "w", origen: "woocommerce", estado: "pendiente", pendiente: 40 }),
+      pendiente({ id: "x", tipo: "textil", tienda_id: null, origen: "textil", pendiente: 20 }),
+    ];
+    expect(pendienteDeCobroHoy(lista, FILTRO_CUENTA_TODO)).toBe(120);
+    expect(pendienteDeCobroHoy(lista, { tienda: "textil-personalizado", linea: "todo" })).toBe(20);
+    expect(pendienteDeCobroHoy(lista, { tienda: "t1", linea: "dtf" })).toBe(100);
+  });
+
+  it("los pedidos por cobrar son los mismos que suma lo pendiente", () => {
+    const lista = [
+      pendiente({}),
+      pendiente({ id: "w", origen: "woocommerce", estado: "pendiente", pendiente: 40 }),
+      pendiente({ id: "c", pendiente: 0 }),
+      pendiente({ id: "x", tipo: "textil", tienda_id: null, origen: "textil", pendiente: 20 }),
+    ];
+    expect(pedidosPorCobrarHoy(lista, FILTRO_CUENTA_TODO)).toBe(2);
+    expect(pedidosPorCobrarHoy(lista, { tienda: "t1", linea: "todo" })).toBe(1);
+  });
+
+  it("lo cobrado, por tienda y por línea", () => {
+    const cobro = (c: Partial<CobroConsolidado>) =>
+      ({
+        importe: 10,
+        tienda_id: "t1",
+        pedido_id: "a",
+        propina: 0,
+        base: 0,
+        iva: 0,
+        envio: 0,
+        metros: 0,
+        ...c,
+      }) as CobroConsolidado;
+    const cobros = [
+      cobro({}),
+      cobro({ pedido_id: "u", importe: 5 }),
+      cobro({ tienda_id: "textil-personalizado", importe: 7 }),
+    ];
+    expect(cobradoDelPeriodo(cobros, FILTRO_CUENTA_TODO)).toBe(22);
+    expect(cobradoDelPeriodo(cobros, { tienda: "t1", linea: "uv" }, new Set(["u"]))).toBe(5);
+    expect(cobradoDelPeriodo(cobros, { tienda: "todas", linea: "dtf" }, new Set(["u"]))).toBe(10);
+  });
+});
+
+describe("separar en columnas", () => {
+  it("por tienda: una columna por tienda con ventas, sin estructura, y suman el todo", () => {
+    const v = [venta(), venta({ tienda_id: "t2", coste_envio_real: 4 })];
+    const cols = separarCuenta(entrada({ ventas: v }), "tienda", {
+      tiendas: [
+        { id: "t1", nombre: "Uno" },
+        { id: "t2", nombre: "Dos" },
+        { id: "t3", nombre: "Sin ventas" },
+      ],
+    });
+    expect(cols.map((c) => c.titulo)).toEqual(["Uno", "Dos"]);
+    expect(cols[0].cuenta.gastos_estructura.valor).toBeNull();
+    const todo = calcularCuenta(entrada({ ventas: v }));
+    const suma =
+      (cols[0].cuenta.margen_bruto.valor ?? 0) + (cols[1].cuenta.margen_bruto.valor ?? 0);
+    expect(suma).toBe(todo.margen_bruto.valor);
+  });
+
+  it("por línea: DTF, DTF UV y el textil aparte", () => {
+    const textil = venta({ canal: "textil", tienda_id: "textil-personalizado", metros_total: 0 });
+    const cols = separarCuenta(entrada({ ventas: [venta(), textil] }), "linea");
+    expect(cols.map((c) => c.clave)).toEqual(["dtf", "uv", "textil"]);
+    expect(cols[2].cuenta.pedidos).toBe(1);
+  });
+
+  it("lo facturado sin pedido va en su columna y las columnas suman el total", () => {
+    const sinPedido = { base: 40, iva: 8.4, total: 48.4 };
+    const e = entrada({ ventas: [venta(), venta({ tienda_id: "t2" })], sinPedido });
+    const todo = calcularCuenta(e);
+    for (const por of ["tienda", "linea"] as const) {
+      const cols = separarCuenta(e, por, {
+        tiendas: [
+          { id: "t1", nombre: "Uno" },
+          { id: "t2", nombre: "Dos" },
+        ],
+      });
+      expect(cols.at(-1)?.titulo).toBe("Sin pedido");
+      for (const k of ["ventas_con_iva", "iva", "ventas", "margen_bruto"] as const) {
+        const suma = redondear(cols.reduce((s, c) => s + (c.cuenta[k].valor ?? 0), 0));
+        expect([por, k, suma]).toEqual([por, k, todo[k].valor]);
+      }
+    }
+  });
+
+  it("por mes: cada venta y cada devolución en su mes, con la estructura de cada mes", () => {
+    const v = [venta({ fecha_pedido: "2026-10-05T10:00:00.000Z" }), venta()];
+    const d = [
+      {
+        fecha: "2026-11-03",
+        importe: 13.31,
+        pedido: { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 },
+      },
+    ];
+    const cols = separarCuenta(entrada({ ventas: v, devoluciones: d }), "mes", {
+      rango: { desde: new Date(2026, 9, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) },
+      estructuraDe: () => ({
+        fijos: 10,
+        fijosConJustificante: 10,
+        compras: 0,
+        amortizacion: 0,
+        almacen: 0,
+        conNominas: true,
+      }),
+    });
+    expect(cols).toHaveLength(2);
+    expect(cols[0].cuenta.pedidos).toBe(1);
+    expect(cols[0].cuenta.devoluciones.valor).toBe(0);
+    expect(cols[1].cuenta.devoluciones.valor).toBe(11);
+    expect(cols[1].cuenta.gastos_estructura.valor).toBe(10);
+  });
+
+  it("por mes, sin estructura en la entrada (un filtro), los meses tampoco la tienen", () => {
+    const cols = separarCuenta(entrada({ estructura: null }), "mes", {
+      rango: { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 30) },
+      estructuraDe: () => ({
+        fijos: 10,
+        fijosConJustificante: 10,
+        compras: 0,
+        amortizacion: 0,
+        almacen: 0,
+        conNominas: true,
+      }),
+    });
+    expect(cols[0].cuenta.gastos_estructura.valor).toBeNull();
+  });
+
+  it("los meses de un rango, recortados", () => {
+    const m = mesesDelRango({ desde: new Date(2026, 9, 15), hasta: new Date(2026, 10, 5) });
+    expect(m).toHaveLength(2);
+    expect(m[0].desde.getDate()).toBe(15);
+    expect(m[1].hasta.getDate()).toBe(5);
+  });
+});
+
+describe("para pintar", () => {
+  it("variación y % sobre ventas netas, nulas si falta algo", () => {
+    expect(variacionCifra({ valor: 110 }, { valor: 100 })).toBe(10);
+    expect(variacionCifra({ valor: null }, { valor: 100 })).toBeNull();
+    expect(variacionCifra({ valor: 1 }, undefined)).toBeNull();
+    expect(sobreVentasNetas({ valor: 25 }, { valor: 100 })).toBe(25);
+    expect(sobreVentasNetas({ valor: 25 }, { valor: 0 })).toBeNull();
+  });
+
+  it("el IVA sobre la base y el coste por metro de la empresa", () => {
+    expect(pctIva(21, 100)).toBe(21);
+    expect(pctIva(0, 0)).toBeNull();
+    expect(
+      costeMetroDeEmpresa({
+        coste_consumibles_metro: "1.5",
+        coste_packaging_metro: 0.25,
+        coste_electricidad_metro: null,
+      }),
+    ).toBe(1.75);
+    expect(costeMetroDeEmpresa(null)).toBe(0);
+  });
+
+  it("las filas: la cascada y el dinero, en su orden", () => {
+    expect(FILAS_RESULTADOS[0].clave).toBe("ventas_con_iva");
+    expect(FILAS_RESULTADOS.at(-1)?.clave).toBe("beneficio_neto");
+    expect(FILAS_DINERO.map((c) => c.clave)).toEqual([
+      "cobrado",
+      "pendiente_cobro",
+      "pendiente_pago",
+    ]);
+  });
+});
+
+describe("canal y grupo (filtros de Gerencia)", () => {
+  const web = venta({ id: "w", canal: "web" });
+  const manual = venta({ id: "m", canal: "manual" });
+  const pedido = { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 };
+  const devWeb = {
+    fecha: "2026-11-20",
+    importe: 13.31,
+    pedido_id: "w",
+    pedido: { ...pedido, origen: "woocommerce" },
+  };
+  const devManual = {
+    fecha: "2026-11-20",
+    importe: 13.31,
+    pedido_id: "m",
+    pedido: { ...pedido, origen: "manual" },
+  };
+  const e = entrada({ ventas: [web, manual], devoluciones: [devWeb, devManual] });
+
+  it("por canal: sus ventas y sus devoluciones, sin gastos", () => {
+    const f = entradaDeCanalYGrupo(e, "web", "total", null)!;
+    expect(f.ventas.map((v) => v.id)).toEqual(["w"]);
+    expect(f.devoluciones).toHaveLength(1);
+    expect(calcularCuenta(f).gastos_estructura.valor).toBeNull();
+  });
+
+  it("por grupo: con documento (A) o sin él (B), y A + B = total", () => {
+    const docs = new Set(["w"]);
+    const a = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "a", docs)!);
+    const b = calcularCuenta(entradaDeCanalYGrupo(e, "todos", "b", docs)!);
+    const t = calcularCuenta({ ...e, documentado: null });
+    expect((a.ventas_netas.valor ?? 0) + (b.ventas_netas.valor ?? 0)).toBeCloseTo(
+      t.ventas_netas.valor ?? 0,
+      6,
+    );
+    expect(a.pedidos).toBe(1);
+  });
+
+  it("sin filtros, la misma entrada", () => {
+    expect(entradaDeCanalYGrupo(e, "todos", "total", null)).toBe(e);
+  });
+});
+
+describe("lo facturado sin pedido es venta en todas las pantallas", () => {
+  const sinPedido = { base: 40, iva: 8.4, total: 48.4 };
+  const docs = new Set(["w"]);
+  const web = venta({ id: "w", canal: "web" });
+  const manual = venta({ id: "m", canal: "manual" });
+  // La Cuenta de resultados: con gastos y con lo documentado.
+  const completa = entrada({ ventas: [web, manual], sinPedido });
+  // Inicio y el resumen de tienda: sin gastos ni documentos, con lo sin pedido.
+  const inicio: EntradaCuenta = { ...completa, estructura: null, documentado: undefined };
+
+  it("Inicio, la Cuenta de resultados y Gerencia (A + B) dan las mismas ventas netas", () => {
+    const enCuenta = calcularCuenta(completa).ventas_netas.valor;
+    const enInicio = calcularCuenta(inicio).ventas_netas.valor;
+    const a = calcularCuenta(entradaDeCanalYGrupo(inicio, "todos", "a", docs)!);
+    const b = calcularCuenta(entradaDeCanalYGrupo(inicio, "todos", "b", docs)!);
+    expect(enInicio).toBe(enCuenta);
+    expect(redondear((a.ventas_netas.valor ?? 0) + (b.ventas_netas.valor ?? 0))).toBe(enCuenta);
+    // Lo sin pedido está documentado: va en A, no en B.
+    expect(a.ventas.valor).toBe(140);
+    expect(b.ventas.valor).toBe(100);
+  });
+
+  it("con A o B y sin saber aún qué tiene documento, no se calcula nada", () => {
+    expect(entradaDeCanalYGrupo(inicio, "todos", "a", null)).toBeNull();
+    expect(entradaDeCanalYGrupo(inicio, "web", "b", null)).toBeNull();
+    expect(entradaDeCanalYGrupo(inicio, "web", "total", null)).not.toBeNull();
+  });
+
+  it("con un canal no va: no es de ningún canal", () => {
+    const w = calcularCuenta(entradaDeCanalYGrupo(inicio, "web", "total", null)!);
+    expect(w.ventas.valor).toBe(100);
+  });
+
+  const doc = (
+    id: string,
+    tienda_id: string,
+    fecha: string,
+    base: number,
+    pedido_id: string | null = null,
+  ) => ({
+    id,
+    tienda_id,
+    fecha,
+    tipo: "ordinaria" as const,
+    estado: "emitida",
+    base,
+    iva: base * 0.21,
+    total: base * 1.21,
+    pedido_id,
+  });
+  const documentos = [
+    doc("f1", "t1", "2026-11-03", 40),
+    doc("f2", "t2", "2026-11-10", 60),
+    doc("f3", "t1", "2026-11-12", 500, "p1"),
+  ];
+
+  it("con una tienda, solo lo sin pedido de esa tienda; con una línea, nada", () => {
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "todo" }).base).toBe(100);
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "t1", linea: "todo" }).base).toBe(40);
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "dtf" }).base).toBe(0);
+  });
+
+  it("en un rango, solo lo de sus días", () => {
+    const r = { desde: new Date(2026, 10, 1), hasta: new Date(2026, 10, 5, 23, 59, 59) };
+    expect(sinPedidoDelFiltro(documentos, [], { tienda: "todas", linea: "todo" }, r).base).toBe(40);
+  });
+});
+
+describe("separar por mes: el impuesto, solo del periodo entero", () => {
+  it("cada mes sin impuesto ni neto, con su motivo; el total sí lo lleva", () => {
+    const v = [venta({ fecha_pedido: "2026-10-05T10:00:00.000Z" }), venta()];
+    const e = entrada({ ventas: v });
+    const total = calcularCuenta(e);
+    expect(total.sociedades.valor).not.toBeNull();
+    const cols = separarCuenta(e, "mes", {
+      rango: { desde: new Date(2026, 9, 1), hasta: new Date(2026, 10, 30, 23, 59, 59) },
+      estructuraDe: () => e.estructura,
+    });
+    for (const c of cols) {
+      expect(c.cuenta.sociedades).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
+      expect(c.cuenta.beneficio_neto).toEqual({ valor: null, falta: MOTIVO_IMPUESTO_POR_MES });
+      expect(c.cuenta.beneficio_antes_impuestos.valor).not.toBeNull();
+    }
+  });
+});
+
+describe("ventasNetasPorTramo (Inicio, «Ventas netas por día»)", () => {
+  const dias = Array.from({ length: 30 }, (_, i) => ({
+    desde: new Date(2026, 10, i + 1),
+    hasta: new Date(2026, 10, i + 1, 23, 59, 59, 999),
+  }));
+  const pedido = { subtotal: 110, iva: 23.1, envio: 10, total: 133.1 };
+  const e = entrada({
+    ventas: [
+      venta({ id: "a", fecha_pedido: "2026-11-03T10:00:00.000Z" }),
+      // Medio céntimo: 33,335 de base.
+      venta({ id: "b", subtotal: 33.335, iva: 7, envio: 0, total: 40.335 }),
+      venta({ id: "c", subtotal: 33.335, iva: 7, envio: 0, total: 40.335 }),
+      venta({ id: "w", canal: "web", origen: "woocommerce", estado: "pendiente" }),
+      venta({ id: "x", estado: "cancelado" }),
+    ],
+    devoluciones: [{ fecha: "2026-11-20", importe: 13.31, pedido_id: "a", pedido }],
+    sinPedido: { base: 40, iva: 8.4, total: 48.4 },
+  });
+  const sinPedidoDe = (r: { desde: Date; hasta: Date }) =>
+    r.desde.getDate() === 12 ? { base: 40, iva: 8.4, total: 48.4 } : { base: 0, iva: 0, total: 0 };
+
+  it("la suma de los días son las ventas netas del periodo, al céntimo", () => {
+    const netas = ventasNetasPorTramo(e, dias, sinPedidoDe);
+    const total = calcularCuenta({ ...e, estructura: null }).ventas_netas.valor;
+    expect(redondear(netas.reduce((s, v) => s + v, 0))).toBe(total);
+  });
+
+  it("cada cosa en su día: la venta en el de su pedido, la devolución y lo sin pedido en el suyo", () => {
+    const netas = ventasNetasPorTramo(e, dias, sinPedidoDe);
+    expect(netas[2]).toBe(100); // 3 de noviembre: el pedido «a», sin IVA ni portes.
+    expect(netas[11]).toBe(40); // 12: la factura sin pedido.
+    expect(netas[19]).toBe(-11); // 20: la devolución, sin IVA (13,31 × 110 ÷ 133,1).
+    // Ni el web sin pagar ni el cancelado (5 de noviembre) cuentan.
+    expect(netas[4]).toBeCloseTo(66.67, 2);
+  });
+});
+
+describe("cuadrarConTotal (columnas que suman el total)", () => {
+  it("el céntimo de diferencia va a la mayor", () => {
+    expect(cuadrarConTotal([33.34, 33.34, 10], 76.67)).toEqual([33.33, 33.34, 10]);
+    expect(cuadrarConTotal([1, 2], 3)).toEqual([1, 2]);
+  });
+
+  it("una diferencia que no es de redondeo no se esconde", () => {
+    expect(cuadrarConTotal([10, 20], 31)).toEqual([10, 20]);
+  });
+
+  it("al separar por tienda, las columnas suman el total aun con medios céntimos", () => {
+    const v = [
+      venta({ id: "1", tienda_id: "t1", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+      venta({ id: "2", tienda_id: "t2", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+      venta({ id: "3", tienda_id: "t3", subtotal: 0.005, iva: 0, envio: 0, total: 0.005 }),
+    ];
+    const e = entrada({ ventas: v, estructura: null });
+    const cols = separarCuenta(e, "tienda", {
+      tiendas: [
+        { id: "t1", nombre: "Uno" },
+        { id: "t2", nombre: "Dos" },
+        { id: "t3", nombre: "Tres" },
+      ],
+    });
+    const total = calcularCuenta(e);
+    for (const k of ["ventas_con_iva", "ventas", "ventas_netas"] as const) {
+      const suma = redondear(cols.reduce((s, c) => s + (c.cuenta[k].valor ?? 0), 0));
+      expect([k, suma]).toEqual([k, total[k].valor]);
+    }
   });
 });

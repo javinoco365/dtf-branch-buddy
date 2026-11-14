@@ -1,17 +1,5 @@
 import { useMemo } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Euro,
-  Gauge,
-  PiggyBank,
-  Percent,
-  Receipt,
-  Ruler,
-  ShoppingCart,
-  Wallet,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gauge } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -22,9 +10,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { BOCADILLO, EJE, REJILLA, TEXTO_EJE } from "@/components/graficas/estilo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { TarjetaConcepto, TarjetaDato, TarjetaKpi } from "@/components/TarjetaKpi";
+import { useCuentaResultados } from "@/lib/cuenta";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import {
+  FILTRO_CUENTA_TODO,
+  calcularCuenta,
+  entradaDeCanalYGrupo,
+  type Cifra,
+} from "@/dominio/cuenta";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import {
   Table,
@@ -35,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Explicacion } from "@/components/Explicacion";
-import { eur, metros } from "@/lib/format";
+import { eur, metros, numero } from "@/lib/format";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
@@ -46,7 +43,6 @@ import {
   antiguedadPendientes,
   avanceObjetivo,
   avisosGerencia,
-  beneficioEstimado,
   cifrasGerencia,
   cifrasGerenciaPorLinea,
   cobradoPorTramos,
@@ -91,11 +87,11 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       avisosGerencia({
         tramos: antiguedadPendientes(d.pendientes, d.hoy),
         variacionVendido: frente ? variacion(c.total, p.total) : null,
-        webSinPagar: { ...d.webSinPagar, cuentan: d.ajustes.web_sin_pagar_cuenta },
+        webSinPagar: d.webSinPagar,
         banco: d.banco ? resumenBanco(d.banco) : null,
         proformas,
       }),
-    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.ajustes, d.banco, proformas],
+    [d.pendientes, d.hoy, frente, c.total, p.total, d.webSinPagar, d.banco, proformas],
   );
 
   const grafica = useMemo(() => {
@@ -116,6 +112,54 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 
   const pedidos = destinoPedidos(d.filtro, d.seleccion);
 
+  // Las ventas netas y el margen bruto, con la cuenta de resultados
+  // (cuenta.ts): el mismo nombre y la misma cuenta que en Inicio y en la
+  // Cuenta de resultados. Con filtro de canal o de grupo (A/B), la misma
+  // cuenta sobre esos pedidos (entradaDeCanalYGrupo).
+  const cuentaAplica = d.filtro.canal === "todos" && d.grupo === "total";
+  const filtroCuenta = useMemo(
+    () => ({ tienda: d.filtro.tienda, linea: d.filtro.linea ?? "todo" }),
+    [d.filtro.tienda, d.filtro.linea],
+  );
+  const lectura = useCuentaResultados({
+    rango: d.rango,
+    previo: d.comparacion?.previo ?? null,
+    filtro: filtroCuenta,
+    gastos: false,
+    dinero: false,
+  });
+  // Con filtro de canal o de grupo (A/B), la misma cuenta sobre esos pedidos.
+  // Con A o B, mientras no se sabe qué tiene documento, «…»: nada calculado.
+  const cuentaFiltrada = useMemo(() => {
+    if (cuentaAplica || !lectura.entrada) return null;
+    const e = entradaDeCanalYGrupo(lectura.entrada, d.filtro.canal, d.grupo, d.documentados);
+    return e ? calcularCuenta(e) : null;
+  }, [cuentaAplica, lectura.entrada, d.filtro.canal, d.grupo, d.documentados]);
+  const previaFiltrada = useMemo(() => {
+    if (cuentaAplica || !lectura.entradaPrevia) return null;
+    const e = entradaDeCanalYGrupo(
+      lectura.entradaPrevia,
+      d.filtro.canal,
+      d.grupo,
+      d.documentadosPrevios,
+    );
+    return e ? calcularCuenta(e) : null;
+  }, [cuentaAplica, lectura.entradaPrevia, d.filtro.canal, d.grupo, d.documentadosPrevios]);
+  const laCuenta = cuentaAplica ? lectura.cuenta : cuentaFiltrada;
+  const laPrevia = cuentaAplica ? lectura.previa : previaFiltrada;
+  const delaCuenta = (cifra: Cifra | undefined): Cifra | null => cifra ?? null;
+  // Lo cobrado y lo pendiente, de Gerencia: con todos sus filtros.
+  const cifraCobrado: Cifra | null = d.cobrosDisponibles
+    ? { valor: cobrado }
+    : d.cobrosLeidos
+      ? { valor: null, falta: "Esta parte aún no está activada." }
+      : null;
+  const cifraPendiente: Cifra | null = d.pendientesDisponibles
+    ? { valor: pendienteHoy }
+    : d.pendientesLeidos
+      ? { valor: null, falta: "Esta parte aún no está activada." }
+      : null;
+
   return (
     <div className="space-y-4">
       {/* Lo que pide hacer algo, lo primero: antes iba debajo de once
@@ -123,10 +167,12 @@ export function Resumen({ d }: { d: DatosGerencia }) {
       <section aria-label="Avisos" className="space-y-2">
         {/* Un fallo no es «ninguna proforma pendiente». */}
         {errorProformas && (
-          <p className="flex items-start gap-2 rounded-lg border border-status-cancelado/30 bg-status-cancelado/5 px-3 py-2 text-sm text-status-cancelado">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            No se han podido leer las proformas sin factura. Prueba a recargar la página.
-          </p>
+          <ErrorCarga
+            compacto
+            className="rounded-lg border border-status-cancelado/30 bg-status-cancelado/5 px-3 py-2"
+            error={errorProformas}
+            que="las proformas sin factura"
+          />
         )}
         {avisos.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -158,31 +204,32 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         )}
       </section>
 
+      {lectura.error && (
+        <ErrorCarga
+          error={lectura.error}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
+          que="las ventas netas y el margen"
+        />
+      )}
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-        <TarjetaKpi
-          titulo="Vendido"
-          explicacion="g_vendido"
-          valor={eur(c.total)}
+        <TarjetaConcepto
+          clave="ventas_netas"
+          cifra={delaCuenta(laCuenta?.ventas_netas)}
+          previa={laPrevia?.ventas_netas}
           frente={frente}
-          delta={variacion(c.total, p.total)}
-          icon={Euro}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
-        <TarjetaKpi
-          titulo="Cobrado"
-          explicacion="g_cobrado"
-          valor={d.cobrosDisponibles ? eur(cobrado) : d.cobrosLeidos ? "—" : "…"}
+        <TarjetaConcepto
+          clave="cobrado"
+          cifra={cifraCobrado}
+          previa={d.cobrosDisponibles ? { valor: cobradoPrev } : undefined}
           frente={frente}
-          delta={d.cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
-          icon={Wallet}
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
-        <TarjetaKpi
-          titulo="Pendiente de cobro"
-          explicacion="g_pendiente"
-          valor={d.pendientesDisponibles ? eur(pendienteHoy) : d.pendientesLeidos ? "—" : "…"}
-          delta={null}
-          icon={Clock}
+        <TarjetaConcepto
+          clave="pendiente_cobro"
+          cifra={cifraPendiente}
           pie={
             <span className="flex flex-wrap items-center gap-x-2">
               <span className="text-muted-foreground">
@@ -192,38 +239,34 @@ export function Resumen({ d }: { d: DatosGerencia }) {
             </span>
           }
         />
-        <TarjetaKpi
-          titulo={sinCostes ? "Margen" : "Margen estimado"}
-          explicacion="g_margen"
-          valor={sinCostes ? "—" : eur(c.margen)}
+        <TarjetaConcepto
+          clave="margen_bruto"
+          cifra={delaCuenta(laCuenta?.margen_bruto)}
+          previa={laPrevia?.margen_bruto}
           frente={frente}
-          delta={sinCostes ? null : variacion(c.margen, p.margen)}
-          icon={Percent}
         />
-        <TarjetaKpi
-          titulo="Pedidos"
-          explicacion="g_pedidos"
-          valor={String(c.pedidos)}
+        <TarjetaDato
+          clave="pedidos"
+          valor={numero(c.pedidos, 0)}
           frente={frente}
           delta={variacion(c.pedidos, p.pedidos)}
-          icon={Receipt}
           pie={<VerDetalle destino={pedidos} texto="Ver pedidos" />}
         />
-        <TarjetaKpi
-          titulo="Ticket medio"
-          explicacion="g_ticket"
-          valor={eur(c.ticket)}
+        <TarjetaDato
+          clave="ticket_medio"
+          valor={!laCuenta ? "…" : laCuenta.ticketMedio === null ? "—" : eur(laCuenta.ticketMedio)}
           frente={frente}
-          delta={variacion(c.ticket, p.ticket)}
-          icon={ShoppingCart}
+          delta={
+            laCuenta?.ticketMedio != null && laPrevia?.ticketMedio != null
+              ? variacion(laCuenta.ticketMedio, laPrevia.ticketMedio)
+              : null
+          }
         />
-        <TarjetaKpi
-          titulo="Metros vendidos"
-          explicacion="g_metros"
+        <TarjetaDato
+          clave="metros"
           valor={metros(c.metros)}
           frente={frente}
           delta={variacion(c.metros, p.metros)}
-          icon={Ruler}
         />
         <TarjetaKpi
           titulo="€ por metro"
@@ -237,7 +280,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
 
       {(d.filtro.linea ?? "todo") === "todo" && <PorLinea d={d} />}
 
-      <BeneficioYObjetivos d={d} c={c} p={p} sinCostes={sinCostes} />
+      <BeneficioYObjetivos d={d} c={c} sinCostes={sinCostes} />
 
       <Card>
         <CardHeader>
@@ -248,21 +291,14 @@ export function Resumen({ d }: { d: DatosGerencia }) {
         <CardContent className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={grafica.datos}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="tramo" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+              <CartesianGrid {...REJILLA} />
+              <XAxis {...EJE} dataKey="tramo" tick={TEXTO_EJE} interval="preserveStartEnd" />
               <YAxis
-                tick={{ fontSize: 11 }}
+                {...EJE}
+                tick={TEXTO_EJE}
                 tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
               />
-              <Tooltip
-                formatter={(v: number) => eur(v)}
-                labelStyle={{ color: "var(--color-foreground)" }}
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                }}
-              />
+              <Tooltip {...BOCADILLO} formatter={(v: number) => eur(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="Vendido" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Cobrado" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
@@ -294,8 +330,9 @@ function PorLinea({ d }: { d: DatosGerencia }) {
           dos.
         </p>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
-        <Table>
+      {/* En el móvil, una tarjeta por línea: ocho columnas no caben a lo ancho. */}
+      <CardContent>
+        <Table movil="tarjetas">
           <TableHeader>
             <TableRow>
               <TableHead>Línea</TableHead>
@@ -344,15 +381,21 @@ function PorLinea({ d }: { d: DatosGerencia }) {
 function BeneficioYObjetivos({
   d,
   c,
-  p,
   sinCostes,
 }: {
   d: DatosGerencia;
   c: CifrasGerencia;
-  p: CifrasGerencia;
   sinCostes: boolean;
 }) {
   const frente = d.comparacion?.etiqueta;
+  // El beneficio, con la cuenta de resultados (cuenta.ts): el mismo que en la
+  // pantalla Cuenta de resultados, con devoluciones, envíos y estructura.
+  const lectura = useCuentaResultados({
+    rango: d.rango,
+    previo: d.comparacion?.previo ?? null,
+    filtro: FILTRO_CUENTA_TODO,
+    dinero: false,
+  });
   // Los objetivos son de toda la venta: en B (lo pendiente de documentar) no
   // se comparan.
   const objetivo =
@@ -369,46 +412,43 @@ function BeneficioYObjetivos({
   if (!hayGastos && !hayObjetivo) {
     return (
       <Nota>
-        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio estimado y
-        cómo vas frente al objetivo. <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
+        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio antes de
+        impuestos y cómo vas frente al objetivo.{" "}
+        <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
       </Nota>
     );
   }
   if (!sinFiltros) {
     return (
       <Nota>
-        El beneficio estimado y los objetivos son de toda la empresa: se ven con «Todas las tiendas»
-        y «Todos los canales».
+        El beneficio antes de impuestos y los objetivos son de toda la empresa: se ven con «Todas
+        las tiendas» y «Todos los canales».
       </Nota>
     );
   }
 
   const transcurrido = parteTranscurrida(d.rango, d.hoy);
-  const actual = beneficioEstimado(c.margen, d.gastosDelGrupo, d.rango, d.hoy);
-  const previo = d.comparacion
-    ? beneficioEstimado(p.margen, d.gastosDelGrupo, d.comparacion.previo)
-    : null;
+  const bai = lectura.cuenta?.beneficio_antes_impuestos ?? null;
 
   return (
     <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-      {hayGastos && (
-        <TarjetaKpi
-          titulo="Beneficio estimado"
-          explicacion="g_beneficio"
-          valor={sinCostes ? "—" : eur(actual.beneficio)}
-          color={!sinCostes && actual.beneficio < 0 ? "destructive" : "primary"}
+      {hayGastos && d.grupo === "total" && (
+        <TarjetaConcepto
+          clave="beneficio_antes_impuestos"
+          cifra={bai}
+          previa={lectura.previa?.beneficio_antes_impuestos}
           frente={frente}
-          delta={
-            sinCostes || !previo || previo.beneficio <= 0
-              ? null
-              : variacion(actual.beneficio, previo.beneficio)
-          }
-          icon={PiggyBank}
+          estado={{ cargando: false, error: lectura.error }}
+          onReintentar={lectura.reintentar}
+          reintentando={lectura.reintentando}
           pie={
-            <span className="text-muted-foreground">
-              {sinCostes
-                ? "Falta el coste por metro para calcular el margen."
-                : `Margen ${eur(c.margen)} − gastos ${eur(actual.gastos)}${actual.hastaHoy ? " hasta hoy" : ""}`}
+            <span className="flex flex-wrap items-center gap-x-2">
+              {sinCostes && (
+                <span className="text-muted-foreground">
+                  Falta el coste por metro: la producción va sin coste.
+                </span>
+              )}
+              <VerDetalle destino={{ to: "/panel/cuenta-resultados" }} texto="Ver la cuenta" />
             </span>
           }
         />

@@ -42,10 +42,10 @@ export function BotonResumenDiario(props: {
         Resumen diario
       </Button>
       <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent className="resumen-imprimible grid-cols-1 max-w-6xl max-h-[94vh] overflow-y-auto max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:max-w-none max-md:rounded-none max-md:p-4">
+        <DialogContent className="resumen-imprimible grid-cols-1 max-w-6xl max-h-[94dvh] overflow-y-auto max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:max-w-none max-md:rounded-none max-md:p-4">
           {/* Solo montado mientras está abierto: cerrado no lee nada. */}
           {abierto && (
-            <Suspense fallback={<Skeleton className="h-[60vh] w-full" />}>
+            <Suspense fallback={<Skeleton className="h-[60dvh] w-full" />}>
               <ContenidoResumenDiario {...datos} />
             </Suspense>
           )}

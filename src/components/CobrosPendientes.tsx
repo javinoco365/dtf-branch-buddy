@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SiPuede } from "@/components/SiPuede";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eur, fechaCorta } from "@/lib/format";
 import { toast } from "sonner";
-import { CheckCircle2, AlertTriangle, Clock, Wallet, Search, X } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Clock, Search, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,8 +28,23 @@ import {
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { useTiendas } from "@/lib/periodo";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { useServerFn } from "@tanstack/react-start";
 import { cambiarEstadoCobro } from "@/lib/facturas.functions";
+import { leerPorIds } from "@/lib/leer-por-ids";
+import { tabla } from "@/lib/rpc";
+import { pendienteDeFactura } from "@/dominio/cuenta";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ICONO } from "@/components/iconos";
 
 type Factura = {
   id: string;
@@ -41,6 +56,11 @@ type Factura = {
   estado: string;
   cliente_nombre: string | null;
   total: number;
+  pedido_id: string | null;
+  /** Lo cobrado de su pedido, con IVA (0 sin pedido). */
+  cobrado: number;
+  /** Lo que falta: total − cobrado; 0 en un borrador (ver pendienteDeFactura). */
+  pendiente: number;
   tiendas?: { nombre: string; color: string | null } | null;
 };
 
@@ -61,31 +81,62 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
   const [busqueda, setBusqueda] = useTextoDiferido(filtros.fq, (fq) => cambiar({ fq }));
   const { data: tiendasLista = [] } = useTiendas();
 
-  const { data: facturas = [], isLoading } = useQuery({
+  const {
+    data: facturas = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["cobros-pendientes", tiendaId ?? "global"],
     queryFn: async () => {
       let q = supabase
         .from("facturas")
         .select(
-          "id,tienda_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)",
+          "id,tienda_id,pedido_id,serie,numero,fecha,fecha_vencimiento,estado,cliente_nombre,total,tiendas(nombre,color)",
         )
         .in("estado", ["emitida", "vencida", "borrador"])
         .order("fecha", { ascending: true });
       if (tiendaId) q = q.eq("tienda_id", tiendaId);
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as unknown as Factura[];
+      const filas = (data ?? []) as unknown as Omit<Factura, "cobrado" | "pendiente">[];
+      // Lo ya cobrado de cada pedido: un pago a medias no es deuda entera.
+      const pedidos = filas.map((f) => f.pedido_id).filter((id): id is string => !!id);
+      const { data: cobros, error: errCobros } = await leerPorIds<{
+        pedido_id: string;
+        importe: number;
+      }>(pedidos, (trozo, a, b) =>
+        tabla(supabase, "cobros")
+          .select("pedido_id, importe")
+          .in("pedido_id", trozo)
+          .order("id")
+          .range(a, b),
+      );
+      if (errCobros) throw new Error(errCobros.message);
+      const cobradoDe = new Map<string, number>();
+      for (const c of cobros) {
+        cobradoDe.set(c.pedido_id, (cobradoDe.get(c.pedido_id) ?? 0) + Number(c.importe));
+      }
+      return filas.map((f): Factura => {
+        const cobrado = f.pedido_id ? (cobradoDe.get(f.pedido_id) ?? 0) : 0;
+        return { ...f, cobrado, pendiente: pendienteDeFactura({ ...f, cobrado }) };
+      });
     },
   });
 
   // Por el servidor y factura_cambiar_estado_cobro(), como el ✓ de Tienda ›
   // Facturas. Antes escribía en `facturas` desde el navegador, que no tiene ese
   // permiso desde 20260902130000_motor_facturacion.sql: el botón siempre fallaba.
+  // Con un toque se marcaba pagada la factura que no era: ahora se confirma,
+  // con la factura y lo que falta por cobrar a la vista.
+  const [cobrando, setCobrando] = useState<Factura | null>(null);
   const cambiarEstadoFn = useServerFn(cambiarEstadoCobro);
   const marcar = useMutation({
     mutationFn: (id: string) => cambiarEstadoFn({ data: { factura_id: id, estado: "pagada" } }),
     onSuccess: () => {
       toast.success("Marcada como cobrada");
+      setCobrando(null);
       qc.invalidateQueries({ queryKey: ["cobros-pendientes"] });
       qc.invalidateQueries({ queryKey: ["facturas"] });
     },
@@ -108,15 +159,16 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
     });
   }, [facturas, filtros.fq, filtros.ftienda, filtros.festado, tiendaId]);
 
-  const totalPendiente = filtradas.reduce((s, f) => s + Number(f.total), 0);
-  const vencidas = filtradas.filter((f) => diasVencidos(f) > 0);
-  const totalVencido = vencidas.reduce((s, f) => s + Number(f.total), 0);
+  // Lo que de verdad se debe: sin borradores y restando lo ya cobrado.
+  const totalPendiente = filtradas.reduce((s, f) => s + f.pendiente, 0);
+  const vencidas = filtradas.filter((f) => f.estado !== "borrador" && diasVencidos(f) > 0);
+  const totalVencido = vencidas.reduce((s, f) => s + f.pendiente, 0);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         <KPI
-          icon={<Wallet className="h-4 w-4" />}
+          icon={<ICONO.pendienteCobro className="h-4 w-4" />}
           label="Total pendiente"
           value={eur(totalPendiente)}
           tone="default"
@@ -192,7 +244,7 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Importe</TableHead>
+                <TableHead className="text-right">Falta por cobrar</TableHead>
                 <TableHead className="text-right">Acción</TableHead>
               </TableRow>
             </TableHeader>
@@ -233,29 +285,64 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
                         {vencida ? "vencida" : f.estado}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {f.estado === "borrador" ? (
+                        <span className="text-muted-foreground">{eur(f.total)}</span>
+                      ) : (
+                        eur(f.pendiente)
+                      )}
+                      {f.estado === "borrador" && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          borrador: no suma
+                        </div>
+                      )}
+                      {f.estado !== "borrador" && f.cobrado > 0 && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          de {eur(f.total)}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <SiPuede accion="escribir">
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => marcar.mutate(f.id)}
+                          onClick={() => setCobrando(f)}
                           disabled={marcar.isPending}
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" /> Cobrado
+                          <CheckCircle2 className="h-4 w-4 mr-1 text-aviso-bien-texto" /> Cobrado
                         </Button>
                       </SiPuede>
                     </TableCell>
                   </TableRow>
                 );
               })}
-              {!isLoading && filtradas.length === 0 && (
+              {isLoading && (
                 <TableRow>
                   <TableCell
                     colSpan={tiendaId ? 7 : 8}
                     className="text-center py-8 text-muted-foreground"
                   >
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {error && !isLoading && (
+                <ErrorCarga
+                  error={error}
+                  que="los cobros pendientes"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={tiendaId ? 7 : 8}
+                />
+              )}
+              {!isLoading && !error && filtradas.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={tiendaId ? 7 : 8}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-aviso-bien-texto" />
                     Sin cobros pendientes.
                   </TableCell>
                 </TableRow>
@@ -275,6 +362,55 @@ export function CobrosPendientes({ tiendaId }: { tiendaId?: string }) {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={!!cobrando}
+        onOpenChange={(o) => !o && !marcar.isPending && setCobrando(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Marcar como cobrada la factura{" "}
+              {cobrando ? `${cobrando.serie}-${String(cobrando.numero).padStart(5, "0")}` : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {cobrando && (
+                  <p>
+                    {cobrando.cliente_nombre ?? "Sin cliente"} · emitida el{" "}
+                    {fechaCorta(cobrando.fecha)}
+                    {cobrando.tiendas?.nombre ? ` · ${cobrando.tiendas.nombre}` : ""}
+                  </p>
+                )}
+                <p>
+                  {/* Lo que falta, no el total: con un pago a medias, el total
+                      decía que se debía más de lo que se debe. */}
+                  Queda pendiente{" "}
+                  <span className="font-semibold text-foreground">
+                    {cobrando ? eur(cobrando.pendiente) : "…"}
+                  </span>
+                  {cobrando && cobrando.pendiente !== Number(cobrando.total) && (
+                    <> de {eur(Number(cobrando.total))}</>
+                  )}
+                  . Al confirmar, la factura pasa a pagada y deja de salir aquí.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={marcar.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={marcar.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (cobrando) marcar.mutate(cobrando.id);
+              }}
+            >
+              {marcar.isPending ? "Marcando…" : "Sí, está cobrada"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

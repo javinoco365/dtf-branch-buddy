@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Clock, HandCoins, Hourglass, Truck, Wallet } from "lucide-react";
+import { HandCoins, Hourglass, Truck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -30,7 +30,8 @@ import {
   type DatosGerencia,
 } from "./destinos";
 import { NotaGrupo, VerDetalle } from "./comun";
-import { mensajeDeError } from "@/lib/errores";
+import { ICONO } from "@/components/iconos";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export function Tesoreria({ d }: { d: DatosGerencia }) {
   const frente = d.comparacion?.etiqueta;
@@ -62,7 +63,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           valor={d.cobrosDisponibles ? eur(t.cobrado) : "—"}
           frente={frente}
           delta={d.cobrosDisponibles ? variacion(t.cobrado, tPrev.cobrado) : null}
-          icon={Wallet}
+          icon={ICONO.cobrado}
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
         <TarjetaKpi
@@ -70,7 +71,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           explicacion="g_pendiente"
           valor={d.pendientesDisponibles ? eur(pendienteHoy) : "—"}
           delta={null}
-          icon={Clock}
+          icon={ICONO.pendienteCobro}
           pie={<VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver pendientes" />}
         />
         <TarjetaKpi
@@ -88,7 +89,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           valor={eur(t.propina)}
           frente={frente}
           delta={variacion(t.propina, tPrev.propina)}
-          icon={HandCoins}
+          icon={ICONO.propinas}
         />
       </div>
 
@@ -286,15 +287,19 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {consulta.error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer las facturas de compra: {mensajeDeError(consulta.error)}
-          </p>
+          <ErrorCarga
+            compacto
+            error={consulta.error}
+            onReintentar={consulta.refetch}
+            reintentando={consulta.isRefetching}
+            que="las facturas de compra"
+          />
         ) : consulta.data === undefined ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : !pagos ? (
           <p className="text-sm text-muted-foreground">
-            Falta aplicar la migración 20261014100000_compras_recibidas: sin ella no se sabe qué
-            facturas de compra están pagadas.
+            Esta parte aún no está activada. Avisa a Javier. Hasta entonces no se sabe qué facturas
+            de compra están pagadas.
           </p>
         ) : pagos.facturas === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -435,9 +440,13 @@ function AnticiposProveedores({ hoy }: { hoy: Date }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {consulta.error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer las proformas: {mensajeDeError(consulta.error)}
-          </p>
+          <ErrorCarga
+            compacto
+            error={consulta.error}
+            onReintentar={consulta.refetch}
+            reintentando={consulta.isRefetching}
+            que="las proformas"
+          />
         ) : !anticipos || anticipos.proformas === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hay anticipos: ninguna proforma pagada espera su factura.

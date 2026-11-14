@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mensajeDeError } from "@/lib/errores";
 import { AlertTriangle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,13 +76,13 @@ export function VistaPreviaPdf({
       >
         {error ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-aviso-atencion text-aviso-atencion-texto">
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium">No se ha podido preparar la vista previa</p>
               <p className="mx-auto max-w-xs break-words text-xs text-muted-foreground">
-                {error.message || "Error desconocido"}
+                {mensajeDeError(error, "Error desconocido")}
               </p>
               <p className="mx-auto max-w-xs text-xs text-muted-foreground">
                 La plantilla se puede seguir editando y guardando.
@@ -105,9 +106,9 @@ export function VistaPreviaPdf({
         )}
       </div>
       {logoFallido && !error && (
-        <p className="text-[11px] text-amber-700 dark:text-amber-300">
-          No se ha podido cargar el logo en la vista previa, que sale sin él. Comprueba que es un
-          PNG, JPG o WebP; si es así, súbelo aquí para que el PDF lo lleve seguro.
+        <p className="text-[11px] text-aviso-atencion-texto">
+          El logo no se ha cargado en la vista previa, que sale sin él. Comprueba que es un PNG, JPG
+          o WebP; si es así, súbelo aquí para que el PDF lo lleve seguro.
         </p>
       )}
       {!llenar && pdf && !error && (

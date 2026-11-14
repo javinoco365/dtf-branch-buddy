@@ -57,7 +57,7 @@ import {
 } from "@/lib/escaner-textil.functions";
 import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
-import { eur as fmtEUR, eurConSigno, eurUnitario, numero } from "@/lib/format";
+import { eur as fmtEUR, eurConSigno, eurUnitario, fechaHora, numero } from "@/lib/format";
 import { comprasParaDevolucion } from "@/dominio/proformas";
 import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
@@ -76,6 +76,9 @@ import {
 import { CONSULTA_TABLET, useEsMovil } from "@/hooks/use-es-movil";
 import { AvisoUnirProductos } from "@/components/textil/UnirProductosDialog";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/stock")({
   head: () => ({ meta: [{ title: "Stock textil · DTF Culture" }] }),
@@ -92,7 +95,13 @@ function StockPage() {
   const listFn = useServerFn(listStock);
   const upsertFn = useServerFn(upsertStockItem);
   const delFn = useServerFn(deleteStockItem);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error: errorStock,
+    refetch: recargarStock,
+    isFetching: recargandoStock,
+  } = useQuery({
     queryKey: ["textil-stock"],
     queryFn: () => listFn(),
   });
@@ -171,6 +180,7 @@ function StockPage() {
   const [recuento, setRecuento] = useState<Item | null>(null);
   const [historial, setHistorial] = useState<Item | null>(null);
   const [fusionando, setFusionando] = useState<VarianteCatalogo | null>(null);
+  const [borrandoVariante, setBorrandoVariante] = useState<VarianteCatalogo | null>(null);
   // Variantes marcadas para crear un presupuesto o un pedido con ellas.
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const marcar = (ids: readonly string[], si: boolean) =>
@@ -246,6 +256,7 @@ function StockPage() {
           ? "La variante tiene movimientos, así que se ha desactivado en vez de borrarla"
           : "Variante eliminada",
       );
+      setBorrandoVariante(null);
     },
     onError: (e: any) => avisarError(e),
   });
@@ -273,21 +284,7 @@ function StockPage() {
       setEditing(it);
       setOpen(true);
     },
-    borrar: (v) => {
-      if (
-        confirm(
-          `¿Seguro que quieres eliminar "${etiquetaVariante(v)}"?\n\n` +
-            "Si tiene movimientos de stock no se borrará: se desactivará, " +
-            "porque su historia explica el coste de lo que ya vendiste." +
-            // Con la migración del escáner, solo a 0 unidades.
-            (escaner && v.cantidad !== 0
-              ? "\n\nTodavía tiene unidades: para retirarla, antes anota una " +
-                "merma o un recuento que la deje a 0, o fusiónala con la buena."
-              : ""),
-        )
-      )
-        del.mutate(v.id);
-    },
+    borrar: (v) => setBorrandoVariante(v),
     fusionar: (v) => setFusionando(v),
   };
   const propsCurva = {
@@ -303,29 +300,25 @@ function StockPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Stock textil</h1>
-          <p className="text-sm text-muted-foreground">
-            Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado
-            para pedidos.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una fila por prenda y color. En cada talla, lo disponible: lo que hay menos lo reservado para pedidos."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+            </Button>
+          </SiPuede>
+        }
+      />
       {estadoEscaner && !escaner && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_ESCANER}</p>
           </CardContent>
         </Card>
@@ -374,14 +367,44 @@ function StockPage() {
           </CardContent>
         </Card>
       )}
-      {isLoading || data.length === 0 || curva.filas.length === 0 ? (
+      {!isLoading && errorStock ? (
+        <ErrorCarga
+          error={errorStock}
+          que="las existencias"
+          onReintentar={recargarStock}
+          reintentando={recargandoStock}
+        />
+      ) : isLoading || data.length === 0 || curva.filas.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            {isLoading
-              ? "Cargando…"
-              : data.length === 0
-                ? "Sin artículos."
-                : "Ninguna prenda coincide con los filtros."}
+            {isLoading ? (
+              "Cargando…"
+            ) : data.length === 0 ? (
+              <>
+                Todavía no hay artículos.
+                {escribir && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(null);
+                        setOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Nuevo artículo
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                Ninguna prenda cumple los filtros.
+                <div className="mt-2">
+                  <QuitarFiltros visible alQuitar={() => quitar()} />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -436,6 +459,23 @@ function StockPage() {
           loading={fusionar.isPending}
         />
       )}
+
+      <ConfirmarBorrado
+        abierto={!!borrandoVariante}
+        que={borrandoVariante ? `«${etiquetaVariante(borrandoVariante)}»` : "la variante"}
+        consecuencias={[
+          "Si tiene movimientos de stock no se borra: se desactiva, porque su historia explica el coste de lo que ya vendiste.",
+        ]}
+        // Con la migración del escáner, solo a 0 unidades.
+        impedimento={
+          escaner && borrandoVariante && borrandoVariante.cantidad !== 0
+            ? "Todavía tiene unidades: para retirarla, antes anota una merma o un recuento que la deje a 0, o fusiónala con la buena."
+            : null
+        }
+        cargando={del.isPending}
+        onCerrar={() => !del.isPending && setBorrandoVariante(null)}
+        onConfirmar={() => borrandoVariante && del.mutate(borrandoVariante.id)}
+      />
 
       <HistorialDialog item={historial} onClose={() => setHistorial(null)} />
     </div>
@@ -522,7 +562,7 @@ function StockDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item ? "Editar artículo" : "Nuevo artículo"}</DialogTitle>
         </DialogHeader>
@@ -1029,7 +1069,7 @@ function RecuentoDialog({ item, onClose, onSave, loading }: any) {
             </div>
             <div
               className={`rounded-md border p-3 text-sm ${
-                diferencia === 0 ? "bg-muted/30" : "border-amber-500/50 bg-amber-500/10"
+                diferencia === 0 ? "bg-muted/30" : "border-aviso-atencion-borde bg-aviso-atencion"
               }`}
             >
               {diferencia === 0
@@ -1096,7 +1136,13 @@ const conSigno = (n: number) => `${n > 0 ? "+" : ""}${numero(n || 0, 0)}`;
 /** El libro de una variante: de dónde sale cada unidad que tiene o tuvo. */
 function HistorialDialog({ item, onClose }: any) {
   const listFn = useServerFn(listMovimientosStock);
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["stock-movimientos", item?.id],
     queryFn: () => listFn({ data: { stock_id: item.id } }),
     enabled: !!item,
@@ -1106,7 +1152,7 @@ function HistorialDialog({ item, onClose }: any) {
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Historial de movimientos</DialogTitle>
         </DialogHeader>
@@ -1119,6 +1165,14 @@ function HistorialDialog({ item, onClose }: any) {
         )}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : error ? (
+          <ErrorCarga
+            error={error}
+            que="los movimientos"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         ) : data.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin movimientos.</p>
         ) : (
@@ -1136,16 +1190,16 @@ function HistorialDialog({ item, onClose }: any) {
             <TableBody>
               {data.map((m: any) => (
                 <TableRow key={m.id}>
-                  <TableCell className="text-xs">
-                    {new Date(m.created_at).toLocaleString("es-ES")}
-                  </TableCell>
+                  <TableCell className="text-xs">{fechaHora(m.created_at)}</TableCell>
                   <TableCell>{MOTIVO_TEXTO[m.motivo] ?? m.motivo}</TableCell>
                   {m.motivo === "ajuste_coste" ? (
                     // Revaloriza lo que queda (factura casada con su proforma): sin
                     // unidades, con su importe.
                     <>
-                      <TableCell className="text-right text-muted-foreground">—</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell className="text-right text-muted-foreground tabular-nums">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap tabular-nums">
                         {eurConSigno(Number(m.importe_ajuste ?? 0))}{" "}
                         <span className="text-xs text-muted-foreground">en total</span>
                       </TableCell>
@@ -1153,14 +1207,14 @@ function HistorialDialog({ item, onClose }: any) {
                   ) : (
                     <>
                       <TableCell
-                        className={`text-right font-medium ${
-                          Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
+                        className={`text-right font-medium tabular-nums ${
+                          Number(m.cantidad) > 0 ? "text-aviso-bien-texto" : "text-destructive"
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}
                         {m.cantidad}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {fmtEUR(Number(m.coste_unitario))}
                       </TableCell>
                     </>

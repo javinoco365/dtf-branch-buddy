@@ -11,6 +11,11 @@ const alertVariants = cva(
         default: "bg-background text-foreground",
         destructive:
           "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+        /** Algo que conviene mirar, sin ser un error (ámbar). */
+        atencion:
+          "border-aviso-atencion-borde bg-aviso-atencion text-aviso-atencion-texto [&>svg]:text-aviso-atencion-texto",
+        /** Algo que ha salido bien o está en orden (verde). */
+        bien: "border-aviso-bien-borde bg-aviso-bien text-aviso-bien-texto [&>svg]:text-aviso-bien-texto",
       },
     },
     defaultVariants: {

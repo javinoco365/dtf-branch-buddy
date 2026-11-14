@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { clientesDormidos, resumenClientes, type VentaCliente } from "./clientela";
 import { resumenIva, type DocumentoFiscal } from "./fiscal";
-import { beneficioEstimado, cifrasGerencia, ventaDeTienda, type Venta } from "./gerencia";
-import { margenPor, margenPorTramos } from "./margen";
-import { tramosGrafica } from "./periodos";
+import { ventaDeTienda } from "./gerencia";
 import { sumarImportes } from "./sumatorios";
 import {
   totalDormidos,
   totalEsperandoRespuesta,
-  totalMargen,
   totalRankingClientes,
   totalTiposIva,
-  totalTramosMargen,
 } from "./sumatorios-gerencia-a";
 
 const pedido = (
@@ -148,71 +144,5 @@ describe("totalTiposIva", () => {
     ]);
     expect(totalTiposIva(iva.porTipoIva)).toEqual({ base: 90, cuota: 18.9 });
     expect(iva.repercutido.base).toBe(100);
-  });
-});
-
-describe("totalMargen y totalTramosMargen", () => {
-  const dtf = (fecha: string, bruta: number, metros: number, tienda: string): Venta =>
-    ventaDeTienda({
-      fecha_pedido: `${fecha}T10:00:00`,
-      tienda_id: tienda,
-      estado: "entregado",
-      subtotal: bruta,
-      iva: bruta * 0.21,
-      envio: 0,
-      total: bruta * 1.21,
-      metros_total: metros,
-      coste_metro_snapshot: 2,
-      origen: "manual",
-      cliente_id: "c",
-    });
-
-  const ventas = [
-    dtf("2026-10-01", 100, 10, "t1"), // margen 80: 80 %
-    dtf("2026-10-02", 300, 135, "t2"), // margen 30: 10 %
-    { ...dtf("2026-10-03", 999, 1, "t2"), estado: "cancelado" },
-  ];
-
-  it("es el total del periodo, el de las tarjetas, y el % es el del total", () => {
-    const c = cifrasGerencia(ventas, 0);
-    const filas = margenPor(ventas, (v) => v.tienda_id, new Map(), 0);
-    const t = totalMargen(c);
-    expect(t).toEqual({ bruta: 400, coste: 290, margen: 110, porcentaje: 27.5 });
-    // Ni la suma (90 %) ni la media (45 %) de los de cada fila.
-    expect(filas.map((f) => f.porcentaje)).toEqual([80, 10]);
-    // Y es lo que suman las filas.
-    expect(t.bruta).toBe(sumarImportes(filas, (f) => f.bruta));
-    expect(t.coste).toBe(sumarImportes(filas, (f) => f.coste));
-    expect(t.margen).toBe(sumarImportes(filas, (f) => f.margen));
-  });
-
-  it("sin ventas, el % queda vacío", () => {
-    expect(totalMargen({ bruta: 0, coste: 0, margen: 0 }).porcentaje).toBeNull();
-  });
-
-  const gastos = [
-    { id: "g", concepto: "Alquiler", importe_mensual: 100, desde: "2026-01-01", hasta: null },
-  ];
-
-  it("por tramos: los gastos del periodo, no la suma de los de cada día redondeados", () => {
-    const hoy = new Date(2026, 10, 5); // octubre ya ha pasado entero
-    const c = cifrasGerencia(ventas, 0);
-    const filas = margenPorTramos(ventas, tramosGrafica(octubre).tramos, 0, gastos, hoy);
-    const t = totalTramosMargen(c, gastos, octubre, hoy);
-    expect(t).toMatchObject({ bruta: 400, margen: 110, gastos: 100, beneficio: 10 });
-    // 100 € entre 31 días son 3,23 € al día: las filas suman 100,13 €.
-    expect(sumarImportes(filas, (f) => f.gastos)).toBe(100.13);
-    // El margen sí es el de las filas.
-    expect(sumarImportes(filas, (f) => f.margen)).toBe(t.margen);
-  });
-
-  it("por tramos a mitad de periodo: los gastos hasta hoy, como el Resumen", () => {
-    const hoy = new Date(2026, 9, 10, 12);
-    const c = cifrasGerencia(ventas, 0);
-    const t = totalTramosMargen(c, gastos, octubre, hoy);
-    const resumen = beneficioEstimado(c.margen, gastos, octubre, hoy);
-    expect(t.gastos).toBe(resumen.gastos);
-    expect(t.beneficio).toBe(resumen.beneficio);
-    expect(t.gastos).toBe(32.26); // 100 × 10 / 31
   });
 });

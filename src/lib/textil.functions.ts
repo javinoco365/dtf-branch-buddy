@@ -1876,7 +1876,7 @@ export const anularTicketTextil = createServerFn({ method: "POST" })
         _receptor: ticket.receptor_snapshot ?? {},
         _lineas: lineasDeSnapshotTextil(ticket.lineas_snapshot, -1),
         _marca_id: ticket.marca_id ?? null,
-        _fecha: new Date().toISOString().slice(0, 10),
+        _fecha: diaEnEspana(new Date()),
         _cliente_id: ticket.cliente_id ?? null,
         _notas: `Anulación del ticket ${ticket.numero}`,
         _rectifica_a_id: ticket.id,

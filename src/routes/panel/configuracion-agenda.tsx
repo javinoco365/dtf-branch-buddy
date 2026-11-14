@@ -39,6 +39,7 @@ import {
 import { EstadoVacio } from "@/components/EstadoVacio";
 import { iconoDeCategoria } from "@/components/agenda/estilos";
 import { cn } from "@/lib/utils";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/configuracion-agenda")({
   head: () => ({ meta: [{ title: "Agenda · Ajustes · DTF Culture" }] }),
@@ -66,13 +67,16 @@ function ConfiguracionAgenda() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <Link
-        to="/panel/configuracion"
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
-      </Link>
-      <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
+      <CabeceraPantalla
+        antes={
+          <Link
+            to="/panel/configuracion"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Ajustes
+          </Link>
+        }
+      />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -81,8 +85,8 @@ function ConfiguracionAgenda() {
       ) : data?.falta_migracion ? (
         <EstadoVacio
           icono={CalendarDays}
-          titulo="La Agenda todavía no está en la base"
-          descripcion="Falta aplicar la migración 20261116100000_agenda."
+          titulo="La Agenda aún no está activada"
+          descripcion="Avisa a Javier para activarla."
         />
       ) : (
         <Card>

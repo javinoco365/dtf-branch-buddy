@@ -8,6 +8,10 @@ import {
   esHora,
   esNueva,
   esVencida,
+  franjaDeTarea,
+  motivoSinCrear,
+  msHastaMananaEnMadrid,
+  personasDeAgenda,
   FILTROS_LISTA_INICIALES,
   hayFiltrosLista,
   horaDeMadrid,
@@ -424,5 +428,53 @@ describe("nombreCategoriaRepetido", () => {
   it("renombrar una categoría con su propio nombre no es repetirlo", () => {
     expect(nombreCategoriaRepetido("Gestión", cats, "1")).toBe(false);
     expect(nombreCategoriaRepetido("Pedido", cats, "1")).toBe(true);
+  });
+});
+
+describe("franjaDeTarea", () => {
+  it("con fin, sin fin y de todo el día", () => {
+    const inicio = instanteDeMadrid("2026-11-12", "10:00");
+    const fin = instanteDeMadrid("2026-11-12", "11:30");
+    expect(franjaDeTarea({ todoElDia: false, inicio, fin })).toBe("10:00–11:30");
+    expect(franjaDeTarea({ todoElDia: false, inicio, fin: null })).toBe("10:00");
+    expect(franjaDeTarea({ todoElDia: true, inicio, fin: null })).toBeNull();
+  });
+});
+
+describe("msHastaMananaEnMadrid", () => {
+  it("cuenta hasta las 00:00 de Madrid, no de UTC", () => {
+    // 23:30 en Madrid (invierno, UTC+1) = 22:30 UTC: faltan 30 minutos.
+    expect(msHastaMananaEnMadrid(new Date("2026-11-14T22:30:00Z"))).toBe(30 * 60_000);
+    // En verano (UTC+2): 21:59 UTC son las 23:59 de Madrid.
+    expect(msHastaMananaEnMadrid(new Date("2026-07-01T21:59:00Z"))).toBe(60_000);
+  });
+});
+
+describe("personasDeAgenda", () => {
+  const socios = [
+    { id: "a", nombre: "Ana", activo: true },
+    { id: "n", nombre: "NOVASTRA", activo: true },
+    { id: "v", nombre: "Viejo", activo: false },
+  ];
+  it("solo se eligen los socios activos con cuenta; los demás quedan para los nombres", () => {
+    const p = personasDeAgenda(socios, new Set(["a", "v"]));
+    expect(p.map((x) => [x.id, x.activo])).toEqual([
+      ["a", true],
+      ["n", false],
+      ["v", false],
+    ]);
+  });
+  it("sin saber las cuentas, cuenta el socio activo", () => {
+    expect(personasDeAgenda(socios, null).map((x) => x.activo)).toEqual([true, true, false]);
+  });
+});
+
+describe("motivoSinCrear", () => {
+  it("solo se crea con persona y nivel para escribir", () => {
+    expect(motivoSinCrear(true, "identificado")).toBeNull();
+    expect(motivoSinCrear(false, "identificado")).toMatch(/nivel/);
+    expect(motivoSinCrear(true, "elegir")).toMatch(/Elige quién eres/);
+    expect(motivoSinCrear(true, "sin-personas")).toMatch(/Ajustes › Usuarios/);
+    expect(motivoSinCrear(true, "error")).toMatch(/Reintenta/);
   });
 });

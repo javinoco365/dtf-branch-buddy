@@ -11,7 +11,7 @@ import {
 } from "./grupos";
 import {
   AJUSTES_POR_DEFECTO,
-  aplicarAjustesVentas,
+  sinWebSinPagar,
   filtrarCobrosGerencia,
   filtrarPendientesGerencia,
   filtrarVentas,
@@ -72,13 +72,14 @@ function referencia(e: EntradasGerencia): DatosAntes | null {
   }
   const a = aj.ajustes;
   const delPeriodo = filtrarVentas(ventas.data, filtro);
-  const todas = aplicarAjustesVentas(delPeriodo, a);
+  const todas = sinWebSinPagar(delPeriodo);
   const documentados = pedidosDocumentados(docs.data ?? []);
   const documentadosPrevios = pedidosDocumentados(docsPrevios.data ?? []);
   return {
     grupo,
     ventasTodas: todas,
     documentados: docs.data ? documentados : null,
+    documentadosPrevios: !periodo.comparacion || docsPrevios.data ? documentadosPrevios : null,
     pendiente: docs.data ? pendienteDocumentar(todas, documentados) : null,
     filtro,
     seleccion: periodo.seleccion,
@@ -88,7 +89,7 @@ function referencia(e: EntradasGerencia): DatosAntes | null {
     tiendas,
     ventas: ventasDelGrupo(todas, documentados, grupo),
     ventasPrevias: ventasDelGrupo(
-      aplicarAjustesVentas(filtrarVentas(ventasPrevias.data ?? [], filtro), a),
+      sinWebSinPagar(filtrarVentas(ventasPrevias.data ?? [], filtro)),
       documentadosPrevios,
       grupo,
     ),
@@ -164,16 +165,10 @@ const FILTROS: FiltroGerencia[] = [
   { tienda: "t-norte", canal: "textil" },
 ];
 
-const SIN_PAGAR_NO_CUENTA = {
-  ...banco.ajustes,
-  ajustes: { ...banco.ajustes.ajustes, web_sin_pagar_cuenta: false },
-};
-
 /** Lo que puede faltar mientras se lee, o fallar. */
 const ESTADOS: Record<string, Partial<EntradasGerencia>> = {
   "todo leído": {},
   "sin comparación": { comparacion: null, ventasPrevias: [], docsPrevios: [] },
-  "web sin pagar no cuenta": { ajustes: { data: SIN_PAGAR_NO_CUENTA, isError: false } },
   "sin ventas todavía": { ventas: undefined },
   "sin ajustes todavía": { ajustes: { data: undefined, isError: false } },
   "ajustes con error": { ajustes: { data: undefined, isError: true } },
@@ -205,15 +200,16 @@ describe("montarDatosGerencia", () => {
 
   it("el banco de casos pasa por todas las ramas", () => {
     const d = montarDatosGerencia(completas())!;
-    // Sin documento: p-4 (web sin pagar), p-5 (31-10 a las 23:15 UTC), p-6 (su
-    // factura está rectificada) y x-2. El cancelado p-2 no cuenta.
+    // Sin documento: p-5 (31-10 a las 23:15 UTC), p-6 (su factura está
+    // rectificada) y x-2. El cancelado p-2 no cuenta, y p-4 (web sin pagar)
+    // tampoco: no es venta.
     expect(d.pendiente).toEqual({
-      pedidos: 4,
-      vendido: 621.1,
+      pedidos: 3,
+      vendido: 520.3,
       porTienda: [
         { tienda_id: "t-norte", pedidos: 1, vendido: 363 },
-        { tienda_id: "t-sur", pedidos: 2, vendido: 149.2 },
         { tienda_id: "textil-personalizado", pedidos: 1, vendido: 108.9 },
+        { tienda_id: "t-sur", pedidos: 1, vendido: 48.4 },
       ],
     });
     expect(d.webSinPagar).toEqual({ pedidos: 1, importe: 100.8 });
@@ -223,7 +219,9 @@ describe("montarDatosGerencia", () => {
     );
     const b = montarDatosGerencia(completas({ grupo: "b" }))!;
     expect(b.gastosDelGrupo.map((g) => g.id)).toEqual(["g-2"]);
-    expect(b.ventas.map((v) => v.id)).toEqual(["p-2", "p-4", "p-5", "p-6", "x-2"]);
+    expect(b.ventas.map((v) => v.id)).toEqual(["p-2", "p-5", "p-6", "x-2"]);
+    // El web sin pagar no está en ninguna cifra de Gerencia, ni en A ni en B.
+    expect(d.ventasTodas.some((v) => v.id === "p-4")).toBe(false);
   });
 
   it("espera a las ventas, a los ajustes y a las compras", () => {
@@ -298,9 +296,9 @@ describe("cada pestaña pide lo suyo", () => {
     expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.tesoreria)).not.toBeNull();
     expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.comercial)).not.toBeNull();
     // Sin ventas no hay pendiente: nunca un cero que no es.
-    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.fiscal)?.pendiente).toBeNull();
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.comercial)?.pendiente).toBeNull();
     const sinCompras = completas({ compras: { data: undefined, isError: false } });
-    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.margen)).toBeNull();
+    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.fiscal)).toBeNull();
     expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.textil)).not.toBeNull();
     const sinAjustes = completas({ ajustes: { data: undefined, isError: false } });
     expect(montarDatosGerencia(sinAjustes, FUENTES_DE_PESTANA.clientes)).toBeNull();

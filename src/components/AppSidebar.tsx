@@ -3,7 +3,6 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -17,34 +16,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Boxes,
-  Building2,
-  CalendarDays,
-  ChevronRight,
-  Coins,
-  FilePen,
-  FileText,
-  FileUp,
-  FolderArchive,
-  Gauge,
-  HandCoins,
-  Landmark,
-  LayoutDashboard,
-  type LucideIcon,
-  Package,
-  PiggyBank,
-  Plus,
-  Receipt,
-  ReceiptText,
-  Settings,
-  Shirt,
-  Sparkles,
-  ShoppingCart,
-  Store,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { ChevronRight, Plus, Shirt, Store } from "lucide-react";
+import { ICONOS_PANTALLA } from "@/components/iconos";
 import { useAuth } from "@/lib/auth-context";
 import { Marca } from "@/components/Marca";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
@@ -57,34 +30,11 @@ import {
   SUBMENU_TEXTIL,
   SUBMENU_TIENDA,
   entradaActiva,
-  type ClaveIcono,
   type EntradaMenu,
 } from "@/dominio/navegacion";
 
-const ICONOS: Record<ClaveIcono, LucideIcon> = {
-  inicio: LayoutDashboard,
-  gerencia: Gauge,
-  agenda: CalendarDays,
-  pedidos: ShoppingCart,
-  clientes: Users,
-  productos: Package,
-  cobros: Wallet,
-  cobrado: HandCoins,
-  compras: ReceiptText,
-  banco: Landmark,
-  caja: Coins,
-  inversion: PiggyBank,
-  archivo: FolderArchive,
-  presupuestos: FilePen,
-  facturas: FileText,
-  facturacion: Receipt,
-  ajustes: Settings,
-  usuarios: Users,
-  tiendas: Building2,
-  stock: Boxes,
-  "compras-textil": FileUp,
-  novedades: Sparkles,
-};
+/** El icono de cada pantalla: el mapa único de src/components/iconos.ts. */
+const ICONOS = ICONOS_PANTALLA;
 
 const ESTILO_GRUPO =
   "uppercase tracking-wider text-[10px] font-semibold text-sidebar-foreground/50";
@@ -144,7 +94,7 @@ export function AppSidebar() {
                     key={e.ruta}
                     entrada={e}
                     pathname={pathname}
-                    aviso={e.ruta === "/panel/agenda" ? avisoAgenda : 0}
+                    aviso={e.ruta === "/panel/agenda" ? (avisoAgenda ?? 0) : 0}
                   />
                 ))}
               </SidebarMenu>
@@ -273,13 +223,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border">
-        {!collapsed && (
-          <div className="px-3 py-2 text-[10px] text-sidebar-foreground/40 tracking-wider">
-            v1.0.0
-          </div>
-        )}
-      </SidebarFooter>
     </Sidebar>
   );
 }

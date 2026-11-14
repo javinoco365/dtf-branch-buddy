@@ -149,7 +149,7 @@ export function Jornada({
         </CamposSegunNivel>
         {!disponible && (
           <p className="text-xs text-destructive">
-            Falta aplicar la migración 20261027100000_pedidos_realizado.sql para poder guardarlo.
+            Esta parte aún no está activada. Avisa a Javier.
           </p>
         )}
         {error && <p className="text-xs text-destructive">{error}</p>}

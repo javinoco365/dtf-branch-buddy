@@ -110,8 +110,8 @@ export function LineasEditor({
           const tono = excede
             ? "bg-destructive/10 text-destructive border-destructive/30"
             : critico
-              ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
-              : "bg-emerald-500/10 text-emerald-700 border-emerald-500/30";
+              ? "bg-aviso-atencion text-aviso-atencion-texto border-aviso-atencion-borde"
+              : "bg-aviso-bien text-aviso-bien-texto border-aviso-bien-borde";
           const Icon = excede ? PackageX : critico ? AlertTriangle : CheckCircle2;
           const coste = s ? costeDeLinea(it, s) : null;
           const sinPrecio = !(Number(it.precio_unitario) > 0);
@@ -202,7 +202,7 @@ export function LineasEditor({
                     </span>
                   )}
                   {critico && !excede && (
-                    <span className="text-[11px] text-amber-700">· stock bajo</span>
+                    <span className="text-[11px] text-aviso-atencion-texto">· stock bajo</span>
                   )}
                   <span className="text-[11px] text-muted-foreground">
                     · {coste !== null && coste > 0 ? `Coste ${eurUnitario(coste)}` : "Sin coste"}

@@ -50,7 +50,7 @@ export function FiltroPersonas({
       <div
         role="group"
         aria-label="Atajos"
-        className="inline-flex flex-wrap gap-0.5 rounded-lg bg-muted p-1"
+        className="inline-flex flex-wrap gap-0.5 rounded-lg bg-muted p-1 max-sm:w-full"
       >
         {atajos.map((a) => {
           const activo = valor.para === a.filtro.para && valor.de === a.filtro.de;
@@ -61,7 +61,7 @@ export function FiltroPersonas({
               aria-pressed={activo}
               onClick={() => onCambio(a.filtro)}
               className={cn(
-                "inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm transition-colors md:min-h-9",
+                "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm transition-colors max-sm:flex-1 md:min-h-9",
                 activo
                   ? "bg-card font-semibold text-foreground shadow-sm"
                   : "text-secondary-foreground hover:text-foreground",
@@ -109,10 +109,13 @@ function Desplegable({
   onCambio: (v: string) => void;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-      {etiqueta}
+    <label className="inline-flex items-center gap-2 text-sm text-muted-foreground max-sm:w-full">
+      <span className="max-sm:w-9">{etiqueta}</span>
       <Select value={valor} onValueChange={onCambio}>
-        <SelectTrigger className="h-11 w-[170px] text-foreground md:h-9" aria-label={etiqueta}>
+        <SelectTrigger
+          className="h-11 w-[170px] text-foreground max-sm:w-auto max-sm:flex-1 md:h-9"
+          aria-label={etiqueta}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

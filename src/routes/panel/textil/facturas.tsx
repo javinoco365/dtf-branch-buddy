@@ -50,6 +50,9 @@ import { totalesDocumentos } from "@/dominio/sumatorios";
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ConfirmarRectificativa } from "@/components/documentos/ConfirmarRectificativa";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/facturas")({
   head: () => ({ meta: [{ title: "Facturas textil · DTF Culture" }] }),
@@ -60,8 +63,15 @@ function FacturasPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listTextilFacturas);
   const [borrando, setBorrando] = useState<any>(null);
+  const [anulando, setAnulando] = useState<any>(null);
   const delFn = useServerFn(deleteTextilFactura);
-  const { data = [] } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-facturas"], queryFn: () => listFn() });
   // Por dónde va cada serie: solo la última se puede borrar.
   const contadoresFn = useServerFn(contadoresDeSerie);
   const { data: contadores = [] } = useQuery({
@@ -158,6 +168,7 @@ function FacturasPage() {
     mutationFn: (id: string) => anularFn({ data: { factura_id: id } }),
     onSuccess: (r: any) => {
       toast.success(`Ticket anulado con la rectificativa ${r.referencia}`);
+      setAnulando(null);
       qc.invalidateQueries({ queryKey: ["textil-facturas"] });
     },
     onError: (e: any) => avisarError(e, "No se pudo anular"),
@@ -200,18 +211,15 @@ function FacturasPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Facturas textil</h1>
-          <p className="text-sm text-muted-foreground">
-            Las facturas se generan al convertir un presupuesto aceptado.
-          </p>
-        </div>
-        <DescargarPdfs
-          docs={(filtrados as any[]).map(deFacturaTextil)}
-          nombreZip={nombreZip(periodo.seleccion, periodo.rango, "Facturas_textil")}
-        />
-      </div>
+      <CabeceraPantalla
+        subtitulo="Las facturas se generan al convertir un presupuesto aceptado."
+        acciones={
+          <DescargarPdfs
+            docs={(filtrados as any[]).map(deFacturaTextil)}
+            nombreZip={nombreZip(periodo.seleccion, periodo.rango, "Facturas_textil")}
+          />
+        }
+      />
       <BarraFiltros>
         <CampoBusqueda
           valor={filtros.q}
@@ -254,10 +262,19 @@ function FacturasPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="las facturas"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
+              )}
+              {(isLoading || (!error && data.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    Sin facturas.
+                    {isLoading ? "Cargando…" : "Sin facturas."}
                   </TableCell>
                 </TableRow>
               )}
@@ -306,9 +323,18 @@ function FacturasPage() {
                   <TableCell>
                     <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(Number(f.total))}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     <Button
+                      aria-label={
+                        f.pdf_path
+                          ? "Abrir el PDF"
+                          : escribir
+                            ? "Generar el PDF"
+                            : "Todavía sin PDF guardado"
+                      }
                       variant="ghost"
                       size="icon"
                       title={
@@ -348,22 +374,19 @@ function FacturasPage() {
                           title="Anular con una rectificativa"
                           aria-label="Anular con una rectificativa"
                           disabled={anular.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Se emitirá una rectificativa que anula el ticket ${f.numero}. El ticket no se borra ni se modifica. ¿Continuar?`,
-                              )
-                            ) {
-                              anular.mutate(f.id);
-                            }
-                          }}
+                          onClick={() => setAnulando(f)}
                         >
                           <Undo2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </>
                     )}
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(f)}>
+                      <Button
+                        aria-label="Borrar la factura"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(f)}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </SiPuede>
@@ -416,6 +439,14 @@ function FacturasPage() {
           alCanjear={() => qc.invalidateQueries({ queryKey: ["textil-facturas"] })}
         />
       )}
+
+      <ConfirmarRectificativa
+        abierto={!!anulando}
+        que={`el ticket ${anulando?.numero ?? ""}`}
+        cargando={anular.isPending}
+        onCerrar={() => setAnulando(null)}
+        onConfirmar={() => anulando && anular.mutate(anulando.id)}
+      />
 
       <ConfirmarBorrado
         abierto={!!borrando}

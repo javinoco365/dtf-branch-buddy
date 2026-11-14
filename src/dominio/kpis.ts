@@ -229,13 +229,32 @@ export function costeVariable(
 /**
  * Variación porcentual respecto al periodo anterior.
  *
- * Devuelve `null` cuando no hay comparación posible, es decir, cuando el
- * periodo anterior fue cero. La versión anterior devolvía 100 % en ese caso, un
- * número inventado que la pantalla presentaba como si fuera real.
+ * Devuelve `null` cuando no hay comparación posible: cuando el periodo
+ * anterior fue cero (la versión anterior devolvía 100 %, un número inventado),
+ * o cuando el signo cambia (de pérdidas a beneficio o al revés): ningún
+ * porcentaje dice eso bien, y se dice con palabras (`cambioDeSigno`).
+ *
+ * Se divide por el valor absoluto de lo anterior: de −100 a −50 es mejorar
+ * (+50 %), no empeorar. Antes, de −88,33 a 807,13 salía «−1013,8 %».
  */
 export function variacion(actual: number, anterior: number): number | null {
   if (anterior === 0) return null;
-  return redondear(((actual - anterior) / anterior) * 100, 1);
+  if (cambioDeSigno(actual, anterior)) return null;
+  return redondear(((actual - anterior) / Math.abs(anterior)) * 100, 1);
+}
+
+/**
+ * Si de un periodo a otro se ha pasado de pérdidas a beneficio («antes en
+ * pérdidas») o al revés («antes en beneficio»), para decirlo en lugar de un
+ * porcentaje. `null` si el signo no cambia (o alguno es cero).
+ */
+export function cambioDeSigno(
+  actual: number,
+  anterior: number,
+): "antes en pérdidas" | "antes en beneficio" | null {
+  if (anterior < 0 && actual > 0) return "antes en pérdidas";
+  if (anterior > 0 && actual < 0) return "antes en beneficio";
+  return null;
 }
 
 /**
@@ -251,6 +270,25 @@ export function formaVariacion(
     return { tipo: "veces", valor: redondear(veces, veces >= 20 ? 0 : 1) };
   }
   return { tipo: "porcentaje", valor: Math.abs(delta) };
+}
+
+/**
+ * La variación escrita: «+12,4 %», «−3,0 %» o «×61»; «—» sin datos para
+ * comparar, o «— (antes en pérdidas)» si el signo cambió (`motivo`, de
+ * cambioDeSigno). `formatear` es `numero` de lib/format.ts (aquí no se
+ * formatea).
+ */
+export function textoVariacion(
+  delta: number | null,
+  formatear: (n: number, decimales: number) => string,
+  motivo?: string | null,
+): string {
+  if (delta === null) return motivo ? `— (${motivo})` : "—";
+  const forma = formaVariacion(delta);
+  if (forma.tipo === "veces") {
+    return `×${formatear(forma.valor, Number.isInteger(forma.valor) ? 0 : 1)}`;
+  }
+  return `${delta >= 0 ? "+" : "−"}${formatear(forma.valor, 1)}\u00A0%`;
 }
 
 /**

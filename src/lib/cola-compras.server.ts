@@ -43,7 +43,7 @@ const CAMPOS_PROFORMA =
 
 /** Motivo extra: la IA dice proforma y la base todavía no sabe de proformas. */
 export const MOTIVO_PROFORMA_SIN_MIGRACION =
-  "Es una proforma, pero falta aplicar la migración de proformas: no la registres hasta entonces.";
+  "Es una proforma, pero las proformas aún no están activadas (avisa a Javier): no la registres hasta entonces.";
 
 /**
  * El proveedor del catálogo, como `leerMemoriaEscaner`: por NIF y, sin NIF,
@@ -166,7 +166,7 @@ export type Resultado =
 
 /** Motivo de revisión cuando la base todavía no tiene las columnas de línea del escáner. */
 export const MOTIVO_SIN_COLUMNAS_ESCANER =
-  "Falta aplicar la migración 20261028100000: se han guardado las líneas sin tipo, talla, color ni referencia.";
+  "La lectura completa de líneas aún no está activada (avisa a Javier): se han guardado las líneas sin tipo, talla, color ni referencia.";
 
 export type OpcionesProcesar = {
   /**

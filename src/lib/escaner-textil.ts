@@ -21,14 +21,15 @@ import {
 /** La primera de las tres migraciones del escáner textil. */
 export const MIGRACION_ESCANER = "20261028100000";
 
+// Los avisos los lee la persona que usa la app: sin nombres de migraciones.
+// Las que faltan: 20261028100000, 20261028100100 y 20261028100200, en ese orden.
 export const AVISO_MIGRACION_ESCANER =
-  "Faltan aplicar las migraciones 20261028100000, 20261028100100 y 20261028100200 " +
-  "(escáner textil: esquema, datos y reglas), en ese orden. Hasta entonces, Textil › Compras " +
-  "funciona como antes: casado a mano y sin repartir portes.";
+  "La lectura automática de compras de textil aún no está activada (avisa a Javier). " +
+  "Hasta entonces, Textil › Compras funciona como antes: casado a mano y sin repartir portes.";
 
-/** Unir los productos que son el mismo modelo (textil_productos_unir). */
+/** Unir los productos que son el mismo modelo (textil_productos_unir, 20261101100000). */
 export const AVISO_MIGRACION_UNIR_PRODUCTOS =
-  "Falta aplicar la migración 20261101100000 (unir productos textiles). Hasta entonces, " +
+  "Unir productos de textil aún no está activado (avisa a Javier). Hasta entonces, " +
   "las prendas partidas en varios productos se ven juntas en Stock, pero no se pueden unir.";
 
 /**
@@ -47,8 +48,9 @@ export async function escanerAplicado(cliente: unknown): Promise<boolean> {
 /** La segunda (la grande) de las dos migraciones de proformas. */
 export const MIGRACION_PROFORMAS = "20261029100100";
 
+// Las que faltan: 20261029100000 y 20261029100100.
 export const AVISO_MIGRACION_PROFORMAS =
-  "Falta aplicar las migraciones 20261029100000 y 20261029100100 (proformas): hasta entonces no se pueden registrar proformas ni casar facturas con ellas.";
+  "Las proformas aún no están activadas (avisa a Javier): hasta entonces no se pueden registrar proformas ni casar facturas con ellas.";
 
 /**
  * true si existe `proformas_version()` (la última sentencia de 20261029100100:

@@ -10,7 +10,7 @@ export function EtiquetaUv({ className, texto = "UV" }: { className?: string; te
     <span
       title="DTF UV (subcontratado)"
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border border-violet-500/30 bg-violet-500/10 px-1.5 py-0 text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300",
+        "inline-flex items-center whitespace-nowrap rounded-full border border-linea-uv-borde bg-linea-uv-fondo px-1.5 py-0 text-[11px] font-semibold uppercase tracking-wide text-linea-uv-texto",
         className,
       )}
     >

@@ -22,9 +22,15 @@ export function mensajeDeError(e: unknown, porDefecto?: string): string {
 
 /**
  * El aviso de error de siempre (toast), en castellano llano. Si el mensaje
- * original era técnico, va debajo en pequeño, para quien tenga que mirarlo.
+ * original era técnico, va debajo en pequeño, para quien tenga que mirarlo;
+ * con `sinDetalle`, no (en el acceso, «Invalid login credentials» bajo la
+ * traducción solo confunde).
  */
-export function avisarError(e: unknown, porDefecto?: string) {
+export function avisarError(
+  e: unknown,
+  porDefecto?: string,
+  opciones: { sinDetalle?: boolean } = {},
+) {
   const { texto, detalle } = errorLegible(e, porDefecto);
-  toast.error(texto, detalle ? { description: detalle } : undefined);
+  toast.error(texto, detalle && !opciones.sinDetalle ? { description: detalle } : undefined);
 }

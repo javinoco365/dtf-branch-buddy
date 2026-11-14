@@ -94,8 +94,8 @@ export function DatosFiscales({
     return (
       <Card>
         <CardContent className="py-4 text-sm text-muted-foreground">
-          Para el Impuesto sobre Sociedades, el precio del metro y los gastos con IVA e IRPF falta
-          aplicar la migración <code>20261010100000_gastos_impuestos.sql</code>.
+          El Impuesto sobre Sociedades, el precio del metro y los gastos con IVA e IRPF: Esta parte
+          aún no está activada. Avisa a Javier.
         </CardContent>
       </Card>
     );

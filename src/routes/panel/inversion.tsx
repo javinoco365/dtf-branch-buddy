@@ -36,7 +36,9 @@ import { listarCatalogosCaja } from "@/lib/caja.functions";
 import { InversionFormDialog } from "@/components/InversionFormDialog";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { SiPuede } from "@/components/SiPuede";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/inversion")({
   head: () => ({ meta: [{ title: "Inversión · DTF Culture" }] }),
@@ -53,7 +55,7 @@ function InversionPage() {
   const catalogos = useServerFn(listarCatalogosCaja);
   const borrar = useServerFn(borrarInversion);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["inversion"],
     queryFn: () => listar(),
   });
@@ -111,32 +113,30 @@ function InversionPage() {
   const sinSocios = cat && cat.socios.filter((s) => s.activo).length === 0;
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Inversión</h1>
-          <p className="text-sm text-muted-foreground">
-            Lo que ha puesto cada socio y lo que ha recuperado. Desde el principio, sin filtro de
-            fechas.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Exportar
-          </Button>
-          <SiPuede accion="escribir">
-            <Button
-              onClick={() => {
-                setEditando(undefined);
-                setAbierto(true);
-              }}
-              disabled={sinSocios}
-            >
-              <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+    <div className="space-y-4">
+      <CabeceraPantalla
+        subtitulo={
+          "Lo que ha puesto cada socio y lo que ha recuperado. Desde el principio, sin filtro de fechas."
+        }
+        acciones={
+          <>
+            <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0}>
+              <Download className="h-4 w-4 mr-2" /> Descargar Excel
             </Button>
-          </SiPuede>
-        </div>
-      </div>
+            <SiPuede accion="escribir">
+              <Button
+                onClick={() => {
+                  setEditando(undefined);
+                  setAbierto(true);
+                }}
+                disabled={sinSocios}
+              >
+                <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+              </Button>
+            </SiPuede>
+          </>
+        }
+      />
 
       {sinSocios && (
         <Card>
@@ -173,10 +173,26 @@ function InversionPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {socios.length === 0 && (
+              {!isLoading && !error && socios.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Todavía no hay ninguna inversión anotada.
+                    {!sinSocios && (
+                      <SiPuede accion="escribir">
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditando(undefined);
+                              setAbierto(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-2" /> Nuevo apunte
+                          </Button>
+                        </div>
+                      </SiPuede>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -284,18 +300,27 @@ function InversionPage() {
                 </TableRow>
               )}
               {error && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-destructive py-8">
-                    {mensajeDeError(error)}
-                  </TableCell>
-                </TableRow>
+                <ErrorCarga
+                  error={error}
+                  que="los apuntes de inversión"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={6}
+                />
               )}
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    {movimientos.length === 0
-                      ? "Sin apuntes."
-                      : "Ningún apunte cumple los filtros."}
+                    {movimientos.length === 0 ? (
+                      "Todavía no hay apuntes."
+                    ) : (
+                      <>
+                        Ningún apunte cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -326,9 +351,10 @@ function InversionPage() {
                   <TableCell className="text-muted-foreground text-sm">
                     {m.observaciones ?? ""}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar el apunte"
                         variant="ghost"
                         size="icon"
                         onClick={() => {
@@ -340,7 +366,12 @@ function InversionPage() {
                       </Button>
                     </SiPuede>
                     <SiPuede accion="borrar">
-                      <Button variant="ghost" size="icon" onClick={() => setBorrando(m)}>
+                      <Button
+                        aria-label="Borrar el apunte"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBorrando(m)}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </SiPuede>

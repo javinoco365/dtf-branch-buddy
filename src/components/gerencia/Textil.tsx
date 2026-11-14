@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, Coins, Package, Receipt, Shirt } from "lucide-react";
+import { AlertTriangle, Check, Shirt } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,7 +38,8 @@ import { proformasSinFactura, proformasTextil, resumenProformas } from "@/domini
 import { sumarCantidades, sumarImportes } from "@/dominio/sumatorios";
 import type { DatosGerencia } from "./destinos";
 import { CargandoPestana, ErrorPestana, Nota, VerDetalle } from "./comun";
-import { mensajeDeError } from "@/lib/errores";
+import { ICONO } from "@/components/iconos";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 const SIN_MARCA = "sin-marca";
 const FILAS = 10;
@@ -138,7 +139,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
           valor={String(c.pedidos)}
           frente={frente}
           delta={variacion(c.pedidos, p.pedidos)}
-          icon={Receipt}
+          icon={ICONO.pedidos}
           pie={<span className="text-muted-foreground">Ticket medio {eur(c.ticket)}</span>}
         />
         <TarjetaKpi
@@ -147,7 +148,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
           valor={eur(c.margen)}
           frente={frente}
           delta={variacion(c.margen, p.margen)}
-          icon={Coins}
+          icon={ICONO.margen}
           pie={
             <span className="text-muted-foreground">
               {pct === null ? "Sin ventas" : `${numero(pct, 1)}\u00A0% de la bruta`}
@@ -160,7 +161,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
           explicacion="g_stock_valor"
           valor={stock ? eur(stock.valor) : "—"}
           delta={null}
-          icon={Package}
+          icon={ICONO.almacen}
           pie={
             stock ? (
               <span className="text-muted-foreground">
@@ -306,9 +307,12 @@ export function Textil({ d }: { d: DatosGerencia }) {
               </p>
             )}
             {errorProformas && (
-              <p className="text-xs text-destructive">
-                No se han podido leer las proformas sin factura: {mensajeDeError(errorProformas)}
-              </p>
+              <ErrorCarga
+                compacto
+                className="text-xs"
+                error={errorProformas}
+                que="las proformas sin factura"
+              />
             )}
             {proformas && proformas.proformas > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -466,9 +470,7 @@ function CuentaDelAlmacen({
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer los movimientos del almacén: {mensajeDeError(error)}
-          </p>
+          <ErrorCarga compacto error={error} que="los movimientos del almacén" />
         ) : datos === undefined ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : datos === null || !cuenta ? (
@@ -615,9 +617,7 @@ function ControlesDelAlmacen({
       </CardHeader>
       <CardContent className="space-y-3">
         {error ? (
-          <p className="text-sm text-destructive">
-            No se han podido leer los controles: {mensajeDeError(error)}
-          </p>
+          <ErrorCarga compacto error={error} que="los controles" />
         ) : disponible === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : !disponible || !resumen ? (

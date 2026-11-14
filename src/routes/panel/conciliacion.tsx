@@ -40,6 +40,8 @@ import { MotorConciliacion } from "@/components/banco/MotorConciliacion";
 import { verConciliacion } from "@/lib/conciliacion.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/conciliacion")({
   head: () => ({ meta: [{ title: "Conciliación bancaria · DTF Culture" }] }),
@@ -55,7 +57,13 @@ const ETIQUETA_MOTIVO: Record<string, string> = {
 function ConciliacionPage() {
   const qc = useQueryClient();
   const verFn = useServerFn(verConciliacion);
-  const { data: motor, isLoading } = useQuery({
+  const {
+    data: motor,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["conciliacion-motor"],
     queryFn: () => verFn(),
   });
@@ -71,14 +79,16 @@ function ConciliacionPage() {
   };
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
-        <p className="text-sm text-muted-foreground">
-          Los cargos se casan con las facturas recibidas y los abonos con las emitidas.
-        </p>
-      </div>
+      <CabeceraPantalla subtitulo="Sube el extracto del banco y comprueba qué facturas ya están pagadas o cobradas." />
       <CuentasExtractos alImportar={refrescar} />
-      {isLoading || !motor ? (
+      {!isLoading && error ? (
+        <ErrorCarga
+          error={error}
+          que="los movimientos por conciliar"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
+      ) : isLoading || !motor ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <MotorConciliacion datos={motor} alCambiar={refrescar} />
@@ -97,7 +107,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
   const [elegidas, setElegidas] = useState<Record<string, string>>({});
 
   const proponerFn = useServerFn(proponerConciliacion);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["conciliacion"],
     queryFn: () => proponerFn(),
   });
@@ -182,60 +192,58 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
   return (
     <CamposSegunNivel>
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Conciliación bancaria</h1>
-            <p className="text-sm text-muted-foreground">
-              Sube el extracto del banco y marca de una vez las facturas cobradas.
+        <CabeceraPantalla
+          subtitulo="Sube el extracto del banco y marca de una vez las facturas cobradas."
+          acciones={
+            <>
+              {!conCuentas && (
+                <>
+                  <input
+                    ref={ficheroRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) importar.mutate(f);
+                    }}
+                  />
+                  <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
+                    {importar.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileUp className="h-4 w-4 mr-2" />
+                    )}
+                    Subir extracto
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="secondary"
+                disabled={seguras.length === 0 || aplicar.isPending}
+                onClick={() =>
+                  aplicar.mutate(
+                    seguras.map((p) => ({
+                      movimiento_id: p.movimiento_id,
+                      factura_id: p.factura_id,
+                      motivo: p.motivo,
+                    })),
+                  )
+                }
+              >
+                <Wand2 className="h-4 w-4 mr-2" />
+                Aplicar las {seguras.length} seguras
+              </Button>
+            </>
+          }
+        >
+          {falta && (
+            <p className="text-xs text-muted-foreground">
+              La comprobación automática aún no está activada. Avisa a Javier.
             </p>
-            {falta && (
-              <p className="text-xs text-muted-foreground">
-                El motor de conciliación necesita la migración <code>{falta}</code>.
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {!conCuentas && (
-              <>
-                <input
-                  ref={ficheroRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) importar.mutate(f);
-                  }}
-                />
-                <Button onClick={() => ficheroRef.current?.click()} disabled={importar.isPending}>
-                  {importar.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileUp className="h-4 w-4 mr-2" />
-                  )}
-                  Subir extracto
-                </Button>
-              </>
-            )}
-            <Button
-              variant="secondary"
-              disabled={seguras.length === 0 || aplicar.isPending}
-              onClick={() =>
-                aplicar.mutate(
-                  seguras.map((p) => ({
-                    movimiento_id: p.movimiento_id,
-                    factura_id: p.factura_id,
-                    motivo: p.motivo,
-                  })),
-                )
-              }
-            >
-              <Wand2 className="h-4 w-4 mr-2" />
-              Aplicar las {seguras.length} seguras
-            </Button>
-          </div>
-        </div>
+          )}
+        </CabeceraPantalla>
 
         {conCuentas && <CuentasExtractos alImportar={refrescar} />}
 
@@ -258,7 +266,16 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                     <TableCell colSpan={6}>Cargando…</TableCell>
                   </TableRow>
                 )}
-                {!isLoading && movimientos.length === 0 && (
+                {!isLoading && error && (
+                  <ErrorCarga
+                    error={error}
+                    que="los ingresos por conciliar"
+                    onReintentar={refetch}
+                    reintentando={isFetching}
+                    colSpan={6}
+                  />
+                )}
+                {!isLoading && !error && movimientos.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No hay ingresos sin conciliar. Sube el extracto del banco para empezar.
@@ -275,7 +292,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                     <TableRow key={m.id}>
                       <TableCell className="whitespace-nowrap">{fechaCorta(m.fecha)}</TableCell>
                       <TableCell className="text-sm">{m.concepto || "—"}</TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-medium tabular-nums">
                         {eur(Number(m.importe))}
                       </TableCell>
                       <TableCell>
@@ -283,7 +300,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                           value={elegida}
                           onValueChange={(v) => setElegidas({ ...elegidas, [m.id]: v })}
                         >
-                          <SelectTrigger className={segura ? "" : "border-amber-500/60"}>
+                          <SelectTrigger className={segura ? "" : "border-aviso-atencion-borde"}>
                             <SelectValue placeholder="Sin casar" />
                           </SelectTrigger>
                           <SelectContent>
@@ -316,14 +333,15 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             contra la propuesta: al cambiarla a mano hay que ver
                             si el importe deja de cuadrar. */}
                           {factura && Math.abs(Number(m.importe) - Number(factura.total)) > 0 && (
-                            <div className="text-xs text-amber-600">
+                            <div className="text-xs text-aviso-atencion-texto">
                               Difiere {eur(Number(m.importe) - Number(factura.total))}
                             </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         <Button
+                          aria-label="Marcar como cobrada"
                           variant="ghost"
                           size="icon"
                           title="Marcar como cobrada"
@@ -338,7 +356,7 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
                             ])
                           }
                         >
-                          <Check className="h-4 w-4 text-emerald-600" />
+                          <Check className="h-4 w-4 text-aviso-bien-texto" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -380,7 +398,12 @@ function ConciliacionAntigua({ falta }: { falta?: string }) {
 /** Lo ya casado, para poder deshacerlo. */
 function MovimientosConciliados({ onDeshacer }: { onDeshacer: (id: string) => void }) {
   const listFn = useServerFn(listMovimientosBanco);
-  const { data = [] } = useQuery({
+  const {
+    data = [],
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ["banco-movimientos"],
     queryFn: () => listFn(),
   });
@@ -391,7 +414,15 @@ function MovimientosConciliados({ onDeshacer }: { onDeshacer: (id: string) => vo
       <summary className="cursor-pointer text-muted-foreground">
         Ya conciliados ({casados.length})
       </summary>
-      {casados.length === 0 ? (
+      {error ? (
+        <ErrorCarga
+          error={error}
+          que="los movimientos conciliados"
+          onReintentar={refetch}
+          reintentando={isFetching}
+          sinMarco
+        />
+      ) : casados.length === 0 ? (
         <p className="text-muted-foreground py-3">Todavía no has conciliado nada.</p>
       ) : (
         <ConciliadosTabla casados={casados} onDeshacer={onDeshacer} />
@@ -425,9 +456,15 @@ function ConciliadosTabla({
           <TableRow key={m.id}>
             <TableCell>{fechaCorta(m.fecha)}</TableCell>
             <TableCell>{m.concepto || "—"}</TableCell>
-            <TableCell className="text-right">{eur(Number(m.importe))}</TableCell>
-            <TableCell className="text-right">
-              <Button variant="ghost" size="icon" title="Deshacer" onClick={() => onDeshacer(m.id)}>
+            <TableCell className="text-right tabular-nums">{eur(Number(m.importe))}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              <Button
+                aria-label="Deshacer"
+                variant="ghost"
+                size="icon"
+                title="Deshacer"
+                onClick={() => onDeshacer(m.id)}
+              >
                 <Undo2 className="h-4 w-4" />
               </Button>
             </TableCell>

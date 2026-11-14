@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { estadosDe } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -80,7 +81,9 @@ import {
 import { SiPuede } from "@/components/SiPuede";
 import { usePermisos } from "@/hooks/use-permisos";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
-import { avisarError, mensajeDeError } from "@/lib/errores";
+import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/textil/pedidos")({
   head: () => ({ meta: [{ title: "Pedidos textil · DTF Culture" }] }),
@@ -113,7 +116,13 @@ function PedidosPage() {
   const empFn = useServerFn(getEmpresaGlobal);
   const stockFn = useServerFn(listStock);
 
-  const { data = [] } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
+  const {
+    data = [],
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({ queryKey: ["textil-pedidos"], queryFn: () => listFn() });
   const { valores: filtros, cambiar, quitar, hay } = useFiltrosUrl(FILTROS_PEDIDOS_TEXTIL);
   // Por defecto, todo: la lista se abre como siempre.
   const periodo = usePeriodoUrl("todo");
@@ -282,28 +291,26 @@ function PedidosPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Pedidos textil</h1>
-          <p className="text-sm text-muted-foreground">Pedidos manuales del módulo textil.</p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setLineasIniciales(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Pedidos manuales del módulo textil."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setLineasIniciales(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+            </Button>
+          </SiPuede>
+        }
+      />
       {!cobrosDisponibles && (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Los cobros de los pedidos necesitan la migración <code>20260929100000_cobros.sql</code>.
-            Hasta que se aplique, no se pueden registrar.
+            Apuntar los cobros de los pedidos aún no está activado. Avisa a Javier.
           </CardContent>
         </Card>
       )}
@@ -355,10 +362,47 @@ function PedidosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtrados.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="los pedidos"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={9}
+                />
+              )}
+              {(isLoading || (!error && filtrados.length === 0)) && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                    {data.length === 0 ? "Sin pedidos." : "Ningún pedido cumple los filtros."}
+                    {isLoading ? (
+                      "Cargando…"
+                    ) : data.length === 0 ? (
+                      <>
+                        Todavía no hay pedidos.
+                        {escribir && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditing(null);
+                                setLineasIniciales(null);
+                                setOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" /> Nuevo pedido
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Ningún pedido cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -407,13 +451,15 @@ function PedidosPage() {
                         <EtiquetaEstado tipo="pedido_textil" valor={p.estado} />
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {eur(Number(p.total))}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{eur(cobro.cobrado)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <div className="tabular-nums">{eur(Math.max(cobro.pendiente, 0))}</div>
                       {p.estado !== "cancelado" && <EstadoCobroTexto estado={cobro.estado} />}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -450,7 +496,12 @@ function PedidosPage() {
                         {escribir ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                       <SiPuede accion="borrar">
-                        <Button variant="ghost" size="icon" onClick={() => setBorrando(p)}>
+                        <Button
+                          aria-label="Borrar el pedido"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setBorrando(p)}
+                        >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </SiPuede>
@@ -542,9 +593,7 @@ function PedidosPage() {
               <DialogTitle>{editing ? `Editar ${editing.numero}` : "Nuevo pedido"}</DialogTitle>
             </DialogHeader>
             {errorStock ? (
-              <p className="text-sm text-destructive">
-                No se ha podido leer el stock: {mensajeDeError(errorStock)}
-              </p>
+              <ErrorCarga compacto error={errorStock} que="el stock" />
             ) : (
               <p className="text-sm text-muted-foreground">Cargando el stock…</p>
             )}
@@ -582,7 +631,7 @@ function PedidoDialog({
   loading,
 }: any) {
   const initial = pedido ?? {
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: diaEnEspana(new Date()),
     estado: "pendiente",
     envio: 0,
     marca_id: defaultMarcaId,
@@ -620,7 +669,7 @@ function PedidoDialog({
   const { escribir } = usePermisos();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {pedido ? `${escribir ? "Editar" : "Pedido"} ${pedido.numero}` : "Nuevo pedido"}

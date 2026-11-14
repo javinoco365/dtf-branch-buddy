@@ -16,7 +16,7 @@ import { eur, metros, numero } from "@/lib/format";
 import { useEnvios, useTaller } from "@/lib/gerencia";
 import { variacion } from "@/dominio/kpis";
 import { DEFINICIONES } from "@/dominio/definiciones";
-import { aplicarAjustesVentas, filtrarVentas } from "@/dominio/gerencia";
+import { filtrarVentas, sinWebSinPagar } from "@/dominio/gerencia";
 import {
   pedidosPorEstado,
   separarSubcontrata,
@@ -34,11 +34,8 @@ export function Produccion({ d }: { d: DatosGerencia }) {
 
   // Lo que hace la subcontrata (pedidos solo de DTF UV) no pasa por el taller.
   const abiertos = useMemo(
-    () =>
-      separarSubcontrata(
-        aplicarAjustesVentas(filtrarVentas(taller.data ?? [], d.filtro), d.ajustes),
-      ),
-    [taller.data, d.filtro, d.ajustes],
+    () => separarSubcontrata(sinWebSinPagar(filtrarVentas(taller.data ?? [], d.filtro))),
+    [taller.data, d.filtro],
   );
   const enTallerHoy = abiertos.taller;
   const abierto = useMemo(() => trabajoAbierto(enTallerHoy, d.hoy), [enTallerHoy, d.hoy]);
@@ -88,7 +85,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
             <span className="text-muted-foreground">
               Hoy · {metros(metrosTaller)} por hacer o por enviar
               {abiertos.subcontrata.pedidos > 0 && (
-                <span className="block font-medium text-violet-700 dark:text-violet-300">
+                <span className="block font-medium text-linea-uv-texto">
                   Aparte, {abiertos.subcontrata.pedidos} de DTF UV (
                   {metros(abiertos.subcontrata.metros)}) en la subcontrata
                 </span>

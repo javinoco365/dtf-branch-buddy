@@ -5,6 +5,7 @@ import {
   filtrarPendientes,
   ordenarPendientes,
   origenPendiente,
+  etiquetaOrigenPendiente,
   resumirPendientes,
   tiendaDelPendiente,
   type PedidoPendiente,
@@ -119,5 +120,16 @@ describe("resumirPendientes", () => {
 describe("ordenarPendientes", () => {
   it("los más antiguos primero", () => {
     expect(ordenarPendientes(todos).map((p) => p.id)).toEqual(["p2", "p1", "p3"]);
+  });
+});
+
+describe("etiquetaOrigenPendiente", () => {
+  it("un pedido web con algo cobrado es «pago parcial», no «sin pagar»", () => {
+    const web = { tipo: "tienda" as const, origen: "woocommerce" };
+    expect(etiquetaOrigenPendiente({ ...web, cobrado: 0 })).toBe("Web (sin pagar)");
+    expect(etiquetaOrigenPendiente({ ...web, cobrado: "12.50" })).toBe("Web (pago parcial)");
+    expect(etiquetaOrigenPendiente({ tipo: "tienda", origen: "manual", cobrado: 5 })).toBe(
+      "Pedido manual",
+    );
   });
 });

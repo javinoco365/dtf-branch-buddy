@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFiltrosUrl, useTextoDiferido } from "@/lib/filtros-url";
 import { faltaLaColumna, tabla } from "@/lib/rpc";
@@ -44,8 +44,6 @@ import {
   Phone,
   MapPin,
   FileText,
-  ShoppingCart,
-  Receipt,
   Pencil,
   Trash2,
   Shirt,
@@ -67,6 +65,11 @@ import {
 } from "@/dominio/sumatorios-pedidos";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
+import { ICONO, ICONOS_PANTALLA } from "@/components/iconos";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -132,7 +135,11 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const qc = useQueryClient();
   // Los filtros viven en la dirección. El origen por defecto depende de desde
   // dónde se entra: la tienda, el textil o todos.
-  const { valores: filtros, cambiar } = useFiltrosUrl({
+  const {
+    valores: filtros,
+    cambiar,
+    quitar,
+  } = useFiltrosUrl({
     q: "",
     origen: filtroInicial(contexto),
     // «uv»: solo los que han comprado DTF UV. No es la «línea» de los paneles
@@ -146,7 +153,13 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [borrando, setBorrando] = useState<Cliente | null>(null);
 
-  const { data: clientes = [], isLoading } = useQuery({
+  const {
+    data: clientes = [],
+    isLoading,
+    error: errorClientes,
+    refetch: recargarClientes,
+    isFetching: recargandoClientes,
+  } = useQuery({
     queryKey: ["clientes-empresa"],
     queryFn: async () => {
       // tabla() y no .from(): types.ts está generado y todavía no conoce
@@ -242,30 +255,19 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
     onError: (e: Error) => avisarError(e),
   });
 
-  const titulo =
-    contexto.tipo === "textil"
-      ? "Clientes textil"
-      : contexto.tipo === "tienda"
-        ? "Clientes de la tienda"
-        : "Clientes";
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{titulo}</h1>
-          <p className="text-sm text-muted-foreground">
-            Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la
-            misma lista.
-          </p>
-        </div>
-        <SiPuede accion="escribir">
-          <Button onClick={() => setEditing({ ...vacio })}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo cliente
-          </Button>
-        </SiPuede>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Una sola ficha por cliente para toda la empresa: las tiendas y el textil comparten la misma lista."
+        acciones={
+          <SiPuede accion="escribir">
+            <Button onClick={() => setEditing({ ...vacio })}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo cliente
+            </Button>
+          </SiPuede>
+        }
+      />
 
       <div className="flex flex-wrap gap-3">
         <div className="relative w-full max-w-sm">
@@ -334,7 +336,18 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
               {filtrados.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setDetailId(c.id)}>
                   <TableCell className="font-medium">
-                    {c.nombre}
+                    {/* La fila entera se abre con el ratón; el nombre es un botón
+                        para abrirla también con el teclado. */}
+                    <button
+                      type="button"
+                      className="rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailId(c.id);
+                      }}
+                    >
+                      {c.nombre}
+                    </button>
                     {c.apodo && (
                       <div className="text-xs font-normal text-muted-foreground">{c.apodo}</div>
                     )}
@@ -353,6 +366,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <SiPuede accion="escribir">
                       <Button
+                        aria-label="Editar"
                         variant="ghost"
                         size="icon"
                         title="Editar"
@@ -363,6 +377,7 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                     </SiPuede>
                     <SiPuede accion="borrar">
                       <Button
+                        aria-label="Borrar"
                         variant="ghost"
                         size="icon"
                         title="Borrar"
@@ -374,16 +389,55 @@ export function PantallaClientes({ contexto }: { contexto: ContextoClientes }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && filtrados.length === 0 && (
+              {isLoading && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    {clientes.length === 0
-                      ? "Sin clientes"
-                      : soloUv && conUv.isLoading
-                        ? "Buscando quién ha comprado DTF UV…"
-                        : soloUv && conUv.error
-                          ? "No se ha podido saber quién ha comprado DTF UV. Recarga la página."
-                          : "Ningún cliente con este filtro. Prueba con «Todos los clientes» y «Compren lo que compren»."}
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!isLoading && errorClientes && (
+                <ErrorCarga
+                  error={errorClientes}
+                  que="los clientes"
+                  onReintentar={recargarClientes}
+                  reintentando={recargandoClientes}
+                  colSpan={7}
+                />
+              )}
+              {!isLoading && !errorClientes && filtrados.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    {clientes.length === 0 ? (
+                      <>
+                        Todavía no hay clientes.
+                        <SiPuede accion="escribir">
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditing({ ...vacio })}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Nuevo cliente
+                            </Button>
+                          </div>
+                        </SiPuede>
+                      </>
+                    ) : soloUv && conUv.isLoading ? (
+                      "Buscando quién ha comprado DTF UV…"
+                    ) : soloUv && conUv.error ? (
+                      "No se ha podido saber quién ha comprado DTF UV. Recarga la página."
+                    ) : (
+                      <>
+                        Ningún cliente cumple los filtros.
+                        <div className="mt-2">
+                          <Button variant="ghost" size="sm" onClick={() => quitar()}>
+                            Quitar filtros
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -514,99 +568,113 @@ function ClienteForm({
   saving: boolean;
 }) {
   const set = (k: keyof Cliente, v: string) => onChange({ ...cliente, [k]: v });
+  // Lo que había al abrir: con cambios, cerrar (la X, Escape, un toque fuera
+  // o «Cancelar») pregunta antes de perder lo escrito.
+  const [inicial] = useState(() => JSON.stringify(cliente));
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(
+    JSON.stringify(cliente) !== inicial,
+    onClose,
+  );
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && pedirCierre()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{cliente.id ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label>Nombre *</Label>
-            <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
-              WooCommerce ni se cambia solo.
-            </p>
+        <FormularioDialogo alEnviar={onSave} ocupado={saving}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Nombre *</Label>
+              <Input value={cliente.nombre ?? ""} onChange={(e) => set("nombre", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                El nombre o razón social tal cual va en la factura. No lo toca la sincronización de
+                WooCommerce ni se cambia solo.
+              </p>
+            </div>
+            <div className="col-span-2">
+              <Label>Apodo</Label>
+              <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
+              <p className="text-xs text-muted-foreground mt-1">
+                Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí»
+                para «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una
+                factura.
+              </p>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={cliente.email ?? ""}
+                onChange={(e) => set("email", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Teléfono</Label>
+              <Input
+                value={cliente.telefono ?? ""}
+                onChange={(e) => set("telefono", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>NIF / CIF</Label>
+              <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
+            </div>
+            <div>
+              <Label>Empresa</Label>
+              <Input
+                value={cliente.empresa ?? ""}
+                onChange={(e) => set("empresa", e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Dirección</Label>
+              <Input
+                value={cliente.direccion ?? ""}
+                onChange={(e) => set("direccion", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Código postal</Label>
+              <Input
+                value={cliente.codigo_postal ?? ""}
+                onChange={(e) => set("codigo_postal", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Ciudad</Label>
+              <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
+            </div>
+            <div>
+              <Label>Provincia</Label>
+              <Input
+                value={cliente.provincia ?? ""}
+                onChange={(e) => set("provincia", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>País</Label>
+              <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
+            </div>
+            <div className="col-span-2">
+              <Label>Notas</Label>
+              <Textarea
+                rows={3}
+                value={cliente.notas ?? ""}
+                onChange={(e) => set("notas", e.target.value)}
+              />
+            </div>
           </div>
-          <div className="col-span-2">
-            <Label>Apodo</Label>
-            <Input value={cliente.apodo ?? ""} onChange={(e) => set("apodo", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">
-              Cómo lo llamáis vosotros, si es distinto del nombre fiscal — por ejemplo «Martí» para
-              «Martí &amp; Hijos S.L.». Solo para encontrarlo rápido: nunca sale en una factura.
-            </p>
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={cliente.email ?? ""}
-              onChange={(e) => set("email", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Teléfono</Label>
-            <Input
-              value={cliente.telefono ?? ""}
-              onChange={(e) => set("telefono", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>NIF / CIF</Label>
-            <Input value={cliente.nif ?? ""} onChange={(e) => set("nif", e.target.value)} />
-          </div>
-          <div>
-            <Label>Empresa</Label>
-            <Input value={cliente.empresa ?? ""} onChange={(e) => set("empresa", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Dirección</Label>
-            <Input
-              value={cliente.direccion ?? ""}
-              onChange={(e) => set("direccion", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Código postal</Label>
-            <Input
-              value={cliente.codigo_postal ?? ""}
-              onChange={(e) => set("codigo_postal", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>Ciudad</Label>
-            <Input value={cliente.ciudad ?? ""} onChange={(e) => set("ciudad", e.target.value)} />
-          </div>
-          <div>
-            <Label>Provincia</Label>
-            <Input
-              value={cliente.provincia ?? ""}
-              onChange={(e) => set("provincia", e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>País</Label>
-            <Input value={cliente.pais ?? ""} onChange={(e) => set("pais", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <Label>Notas</Label>
-            <Textarea
-              rows={3}
-              value={cliente.notas ?? ""}
-              onChange={(e) => set("notas", e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={pedirCierre}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }
@@ -632,7 +700,7 @@ function ClienteDetalle({
     },
   });
 
-  const { data: pedidos = [] } = useQuery({
+  const qPedidos = useQuery({
     queryKey: ["cliente-pedidos", clienteId],
     queryFn: async (): Promise<PedidoDelCliente[]> => {
       // Con lo del DTF UV, para separar lo comprado de cada línea (camposUv):
@@ -658,10 +726,11 @@ function ClienteDetalle({
   });
   // Lo comprado de cada línea (por-linea.ts): sin cancelados, DTF + UV = lo de
   // las tiendas; con el textil, «Total pedidos».
+  const pedidos = useMemo(() => qPedidos.data ?? [], [qPedidos.data]);
   const porLinea = useMemo(() => cifrasPorLinea(pedidos), [pedidos]);
 
   // El mismo cliente, sus pedidos del textil: es la razón de tener una sola ficha.
-  const { data: pedidosTextil = [] } = useQuery({
+  const qPedidosTextil = useQuery({
     queryKey: ["cliente-pedidos-textil", clienteId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -674,7 +743,7 @@ function ClienteDetalle({
     },
   });
 
-  const { data: facturas = [] } = useQuery({
+  const qFacturas = useQuery({
     queryKey: ["cliente-facturas", clienteId],
     queryFn: async () => {
       // sustituye_a_id y rectifica_a_id, para que el total no cuente dos veces
@@ -708,7 +777,7 @@ function ClienteDetalle({
 
   // Sus facturas y tickets del textil, con los mismos enlaces de canje y
   // rectificación: suman en la misma tabla y con las mismas reglas.
-  const { data: facturasTextil = [] } = useQuery({
+  const qFacturasTextil = useQuery({
     queryKey: ["cliente-facturas-textil", clienteId],
     queryFn: async () => {
       const { data, error } = await leerTodas<{
@@ -731,6 +800,9 @@ function ClienteDetalle({
       return data;
     },
   });
+  const pedidosTextil = qPedidosTextil.data ?? [];
+  const facturas = qFacturas.data ?? [];
+  const facturasTextil = qFacturasTextil.data ?? [];
 
   if (!cliente) return null;
 
@@ -758,7 +830,7 @@ function ClienteDetalle({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
@@ -832,8 +904,9 @@ function ClienteDetalle({
 
         <Historial
           titulo="Pedidos de las tiendas"
-          icono={<ShoppingCart className="h-4 w-4" />}
+          icono={<ICONO.pedidos className="h-4 w-4" />}
           vacio="Sin pedidos en las tiendas"
+          consultas={[qPedidos]}
           pie={{
             texto: describirPedidos(totales.tienda.pedidos, totales.tienda.cancelados),
             total: totales.tienda.total,
@@ -851,6 +924,7 @@ function ClienteDetalle({
           titulo="Pedidos del textil"
           icono={<Shirt className="h-4 w-4" />}
           vacio="Sin pedidos del textil"
+          consultas={[qPedidosTextil]}
           pie={{
             texto: describirPedidos(totales.textil.pedidos, totales.textil.cancelados),
             total: totales.textil.total,
@@ -865,8 +939,9 @@ function ClienteDetalle({
         />
         <Historial
           titulo="Facturas"
-          icono={<Receipt className="h-4 w-4" />}
+          icono={<ICONOS_PANTALLA.facturas className="h-4 w-4" />}
           vacio="Sin facturas"
+          consultas={[qFacturas, qFacturasTextil]}
           pie={{
             texto: describirDocumentos(totales.facturas),
             total: totales.facturas.total,
@@ -902,12 +977,15 @@ function Historial({
   titulo,
   icono,
   vacio,
+  consultas,
   pie,
   filas,
 }: {
   titulo: string;
   icono: React.ReactNode;
   vacio: string;
+  /** Las lecturas de las que salen las filas: cargando, error o vacío. */
+  consultas: Pick<UseQueryResult, "isLoading" | "error" | "refetch" | "isFetching">[];
   /**
    * El total de la tabla, ya calculado con las reglas de cada lista: no es la
    * suma de las filas a secas (los cancelados y los borradores se ven pero no
@@ -924,6 +1002,8 @@ function Historial({
     etiqueta?: React.ReactNode;
   }[];
 }) {
+  const cargando = consultas.some((c) => c.isLoading);
+  const fallida = consultas.find((c) => c.error);
   return (
     <div>
       <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
@@ -954,7 +1034,23 @@ function Historial({
                   <TableCell className="text-right tabular-nums">{eur(f.total)}</TableCell>
                 </TableRow>
               ))}
-              {filas.length === 0 && (
+              {cargando && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!cargando && fallida && (
+                <ErrorCarga
+                  error={fallida.error}
+                  que={titulo.toLowerCase()}
+                  onReintentar={() => consultas.forEach((c) => c.error && c.refetch())}
+                  reintentando={consultas.some((c) => c.isFetching)}
+                  colSpan={4}
+                />
+              )}
+              {!cargando && !fallida && filas.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">
                     {vacio}

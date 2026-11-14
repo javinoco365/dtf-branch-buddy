@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -28,9 +29,12 @@ import { AbrirDocumento } from "@/components/archivo/AbrirDocumento";
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
 import { listarArchivo } from "@/lib/archivo.functions";
 import { eur, fechaCorta } from "@/lib/format";
+import { esNavegable, moverSeleccion } from "@/dominio/periodos";
 import { normalizarTexto } from "@/dominio/clientes";
 import { CLASES_ARCHIVO, nombreZip, resumenArchivo, type DocArchivo } from "@/dominio/archivo";
 import { totalesArchivo } from "@/dominio/sumatorios-facturas";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 export const Route = createFileRoute("/panel/archivo")({
   head: () => ({ meta: [{ title: "Archivo · DTF Culture" }] }),
@@ -64,7 +68,7 @@ function ArchivoPage() {
   const hasta = periodo.rango ? dia(periodo.rango.hasta) : null;
 
   const listarFn = useServerFn(listarArchivo);
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["archivo", desde, hasta],
     queryFn: () => listarFn({ data: { desde, hasta } }),
   });
@@ -100,19 +104,18 @@ function ArchivoPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Archivo</h1>
-          <p className="text-sm text-muted-foreground">
-            Facturas emitidas, tickets, rectificativas y facturas de compra de todas las tiendas y
-            del textil. Elige el periodo, filtra y descárgalos en un ZIP.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <RehacerPdfsFacturas />
-          <DescargarPdfs docs={filtrados} nombreZip={nombreZip(periodo.seleccion, periodo.rango)} />
-        </div>
-      </div>
+      <CabeceraPantalla
+        subtitulo="Facturas emitidas, tickets, rectificativas y facturas de compra de todas las tiendas y del textil. Elige el periodo, filtra y descárgalos en un ZIP."
+        acciones={
+          <>
+            <RehacerPdfsFacturas />
+            <DescargarPdfs
+              docs={filtrados}
+              nombreZip={nombreZip(periodo.seleccion, periodo.rango)}
+            />
+          </>
+        }
+      />
 
       <BarraFiltros>
         <CampoBusqueda
@@ -193,16 +196,40 @@ function ArchivoPage() {
                 </TableRow>
               )}
               {error && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-destructive">
-                    {(error as Error).message || "No se pudo leer el archivo"}
-                  </TableCell>
-                </TableRow>
+                <ErrorCarga
+                  error={error}
+                  que="los documentos del archivo"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={7}
+                />
               )}
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    No hay documentos en este periodo con estos filtros.
+                    {hay() ? (
+                      <>
+                        Ningún documento cumple los filtros.
+                        <div className="mt-2">
+                          <QuitarFiltros visible alQuitar={() => quitar()} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        No hay documentos en este periodo.
+                        {esNavegable(periodo.seleccion.tipo) && (
+                          <div className="mt-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => periodo.elegir(moverSeleccion(periodo.seleccion, -1))}
+                            >
+                              Ver el periodo anterior
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -222,7 +249,9 @@ function ArchivoPage() {
                         "—"
                       ))}
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(d.total)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(d.total)}
+                  </TableCell>
                   <TableCell>
                     {/* Un documento emitido se genera al descargarlo: es lo
                         normal. Una compra sin fichero sí es un hueco. */}

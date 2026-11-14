@@ -29,6 +29,9 @@ import {
   nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
+  filasDevolucionWoo,
+  type FilaDevolucionWoo,
+  type ReembolsoDetalleWoo,
   pedidosDesaparecidos,
   totalReembolsado,
 } from "@/dominio/sync-woo";
@@ -899,10 +902,10 @@ async function guardarPedidosWoo(
   }
 
   // --- Devoluciones ---------------------------------------------------------
-  // WooCommerce ya trae los reembolsos de cada pedido dentro de la propia
-  // respuesta de /orders (o.refunds), así que esto no hace ninguna llamada
-  // extra a la tienda.
-  const filasDevoluciones: any[] = [];
+  // La respuesta de /orders trae los reembolsos de cada pedido (o.refunds),
+  // pero sin fecha. La fecha real sale de /orders/{id}/refunds, que se pide
+  // solo para los pedidos que traen alguno (ver filasDevolucionWoo).
+  const filasDevoluciones: FilaDevolucionWoo[] = [];
   const idsReembolsados: string[] = [];
   const idsParciales: string[] = [];
   for (const o of orders) {
@@ -910,23 +913,20 @@ async function guardarPedidosWoo(
     if (!pedido_id) continue;
     const refunds = Array.isArray(o.refunds) ? o.refunds : [];
     if (!refunds.length) continue;
-    for (const rf of refunds) {
-      if (rf?.id == null) continue;
-      filasDevoluciones.push({
-        tienda_id: ctx.tiendaId,
-        pedido_id,
-        woo_refund_id: rf.id,
-        importe: Math.abs(Number(rf.total || 0)) || 0,
-        motivo: rf.reason || null,
-      });
-    }
+    const detalle = await reembolsosConFecha(ctx, Number(o.id));
+    filasDevoluciones.push(...filasDevolucionWoo(ctx.tiendaId, pedido_id, refunds, detalle));
     const reembolsado = totalReembolsado(refunds);
     const estado = estadoPagoPorDevolucion(Number(o.total || 0), reembolsado);
     if (estado === "reembolsado") idsReembolsados.push(pedido_id);
     else if (estado === "parcial") idsParciales.push(pedido_id);
   }
-  if (filasDevoluciones.length) {
-    const { error } = await tabla(ctx.sb, "pedido_devoluciones").upsert(filasDevoluciones, {
+  // Dos tandas: con fecha y sin ella. Un upsert solo toca las columnas que
+  // lleva, así que la de sin fecha no pisa la que ya hubiera guardada.
+  const conFecha = filasDevoluciones.filter((f) => f.fecha);
+  const sinFecha = filasDevoluciones.filter((f) => !f.fecha);
+  for (const filas of [conFecha, sinFecha]) {
+    if (!filas.length) continue;
+    const { error } = await tabla(ctx.sb, "pedido_devoluciones").upsert(filas, {
       onConflict: "tienda_id,woo_refund_id",
     });
     if (error) throw new Error(`No se pudieron guardar las devoluciones: ${error.message}`);
@@ -941,6 +941,35 @@ async function guardarPedidosWoo(
   }
   resultado.devoluciones = idsReembolsados.length + idsParciales.length;
   return resultado;
+}
+
+/**
+ * Los reembolsos de un pedido con su fecha (`/orders/{id}/refunds`). Si
+ * WooCommerce no responde, se sigue sin fecha y se avisa: el reembolso se
+ * guarda igual y la fecha se completa en otra sincronización.
+ */
+async function reembolsosConFecha(
+  ctx: ContextoSync,
+  wooOrderId: number,
+): Promise<ReembolsoDetalleWoo[]> {
+  try {
+    const r = await fetch(
+      urlWoo(ctx.base, `orders/${wooOrderId}/refunds`, {
+        per_page: "100",
+        _fields: "id,date_created,date_created_gmt",
+      }),
+      { headers: ctx.headers },
+    );
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+    const lista = (await r.json()) as unknown;
+    return Array.isArray(lista) ? (lista as ReembolsoDetalleWoo[]) : [];
+  } catch (e) {
+    ctx.avisos.push(
+      `No se pudo leer la fecha de los reembolsos del pedido ${wooOrderId} ` +
+        `(${e instanceof Error ? e.message : String(e)}): se guardan sin cambiar su fecha.`,
+    );
+    return [];
+  }
 }
 
 /**
@@ -1157,13 +1186,13 @@ async function tandaWoo(ctx: ContextoSync, continuar: ContinuacionWoo | null, in
 
   if (primera && ctx.esquema === "sin_tabla") {
     ctx.avisos.push(
-      "Falta aplicar la migración 20261024100000 (woo_sincronizacion). Mientras tanto se " +
+      "Una mejora de la sincronización aún no está activada (avisa a Javier). Mientras tanto se " +
         "sincroniza como antes: los 100 últimos pedidos por fecha y los 100 productos cambiados " +
         "más recientes. Un pedido más antiguo que cambie en WooCommerce no se actualiza aquí.",
     );
   } else if (primera && ctx.esquema === "sin_bloqueo") {
     ctx.avisos.push(
-      "Falta aplicar la migración 20261024110000. Sin ella nada impide que dos " +
+      "Una protección de la sincronización aún no está activada (avisa a Javier). Sin ella nada impide que dos " +
         "sincronizaciones de esta tienda vayan a la vez (podrían duplicar líneas de pedido), ni " +
         "se guarda la página cuando cientos de pedidos cambian en el mismo segundo, ni por " +
         "dónde iban los clientes nuevos si una sincronización se corta.",
@@ -1698,6 +1727,109 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
       revisados: pedidos.length,
       actualizados,
       siguiente: pedidos.length === 100 ? pedidos[pedidos.length - 1].woo_order_id : null,
+    };
+  });
+
+/**
+ * Corrige la fecha de los reembolsos de WooCommerce guardados antes de leerla
+ * (se quedaron con la de la sincronización). La sincronización ya la corrige
+ * cuando vuelve a traer un pedido, pero un pedido que no cambia no vuelve:
+ * esto la pide a WooCommerce para todos, de 30 reembolsos en 30 (la pantalla
+ * llama con `desde` hasta que `siguiente` vuelve nulo). Repetirlo no cambia
+ * nada: solo escribe la fecha si es distinta.
+ */
+export const recuperarFechasReembolsosWoo = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid(),
+        /** El último woo_refund_id revisado: se sigue a partir de ahí. */
+        desde: z.number().int().nonnegative().default(0),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    // La misma comprobación que la sincronización: de la tienda o administrador.
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("Esta tienda no tiene URL de WooCommerce");
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Esta tienda no tiene credenciales de WooCommerce guardadas");
+
+    const POR_TANDA = 30;
+    const { data: filas, error } = await tabla(supabaseAdmin, "pedido_devoluciones")
+      .select("id, woo_refund_id, fecha, pedidos(woo_order_id)")
+      .eq("tienda_id", data.tienda_id)
+      .not("woo_refund_id", "is", null)
+      .gt("woo_refund_id", data.desde)
+      .order("woo_refund_id")
+      .limit(POR_TANDA);
+    if (error) throw new Error(error.message);
+    const devoluciones = (filas ?? []) as {
+      id: string;
+      woo_refund_id: number;
+      fecha: string | null;
+      pedidos: { woo_order_id: number | null } | null;
+    }[];
+    if (devoluciones.length === 0) return { revisados: 0, actualizados: 0, siguiente: null };
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const headers = { Authorization: autorizacionWoo(creds), Accept: "application/json" };
+    const pedidosWoo = [
+      ...new Set(
+        devoluciones
+          .map((d) => Number(d.pedidos?.woo_order_id))
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ];
+    const fechaDe = new Map<number, string>();
+    for (const wooId of pedidosWoo) {
+      const r = await fetch(
+        urlWoo(base, `orders/${wooId}/refunds`, {
+          per_page: "100",
+          _fields: "id,date_created,date_created_gmt",
+        }),
+        { headers },
+      );
+      // Un pedido borrado en WooCommerce no tiene reembolsos que leer: se salta.
+      if (r.status === 404) continue;
+      if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+      const lista = (await r.json()) as ReembolsoDetalleWoo[];
+      for (const rf of Array.isArray(lista) ? lista : []) {
+        const f = fechaGmtWoo(rf?.date_created_gmt);
+        if (rf?.id != null && f) fechaDe.set(Number(rf.id), f);
+      }
+    }
+
+    let actualizados = 0;
+    for (const d of devoluciones) {
+      const fecha = fechaDe.get(Number(d.woo_refund_id));
+      if (!fecha) continue;
+      if (d.fecha && Date.parse(d.fecha) === Date.parse(fecha)) continue;
+      const { error: uErr } = await tabla(supabaseAdmin, "pedido_devoluciones")
+        .update({ fecha })
+        .eq("id", d.id);
+      if (uErr) throw new Error(uErr.message);
+      actualizados++;
+    }
+    return {
+      revisados: devoluciones.length,
+      actualizados,
+      siguiente:
+        devoluciones.length === POR_TANDA
+          ? devoluciones[devoluciones.length - 1].woo_refund_id
+          : null,
     };
   });
 

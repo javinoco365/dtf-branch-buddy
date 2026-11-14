@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle2, Clock, Search, Wallet, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Search, X } from "lucide-react";
 import { eur, fechaCorta } from "@/lib/format";
 import { faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
@@ -38,17 +38,17 @@ import {
   filtrarPendientes,
   ordenarPendientes,
   origenPendiente,
+  etiquetaOrigenPendiente,
   resumirPendientes,
   tiendaDelPendiente,
   type FiltroPendientes,
   type PedidoPendiente,
 } from "@/dominio/pendientes";
-import { mensajeDeError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { ICONO } from "@/components/iconos";
 
 /** Los filtros en la dirección. La tienda solo cuenta en la vista global. */
 const FILTROS_URL = { q: "", tienda: "todas", origen: "todos", parciales: false };
-
-const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_PENDIENTE.map((o) => [o.valor, o.etiqueta]));
 
 /**
  * Lo que queda por cobrar de los pedidos, de todas las tiendas y del textil.
@@ -72,7 +72,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
   );
   const [cobrando, setCobrando] = useState<PedidoPendiente | null>(null);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["cobros-pendientes-pedidos", tiendaId ?? "todas"],
     queryFn: async (): Promise<{ disponible: boolean; pedidos: PedidoPendiente[] }> => {
       // Por páginas: Supabase corta en 1000 filas sin avisar (ver paginar.ts).
@@ -107,8 +107,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Los pedidos pendientes necesitan la migración{" "}
-          <code>20260930100000_pedidos_pendientes_cobro.sql</code>.
+          Los pedidos pendientes de cobro aún no están activados. Avisa a Javier.
         </CardContent>
       </Card>
     );
@@ -120,7 +119,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         <Kpi
-          icon={<Wallet className="h-4 w-4" />}
+          icon={<ICONO.pendienteCobro className="h-4 w-4" />}
           label="Total pendiente"
           value={eur(resumen.pendiente)}
         />
@@ -194,11 +193,12 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
       </Card>
 
       {error && (
-        <Card>
-          <CardContent className="py-6 text-sm text-destructive">
-            No se han podido cargar los pendientes: {mensajeDeError(error)}
-          </CardContent>
-        </Card>
+        <ErrorCarga
+          error={error}
+          que="los pedidos pendientes de cobro"
+          onReintentar={refetch}
+          reintentando={isFetching}
+        />
       )}
 
       <Card>
@@ -253,7 +253,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                     )}
                     <TableCell>
                       <Badge variant={origen === "web" ? "default" : "outline"}>
-                        {ETIQUETA_ORIGEN[origen]}
+                        {etiquetaOrigenPendiente(p)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -265,7 +265,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {eur(Number(p.pendiente))}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <Button size="sm" variant="outline" onClick={() => setCobrando(p)}>
                         {origen === "web" ? "Ver" : "Cobrar"}
                       </Button>
@@ -276,10 +276,19 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
               {!isLoading && !error && filtrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={columnas} className="text-center py-8 text-muted-foreground">
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-green-600" />
-                    {hayFiltro
-                      ? "Ningún pedido pendiente cumple los filtros."
-                      : "Todo cobrado: no hay pedidos pendientes."}
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40 text-aviso-bien-texto" />
+                    {hayFiltro ? (
+                      <>
+                        Ningún pedido pendiente cumple los filtros.
+                        <div className="mt-2">
+                          <Button variant="ghost" size="sm" onClick={() => quitar()}>
+                            <X className="h-4 w-4 mr-1" /> Quitar filtros
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      "Todo cobrado: no hay pedidos pendientes."
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -290,7 +299,9 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                   <TableCell colSpan={columnas - 2} className="font-semibold">
                     TOTAL PENDIENTE
                   </TableCell>
-                  <TableCell className="text-right font-bold">{eur(resumen.pendiente)}</TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(resumen.pendiente)}
+                  </TableCell>
                   <TableCell />
                 </TableRow>
               </TableFooter>

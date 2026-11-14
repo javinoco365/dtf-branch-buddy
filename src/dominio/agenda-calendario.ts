@@ -60,8 +60,24 @@ export function casillasDelMes(dia: string): string[] {
   return casillas;
 }
 
-/** Mueve la fecha de referencia una vista adelante (+1) o atrás (-1). */
-export function moverReferencia(dia: string, vista: VistaCalendario, n: 1 | -1): string {
+/**
+ * El día que se queda marcado al ir a un mes: hoy si es el mes de hoy (así la
+ * semana y el día que se abran luego son los de hoy); si no, el día 1.
+ */
+export function referenciaDelMes(diaDelMes: string, hoy?: string): string {
+  return hoy && hoy.slice(0, 7) === diaDelMes.slice(0, 7) ? hoy : primeroDelMes(diaDelMes);
+}
+
+/**
+ * Mueve la fecha de referencia una vista adelante (+1) o atrás (-1). En Mes y
+ * Año, si se llega al mes (o al año) de `hoy`, la referencia es hoy.
+ */
+export function moverReferencia(
+  dia: string,
+  vista: VistaCalendario,
+  n: 1 | -1,
+  hoy?: string,
+): string {
   const [y, m, d] = dia.split("-").map(Number);
   switch (vista) {
     case "dia":
@@ -70,10 +86,12 @@ export function moverReferencia(dia: string, vista: VistaCalendario, n: 1 | -1):
       return sumarDias(dia, 7 * n);
     case "mes": {
       const f = new Date(Date.UTC(y!, m! - 1 + n, 1));
-      return f.toISOString().slice(0, 10);
+      return referenciaDelMes(f.toISOString().slice(0, 10), hoy);
     }
-    case "anio":
+    case "anio": {
+      if (hoy && Number(hoy.slice(0, 4)) === y! + n) return hoy;
       return `${y! + n}-${String(m).padStart(2, "0")}-${d === 29 && m === 2 ? "28" : String(d).padStart(2, "0")}`;
+    }
   }
 }
 

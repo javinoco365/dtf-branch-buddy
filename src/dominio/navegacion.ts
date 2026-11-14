@@ -17,6 +17,7 @@
 export type ClaveIcono =
   | "inicio"
   | "gerencia"
+  | "cuenta-resultados"
   | "agenda"
   | "pedidos"
   | "clientes"
@@ -62,6 +63,11 @@ export const MENU_PRINCIPAL: SeccionMenu[] = [
     entradas: [
       { ruta: "/panel", etiqueta: "Inicio", icono: "inicio" },
       { ruta: "/panel/gerencia", etiqueta: "Gerencia", icono: "gerencia", prefijo: true },
+      {
+        ruta: "/panel/cuenta-resultados",
+        etiqueta: "Cuenta de resultados",
+        icono: "cuenta-resultados",
+      },
       { ruta: "/panel/agenda", etiqueta: "Agenda", icono: "agenda" },
     ],
   },

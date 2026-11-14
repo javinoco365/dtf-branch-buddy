@@ -23,7 +23,7 @@ import {
   type PedidoParaFacturar,
 } from "@/lib/facturas.functions";
 import { invalidarTrasGuardar } from "@/lib/cache";
-import { avisarError } from "@/lib/errores";
+import { avisarError, mensajeDeError } from "@/lib/errores";
 
 type Modo = "ticket" | "factura";
 
@@ -221,12 +221,12 @@ export function FacturarPedidosDialog({
         {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Leyendo…</p>}
         {error && (
           <p className="py-6 text-center text-sm text-destructive">
-            {(error as Error).message || "No se pudieron leer los pedidos"}
+            {mensajeDeError(error, "No se pudieron leer los pedidos")}
           </p>
         )}
 
         {resultado && (
-          <div className="max-h-[55vh] space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
+          <div className="max-h-[55dvh] space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
             {resultado.emitidos.length > 0 && (
               <p>
                 Emitidos:{" "}
@@ -266,7 +266,7 @@ export function FacturarPedidosDialog({
               />
               Marcar todos los que se pueden ({posibles.length} de {pedidos.length})
             </label>
-            <div className="max-h-[50vh] divide-y overflow-y-auto rounded-md border text-sm">
+            <div className="max-h-[50dvh] divide-y overflow-y-auto rounded-md border text-sm">
               {pedidos.map((p) => {
                 const no = motivo(p);
                 const tienda = nombreTienda?.(p.tienda_id);

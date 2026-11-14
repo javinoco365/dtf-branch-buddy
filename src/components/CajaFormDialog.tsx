@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -30,6 +31,9 @@ import {
   type SocioCaja,
 } from "@/lib/caja.functions";
 import { avisarError } from "@/lib/errores";
+import { leerNumeroEscrito } from "@/dominio/numeros";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
+import { FormularioDialogo } from "@/components/FormularioDialogo";
 
 const SIN_CLIENTE = "__sin_cliente__";
 const SIN_SOCIO = "__sin_socio__";
@@ -67,15 +71,35 @@ export function CajaFormDialog({
   const [observaciones, setObservaciones] = useState("");
   const [nuevoClienteAbierto, setNuevoClienteAbierto] = useState(false);
 
+  // Lo que había al abrir: con cambios, cerrar (la X, Escape, un toque fuera
+  // o «Cancelar») pregunta antes de perderlos.
+  const [inicial, setInicial] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
-    setFecha(movimiento?.fecha ?? new Date().toISOString().slice(0, 10));
-    setConceptoId(movimiento?.concepto_id ?? "");
-    setClienteId(movimiento?.cliente_id ?? SIN_CLIENTE);
-    setSocioId(movimiento?.socio_id ?? SIN_SOCIO);
-    setImporte(movimiento ? String(movimiento.importe) : "");
-    setObservaciones(movimiento?.observaciones ?? "");
+    const valores = {
+      fecha: movimiento?.fecha ?? diaEnEspana(new Date()),
+      conceptoId: movimiento?.concepto_id ?? "",
+      clienteId: movimiento?.cliente_id ?? SIN_CLIENTE,
+      socioId: movimiento?.socio_id ?? SIN_SOCIO,
+      importe: movimiento ? String(movimiento.importe).replace(".", ",") : "",
+      observaciones: movimiento?.observaciones ?? "",
+    };
+    setFecha(valores.fecha);
+    setConceptoId(valores.conceptoId);
+    setClienteId(valores.clienteId);
+    setSocioId(valores.socioId);
+    setImporte(valores.importe);
+    setObservaciones(valores.observaciones);
+    setInicial(JSON.stringify(valores));
   }, [open, movimiento]);
+
+  const cambiado =
+    inicial !== null &&
+    JSON.stringify({ fecha, conceptoId, clienteId, socioId, importe, observaciones }) !== inicial;
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cambiado, () =>
+    onOpenChange(false),
+  );
 
   // Al editar, un concepto desactivado tiene que seguir apareciendo en la
   // lista: si no, el desplegable saldría vacío y guardar cambiaría el concepto
@@ -107,7 +131,7 @@ export function CajaFormDialog({
   const mut = useMutation({
     mutationFn: async () => {
       if (!conceptoId) throw new Error("Elige un concepto");
-      const n = Number(String(importe).replace(",", "."));
+      const n = leerNumeroEscrito(importe);
       if (!Number.isFinite(n) || n <= 0) throw new Error("El importe tiene que ser mayor que cero");
       return guardar({
         data: {
@@ -131,128 +155,130 @@ export function CajaFormDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar apunte" : "Nuevo apunte de caja"}</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Fecha</Label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Importe (€)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={importe}
+                  onChange={(e) => setImporte(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
             </div>
+
             <div className="space-y-1">
-              <Label>Importe (€)</Label>
-              <Input
-                inputMode="decimal"
-                value={importe}
-                onChange={(e) => setImporte(e.target.value)}
-                placeholder="0,00"
+              <Label>Concepto</Label>
+              <Select value={conceptoId} onValueChange={setConceptoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elige un concepto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {conceptosVisibles.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                      <span className="text-muted-foreground text-xs ml-2">
+                        {c.categoria === "ingreso" ? "ingreso" : "gasto"}
+                        {!c.activo && " · desactivado"}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!concepto && (
+                <p className="text-xs text-muted-foreground">
+                  La categoría —ingreso o gasto— la marca el concepto.
+                </p>
+              )}
+            </div>
+
+            {esIngreso && (
+              <div className="space-y-1">
+                <Label>Cliente</Label>
+                <Select
+                  value={clienteId}
+                  onValueChange={(v) => {
+                    if (v === NUEVO_CLIENTE) {
+                      setNuevoClienteAbierto(true);
+                      return;
+                    }
+                    setClienteId(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_CLIENTE}>Sin cliente (venta de mostrador)</SelectItem>
+                    <SelectItem value={NUEVO_CLIENTE}>
+                      <span className="flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
+                      </span>
+                    </SelectItem>
+                    {(clientes ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {esGasto && (
+              <div className="space-y-1">
+                <Label>Socio</Label>
+                <Select value={socioId} onValueChange={setSocioId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_SOCIO}>Ninguno (lo paga la empresa)</SelectItem>
+                    {sociosVisibles.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nombre}
+                        {!s.activo && (
+                          <span className="text-muted-foreground text-xs ml-2">desactivado</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label>Observaciones</Label>
+              <Textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
               />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label>Concepto</Label>
-            <Select value={conceptoId} onValueChange={setConceptoId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige un concepto" />
-              </SelectTrigger>
-              <SelectContent>
-                {conceptosVisibles.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.nombre}
-                    <span className="text-muted-foreground text-xs ml-2">
-                      {c.categoria === "ingreso" ? "ingreso" : "gasto"}
-                      {!c.activo && " · desactivado"}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!concepto && (
-              <p className="text-xs text-muted-foreground">
-                La categoría —ingreso o gasto— la marca el concepto.
-              </p>
-            )}
-          </div>
-
-          {esIngreso && (
-            <div className="space-y-1">
-              <Label>Cliente</Label>
-              <Select
-                value={clienteId}
-                onValueChange={(v) => {
-                  if (v === NUEVO_CLIENTE) {
-                    setNuevoClienteAbierto(true);
-                    return;
-                  }
-                  setClienteId(v);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_CLIENTE}>Sin cliente (venta de mostrador)</SelectItem>
-                  <SelectItem value={NUEVO_CLIENTE}>
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5" /> Nuevo cliente…
-                    </span>
-                  </SelectItem>
-                  {(clientes ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {esGasto && (
-            <div className="space-y-1">
-              <Label>Socio</Label>
-              <Select value={socioId} onValueChange={setSocioId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_SOCIO}>Ninguno (lo paga la empresa)</SelectItem>
-                  {sociosVisibles.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.nombre}
-                      {!s.activo && (
-                        <span className="text-muted-foreground text-xs ml-2">desactivado</span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label>Observaciones</Label>
-            <Textarea
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              rows={2}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={pedirCierre}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
 
       <NuevoClienteDialog
         open={nuevoClienteAbierto}
@@ -328,35 +354,36 @@ function NuevoClienteDialog({
         <DialogHeader>
           <DialogTitle>Nuevo cliente</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label>Nombre</Label>
-            <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        <FormularioDialogo alEnviar={() => mut.mutate()} ocupado={mut.isPending}>
+          <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Teléfono</Label>
-              <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              <Label>Nombre</Label>
+              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
             </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Teléfono</Label>
+                <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              El resto de datos —NIF, dirección…— se rellenan luego desde Clientes, si hace falta.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            El resto de datos —NIF, dirección…— se rellenan luego desde Clientes, si hace falta.
-          </p>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? "Creando…" : "Crear"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? "Creando…" : "Crear"}
+            </Button>
+          </DialogFooter>
+        </FormularioDialogo>
       </DialogContent>
     </Dialog>
   );

@@ -94,8 +94,6 @@ export type CostesMetro = { consumibles: number; packaging: number; electricidad
 export type AjustesExport = {
   /** Precio por metro sin IVA con el que se estiman los metros sin longitud. */
   precio_metro: number;
-  /** Si los pedidos web sin pagar cuentan como venta en Gerencia. */
-  web_sin_pagar_cuenta: boolean;
   /** true si no hay ajustes guardados y son los de fábrica. */
   de_fabrica: boolean;
 };
@@ -178,7 +176,7 @@ export const LEEME_ANALISIS = {
       "Una fila por mes y tienda: sumas de los pedidos de ese mes (por la fecha del pedido) que no están cancelados, salvo los campos *_cancelados. Cuadra al céntimo con la suma de sus pedidos. `cobrado` son los cobros de los pedidos del mes, se cobraran cuando se cobraran; `cobrado_por_fecha_de_cobro` son los cobros con fecha en ese mes, de pedidos de cualquier mes (también cancelados), que es lo que enseñan las pantallas como «Cobrado». Precio del metro: `eur_metro` = Σ venta_metros ÷ Σ metros; `eur_metro_medido`, lo mismo solo con los pedidos web cuyas líneas en metros traen todas la longitud del montador (metros_origen 'montador'), que es el precio real más fiable (null si no hay ninguno); `metros_dudosos` y `pedidos_metros_dudosos`, los de metros_de 'sin_origen' o 'suma_de_cantidades'; `eur_metro_neto` = (bruta_neta − venta_uv_neta) ÷ metros de los pedidos con metros de DTF, la cifra «€/metro» de Gerencia; `metros_uv`, `venta_uv_neta` y `coste_uv`, el DTF UV aparte.",
     totales: "Lo mismo que una fila del resumen, para todo el fichero.",
     empresa:
-      "coste_metro_hoy: coste estándar por metro de hoy, por partidas; es el que se usa en los pedidos sin coste guardado. ajustes.precio_metro: precio sin IVA con el que la sincronización estima los metros de las líneas sin longitud; no es una tarifa de venta. ajustes.web_sin_pagar_cuenta: ver diferencias_con_las_pantallas. ajustes.de_fabrica: true si no hay Ajustes de Gerencia guardados; con false, precio_metro puede seguir siendo el 7 por defecto si nunca se cambió.",
+      "coste_metro_hoy: coste estándar por metro de hoy, por partidas; es el que se usa en los pedidos sin coste guardado. ajustes.precio_metro: precio sin IVA con el que la sincronización estima los metros de las líneas sin longitud; no es una tarifa de venta. ajustes.de_fabrica: true si no hay Ajustes de Gerencia guardados; con false, precio_metro puede seguir siendo el 7 por defecto si nunca se cambió.",
   },
   reglas: [
     "Los pedidos cancelados no cuentan en ventas, metros, costes ni pendiente: van aparte (cancelados, importe_cancelados, devuelto_cancelados, cobrado_cancelados).",
@@ -190,7 +188,7 @@ export const LEEME_ANALISIS = {
     "Mes: las pantallas (Pedidos, Dashboard, Facturación y Gerencia) cuentan cada pedido en su día, el mismo `fecha` de aquí, así que un pedido web de las últimas horas del último día del mes (de 22:00 a 24:00 en verano, de 23:00 a 24:00 en invierno) cuenta en su mes aquí y allí. Su cobro web, en cambio, se fechó pasando la hora de la web a la de España como si fuera UTC: cae en el día siguiente y, a fin de mes, en el mes siguiente, aquí (`cobrado_por_fecha_de_cobro`) y allí («Cobrado»).",
     "«Cobrado» de las pantallas va por la fecha del cobro: es `cobrado_por_fecha_de_cobro`, no `cobrado`.",
     "Gerencia con «Todas las tiendas» y «Todos los canales», y Facturación Consolidada con «Todas», suman también el textil, que este fichero no lleva. Para comparar, usar en Gerencia una tienda o los canales web y manual, o el Dashboard y la Facturación de cada tienda. El €/metro de Gerencia sí cuadra: el textil no tiene metros.",
-    "Si en Ajustes de Gerencia los pedidos web sin pagar no cuentan (empresa.ajustes.web_sin_pagar_cuenta = false), Gerencia los quita de las ventas; aquí siempre cuentan, y se dan aparte (pedidos_web_sin_pagar, total_neto_web_sin_pagar).",
+    "Los pedidos web sin pagar no son venta: Gerencia, Inicio y la Cuenta de resultados los quitan siempre de las ventas; aquí sí están, y se dan aparte (pedidos_web_sin_pagar, total_neto_web_sin_pagar).",
   ],
   comprobaciones_sugeridas: [
     "Que en cada fila base_neta = bruta_neta + envios_netos, y que la suma de los pedidos de cada mes dé su fila.",

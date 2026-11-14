@@ -167,7 +167,7 @@ function DecidirPrimerPedido({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !decidir.isPending && onCerrar()}>
-      <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>¿Es su primer pedido?</DialogTitle>
           <DialogDescription>

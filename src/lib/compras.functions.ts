@@ -610,7 +610,7 @@ export const borrarCompra = createServerFn({ method: "POST" })
       }
       if (!("borrada_en" in compra)) {
         throw new Error(
-          "Una factura registrada no se borra. Falta aplicar la migración 20261014100000.",
+          "Una factura registrada no se borra todavía: esta parte aún no está activada. Avisa a Javier.",
         );
       }
       const { error } = await tabla(context.supabase, "textil_compras")

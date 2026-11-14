@@ -27,6 +27,19 @@ export const fechaLarga = (d: string | Date | null | undefined) => {
   }).format(date);
 };
 
+/** Día y hora, sin segundos: «14/11/2026, 12:05». Para listas y «actualizado el». */
+export const fechaHora = (d: string | Date | null | undefined) => {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
+
 export const numero = (n: number | null | undefined, decimales = 2) =>
   new Intl.NumberFormat("es-ES", {
     minimumFractionDigits: decimales,

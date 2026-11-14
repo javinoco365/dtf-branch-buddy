@@ -1,4 +1,5 @@
 import { useFiltrosUrl, usePeriodoUrl } from "@/lib/filtros-url";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { infoEstado } from "@/dominio/estados";
 import { EtiquetaEstado } from "@/components/EtiquetaEstado";
 import { usePermisos } from "@/hooks/use-permisos";
@@ -135,6 +136,8 @@ import { totalesCompras } from "@/dominio/sumatorios-facturas";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { SiPuede } from "@/components/SiPuede";
 import { avisarError } from "@/lib/errores";
+import { ErrorCarga } from "@/components/ErrorCarga";
+import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 
 /**
  * Las facturas de compra. En modo «textil», las del género que entra en el
@@ -198,7 +201,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       setAbriendoRevision(null);
     }
   }
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["compras", modo],
     queryFn: () => listFn({ data: { soloTextil: !general } }),
   });
@@ -578,74 +581,71 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-[260px] flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {general ? "Facturas de compra" : "Compras"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {general
-              ? "Las facturas de tus proveedores: tinta, film, mensajería, máquinas, servicios… Cada una cuenta en Gerencia según lo que sea, y su IVA va al 303."
-              : "Sube la factura del proveedor y da el género de alta en el stock."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <DescargarPdfs
-            docs={docsFiltrados}
-            etiqueta="Descargar ficheros"
-            nombreZip={nombreZip(
-              periodo.seleccion,
-              periodo.rango,
-              general ? "Compras" : "Compras_textil",
+      <CabeceraPantalla
+        subtitulo={
+          general
+            ? "Las facturas de tus proveedores: tinta, film, mensajería, máquinas, servicios… Cada una cuenta en Gerencia según lo que sea, y su IVA va al 303."
+            : "Sube la factura del proveedor y da el género de alta en el stock."
+        }
+        acciones={
+          <>
+            <DescargarPdfs
+              docs={docsFiltrados}
+              etiqueta="Descargar ficheros"
+              nombreZip={nombreZip(
+                periodo.seleccion,
+                periodo.rango,
+                general ? "Compras" : "Compras_textil",
+              )}
+            />
+            {!cola && escribir && (
+              <>
+                <input
+                  ref={ficheroRef}
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) leer.mutate(f);
+                  }}
+                />
+                <Button
+                  onClick={() => ficheroRef.current?.click()}
+                  disabled={leer.isPending || lector?.disponible === false || sinGenerales}
+                >
+                  {leer.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileUp className="h-4 w-4 mr-2" />
+                  )}
+                  {leer.isPending ? "Leyendo…" : "Subir factura"}
+                </Button>
+              </>
             )}
-          />
-          {!cola && escribir && (
-            <>
-              <input
-                ref={ficheroRef}
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) leer.mutate(f);
-                }}
-              />
+            <SiPuede accion="escribir">
               <Button
-                onClick={() => ficheroRef.current?.click()}
-                disabled={leer.isPending || lector?.disponible === false || sinGenerales}
+                variant="outline"
+                disabled={sinGenerales}
+                onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
               >
-                {leer.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4 mr-2" />
-                )}
-                {leer.isPending ? "Leyendo…" : "Subir factura"}
+                A mano
               </Button>
-            </>
-          )}
-          <SiPuede accion="escribir">
-            <Button
-              variant="outline"
-              disabled={sinGenerales}
-              onClick={() => setRevisando(nueva({ ...COMPRA_VACIA }, null))}
-            >
-              A mano
-            </Button>
-          </SiPuede>
-          {escaner && (
-            <Button variant="outline" onClick={() => setViendoProveedores(true)}>
-              <Users className="h-4 w-4 mr-2" /> Proveedores
-            </Button>
-          )}
-        </div>
-      </div>
+            </SiPuede>
+            {escaner && (
+              <Button variant="outline" onClick={() => setViendoProveedores(true)}>
+                <Users className="h-4 w-4 mr-2" /> Proveedores
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {lector?.disponible === false && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-medium">La lectura automática de facturas no está activada.</p>
               <p className="text-muted-foreground">
@@ -664,11 +664,11 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       )}
 
       {sinGenerales && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>
-              Falta aplicar la migración de compras generales (20261013100000). Hasta entonces, las
+              Las compras generales aún no están activadas (avisa a Javier). Hasta entonces, las
               compras de textil se registran en Textil › Compras.
             </p>
           </CardContent>
@@ -676,18 +676,18 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
       )}
 
       {!general && data && !escaner && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_ESCANER}</p>
           </CardContent>
         </Card>
       )}
 
       {data && !proformas && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardContent className="flex gap-3 py-4 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
             <p>{AVISO_MIGRACION_PROFORMAS}</p>
           </CardContent>
         </Card>
@@ -836,7 +836,16 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                   <TableCell colSpan={general ? 8 : 7}>Cargando…</TableCell>
                 </TableRow>
               )}
-              {!isLoading && compras.length === 0 && (
+              {!isLoading && error && (
+                <ErrorCarga
+                  error={error}
+                  que="las compras"
+                  onReintentar={refetch}
+                  reintentando={isFetching}
+                  colSpan={general ? 8 : 7}
+                />
+              )}
+              {!isLoading && !error && compras.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={general ? 8 : 7}
@@ -867,7 +876,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                     {esProforma(c) && (
                       <Badge
                         variant="outline"
-                        className="mt-0.5 flex w-fit border-amber-500 font-sans text-amber-700"
+                        className="mt-0.5 flex w-fit border-aviso-atencion-borde font-sans text-aviso-atencion-texto"
                       >
                         Proforma
                       </Badge>
@@ -889,8 +898,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{eur(Number(c.base))}</TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right tabular-nums">{eur(Number(c.base))}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
                     {eur(Number(c.liquido ?? c.total))}
                   </TableCell>
                   <TableCell>
@@ -921,7 +930,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           </span>
                         )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <div className="inline-flex items-center gap-1">
                       {c.fichero_ruta ? (
                         <Button
@@ -981,7 +990,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                             onClick={() =>
                               setPagando({
                                 compra: c,
-                                fecha: new Date().toISOString().slice(0, 10),
+                                fecha: diaEnEspana(new Date()),
                               })
                             }
                           >
@@ -997,7 +1006,12 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           !c.proforma_id &&
                           !casadas.has(c.id))) && (
                         <SiPuede accion="borrar">
-                          <Button variant="ghost" size="icon" onClick={() => setBorrando(c)}>
+                          <Button
+                            aria-label="Borrar la factura de compra"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setBorrando(c)}
+                          >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </SiPuede>
@@ -1259,7 +1273,7 @@ function RevisarCompra({
     });
 
   return (
-    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+    <DialogContent className="max-w-5xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>
           {esProformaRev
@@ -1289,10 +1303,10 @@ function RevisarCompra({
       />
 
       {avisos.length > 0 && (
-        <Card className="border-amber-500/50">
+        <Card className="border-aviso-atencion-borde">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto" />
               Los números no cuadran entre sí
             </CardTitle>
           </CardHeader>
@@ -1322,7 +1336,7 @@ function RevisarCompra({
                 })
               }
             >
-              <SelectTrigger className={sinCategoria ? "border-amber-500" : ""}>
+              <SelectTrigger className={sinCategoria ? "border-aviso-atencion-borde" : ""}>
                 <SelectValue placeholder="Elige la categoría" />
               </SelectTrigger>
               <SelectContent>
@@ -1471,7 +1485,9 @@ function RevisarCompra({
                       value={asignaciones[i] ?? ""}
                       onValueChange={(v) => setAsignacion(i, v || null)}
                     >
-                      <SelectTrigger className={asignaciones[i] ? "" : "border-amber-500"}>
+                      <SelectTrigger
+                        className={asignaciones[i] ? "" : "border-aviso-atencion-borde"}
+                      >
                         <SelectValue placeholder="Sin asignar" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1536,7 +1552,9 @@ function RevisarCompra({
                 value={estado.tipo_iva === null ? "" : String(estado.tipo_iva)}
                 onValueChange={(v) => onCambiar({ ...estado, tipo_iva: Number(v) })}
               >
-                <SelectTrigger className={estado.tipo_iva === null ? "border-amber-500" : ""}>
+                <SelectTrigger
+                  className={estado.tipo_iva === null ? "border-aviso-atencion-borde" : ""}
+                >
                   <SelectValue placeholder="Elige el tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1591,10 +1609,10 @@ function RevisarCompra({
             <span className="font-medium text-foreground">líquido {eur(calculado.liquido)}</span>
           </p>
           {descuadre !== null && (
-            <Card className="border-amber-500/50">
+            <Card className="border-aviso-atencion-borde">
               <CardContent className="space-y-3 py-4 text-sm">
                 <p className="flex gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-4 w-4 text-aviso-atencion-texto shrink-0 mt-0.5" />
                   La factura dice {eur(compra.total)} a pagar y el cálculo da{" "}
                   {eur(calculado.liquido)} ({descuadre > 0 ? "+" : ""}
                   {eur(descuadre)}). ¿Cuál vale?
@@ -1812,7 +1830,10 @@ function textoRegistrada(r: {
 function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
   const qc = useQueryClient();
   const listFn = useServerFn(listProveedores);
-  const { data, isLoading } = useQuery({ queryKey: ["proveedores"], queryFn: () => listFn() });
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ["proveedores"],
+    queryFn: () => listFn(),
+  });
   const guardarFn = useServerFn(guardarProveedor);
   const [editando, setEditando] = useState<{
     id: string;
@@ -1835,7 +1856,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Proveedores</DialogTitle>
           <DialogDescription>
@@ -1845,6 +1866,14 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
         </DialogHeader>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : error ? (
+          <ErrorCarga
+            error={error}
+            que="los proveedores"
+            onReintentar={refetch}
+            reintentando={isFetching}
+            sinMarco
+          />
         ) : data?.disponible === false ? (
           <p className="text-sm text-muted-foreground">{AVISO_MIGRACION_ESCANER}</p>
         ) : proveedores.length === 0 ? (
@@ -1884,7 +1913,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
                         aria-label="Activo"
                       />
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                       <Button
                         size="sm"
                         disabled={!editando.nombre.trim() || guardar.isPending}
@@ -1909,7 +1938,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
                     <TableCell className="font-medium">{p.nombre}</TableCell>
                     <TableCell className="font-mono text-xs">{p.nif ?? "—"}</TableCell>
                     <TableCell>{p.activo ? "Sí" : <Badge variant="outline">No</Badge>}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <SiPuede accion="escribir">
                         <Button
                           size="sm"

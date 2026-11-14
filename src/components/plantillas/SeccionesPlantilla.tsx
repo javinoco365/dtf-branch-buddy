@@ -808,7 +808,7 @@ function SeccionPie() {
         onChange={(texto) => cambiar(conGrupo("pie", { texto }))}
       />
       {Math.max(lineas, rellenas) > RENGLONES_PIE && (
-        <p className="text-xs text-amber-700 dark:text-amber-300">
+        <p className="text-xs text-aviso-atencion-texto">
           Hay más de {RENGLONES_PIE} líneas: la letra del pie se hará más pequeña y, si aun así no
           caben, el pie subirá y le quitará sitio al cuerpo.
         </p>

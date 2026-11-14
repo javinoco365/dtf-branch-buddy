@@ -1,3 +1,4 @@
+import { numero } from "@/lib/format";
 import { describe, expect, it } from "vitest";
 import {
   baseConEnvio,
@@ -10,7 +11,9 @@ import {
   parteVendida,
   topPorMetros,
   variacion,
+  cambioDeSigno,
   formaVariacion,
+  textoVariacion,
   type PedidoResumen,
 } from "./kpis";
 
@@ -156,6 +159,24 @@ describe("variacion", () => {
 
   it("redondea a un decimal, que es lo que se pinta", () => {
     expect(variacion(107, 93)).toBe(15.1);
+  });
+
+  it("con lo anterior negativo divide por su valor absoluto: mejorar sube", () => {
+    expect(variacion(-50, -100)).toBe(50);
+    expect(variacion(-150, -100)).toBe(-50);
+    expect(variacion(0, -88.33)).toBe(100);
+  });
+
+  it("si cambia el signo no hay porcentaje: se dice con palabras", () => {
+    // De −88,33 a 807,13 salía «−1013,8 %».
+    expect(variacion(807.13, -88.33)).toBeNull();
+    expect(cambioDeSigno(807.13, -88.33)).toBe("antes en pérdidas");
+    expect(variacion(-20, 300)).toBeNull();
+    expect(cambioDeSigno(-20, 300)).toBe("antes en beneficio");
+    expect(cambioDeSigno(150, 100)).toBeNull();
+    expect(cambioDeSigno(0, -10)).toBeNull();
+    expect(textoVariacion(null, numero, "antes en pérdidas")).toBe("— (antes en pérdidas)");
+    expect(textoVariacion(null, numero)).toBe("—");
   });
 });
 
@@ -443,5 +464,15 @@ describe("formaVariacion", () => {
 
   it("justo por debajo de diez veces sigue en porcentaje", () => {
     expect(formaVariacion(899.9)).toEqual({ tipo: "porcentaje", valor: 899.9 });
+  });
+});
+
+describe("textoVariacion", () => {
+  it("en %, en veces o «—» sin datos", () => {
+    expect(textoVariacion(12.44, numero)).toBe("+12,4\u00A0%");
+    expect(textoVariacion(-3, numero)).toBe("−3,0\u00A0%");
+    expect(textoVariacion(6000, numero)).toBe("×61");
+    expect(textoVariacion(1050, numero)).toBe("×11,5");
+    expect(textoVariacion(null, numero)).toBe("—");
   });
 });
