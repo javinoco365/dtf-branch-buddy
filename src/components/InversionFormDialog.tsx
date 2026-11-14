@@ -26,7 +26,8 @@ import type { SocioCaja } from "@/lib/caja.functions";
 import type { TipoInversion } from "@/dominio/inversion";
 import { avisarError } from "@/lib/errores";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
-import { leerNumeroEscrito } from "@/dominio/numeros";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 export function InversionFormDialog({
   open,
@@ -48,14 +49,33 @@ export function InversionFormDialog({
   const [importe, setImporte] = useState("");
   const [observaciones, setObservaciones] = useState("");
 
+  // Lo que había al abrir, para saber si hay algo sin guardar: con cambios,
+  // cerrar (la X, Escape, un toque fuera o «Cancelar») pregunta antes.
+  const [inicial, setInicial] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
-    setFecha(movimiento?.fecha ?? diaEnEspana(new Date()));
-    setSocioId(movimiento?.socio_id ?? "");
-    setTipo(movimiento?.tipo ?? "aportacion");
-    setImporte(movimiento ? String(movimiento.importe) : "");
-    setObservaciones(movimiento?.observaciones ?? "");
+    const valores = {
+      fecha: movimiento?.fecha ?? diaEnEspana(new Date()),
+      socioId: movimiento?.socio_id ?? "",
+      tipo: movimiento?.tipo ?? ("aportacion" as TipoInversion),
+      importe: movimiento ? escribirNumero(Number(movimiento.importe)) : "",
+      observaciones: movimiento?.observaciones ?? "",
+    };
+    setFecha(valores.fecha);
+    setSocioId(valores.socioId);
+    setTipo(valores.tipo);
+    setImporte(valores.importe);
+    setObservaciones(valores.observaciones);
+    setInicial(JSON.stringify(valores));
   }, [open, movimiento]);
+
+  const cambiado =
+    inicial !== null &&
+    JSON.stringify({ fecha, socioId, tipo, importe, observaciones }) !== inicial;
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(cambiado, () =>
+    onOpenChange(false),
+  );
 
   // Al editar, un socio desactivado tiene que seguir en la lista: si no, el
   // desplegable saldría vacío y guardar le cambiaría el socio al apunte.
@@ -90,7 +110,7 @@ export function InversionFormDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{esEdicion ? "Editar apunte" : "Nuevo apunte de inversión"}</DialogTitle>
@@ -156,7 +176,7 @@ export function InversionFormDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={pedirCierre}>
               Cancelar
             </Button>
             <Button type="submit" disabled={mut.isPending}>
@@ -165,6 +185,7 @@ export function InversionFormDialog({
           </DialogFooter>
         </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }

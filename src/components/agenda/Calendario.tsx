@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Avatar, EtiquetaPrioridad, EtiquetaRealizada } from "./piezas";
 import { CLASES_PRIORIDAD, CLASES_REALIZADA, iconoDeCategoria, prioridadDe } from "./estilos";
+import { useEsMovil } from "@/hooks/use-es-movil";
 
 const DIAS_SEMANA = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
 const CLAVE_VISTA = "agenda:vista";
@@ -66,23 +67,8 @@ function guardarVista(v: VistaCalendario) {
   }
 }
 
-/**
- * Si la pantalla es de móvil. Se mira ya en el primer pintado (no tras un
- * efecto, como useIsMobile): así no se ve un instante la versión de ordenador.
- */
-function useEsMovil(): boolean {
-  const [movil, setMovil] = useState(
-    () => typeof window !== "undefined" && window.innerWidth < CORTE_MOVIL,
-  );
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${CORTE_MOVIL - 1}px)`);
-    const alCambiar = () => setMovil(mql.matches);
-    alCambiar();
-    mql.addEventListener("change", alCambiar);
-    return () => mql.removeEventListener("change", alCambiar);
-  }, []);
-  return movil;
-}
+/** El corte del calendario: por debajo de `sm:` (640 px), la vista de día. */
+const CONSULTA_MOVIL = `(max-width: ${CORTE_MOVIL - 1}px)`;
 
 export function Calendario({
   tareas,
@@ -115,7 +101,8 @@ export function Calendario({
   onNueva: (dia: string) => void;
   onCambiarHecha: (t: Tarea) => void;
 }) {
-  const movil = useEsMovil();
+  // El de toda la app (hooks/use-es-movil.ts), con el corte del calendario.
+  const { movil } = useEsMovil(CONSULTA_MOVIL);
   // La vista guardada se lee antes del primer pintado, para no enseñar un
   // instante el Mes. En el servidor no hay localStorage: ahí no se pinta el
   // calendario hasta saberla (el efecto la lee nada más montar).

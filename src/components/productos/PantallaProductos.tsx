@@ -43,6 +43,7 @@ import { avisarError } from "@/lib/errores";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 export type Producto = {
   id: string;
@@ -404,9 +405,16 @@ function ProductoForm({
   saving: boolean;
 }) {
   const set = <K extends keyof Producto>(k: K, v: Producto[K]) => onChange({ ...producto, [k]: v });
+  // Lo que había al abrir: con cambios, cerrar (la X, Escape, un toque fuera
+  // o «Cancelar») pregunta antes de perder lo escrito.
+  const [inicial] = useState(() => JSON.stringify(producto));
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(
+    JSON.stringify(producto) !== inicial,
+    onClose,
+  );
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && pedirCierre()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{producto.id ? "Editar producto" : "Nuevo producto"}</DialogTitle>
@@ -518,7 +526,7 @@ function ProductoForm({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={pedirCierre}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
@@ -527,6 +535,7 @@ function ProductoForm({
           </DialogFooter>
         </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }

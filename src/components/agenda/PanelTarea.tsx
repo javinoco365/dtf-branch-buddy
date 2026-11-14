@@ -72,6 +72,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, EtiquetaPrioridad, EtiquetaRealizada } from "./piezas";
 import { CLASES_PRIORIDAD, CLASES_REALIZADA, iconoDeCategoria } from "./estilos";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 export type QuePanel = { modo: "nueva"; dia?: string } | { modo: "ver"; id: string } | null;
 
@@ -219,7 +220,6 @@ function Formulario({
   const [b, setB] = useState<BorradorTarea>(inicial);
   const [enlaceTexto, setEnlaceTexto] = useState<string | null>(tarea?.enlaceTexto ?? null);
   const [errores, setErrores] = useState<ErroresTarea>({});
-  const [descartar, setDescartar] = useState(false);
   const [cancelar, setCancelar] = useState(false);
   const [pasarA, setPasarA] = useState("");
   const tituloRef = useRef<HTMLInputElement>(null);
@@ -247,10 +247,22 @@ function Formulario({
     }
   };
 
-  function cerrar() {
-    if (editable && cambiado) setDescartar(true);
-    else onCerrar();
-  }
+  // Con cambios a medias, cerrar pregunta antes (hooks/use-cerrar-sin-perder).
+  const { pedirCierre: cerrar, aviso: avisoDescartar } = useCerrarSinPerder(
+    editable && cambiado,
+    onCerrar,
+    tarea
+      ? {
+          titulo: "¿Salir sin guardar los cambios?",
+          descripcion: "Lo que has escrito se perderá.",
+          descartar: "Salir sin guardar",
+        }
+      : {
+          titulo: "¿Descartar esta tarea?",
+          descripcion: "Lo que has escrito se perderá.",
+          descartar: "Descartar",
+        },
+  );
   registrarCierre(cerrar);
 
   // Al abrir una tarea que me han mandado, deja de salir como nueva.
@@ -709,22 +721,7 @@ function Formulario({
         )}
       </div>
 
-      <AlertDialog open={descartar} onOpenChange={setDescartar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {tarea ? "¿Salir sin guardar los cambios?" : "¿Descartar esta tarea?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>Lo que has escrito se perderá.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
-            <AlertDialogAction onClick={onCerrar}>
-              {tarea ? "Salir sin guardar" : "Descartar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {avisoDescartar}
 
       {tarea && (
         <AlertDialog open={cancelar} onOpenChange={setCancelar}>

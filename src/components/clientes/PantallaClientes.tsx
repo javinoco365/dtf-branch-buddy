@@ -69,6 +69,7 @@ import { ErrorCarga } from "@/components/ErrorCarga";
 import { CabeceraPantalla } from "@/components/CabeceraPantalla";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
 import { ICONO, ICONOS_PANTALLA } from "@/components/iconos";
+import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 
 /** Un pedido de tienda en la ficha del cliente, con lo de su línea. */
 type PedidoDelCliente = PedidoPartible & { id: string; numero: string; estado: string };
@@ -567,8 +568,15 @@ function ClienteForm({
   saving: boolean;
 }) {
   const set = (k: keyof Cliente, v: string) => onChange({ ...cliente, [k]: v });
+  // Lo que había al abrir: con cambios, cerrar (la X, Escape, un toque fuera
+  // o «Cancelar») pregunta antes de perder lo escrito.
+  const [inicial] = useState(() => JSON.stringify(cliente));
+  const { pedirCierre, aviso: avisoDescartar } = useCerrarSinPerder(
+    JSON.stringify(cliente) !== inicial,
+    onClose,
+  );
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && pedirCierre()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{cliente.id ? "Editar cliente" : "Nuevo cliente"}</DialogTitle>
@@ -657,7 +665,7 @@ function ClienteForm({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={pedirCierre}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
@@ -666,6 +674,7 @@ function ClienteForm({
           </DialogFooter>
         </FormularioDialogo>
       </DialogContent>
+      {avisoDescartar}
     </Dialog>
   );
 }

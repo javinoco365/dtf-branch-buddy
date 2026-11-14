@@ -10,12 +10,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+/** Los textos de la pregunta, si no valen los de siempre. */
+export type TextosCerrarSinPerder = {
+  titulo?: string;
+  descripcion?: string;
+  /** El botón que descarta y cierra. */
+  descartar?: string;
+};
+
 /**
  * Cerrar un formulario sin perder lo escrito por un toque fuera o un Escape.
  *
  * Con cambios sin guardar, cerrar (la X, Escape, el clic fuera o «Cancelar»)
  * pregunta antes «¿Descartar los cambios?». Sin cambios, se cierra como
- * siempre. Es lo que hace el panel de tareas de la agenda.
+ * siempre. Lo usan los formularios de pedido, cliente, producto, inversión y
+ * el panel de tareas de la agenda; los textos se pueden cambiar (`textos`).
  *
  *   const { pedirCierre, aviso } = useCerrarSinPerder(cambiado, () => onOpenChange(false));
  *   <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : pedirCierre())}>
@@ -23,7 +32,16 @@ import {
  *     {aviso}
  *   </Dialog>
  */
-export function useCerrarSinPerder(cambiado: boolean, cerrar: () => void) {
+export function useCerrarSinPerder(
+  cambiado: boolean,
+  cerrar: () => void,
+  textos: TextosCerrarSinPerder = {},
+) {
+  const {
+    titulo = "¿Descartar los cambios?",
+    descripcion = "Hay cambios sin guardar. Si cierras, lo que has escrito se perderá.",
+    descartar = "Descartar cambios",
+  } = textos;
   const [preguntando, setPreguntando] = useState(false);
   const pedirCierre = () => {
     if (cambiado) setPreguntando(true);
@@ -33,10 +51,8 @@ export function useCerrarSinPerder(cambiado: boolean, cerrar: () => void) {
     <AlertDialog open={preguntando} onOpenChange={setPreguntando}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Hay cambios sin guardar. Si cierras, lo que has escrito se perderá.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{titulo}</AlertDialogTitle>
+          <AlertDialogDescription>{descripcion}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Seguir editando</AlertDialogCancel>
@@ -47,7 +63,7 @@ export function useCerrarSinPerder(cambiado: boolean, cerrar: () => void) {
               cerrar();
             }}
           >
-            Descartar cambios
+            {descartar}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
