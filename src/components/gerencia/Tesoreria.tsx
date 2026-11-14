@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Clock, HandCoins, Hourglass, Truck } from "lucide-react";
+import { HandCoins, Hourglass, Truck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -71,7 +71,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           explicacion="g_pendiente"
           valor={d.pendientesDisponibles ? eur(pendienteHoy) : "—"}
           delta={null}
-          icon={Clock}
+          icon={ICONO.pendienteCobro}
           pie={<VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver pendientes" />}
         />
         <TarjetaKpi
