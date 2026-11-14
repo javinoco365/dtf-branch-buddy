@@ -62,6 +62,8 @@ export type Venta = PedidoResumen & {
    * coste medio congelado en la salida. Nulo si todavía no ha salido nada.
    */
   coste_textil?: number | null;
+  /** Solo textil: si alguna línea es una prenda del almacén (ver PedidoTextilResumen). */
+  lleva_ropa?: boolean;
 };
 
 /** Un pedido de tienda tal como lo lee usePedidosPeriodo. */
@@ -79,6 +81,12 @@ export type PedidoTextilResumen = {
   marca_id?: string | null;
   /** Coste de la ropa que salió del almacén para el pedido (ver Venta.coste_textil). */
   coste?: number | null;
+  /**
+   * Si alguna línea es una prenda del almacén (stock_id). Un textil sin
+   * prendas propias (se estampa ropa del cliente, solo diseño…) no tiene
+   * coste de ropa: no es que falte, es que no hay.
+   */
+  lleva_ropa?: boolean;
   fecha: string;
   estado: string;
   subtotal: Numerico;
@@ -104,7 +112,24 @@ export function ventaDeTextil(p: PedidoTextilResumen): Venta {
     ...(p.id ? { id: p.id } : {}),
     ...(p.marca_id !== undefined ? { marca_id: p.marca_id } : {}),
     ...(p.coste !== undefined ? { coste_textil: p.coste } : {}),
+    ...(p.lleva_ropa !== undefined ? { lleva_ropa: p.lleva_ropa } : {}),
   };
+}
+
+/**
+ * Un pedido textil que lleva ropa del almacén y todavía no ha salido: su
+ * coste de ropa falta (y el margen es estimado). Sin la marca `lleva_ropa`
+ * (lecturas antiguas) se supone que sí lleva, como antes.
+ */
+export function textilSinCosteDeRopa(
+  v: Pick<Venta, "canal" | "estado" | "coste_textil" | "lleva_ropa">,
+): boolean {
+  return (
+    v.canal === "textil" &&
+    v.estado !== ESTADO_CANCELADO &&
+    v.coste_textil == null &&
+    v.lleva_ropa !== false
+  );
 }
 
 export type FiltroGerencia = {
@@ -231,7 +256,7 @@ export function cifrasGerencia(ventas: readonly Venta[], costeActual: number): C
     ),
     enviosUv: calcularKpis(partes.uv).envios,
     costeTextil,
-    textilSinCoste: textil.filter((v) => v.coste_textil == null).length,
+    textilSinCoste: textil.filter(textilSinCosteDeRopa).length,
     margen: redondear(k.bruta - coste),
     euroMetro: conMetros.metros > 0 ? redondear(brutaMetros / conMetros.metros) : 0,
   };

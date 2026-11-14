@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-textil-sin-ropa",
+    fecha: "2026-11-14",
+    tipo: "arreglo",
+    titulo: "Textil sin ropa: margen exacto",
+    resumen: "Un pedido textil sin prendas del almacén ya no sale como estimado.",
+    puntos: [
+      "Si en el pedido marcas una prenda, lleva ropa; si no, no.",
+      "Solo falta coste si la prenda marcada aún no ha salido del almacén.",
+    ],
+    enlace: { ruta: "/panel/cuenta-resultados", texto: "Ver la Cuenta de resultados" },
+  },
+  {
     id: "2026-11-14-web-sin-pagar-no-cuenta",
     fecha: "2026-11-14",
     tipo: "mejora",
