@@ -223,7 +223,9 @@ function ArchivoPage() {
                         "—"
                       ))}
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(d.total)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(d.total)}
+                  </TableCell>
                   <TableCell>
                     {/* Un documento emitido se genera al descargarlo: es lo
                         normal. Una compra sin fichero sí es un hueco. */}

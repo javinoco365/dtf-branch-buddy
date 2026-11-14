@@ -641,7 +641,7 @@ export function MotorConciliacion({
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right tabular-nums">
                           {escribir && (
                             <Button variant="outline" size="sm" onClick={() => abrirConciliar([m])}>
                               <Lightbulb className="h-4 w-4 mr-1" />
@@ -1424,7 +1424,7 @@ function TablaEnlaces({
                   </div>
                   {e.diferencia !== 0 && <Diferencia enlace={e} />}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right tabular-nums">
                   <div className="inline-flex items-center gap-1">{acciones(e)}</div>
                 </TableCell>
               </TableRow>
@@ -1566,7 +1566,7 @@ function HistorialTraspasos({
                 <TableCell className="text-right tabular-nums">
                   {eur(Math.abs(sale.importe))}
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-right">
+                <TableCell className="whitespace-nowrap text-right tabular-nums">
                   {entra && esTarjeta(entra.cuenta_id) && (
                     <Button variant="ghost" size="sm" onClick={() => setDesglose(entra)}>
                       <Receipt className="h-4 w-4 mr-1" />

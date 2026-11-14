@@ -406,13 +406,15 @@ function PedidosPage() {
                         <EtiquetaEstado tipo="pedido_textil" valor={p.estado} />
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {eur(Number(p.total))}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{eur(cobro.cobrado)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <div className="tabular-nums">{eur(Math.max(cobro.pendiente, 0))}</div>
                       {p.estado !== "cancelado" && <EstadoCobroTexto estado={cobro.estado} />}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                       <Button
                         variant="ghost"
                         size="icon"

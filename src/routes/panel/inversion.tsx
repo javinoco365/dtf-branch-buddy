@@ -326,7 +326,7 @@ function InversionPage() {
                   <TableCell className="text-muted-foreground text-sm">
                     {m.observaciones ?? ""}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <SiPuede accion="escribir">
                       <Button
                         variant="ghost"

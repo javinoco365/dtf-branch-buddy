@@ -1142,8 +1142,10 @@ function HistorialDialog({ item, onClose }: any) {
                     // Revaloriza lo que queda (factura casada con su proforma): sin
                     // unidades, con su importe.
                     <>
-                      <TableCell className="text-right text-muted-foreground">—</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
+                      <TableCell className="text-right text-muted-foreground tabular-nums">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap tabular-nums">
                         {eurConSigno(Number(m.importe_ajuste ?? 0))}{" "}
                         <span className="text-xs text-muted-foreground">en total</span>
                       </TableCell>
@@ -1151,14 +1153,14 @@ function HistorialDialog({ item, onClose }: any) {
                   ) : (
                     <>
                       <TableCell
-                        className={`text-right font-medium ${
+                        className={`text-right font-medium tabular-nums ${
                           Number(m.cantidad) > 0 ? "text-emerald-600" : "text-destructive"
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}
                         {m.cantidad}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {fmtEUR(Number(m.coste_unitario))}
                       </TableCell>
                     </>

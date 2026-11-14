@@ -264,7 +264,7 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {eur(Number(p.pendiente))}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <Button size="sm" variant="outline" onClick={() => setCobrando(p)}>
                         {origen === "web" ? "Ver" : "Cobrar"}
                       </Button>
@@ -289,7 +289,9 @@ export function PedidosPendientes({ tiendaId }: { tiendaId?: string }) {
                   <TableCell colSpan={columnas - 2} className="font-semibold">
                     TOTAL PENDIENTE
                   </TableCell>
-                  <TableCell className="text-right font-bold">{eur(resumen.pendiente)}</TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {eur(resumen.pendiente)}
+                  </TableCell>
                   <TableCell />
                 </TableRow>
               </TableFooter>

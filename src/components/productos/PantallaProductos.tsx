@@ -295,11 +295,11 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       </Badge>
                       {p.linea === "uv" && <EtiquetaUv className="ml-1.5" />}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="text-right font-medium tabular-nums">
                       {eur(p.precio_unitario)}
                       <span className="text-xs text-muted-foreground">/{p.unidad}</span>
                     </TableCell>
-                    <TableCell className="text-right">{p.iva_rate}%</TableCell>
+                    <TableCell className="text-right tabular-nums">{p.iva_rate}%</TableCell>
                     <TableCell className="text-center">
                       <Switch
                         checked={p.activo}

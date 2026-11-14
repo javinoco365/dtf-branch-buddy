@@ -407,10 +407,12 @@ function Facturas() {
                   <TableCell>
                     <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
-                  <TableCell className="text-right">{eur(f.base_imponible)}</TableCell>
-                  <TableCell className="text-right">{eur(f.iva_total)}</TableCell>
-                  <TableCell className="text-right font-semibold">{eur(f.total)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">{eur(f.base_imponible)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{eur(f.iva_total)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {eur(f.total)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     <div className="inline-flex gap-1">
                       <Button
                         size="sm"

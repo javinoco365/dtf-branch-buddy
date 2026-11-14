@@ -407,8 +407,10 @@ function PresupuestosPage() {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(Number(p.total))}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(Number(p.total))}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     <Button
                       variant="ghost"
                       size="icon"

@@ -306,8 +306,10 @@ function FacturasPage() {
                   <TableCell>
                     <EtiquetaEstado tipo="factura" valor={f.estado} />
                   </TableCell>
-                  <TableCell className="text-right font-medium">{eur(Number(f.total))}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {eur(Number(f.total))}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     <Button
                       variant="ghost"
                       size="icon"

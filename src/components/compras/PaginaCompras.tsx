@@ -889,8 +889,8 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{eur(Number(c.base))}</TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right tabular-nums">{eur(Number(c.base))}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
                     {eur(Number(c.liquido ?? c.total))}
                   </TableCell>
                   <TableCell>
@@ -921,7 +921,7 @@ export function PaginaCompras({ modo }: { modo: Modo }) {
                           </span>
                         )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     <div className="inline-flex items-center gap-1">
                       {c.fichero_ruta ? (
                         <Button
@@ -1884,7 +1884,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
                         aria-label="Activo"
                       />
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">
                       <Button
                         size="sm"
                         disabled={!editando.nombre.trim() || guardar.isPending}
@@ -1909,7 +1909,7 @@ function ProveedoresDialog({ onCerrar }: { onCerrar: () => void }) {
                     <TableCell className="font-medium">{p.nombre}</TableCell>
                     <TableCell className="font-mono text-xs">{p.nif ?? "—"}</TableCell>
                     <TableCell>{p.activo ? "Sí" : <Badge variant="outline">No</Badge>}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       <SiPuede accion="escribir">
                         <Button
                           size="sm"
