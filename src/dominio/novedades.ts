@@ -36,6 +36,32 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-14-inicio-hoy",
+    fecha: "2026-11-14",
+    tipo: "mejora",
+    titulo: "Inicio: lo de hoy, arriba",
+    resumen: "Al entrar ves qué hay por producir, por enviar, por cobrar y tus tareas.",
+    puntos: [
+      "Toca cada número para ir a su pantalla.",
+      "Debajo, cuatro cifras del periodo: ventas netas, margen, cobrado y pendiente.",
+      "Las mismas cifras, con el mismo nombre, en el resumen de cada tienda.",
+    ],
+    enlace: { ruta: "/panel", texto: "Ir a Inicio" },
+  },
+  {
+    id: "2026-11-14-cuenta-resultados",
+    fecha: "2026-11-14",
+    tipo: "nuevo",
+    titulo: "Cuenta de resultados",
+    resumen: "De lo que pagan los clientes a lo que le queda a la empresa, en una tabla.",
+    puntos: [
+      "Compara con el periodo anterior y separa por tienda, línea o mes.",
+      "Cada cifra con su explicación; lo estimado, marcado.",
+      "Sustituye a las pestañas Margen y Resultados de Gerencia.",
+    ],
+    enlace: { ruta: "/panel/cuenta-resultados", texto: "Abrir la cuenta" },
+  },
+  {
     id: "2026-11-14-nada-sin-querer",
     fecha: "2026-11-14",
     tipo: "mejora",

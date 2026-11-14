@@ -27,7 +27,9 @@ import { agruparPorRangos, topPorMetros, variacion } from "@/dominio/kpis";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
-import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
+import { useCuentaResultados } from "@/lib/cuenta";
+import { concepto, pctIva } from "@/dominio/cuenta";
 import type { LucideIcon } from "lucide-react";
 import {
   Download,
@@ -103,8 +105,6 @@ function FacturacionTienda() {
     totalizar(
       cobrosDeTiendas(cobros, tiendaId).filter((c) => (soloUv?.has(c.pedido_id) ?? false) === deUv),
     ).cobrado;
-  const cobrado = cobradoDe(consultaCobros.data?.cobros ?? [], false);
-  const cobradoPrev = cobradoDe(consultaCobrosAnt.data?.cobros ?? [], false);
   const cobradoUv = cobradoDe(consultaCobros.data?.cobros ?? [], true);
 
   const grafica = useMemo(() => {
@@ -120,8 +120,32 @@ function FacturacionTienda() {
     [consultaLineas.data],
   );
 
-  // El IVA se cobra sobre la base entera: la bruta más el envío.
-  const pctIva = k.base === 0 ? 0 : (k.iva / k.base) * 100;
+  // Las cifras de dinero, con la cuenta de resultados (cuenta.ts): las
+  // mismas que en Inicio y en la Cuenta de resultados, por línea.
+  const previo = comparacion?.previo ?? null;
+  const lecturaDtf = useCuentaResultados({
+    rango: { desde, hasta },
+    previo,
+    filtro: { tienda: tiendaId, linea: "dtf" },
+    soloTienda: true,
+    gastos: false,
+  });
+  const lecturaUv = useCuentaResultados({
+    rango: { desde, hasta },
+    previo,
+    filtro: { tienda: tiendaId, linea: "uv" },
+    soloTienda: true,
+    gastos: false,
+    dinero: false,
+  });
+  const c = lecturaDtf.cuenta;
+  const cPrev = lecturaDtf.previa;
+  const cUv = lecturaUv.cuenta;
+  const cUvPrev = lecturaUv.previa;
+  // El IVA se cobra sobre la base entera: las ventas más los portes.
+  const ivaPct = c
+    ? pctIva(c.iva.valor ?? 0, (c.ventas.valor ?? 0) + (c.portes_cobrados.valor ?? 0))
+    : null;
 
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
   // se atenúan y no se exportan.
@@ -172,9 +196,14 @@ function FacturacionTienda() {
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
 
-          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
+          <Button
+            onClick={exportar}
+            size="sm"
+            variant="outline"
+            disabled={pedidos.length === 0 || deAntes}
+          >
             <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
+            Descargar Excel
           </Button>
         </div>
       </div>
@@ -208,28 +237,32 @@ function FacturacionTienda() {
       {!cargando && !error && !sinDatos && (
         <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-            <TarjetaKpi
-              titulo="Vendido"
-              explicacion="vendido"
-              valor={eur(k.total)}
+            <TarjetaConcepto
+              clave="ventas_netas"
+              cifra={c?.ventas_netas ?? null}
+              previa={cPrev?.ventas_netas}
               frente={comparacion?.etiqueta}
-              delta={variacion(k.total, kPrev.total)}
               icon={Euro}
             />
-            <TarjetaKpi
-              titulo="Facturación bruta"
-              explicacion="bruta"
-              valor={eur(k.bruta)}
+            <TarjetaConcepto
+              clave="margen_bruto"
+              cifra={c?.margen_bruto ?? null}
+              previa={cPrev?.margen_bruto}
               frente={comparacion?.etiqueta}
-              delta={variacion(k.bruta, kPrev.bruta)}
-              icon={Receipt}
+              icon={Percent}
+              pie={
+                c?.margenPct != null ? (
+                  <span className="text-muted-foreground">
+                    {numero(c.margenPct, 1)}&nbsp;% de las ventas netas
+                  </span>
+                ) : undefined
+              }
             />
-            <TarjetaKpi
-              titulo="Cobrado"
-              explicacion="cobrado"
-              valor={cobrosDisponibles ? eur(cobrado) : "—"}
+            <TarjetaConcepto
+              clave="cobrado"
+              cifra={c?.cobrado ?? null}
+              previa={cPrev?.cobrado}
               frente={comparacion?.etiqueta}
-              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
               icon={Wallet}
             />
             <TarjetaKpi
@@ -256,14 +289,11 @@ function FacturacionTienda() {
               delta={variacion(k.metros, kPrev.metros)}
               icon={Ruler}
             />
-            <TarjetaKpi
-              titulo="Devoluciones"
-              explicacion="devoluciones"
-              valor={eur(k.devuelto)}
-              frente={comparacion?.etiqueta}
-              delta={variacion(k.devuelto, kPrev.devuelto)}
+            <TarjetaConcepto
+              clave="devoluciones"
+              cifra={c?.devoluciones ?? null}
+              previa={cPrev?.devoluciones}
               icon={Undo2}
-              deltaInverso
             />
             <TarjetaKpi
               titulo="Cancelados"
@@ -280,30 +310,34 @@ function FacturacionTienda() {
           {/* Desglose de facturación */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Bloque
-              titulo="Bruta"
-              subtitulo="Lo vendido sin IVA y sin el envío"
-              valor={eur(k.bruta)}
+              titulo={concepto("ventas").nombre}
+              subtitulo={concepto("ventas").definicion}
+              valor={c ? eur(c.ventas.valor) : "…"}
               icon={Receipt}
               tono="primary"
             />
             <Bloque
-              titulo="Envíos cobrados"
-              subtitulo="Portes sin IVA, aparte de la bruta"
-              valor={eur(k.envios)}
+              titulo={concepto("portes_cobrados").nombre}
+              subtitulo={concepto("portes_cobrados").definicion}
+              valor={c ? eur(c.portes_cobrados.valor) : "…"}
               icon={Truck}
               tono="warn"
             />
             <Bloque
-              titulo="IVA"
-              subtitulo={`${numero(pctIva, 1)}% sobre la base (bruta + envíos)`}
-              valor={eur(k.iva)}
+              titulo={concepto("iva").nombre}
+              subtitulo={
+                ivaPct === null
+                  ? concepto("iva").definicion
+                  : `${numero(ivaPct, 1)}\u00A0% sobre las ventas más los portes`
+              }
+              valor={c ? eur(c.iva.valor) : "…"}
               icon={Percent}
               tono="info"
             />
             <Bloque
-              titulo="Total"
-              subtitulo="Bruta + envíos + IVA"
-              valor={eur(k.total)}
+              titulo={concepto("ventas_con_iva").nombre}
+              subtitulo="Ventas + portes + IVA"
+              valor={c ? eur(c.ventas_con_iva.valor) : "…"}
               icon={Wallet}
               tono="success"
             />
@@ -318,25 +352,24 @@ function FacturacionTienda() {
                   Ventas de DTF UV
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Subcontratado: no cuenta en lo vendido, la facturación ni los metros de arriba. La
-                  ganancia es la facturación bruta menos lo que cobra la subcontrata; el envío se
-                  paga por lo mismo que se cobra.
+                  Subcontratado: no cuenta en las cifras ni en los metros de arriba. Su margen bruto
+                  son sus ventas netas menos lo que cobra la subcontrata.
                 </p>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-                  <TarjetaKpi
-                    titulo="Vendido UV"
-                    valor={eur(uv.total)}
+                  <TarjetaConcepto
+                    clave="ventas_netas"
+                    cifra={cUv?.ventas_netas ?? null}
+                    previa={cUvPrev?.ventas_netas}
                     frente={comparacion?.etiqueta}
-                    delta={variacion(uv.total, uvPrev.total)}
                     icon={Euro}
                   />
-                  <TarjetaKpi
-                    titulo="Facturación bruta UV"
-                    valor={eur(uv.bruta)}
+                  <TarjetaConcepto
+                    clave="ventas"
+                    cifra={cUv?.ventas ?? null}
+                    previa={cUvPrev?.ventas}
                     frente={comparacion?.etiqueta}
-                    delta={variacion(uv.bruta, uvPrev.bruta)}
                     icon={Receipt}
                   />
                   <TarjetaKpi
@@ -346,11 +379,11 @@ function FacturacionTienda() {
                     delta={variacion(uv.metrosUv, uvPrev.metrosUv)}
                     icon={Ruler}
                   />
-                  <TarjetaKpi
-                    titulo="Ganancia UV"
-                    valor={eur(uv.ganancia)}
+                  <TarjetaConcepto
+                    clave="margen_bruto"
+                    cifra={cUv?.margen_bruto ?? null}
+                    previa={cUvPrev?.margen_bruto}
                     frente={comparacion?.etiqueta}
-                    delta={variacion(uv.ganancia, uvPrev.ganancia)}
                     icon={Wallet}
                   />
                 </div>

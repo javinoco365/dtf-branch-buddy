@@ -90,8 +90,8 @@ export function Comercial({ d }: { d: DatosGerencia }) {
       />
       {!actual.data.tiendasDisponible && (
         <Nota>
-          Los presupuestos de las tiendas todavía no están en la base de datos: falta aplicar su
-          migración. Abajo solo salen los del textil.
+          Los presupuestos de las tiendas: Esta parte aún no está activada. Avisa a Javier. Abajo
+          solo salen los del textil.
         </Nota>
       )}
 

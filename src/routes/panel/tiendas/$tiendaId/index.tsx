@@ -3,19 +3,21 @@ import { faltaLaColumna, tabla } from "@/lib/rpc";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
-import { eur, metros, numero } from "@/lib/format";
-import { usePedidosPeriodo } from "@/lib/periodo";
+import { metros, numero } from "@/lib/format";
+import { useCuentaResultados } from "@/lib/cuenta";
+import { ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
 import { ESTADO_CANCELADO, variacion } from "@/dominio/kpis";
-import { totalFacturado, type DocumentoFacturado } from "@/dominio/cuenta";
 import { leerTodas } from "@/lib/paginar";
-import { cifrasPorLinea, ETIQUETA_FILTRO_LINEA } from "@/dominio/por-linea";
 import { useLineaUrl } from "@/lib/filtros-url";
 import { SelectorLinea } from "@/components/filtros/SelectorLinea";
-import { DesgloseLinea } from "@/components/DesgloseLinea";
 import { compararCon, rangoDe } from "@/dominio/periodos";
-import { TarjetaKpi } from "@/components/TarjetaKpi";
+import { TarjetaConcepto, TarjetaKpi } from "@/components/TarjetaKpi";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { mensajeDeError } from "@/lib/errores";
 import { useTiendasMenu } from "@/hooks/use-tiendas-menu";
-import { ShoppingCart, Euro, Ruler, FileText, Receipt, Package, Percent } from "lucide-react";
+import { Clock, Euro, FileText, Package, Percent, Ruler, ShoppingCart, Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/")({
   component: Dashboard,
@@ -33,11 +35,7 @@ function Dashboard() {
       // metros_uv viene de 20261110100000: sin ella, se lee como antes.
       const leerPedidos = async () => {
         const leer = (columnas: string) =>
-          leerTodas<{
-            total: number | null;
-            metros_total: number | null;
-            metros_uv?: number | null;
-          }>((a, b) =>
+          leerTodas<{ metros_total: number | null; metros_uv?: number | null }>((a, b) =>
             tabla(supabase, "pedidos")
               .select(columnas)
               .eq("tienda_id", tiendaId)
@@ -45,78 +43,51 @@ function Dashboard() {
               .order("id")
               .range(a, b),
           );
-        const r = await leer("id, total, metros_total, metros_uv");
+        const r = await leer("id, metros_total, metros_uv");
         if (!faltaLaColumna(r.error)) return r;
-        return leer("id, total, metros_total");
+        return leer("id, metros_total");
       };
-      const [pedidos, facturas, empresa] = await Promise.all([
+      const [pedidos, facturas] = await Promise.all([
         leerPedidos(),
-        leerTodas<DocumentoFacturado>((a, b) =>
-          tabla(supabase, "facturas")
-            .select("id, total, estado, sustituye_a_id")
-            .eq("tienda_id", tiendaId)
-            .order("id")
-            .range(a, b),
-        ),
-        tabla(supabase, "empresas")
-          .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
-          .eq("activa", true)
-          .order("created_at")
-          .limit(1)
-          .maybeSingle(),
+        // Solo cuántas: sin bajar las filas (y sin el tope de 1000 de Supabase).
+        supabase
+          .from("facturas")
+          .select("id", { count: "exact", head: true })
+          .eq("tienda_id", tiendaId),
       ]);
       const filas = (pedidos.data ?? []) as {
-        total: number | null;
         metros_total: number | null;
         metros_uv?: number | null;
       }[];
       if (pedidos.error) throw new Error(pedidos.error.message);
-      if (facturas.error) throw new Error(facturas.error.message);
-      return { pedidos: filas, facturas: facturas.data, empresa: empresa.data };
+      return { pedidos: filas, facturas: facturas.count ?? 0 };
     },
   });
   const pedidos = data?.pedidos ?? [];
-  const facturas = data?.facturas ?? [];
-  const eg = data?.empresa;
-  const costeMetro =
-    Number(eg?.coste_consumibles_metro ?? 0) +
-    Number(eg?.coste_packaging_metro ?? 0) +
-    Number(eg?.coste_electricidad_metro ?? 0);
-  // Sin contar dos veces un ticket canjeado por factura (ver totalFacturado).
-  const fact = totalFacturado(facturas);
   // Los metros de cada línea, por separado: no se suman entre sí.
   const mts = pedidos.reduce((s, p) => s + Number(p.metros_total ?? 0), 0);
   const mtsUv = pedidos.reduce((s, p) => s + Number(p.metros_uv ?? 0), 0);
 
-  // El mes en curso con las mismas cuentas que el dashboard (devoluciones
-  // restadas, coste congelado por pedido) y comparado con el mismo trozo del
-  // mes anterior: el día 5, contra del 1 al 5 del mes pasado.
+  // El mes en curso con la cuenta de resultados (cuenta.ts) y comparado con
+  // el mismo trozo del mes anterior: el día 5, contra del 1 al 5 del mes pasado.
   const hoy = useMemo(() => new Date(), []);
   const mes = useMemo(() => rangoDe({ tipo: "mes", ref: hoy })!, [hoy]);
   const comparacion = useMemo(
     () => compararCon({ tipo: "mes", ref: hoy }, "anterior", hoy)!,
     [hoy],
   );
-  const consultaMes = usePedidosPeriodo({ ...mes, tiendaId });
-  const consultaAnt = usePedidosPeriodo({ ...comparacion.previo, tiendaId });
-  const pedidosMes = useMemo(() => consultaMes.data ?? [], [consultaMes.data]);
   // La línea de producto (por-linea.ts): las dos, DTF o DTF UV.
   const [linea, cambiarLinea] = useLineaUrl();
-  const lineas = useMemo(() => cifrasPorLinea(pedidosMes, costeMetro), [pedidosMes, costeMetro]);
-  const lineasAnt = useMemo(
-    () => cifrasPorLinea(consultaAnt.data ?? [], costeMetro),
-    [consultaAnt.data, costeMetro],
-  );
-  const k = lineas[linea];
-  const kAnt = lineasAnt[linea];
-  const hayUv = lineas.uv.pedidos > 0;
-
-  const delta = variacion(k.total, kAnt.total);
-  // El envío no entra: la bruta ya va sin él, y lo que se cobra al cliente es
-  // lo que se paga a la agencia. El DTF UV, con lo que cobra la subcontrata.
-  const margenMes = k.ganancia;
-  const margenPct = k.bruta > 0 ? (margenMes / k.bruta) * 100 : null;
-  const sinCostes = costeMetro === 0 && k.coste === 0;
+  const filtro = useMemo(() => ({ tienda: tiendaId, linea }), [tiendaId, linea]);
+  const lectura = useCuentaResultados({
+    rango: mes,
+    previo: comparacion.previo,
+    filtro,
+    soloTienda: true,
+    gastos: false,
+  });
+  const { cuenta, previa } = lectura;
+  const frente = comparacion.etiqueta;
 
   return (
     <div className="space-y-6">
@@ -125,7 +96,8 @@ function Dashboard() {
           Resumen{nombreTienda ? ` · ${nombreTienda}` : ""}
         </h1>
         <p className="text-sm text-muted-foreground">
-          El mes en curso, frente al mismo trozo del mes anterior, y los totales de la tienda.
+          El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
+          totales de la tienda.
           {linea !== "todo"
             ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
             : ""}
@@ -135,68 +107,91 @@ function Dashboard() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Este mes</h2>
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-          <TarjetaKpi
-            titulo="Vendido"
-            explicacion="vendido"
-            valor={eur(k.total)}
-            frente={comparacion.etiqueta}
-            delta={delta}
-            icon={Euro}
-            pie={
-              linea === "todo" && hayUv ? (
-                <DesgloseLinea dtf={eur(lineas.dtf.total)} uv={eur(lineas.uv.total)} />
-              ) : undefined
-            }
-          />
-          <TarjetaKpi
-            titulo="Pedidos"
-            explicacion="pedidos"
-            valor={String(k.pedidos)}
-            delta={null}
-            icon={Receipt}
-            pie={<span className="text-muted-foreground">Ticket medio {eur(k.ticket)}</span>}
-          />
-          <TarjetaKpi
-            titulo={linea === "uv" ? "Metros de DTF UV" : "Metros"}
-            explicacion="metros"
-            valor={metros(linea === "uv" ? k.metrosUv : k.metros)}
-            delta={null}
-            icon={Package}
-            pie={
-              linea === "todo" && k.metrosUv > 0 ? (
+        {lectura.error && (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6 text-sm text-destructive">
+              <span>No se han podido cargar las cifras: {mensajeDeError(lectura.error)}</span>
+              <Button size="sm" variant="outline" onClick={lectura.reintentar}>
+                Reintentar
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        {lectura.cargando && (
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[124px] w-full rounded-xl" />
+            ))}
+          </div>
+        )}
+        {cuenta && (
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+            <TarjetaConcepto
+              clave="ventas_netas"
+              cifra={cuenta.ventas_netas}
+              previa={previa?.ventas_netas}
+              frente={frente}
+              icon={Euro}
+              pie={
                 <span className="text-muted-foreground">
-                  De DTF. Aparte,{" "}
-                  <span className="font-medium text-violet-700 dark:text-violet-300">
-                    {metros(k.metrosUv)} de DTF UV
-                  </span>
+                  {numero(cuenta.pedidos, 0)} {cuenta.pedidos === 1 ? "pedido" : "pedidos"}
                 </span>
-              ) : undefined
-            }
-          />
-          <TarjetaKpi
-            titulo="Margen estimado"
-            explicacion="margen"
-            valor={sinCostes ? "—" : eur(margenMes)}
-            delta={null}
-            icon={Percent}
-            color={!sinCostes && margenMes < 0 ? "destructive" : "primary"}
-            pie={
-              <span className="text-muted-foreground">
-                {sinCostes
-                  ? "Configura los costes en Ajustes › Datos de la empresa"
-                  : `Bruta ${eur(k.bruta)} − ${linea === "uv" ? "subcontrata" : linea === "dtf" ? "producción" : "coste"} ${eur(k.coste)}${
-                      margenPct !== null ? ` · ${numero(margenPct, 1)}\u00A0% de la bruta` : ""
-                    }`}
-              </span>
-            }
-          />
-        </div>
+              }
+            />
+            <TarjetaConcepto
+              clave="margen_bruto"
+              cifra={cuenta.margen_bruto}
+              previa={previa?.margen_bruto}
+              frente={frente}
+              icon={Percent}
+              pie={
+                cuenta.margenPct !== null ? (
+                  <span className="text-muted-foreground">
+                    {numero(cuenta.margenPct, 1)}&nbsp;% de las ventas netas
+                  </span>
+                ) : undefined
+              }
+            />
+            <TarjetaConcepto
+              clave="cobrado"
+              cifra={cuenta.cobrado}
+              previa={previa?.cobrado}
+              frente={frente}
+              icon={Wallet}
+            />
+            <TarjetaConcepto
+              clave="pendiente_cobro"
+              cifra={cuenta.pendiente_cobro}
+              icon={Clock}
+              pie={<span className="text-muted-foreground">Hoy, sea del mes que sea</span>}
+            />
+            {linea !== "uv" && (
+              <TarjetaKpi
+                titulo="Metros de DTF"
+                explicacion="metros"
+                valor={metros(cuenta.metros)}
+                frente={frente}
+                delta={previa ? variacion(cuenta.metros, previa.metros) : null}
+                icon={Package}
+              />
+            )}
+            {(linea === "uv" || cuenta.metrosUv > 0) && (
+              <TarjetaKpi
+                titulo="Metros de DTF UV"
+                explicacion="metros"
+                valor={metros(cuenta.metrosUv)}
+                frente={frente}
+                delta={previa ? variacion(cuenta.metrosUv, previa.metrosUv) : null}
+                icon={Package}
+              />
+            )}
+          </div>
+        )}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-muted-foreground">Desde el principio</h2>
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
           <TarjetaKpi
             titulo="Pedidos"
             valor={String(pedidos.length)}
@@ -219,10 +214,9 @@ function Dashboard() {
               ) : undefined
             }
           />
-          <TarjetaKpi titulo="Facturado" valor={eur(fact)} delta={null} icon={Euro} />
           <TarjetaKpi
             titulo="Facturas"
-            valor={String(facturas.length)}
+            valor={String(data?.facturas ?? 0)}
             delta={null}
             icon={FileText}
           />

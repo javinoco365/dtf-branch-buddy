@@ -293,8 +293,8 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : !pagos ? (
           <p className="text-sm text-muted-foreground">
-            Falta aplicar la migración 20261014100000_compras_recibidas: sin ella no se sabe qué
-            facturas de compra están pagadas.
+            Esta parte aún no está activada. Avisa a Javier. Hasta entonces no se sabe qué facturas
+            de compra están pagadas.
           </p>
         ) : pagos.facturas === 0 ? (
           <p className="text-sm text-muted-foreground">

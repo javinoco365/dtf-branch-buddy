@@ -20,7 +20,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
-import { leerTodas } from "@/lib/paginar";
+import { enParalelo, leerTodas, PETICIONES_A_LA_VEZ, trozos } from "@/lib/paginar";
+import { costeMetroDeEmpresa, type DevolucionCuenta } from "@/dominio/cuenta";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { ESTADO_CANCELADO, type LineaResumen, type PedidoResumen } from "@/dominio/kpis";
 import { TIENDA_TEXTIL, type MetodoCobro } from "@/dominio/cobros";
 import { clientesConUv } from "@/dominio/clientes";
@@ -365,6 +367,176 @@ export function useTiendas() {
         .order("nombre");
       if (error) throw error;
       return data ?? [];
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lo que necesita la cuenta de resultados (dominio/cuenta.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * El coste por metro de hoy (consumibles + packaging + electricidad), de los
+ * datos de la empresa. Un solo gancho para toda la aplicación: las pantallas
+ * no suman nada (costeMetroDeEmpresa). `undefined` mientras se lee.
+ */
+export function useCosteMetroHoy({ activo = true }: OpcionesLectura = {}) {
+  const consulta = useQuery({
+    queryKey: ["empresa_costes"],
+    enabled: activo,
+    queryFn: async () => {
+      const { data } = await tabla(supabase, "empresas")
+        .select("coste_consumibles_metro, coste_packaging_metro, coste_electricidad_metro")
+        .eq("activa", true)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+  return {
+    costeMetro: consulta.data === undefined ? undefined : costeMetroDeEmpresa(consulta.data),
+    isPending: consulta.isPending,
+  };
+}
+
+type FilaDevolucion = {
+  fecha: string;
+  importe: number | string;
+  tienda_id: string;
+  pedido: {
+    estado: string;
+    subtotal: number | string | null;
+    iva: number | string | null;
+    envio: number | string | null;
+    total: number | string | null;
+    metros_total: number | string | null;
+    metros_uv?: number | string | null;
+    bruta_uv?: number | string | null;
+    iva_uv?: number | string | null;
+  } | null;
+};
+
+/**
+ * Los reembolsos con fecha en el rango, por el día en que se devolvió el
+ * dinero (en España), sea del pedido que sea: un reembolso de noviembre
+ * resta en noviembre aunque el pedido sea de octubre. Con su pedido, para
+ * quitarles el IVA y repartirlos por línea. Solo los de `tiendaId` si se da.
+ */
+export function useDevolucionesPeriodo(
+  rango: RangoFechas,
+  tiendaId?: string,
+  { activo = true }: OpcionesLectura = {},
+) {
+  return useQuery({
+    // Bajo «pedidos»: se refresca con todo lo que invalida los pedidos.
+    queryKey: [
+      "pedidos",
+      "devoluciones-periodo",
+      rango.desde.toISOString(),
+      rango.hasta.toISOString(),
+      tiendaId ?? "todas",
+    ],
+    enabled: activo,
+    queryFn: async (): Promise<DevolucionCuenta[]> => {
+      const dias = diasDelRango(rango);
+      if (!dias) return [];
+      // Un día de más por cada lado: el corte es el día de España (abajo).
+      const tramo = tramoDeConsulta(dias.desde, dias.hasta);
+      const leer = (uv: NivelUv) =>
+        leerTodas<FilaDevolucion>((a, b) => {
+          let consulta = tabla(supabase, "pedido_devoluciones")
+            .select(
+              `id, fecha, importe, tienda_id, pedido:pedidos(estado, subtotal, iva, envio, total, metros_total${camposUv(uv)})`,
+            )
+            .gte("fecha", tramo.desde)
+            .lt("fecha", tramo.hasta);
+          if (tiendaId) consulta = consulta.eq("tienda_id", tiendaId);
+          return consulta.order("id").range(a, b);
+        });
+      let r = await leer(2);
+      // Sin los importes por línea o sin el DTF UV: lo que haya.
+      if (faltaLaColumna(r.error)) r = await leer(1);
+      if (faltaLaColumna(r.error)) r = await leer(0);
+      if (r.error) throw r.error;
+      const salida: DevolucionCuenta[] = [];
+      for (const d of r.data) {
+        const fecha = diaEnEspana(new Date(d.fecha));
+        if (!d.pedido || fecha < dias.desde || fecha > dias.hasta) continue;
+        salida.push({ fecha, importe: d.importe, tienda_id: d.tienda_id, pedido: d.pedido });
+      }
+      return salida;
+    },
+  });
+}
+
+/** Una huella corta de una lista de ids, para la clave de caché. */
+function huellaIds(ids: readonly string[]): string {
+  let h = 0;
+  for (const id of [...ids].sort()) {
+    for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
+  }
+  return `${ids.length}:${h}`;
+}
+
+export type EnvioDeVenta = {
+  /** Lo que cobró la agencia, sin IVA; nulo si no se apuntó. */
+  coste_envio_real: number | string | null;
+  /** Si tiene número de seguimiento: se envió. */
+  seguimiento: boolean;
+};
+
+/**
+ * Lo del envío de unas ventas (de tienda y del textil): lo que cobró la
+ * agencia y si tienen número de seguimiento, como el Resumen diario
+ * (lib/resumen-diario.ts). Sin la migración 20261027100000 no hay coste
+ * apuntado: el envío se estima, y la cuenta lo dice.
+ */
+export function useEnviosDeVentas(
+  ventas: readonly { id?: string; canal?: string }[] | undefined,
+  { activo = true }: OpcionesLectura = {},
+) {
+  const idsTienda = (ventas ?? []).filter((v) => v.id && v.canal !== "textil").map((v) => v.id!);
+  const idsTextil = (ventas ?? []).filter((v) => v.id && v.canal === "textil").map((v) => v.id!);
+  return useQuery({
+    queryKey: ["pedidos", "envios-de-ventas", huellaIds(idsTienda), huellaIds(idsTextil)],
+    enabled: activo && ventas !== undefined,
+    queryFn: async (): Promise<Map<string, EnvioDeVenta>> => {
+      const r = new Map<string, EnvioDeVenta>();
+      const leerCostes = async (tablaPedidos: "pedidos" | "textil_pedidos", ids: string[]) => {
+        const respuestas = await enParalelo(
+          trozos(ids),
+          PETICIONES_A_LA_VEZ,
+          async (trozo) =>
+            await tabla(supabase, tablaPedidos).select("id, coste_envio_real").in("id", trozo),
+        );
+        for (const x of respuestas) {
+          // Sin la columna, sin coste apuntado: se estima.
+          if (faltaLaColumna(x.error)) return;
+          if (x.error) throw new Error(x.error.message);
+          for (const f of (x.data ?? []) as { id: string; coste_envio_real: number | null }[]) {
+            r.set(f.id, { coste_envio_real: f.coste_envio_real, seguimiento: false });
+          }
+        }
+      };
+      await Promise.all([
+        leerCostes("pedidos", idsTienda),
+        leerCostes("textil_pedidos", idsTextil),
+      ]);
+      const seguimientos = await enParalelo(
+        trozos(idsTienda),
+        PETICIONES_A_LA_VEZ,
+        async (trozo) =>
+          await tabla(supabase, "enlaces_seguimiento").select("pedido_id").in("pedido_id", trozo),
+      );
+      for (const x of seguimientos) {
+        if (x.error) throw new Error(x.error.message);
+        for (const f of (x.data ?? []) as { pedido_id: string }[]) {
+          const e = r.get(f.pedido_id);
+          r.set(f.pedido_id, { coste_envio_real: e?.coste_envio_real ?? null, seguimiento: true });
+        }
+      }
+      return r;
     },
   });
 }

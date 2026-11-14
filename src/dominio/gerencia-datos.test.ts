@@ -298,9 +298,9 @@ describe("cada pestaña pide lo suyo", () => {
     expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.tesoreria)).not.toBeNull();
     expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.comercial)).not.toBeNull();
     // Sin ventas no hay pendiente: nunca un cero que no es.
-    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.fiscal)?.pendiente).toBeNull();
+    expect(montarDatosGerencia(sinVentas, FUENTES_DE_PESTANA.comercial)?.pendiente).toBeNull();
     const sinCompras = completas({ compras: { data: undefined, isError: false } });
-    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.margen)).toBeNull();
+    expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.fiscal)).toBeNull();
     expect(montarDatosGerencia(sinCompras, FUENTES_DE_PESTANA.textil)).not.toBeNull();
     const sinAjustes = completas({ ajustes: { data: undefined, isError: false } });
     expect(montarDatosGerencia(sinAjustes, FUENTES_DE_PESTANA.clientes)).toBeNull();

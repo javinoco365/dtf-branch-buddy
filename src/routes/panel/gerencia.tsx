@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,8 +50,6 @@ const CARGAR_PESTANA = {
   clientes: () => import("@/components/gerencia/Clientes"),
   comercial: () => import("@/components/gerencia/Comercial"),
   produccion: () => import("@/components/gerencia/Produccion"),
-  margen: () => import("@/components/gerencia/Margen"),
-  resultados: () => import("@/components/gerencia/Resultados"),
   fiscal: () => import("@/components/gerencia/Fiscal"),
   textil: () => import("@/components/gerencia/Textil"),
   ajustes: () => import("@/components/gerencia/Ajustes"),
@@ -62,8 +60,6 @@ const Tesoreria = lazy(() => CARGAR_PESTANA.tesoreria().then((m) => ({ default: 
 const Clientes = lazy(() => CARGAR_PESTANA.clientes().then((m) => ({ default: m.Clientes })));
 const Comercial = lazy(() => CARGAR_PESTANA.comercial().then((m) => ({ default: m.Comercial })));
 const Produccion = lazy(() => CARGAR_PESTANA.produccion().then((m) => ({ default: m.Produccion })));
-const Margen = lazy(() => CARGAR_PESTANA.margen().then((m) => ({ default: m.Margen })));
-const Resultados = lazy(() => CARGAR_PESTANA.resultados().then((m) => ({ default: m.Resultados })));
 const Fiscal = lazy(() => CARGAR_PESTANA.fiscal().then((m) => ({ default: m.Fiscal })));
 const Textil = lazy(() => CARGAR_PESTANA.textil().then((m) => ({ default: m.Textil })));
 const Ajustes = lazy(() => CARGAR_PESTANA.ajustes().then((m) => ({ default: m.Ajustes })));
@@ -76,7 +72,7 @@ if (typeof window !== "undefined") void CARGAR_PESTANA.resumen().catch(() => und
 /** Mientras llega el código de una pestaña: lo mismo que mientras llegan los datos. */
 /**
  * Lo que la línea elegida (DTF o DTF UV) no separa todavía en cada pestaña.
- * Resultados y Margen lo dicen dentro; las que no salen aquí, la separan entera.
+ * Las que no salen aquí, la separan entera.
  */
 const NOTA_LINEA: Partial<Record<string, string>> = {
   tesoreria:
@@ -110,6 +106,9 @@ const FILTROS_GERENCIA = {
   grupo: "total",
   linea: "todo",
 };
+
+/** Pestañas que pasaron a la pantalla Cuenta de resultados: un enlace viejo lo dice. */
+const PESTANAS_MOVIDAS = new Set(["margen", "resultados"]);
 
 const SIN_COBROS = { disponible: false, cobros: [] };
 const SIN_PENDIENTES = { disponible: false, pedidos: [] };
@@ -328,6 +327,13 @@ function Gerencia() {
           El ⓘ de cada cifra explica qué es y cómo se calcula (con el ratón encima, o tocándolo en
           el móvil).
         </p>
+        <p className="text-sm">
+          El margen y los resultados están en la{" "}
+          <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
+            Cuenta de resultados
+          </Link>
+          .
+        </p>
       </div>
 
       <FiltrosPlegables resumen={resumenFiltros} className={enAjustes ? "hidden" : undefined}>
@@ -390,6 +396,18 @@ function Gerencia() {
         </Card>
       )}
 
+      {PESTANAS_MOVIDAS.has(f.pestana) && (
+        <Card>
+          <CardContent className="py-4 text-sm">
+            El margen y los resultados tienen ahora su propia pantalla:{" "}
+            <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
+              Cuenta de resultados
+            </Link>
+            .
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs value={f.pestana} onValueChange={(pestana) => cambiar({ pestana })}>
         {/* En el móvil las pestañas se desplazan de lado: un degradado a la
             derecha avisa de que hay más. */}
@@ -401,8 +419,6 @@ function Gerencia() {
             <TabsTrigger value="clientes">Clientes</TabsTrigger>
             <TabsTrigger value="comercial">Comercial</TabsTrigger>
             <TabsTrigger value="produccion">Producción</TabsTrigger>
-            <TabsTrigger value="margen">Margen</TabsTrigger>
-            <TabsTrigger value="resultados">Resultados</TabsTrigger>
             <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
             <TabsTrigger value="textil">Textil</TabsTrigger>
             <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
@@ -441,12 +457,6 @@ function Gerencia() {
               </TabsContent>
               <TabsContent value="produccion" className="mt-4">
                 <Produccion d={datos} />
-              </TabsContent>
-              <TabsContent value="margen" className="mt-4">
-                <Margen d={datos} />
-              </TabsContent>
-              <TabsContent value="resultados" className="mt-4">
-                <Resultados d={datos} />
               </TabsContent>
               <TabsContent value="fiscal" className="mt-4">
                 <Fiscal d={datos} />

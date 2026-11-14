@@ -194,8 +194,6 @@ export type PestanaGerencia =
   | "clientes"
   | "comercial"
   | "produccion"
-  | "margen"
-  | "resultados"
   | "fiscal"
   | "textil";
 
@@ -222,9 +220,9 @@ export const FUENTES_DE_PESTANA: Record<PestanaGerencia, readonly FuenteGerencia
   clientes: ["ajustes"],
   comercial: [],
   produccion: ["ventas", "ajustes"],
-  margen: ["ventas", "ventasPrevias", "ajustes", "compras", "costeMetro"],
-  resultados: ["ventas", "ajustes", "compras", "costeMetro"],
-  fiscal: [],
+  // Con los impuestos por trimestre (gastos) y las compras frente a lo
+  // estimado (ventas y coste por metro), que estaban en Resultados.
+  fiscal: ["ventas", "ajustes", "compras", "costeMetro"],
   textil: ["ventas", "ventasPrevias", "ajustes"],
 };
 

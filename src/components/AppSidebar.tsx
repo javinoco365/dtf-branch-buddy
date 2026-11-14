@@ -26,6 +26,7 @@ import {
   FileText,
   FileUp,
   FolderArchive,
+  ChartNoAxesCombined,
   Gauge,
   HandCoins,
   Landmark,
@@ -63,6 +64,7 @@ import {
 const ICONOS: Record<ClaveIcono, LucideIcon> = {
   inicio: LayoutDashboard,
   gerencia: Gauge,
+  "cuenta-resultados": ChartNoAxesCombined,
   agenda: CalendarDays,
   pedidos: ShoppingCart,
   clientes: Users,

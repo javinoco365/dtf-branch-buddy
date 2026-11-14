@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { FileWarning, Landmark, Receipt, ShoppingBag } from "lucide-react";
+import { CalendarClock, FileWarning, Landmark, Receipt, ShoppingBag } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,11 +12,26 @@ import {
 } from "@/components/ui/table";
 import { TarjetaKpi } from "@/components/TarjetaKpi";
 import { Explicacion } from "@/components/Explicacion";
-import { eur, numero } from "@/lib/format";
-import { useFiscal } from "@/lib/gerencia";
+import { eur, fechaCorta, numero } from "@/lib/format";
+import { useFiscal, usePrimeraVenta } from "@/lib/gerencia";
+import { mensajeDeError } from "@/lib/errores";
 import { variacion } from "@/dominio/kpis";
 import { TIENDA_TEXTIL } from "@/dominio/cobros";
-import { DEFINICIONES } from "@/dominio/definiciones";
+import {
+  DEFINICIONES,
+  definicionImpuestosTrimestre,
+  TEXTO_SIN_PRIMERA_VENTA,
+} from "@/dominio/definiciones";
+import { resultadosPorGrupo } from "@/dominio/grupos";
+import {
+  impuestosPorTrimestre,
+  inicioCompensacion,
+  inicioHistorial303,
+  trimestreDe,
+  trimestresDelRango,
+} from "@/dominio/impuestos";
+import { comparacionCompras, comprasParaComparar } from "@/dominio/compras";
+import { totalComparacion, totalImpuestos } from "@/dominio/sumatorios-gerencia-b";
 import { ivaSoportado, resultadoIva, resumenIva } from "@/dominio/fiscal";
 import { totalTiposIva } from "@/dominio/sumatorios-gerencia-a";
 import type { DatosGerencia } from "./destinos";
@@ -327,6 +342,298 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                 ))}
               </TableBody>
             </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <ImpuestosYCompras d={d} />
+    </div>
+  );
+}
+
+/**
+ * Los impuestos por trimestre y las compras frente a lo estimado (antes en
+ * la pestaña Resultados, que ahora es la pantalla Cuenta de resultados). Son
+ * de toda la empresa: con un filtro, solo se dice.
+ */
+function ImpuestosYCompras({ d }: { d: DatosGerencia }) {
+  // Los modelos son trimestrales: se leen los trimestres enteros que toca el
+  // periodo, y los cuatro años de antes para compensar los 303 negativos.
+  const trimestres = useMemo(() => trimestresDelRango(d.rango), [d.rango]);
+  const rangoLectura = useMemo(
+    () => ({
+      desde: inicioCompensacion(trimestres[0]),
+      hasta: trimestres[trimestres.length - 1].hasta,
+    }),
+    [trimestres],
+  );
+  const fiscal = useFiscal(rangoLectura);
+  // Solo se compensa desde la primera venta documentada del CRM. Si no se
+  // puede leer, se ve igual: el 303 sale sin compensar y se dice.
+  const primeraVenta = usePrimeraVenta();
+  const sinPrimeraVenta = primeraVenta.data === undefined && primeraVenta.isError;
+
+  // Lo que los pedidos cuentan de tinta, envíos y subcontrata: los costes
+  // variables del periodo (resultadosPorGrupo, columna total).
+  const estimado = useMemo(
+    () =>
+      resultadosPorGrupo({
+        ventas: d.ventasTodas,
+        documentados: new Set(),
+        costeActual: d.costeMetro,
+        facturadoSinPedido: 0,
+        costesFijos: { a: 0, b: 0 },
+        tipoIs: 0,
+      }).total,
+    [d.ventasTodas, d.costeMetro],
+  );
+  // Tinta, film, mensajería y la subcontrata del DTF UV: ya cuestan en cada
+  // pedido; aquí solo se comparan.
+  const comparadas = useMemo(
+    () => (fiscal.data?.compras ? comprasParaComparar(fiscal.data.compras, d.rango) : null),
+    [fiscal.data, d.rango],
+  );
+  const impuestos = useMemo(
+    () =>
+      fiscal.data && (primeraVenta.data !== undefined || sinPrimeraVenta)
+        ? impuestosPorTrimestre({
+            rango: d.rango,
+            documentos: fiscal.data.documentos,
+            referencias: fiscal.data.referencias,
+            compras: fiscal.data.compras ?? [],
+            gastos: d.gastos,
+            cuotaIsAnterior: d.ajustes.cuota_is_anterior,
+            datosDesde: rangoLectura.desde,
+            primeraVenta: primeraVenta.data ?? null,
+            compensar: !sinPrimeraVenta,
+          })
+        : null,
+    [
+      fiscal.data,
+      primeraVenta.data,
+      sinPrimeraVenta,
+      d.rango,
+      d.gastos,
+      d.ajustes.cuota_is_anterior,
+      rangoLectura.desde,
+    ],
+  );
+  // El ⓘ dice desde qué trimestre se compensa.
+  const definicionImpuestos = useMemo(
+    () =>
+      sinPrimeraVenta
+        ? definicionImpuestosTrimestre("desconocido")
+        : primeraVenta.data !== undefined
+          ? definicionImpuestosTrimestre(
+              inicioHistorial303({
+                rango: d.rango,
+                datosDesde: rangoLectura.desde,
+                primeraVenta: primeraVenta.data,
+              }),
+            )
+          : DEFINICIONES.g_impuestos_trimestre,
+    [sinPrimeraVenta, primeraVenta.data, d.rango, rangoLectura.desde],
+  );
+
+  if (
+    d.filtro.tienda !== "todas" ||
+    d.filtro.canal !== "todos" ||
+    (d.filtro.linea ?? "todo") !== "todo"
+  ) {
+    return (
+      <Nota>
+        Los impuestos por trimestre son de toda la empresa: se ven con «Todas las tiendas», «Todos
+        los canales» y la línea «Todo».
+      </Nota>
+    );
+  }
+  if (fiscal.error) return <ErrorPestana que="las facturas" error={fiscal.error} />;
+  if (!impuestos) return <CargandoPestana />;
+
+  const actual = trimestreDe(d.hoy);
+  const esteTrimestre = impuestos.find(
+    (t) => t.trimestre.anio === actual.anio && t.trimestre.numero === actual.numero,
+  );
+  const filasCompras = comparadas ? comparacionCompras(comparadas, estimado) : [];
+  const totalCompras = totalComparacion(filasCompras);
+  const totalModelos = totalImpuestos(impuestos);
+  const modelos = (n: number) => `${numero(n, 0)} ${n === 1 ? "modelo" : "modelos"}`;
+  const ultimo = impuestos[impuestos.length - 1].trimestre;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+        <TarjetaKpi
+          titulo="A Hacienda este trimestre"
+          explicacion={definicionImpuestos}
+          valor={esteTrimestre ? eur(esteTrimestre.aPagar) : "—"}
+          delta={null}
+          icon={CalendarClock}
+          pie={
+            <span className="text-muted-foreground">
+              {actual.numero}.º trimestre de {actual.anio}
+              {sinPrimeraVenta && " · 303 sin compensar"}
+              {esteTrimestre &&
+                esteTrimestre.compensacion.pendiente > 0 &&
+                ` · quedan ${eur(esteTrimestre.compensacion.pendiente)} de IVA a compensar`}
+            </span>
+          }
+        />
+      </div>
+
+      {comparadas &&
+        (comparadas.consumibles > 0 || comparadas.envios > 0 || comparadas.subcontrataUv > 0) && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                Compras frente a lo estimado
+                <Explicacion
+                  titulo="Compras frente a lo estimado"
+                  definicion={DEFINICIONES.g_compras_comparadas}
+                />
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Sin IVA. Lo facturado por tus proveedores frente a lo que Gerencia cuenta en los
+                pedidos. Si lo comprado de tinta sale siempre por encima, sube el coste por metro;
+                si lo es lo de la subcontrata, revisa lo que cobra por metro de DTF UV.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table movil="tarjetas">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Concepto</TableHead>
+                    <TableHead className="text-right">Facturas de compra</TableHead>
+                    <TableHead className="text-right">Estimado en pedidos</TableHead>
+                    <TableHead className="text-right">Diferencia</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filasCompras.map((f) => (
+                    <TableRow key={f.concepto}>
+                      <TableCell className="font-medium">{f.concepto}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(f.comprado)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{eur(f.estimado)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {f.diferencia > 0 ? "+" : ""}
+                        {eur(f.diferencia)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-bold">Total</TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalCompras.comprado)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {eur(totalCompras.estimado)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold tabular-nums">
+                      {totalCompras.diferencia > 0 ? "+" : ""}
+                      {eur(totalCompras.diferencia)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            Impuestos por trimestre
+            <Explicacion titulo="Impuestos por trimestre" definicion={definicionImpuestos} />
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Orientativo, con lo que hay en el CRM. Los presenta la gestoría.
+          </p>
+          {sinPrimeraVenta && (
+            <p className="text-xs text-status-pendiente">
+              {TEXTO_SIN_PRIMERA_VENTA}
+              {primeraVenta.error ? ` (${mensajeDeError(primeraVenta.error)})` : ""}.
+            </p>
+          )}
+        </CardHeader>
+        <CardContent>
+          <Table movil="tarjetas">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Trimestre</TableHead>
+                <TableHead>Modelo</TableHead>
+                <TableHead className="text-right">Importe</TableHead>
+                <TableHead>Plazo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {impuestos.flatMap((t) =>
+                t.lineas.map((l, i) => (
+                  <TableRow key={`${t.trimestre.anio}-${t.trimestre.numero}-${l.modelo}-${i}`}>
+                    <TableCell className="font-medium">
+                      {t.trimestre.numero}.º {t.trimestre.anio}
+                    </TableCell>
+                    <TableCell>
+                      {l.modelo}
+                      <span className="block text-xs text-muted-foreground">{l.concepto}</span>
+                      {l.modelo === "303" && t.sinVentas && (
+                        <span className="block text-xs text-muted-foreground">
+                          Sin ventas en el CRM todavía: no se calcula ni deja nada a compensar
+                        </span>
+                      )}
+                      {l.modelo === "303" && t.compensacion.compensado > 0 && (
+                        <span className="block text-xs text-muted-foreground">
+                          Resultado {eur(t.compensacion.resultado)} −{" "}
+                          {eur(t.compensacion.compensado)} compensado de trimestres anteriores
+                        </span>
+                      )}
+                      {l.modelo === "303" &&
+                        t.compensacion.pendiente > 0 &&
+                        t.compensacion.pendiente !== -l.importe && (
+                          <span className="block text-xs text-muted-foreground">
+                            Quedan {eur(t.compensacion.pendiente)} a compensar
+                          </span>
+                        )}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums ${l.importe < 0 ? "text-status-completado" : ""}`}
+                    >
+                      {l.modelo === "303" && t.sinVentas
+                        ? "—"
+                        : l.importe < 0
+                          ? `${eur(-l.importe)} a compensar`
+                          : eur(l.importe)}
+                    </TableCell>
+                    <TableCell>Hasta el {fechaCorta(l.plazo)}</TableCell>
+                  </TableRow>
+                )),
+              )}
+            </TableBody>
+            {/* Los 303 ya llegan compensados. */}
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={2} className="font-bold">
+                  Total a ingresar · {modelos(totalModelos.modelosAIngresar)}
+                </TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {eur(totalModelos.aIngresar)}
+                </TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          </Table>
+          {/* Lo que queda a compensar no es una fila: no resta de los otros
+              modelos y puede venir de trimestres que no se ven. */}
+          {totalModelos.aCompensar > 0 && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Al cerrar el {ultimo.numero}.º trimestre de {ultimo.anio} quedan{" "}
+              <span className="font-medium tabular-nums text-status-completado">
+                {eur(totalModelos.aCompensar)}
+              </span>{" "}
+              de IVA a compensar en los próximos 303
+              {totalModelos.aCompensarDeAntes ? ", de trimestres anteriores incluidos" : ""}.
+            </p>
           )}
         </CardContent>
       </Card>

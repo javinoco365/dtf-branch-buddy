@@ -7,6 +7,8 @@
  * mismo commit.
  */
 
+import { concepto, type ClaveConcepto } from "./cuenta";
+
 export type Definicion = {
   /** Qué significa, en una frase. */
   que: string;
@@ -44,7 +46,7 @@ export const DEFINICIONES = {
     fuente: PEDIDOS_TIENDAS,
   },
   cobrado: {
-    que: "El dinero que entró en el periodo por los pedidos, se vendieran cuando se vendieran.",
+    que: concepto("cobrado").definicion,
     calculo:
       "Suma de los cobros con fecha de cobro en el periodo, con IVA y sin propinas. Los pedidos de la web cuentan como cobrados al pagarse en la tienda online.",
     fuente: "Cobros de los pedidos de las tiendas. No incluye el textil ni la caja.",
@@ -112,13 +114,13 @@ export const DEFINICIONES = {
     fuente: GERENCIA_PEDIDOS,
   },
   g_cobrado: {
-    que: "El dinero que entró en el periodo por los pedidos, se vendieran cuando se vendieran.",
+    que: concepto("cobrado").definicion,
     calculo:
       "Suma de los cobros con fecha de cobro en el periodo, con IVA y sin propinas. Los pedidos web cuentan como cobrados al pagarse en la tienda online.",
     fuente: "Cobros de tiendas y textil, con los filtros de tienda y canal. Sin la caja.",
   },
   g_pendiente: {
-    que: "Lo que los clientes deben hoy, sea del periodo que sea.",
+    que: concepto("pendiente_cobro").definicion,
     calculo: "Por cada pedido no cancelado: total − cobrado, si queda algo.",
     fuente:
       "Todos los pedidos de tiendas y textil con algo por cobrar. No depende del periodo elegido: es la foto de hoy.",
@@ -418,7 +420,7 @@ export const DEFINICIONES = {
   },
   // --- Gerencia › Tesorería --------------------------------------------------
   g_pagos_proveedores: {
-    que: "Lo que se debe hoy a los proveedores: facturas registradas que aún no se han pagado.",
+    que: concepto("pendiente_pago").definicion,
     calculo:
       "Suma del líquido (total menos retención) de las facturas de compra registradas, sin borrar y pendientes de pago, de todas las categorías, por proveedor y por antigüedad desde la fecha de la factura.",
     fuente:
@@ -455,7 +457,7 @@ export const DEFINICIONES = {
       "Tickets, facturas y rectificativas de las tiendas y del textil. Los borradores no cuentan.",
   },
   rd_cobrado: {
-    que: "El dinero que entró en el periodo, sea del pedido que sea.",
+    que: concepto("cobrado").definicion,
     calculo: "Suma de los cobros con fecha en el periodo, con IVA y sin propinas.",
     fuente: "Cobros de las tiendas (incluidos los de la web) y del textil.",
   },
@@ -522,4 +524,92 @@ export function definicionImpuestosTrimestre(
           }`
         : "El CRM aún no tiene ninguna factura ni ticket emitido: el 303 no se calcula y no hay nada a compensar.";
   return { ...base, calculo: `${base.calculo} ${desde}` };
+}
+
+// --- La cuenta de resultados (cuenta.ts) ------------------------------------
+// El «qué» de cada cifra es la definición del diccionario de cuenta.ts: aquí
+// solo se añade cómo se calcula y de dónde sale, para no repetir textos.
+
+const CUENTA_PEDIDOS =
+  "Pedidos de las tiendas (web y manuales) y del textil con fecha de pedido en el periodo, sin cancelados y sin los de la web que aún no se han pagado. Con los filtros de tienda y línea de la pantalla.";
+
+const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
+  ventas_con_iva: {
+    calculo: "Suma del total de los pedidos, con IVA y envío. Lo devuelto va aparte, en su día.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  iva: {
+    calculo: "Suma del IVA de los pedidos.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  portes_cobrados: {
+    calculo: "Suma del envío cobrado en los pedidos, sin IVA.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  ventas: {
+    calculo: "Ventas con IVA − IVA − portes cobrados.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  devoluciones: {
+    calculo:
+      "Suma de los reembolsos con fecha en el periodo, sin IVA: un reembolso de noviembre resta en noviembre aunque el pedido sea de octubre. Se le quita el IVA en la misma proporción que tiene su pedido. Un pedido cancelado no cuenta, y su reembolso tampoco.",
+    fuente: "Reembolsos de WooCommerce, que llegan al sincronizar la tienda. El textil no tiene.",
+  },
+  ventas_netas: {
+    calculo: "Ventas − devoluciones.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  coste_produccion: {
+    calculo:
+      "DTF: metros × coste por metro congelado en cada pedido (o el de hoy, si es de antes de congelarlo). DTF UV: metros × lo que cobra la subcontrata, congelado en el pedido. Textil: lo que costó la ropa que salió del almacén; si aún no ha salido, va sin coste y se avisa.",
+    fuente: `${CUENTA_PEDIDOS} El coste por metro, de Ajustes › Datos de la empresa.`,
+  },
+  resultado_portes: {
+    calculo:
+      "Portes cobrados − lo que cobra la agencia. Si un pedido con envío no tiene apuntado lo que costó, se estima con el coste de envío de Ajustes del Resumen diario, y se avisa.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  margen_bruto: {
+    calculo: "Ventas netas − coste de producción + resultado de los envíos.",
+    fuente: CUENTA_PEDIDOS,
+  },
+  gastos_estructura: {
+    calculo:
+      "Gastos fijos de Gerencia › Ajustes repartidos por los días del periodo (hasta hoy si está en curso), compras que cuestan como gasto, amortizaciones y mermas y ajustes del almacén textil. Sin nóminas dadas de alta, la cifra está incompleta y se avisa.",
+    fuente:
+      "Gerencia › Ajustes, Facturas de compra y el almacén textil. Solo con todas las tiendas y todas las líneas: los gastos son de toda la empresa.",
+  },
+  beneficio_antes_impuestos: {
+    calculo: "Margen bruto − gastos de estructura.",
+    fuente: "Toda la empresa: solo con todas las tiendas y todas las líneas.",
+  },
+  sociedades: {
+    calculo:
+      "Beneficio antes de impuestos × el tipo de Gerencia › Ajustes, solo si hay beneficio. Es una estimación: el impuesto va por año entero y lo calcula la gestoría.",
+    fuente: "Gerencia › Ajustes.",
+  },
+  beneficio_neto: {
+    calculo: "Beneficio antes de impuestos − Impuesto sobre Sociedades estimado.",
+    fuente: "Toda la empresa: solo con todas las tiendas y todas las líneas.",
+  },
+  cobrado: {
+    calculo:
+      "Suma de los cobros con fecha de cobro en el periodo, con IVA y sin propinas, se vendiera cuando se vendiera el pedido. Lo aportado por los socios no es un cobro: no está.",
+    fuente: "Cobros de los pedidos de las tiendas (los de la web, al pagarse) y del textil.",
+  },
+  pendiente_cobro: {
+    calculo:
+      "Por cada pedido no cancelado: total − lo cobrado − lo devuelto, si queda algo. Sin los pedidos de la web que aún no se han pagado: no son venta.",
+    fuente: "Pedidos de las tiendas y del textil, de cualquier fecha: es la foto de hoy.",
+  },
+  pendiente_pago: {
+    calculo:
+      "Suma de lo que queda por pagar (total menos retención) de las facturas de compra registradas y pendientes de pago.",
+    fuente: "Facturas de compra, de cualquier fecha: es la foto de hoy. Solo de toda la empresa.",
+  },
+};
+
+/** El ⓘ de una cifra de la cuenta: su definición del diccionario, con su cálculo. */
+export function definicionDeConcepto(clave: ClaveConcepto): Definicion {
+  return { que: concepto(clave).definicion, ...CALCULO_CUENTA[clave] };
 }

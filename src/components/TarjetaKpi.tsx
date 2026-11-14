@@ -2,10 +2,16 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { numero, numeroJusto } from "@/lib/format";
+import { eur, numero, numeroJusto } from "@/lib/format";
 import { Explicacion } from "@/components/Explicacion";
-import { DEFINICIONES, type ClaveDefinicion, type Definicion } from "@/dominio/definiciones";
+import {
+  DEFINICIONES,
+  definicionDeConcepto,
+  type ClaveDefinicion,
+  type Definicion,
+} from "@/dominio/definiciones";
 import { formaVariacion } from "@/dominio/kpis";
+import { concepto, variacionCifra, type Cifra, type ClaveConcepto } from "@/dominio/cuenta";
 
 /**
  * Una cifra de un cuadro de mando, con su variación frente al periodo con el
@@ -75,6 +81,68 @@ export function TarjetaKpi({
         {pie && <div className="mt-2 text-xs">{pie}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Una cifra de la cuenta de resultados (dominio/cuenta.ts) en una tarjeta:
+ * con el nombre y la ⓘ del diccionario, «—» y el motivo si no se puede saber,
+ * y la marca «Estimado» con lo que se ha supuesto. El mismo nombre y la misma
+ * cuenta en todas las pantallas.
+ */
+export function TarjetaConcepto({
+  clave,
+  cifra,
+  previa,
+  frente,
+  icon,
+  pie,
+}: {
+  clave: ClaveConcepto;
+  /** Nula mientras se lee. */
+  cifra: Cifra | null;
+  /** La del periodo con el que se compara. */
+  previa?: Cifra | null;
+  frente?: string;
+  icon: LucideIcon;
+  /** Debajo, tras el motivo o la marca de estimado. */
+  pie?: ReactNode;
+}) {
+  const c = concepto(clave);
+  const valor = cifra?.valor ?? null;
+  const delta = cifra ? variacionCifra(cifra, previa ?? undefined) : null;
+  // Que caiga lo que se debe es buena noticia.
+  const inverso = clave === "pendiente_cobro" || clave === "pendiente_pago";
+  return (
+    <TarjetaKpi
+      titulo={c.nombre}
+      explicacion={definicionDeConcepto(clave)}
+      valor={cifra === null ? "…" : valor === null ? "—" : eur(valor)}
+      delta={frente ? delta : null}
+      frente={frente}
+      deltaInverso={inverso}
+      icon={icon}
+      color={valor !== null && valor < 0 && c.destacado ? "destructive" : "primary"}
+      pie={
+        cifra?.falta || cifra?.estimado || pie ? (
+          <span className="flex flex-col gap-0.5">
+            {cifra?.falta && <span className="text-muted-foreground">{cifra.falta}</span>}
+            {cifra?.estimado && <MarcaEstimado nota={cifra.nota} />}
+            {pie}
+          </span>
+        ) : undefined
+      }
+    />
+  );
+}
+
+/** «Estimado», con lo que se ha supuesto al lado. */
+export function MarcaEstimado({ nota }: { nota?: string }) {
+  return (
+    <span className="text-status-pendiente">
+      <span className="font-medium">Estimado</span>
+      {nota ? <span className="text-muted-foreground"> · {nota}</span> : null}
+    </span>
   );
 }
 
