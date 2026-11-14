@@ -40,7 +40,7 @@ export function celdaCSV(valor: string | number | null | undefined): string {
  * El separador de columnas: punto y coma, el de Excel en español (con la coma
  * decimal, una coma separando columnas partía cada importe en dos).
  */
-export const SEPARADOR_CSV = ";";
+const SEPARADOR_CSV = ";";
 
 /** Las filas como texto CSV (sin BOM), separadas por punto y coma y salto de línea. */
 export function filasCSV(filas: (string | number | null | undefined)[][]): string {

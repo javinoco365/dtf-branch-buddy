@@ -18,8 +18,8 @@ export type PedidoAbierto = {
   canal: string;
 };
 
-export const ESTADOS_POR_PRODUCIR = ["pendiente", "en_produccion", "imprimiendo"] as const;
-export const ESTADO_POR_ENVIAR = "listo";
+const ESTADOS_POR_PRODUCIR = ["pendiente", "en_produccion", "imprimiendo"] as const;
+const ESTADO_POR_ENVIAR = "listo";
 
 export type PedidosDeHoy = { porProducir: number; porEnviar: number };
 

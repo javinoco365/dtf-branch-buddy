@@ -633,11 +633,7 @@ export function calcularCuenta(e: EntradaCuenta): Cuenta {
  * devoluciones de pedidos con documento, lo facturado sin pedido, y los
  * gastos con justificante, las compras, las amortizaciones y el almacén.
  */
-export function beneficioDocumentado(
-  e: EntradaCuenta,
-  d: DocumentadoCuenta,
-  g: EstructuraCuenta,
-): number {
+function beneficioDocumentado(e: EntradaCuenta, d: DocumentadoCuenta, g: EstructuraCuenta): number {
   const a = calcularCuenta({
     ...e,
     ventas: e.ventas.filter((v) => !!v.id && d.pedidos.has(v.id)),
@@ -732,7 +728,7 @@ export function pedidosPorCobrarHoy(
 }
 
 /** Un pedido de la web que el cliente aún no ha pagado: no es venta. */
-export const esWebSinPagar = (p: Pick<PedidoPendiente, "tipo" | "origen" | "estado">) =>
+const esWebSinPagar = (p: Pick<PedidoPendiente, "tipo" | "origen" | "estado">) =>
   p.tipo === "tienda" && p.origen === "woocommerce" && p.estado === "pendiente";
 
 /**

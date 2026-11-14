@@ -1,6 +1,6 @@
 /**
  * Los totales del pie de las tablas de Gerencia que no cubre `sumatorios.ts`:
- * Clientes, Comercial, Fiscal y Margen.
+ * Clientes, Comercial y Fiscal.
  *
  * La regla de esta parte: cuando la pestaña ya enseña el total en una tarjeta
  * de arriba, el pie da la MISMA cifra, sacada con la misma cuenta. Si el pie
@@ -18,8 +18,6 @@
 
 import { redondear } from "./importes";
 import { sumarImportes } from "./sumatorios";
-import { porcentajeMargen } from "./margen";
-import { beneficioEstimado, type CifrasGerencia, type GastoFijo } from "./gerencia";
 import type { ClienteDormido, ResumenClientes } from "./clientela";
 import type { Cuenta, PendientesPresupuesto } from "./comercial";
 
@@ -100,58 +98,4 @@ export function totalTiposIva(filas: readonly { base: number; cuota: number }[])
     base: sumarImportes(filas, (f) => f.base),
     cuota: sumarImportes(filas, (f) => f.cuota),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Margen
-// ---------------------------------------------------------------------------
-
-/** El pie de una tabla de margen. */
-export type TotalMargen = {
-  bruta: number;
-  coste: number;
-  margen: number;
-  /** Margen ÷ bruta del total, en %; no la suma ni la media de los de cada fila. */
-  porcentaje: number | null;
-};
-
-/**
- * El pie de las tablas de margen por tienda y por canal: las cifras del
- * periodo entero, las mismas que las tarjetas de arriba (`cifrasGerencia`).
- * Las tablas reparten esas mismas ventas en grupos, así que es su total.
- */
-export function totalMargen(c: Pick<CifrasGerencia, "bruta" | "coste" | "margen">): TotalMargen {
-  return {
-    bruta: c.bruta,
-    coste: c.coste,
-    margen: c.margen,
-    porcentaje: porcentajeMargen(c.margen, c.bruta),
-  };
-}
-
-/** El pie de la tabla de margen por días o meses. */
-export type TotalTramos = TotalMargen & {
-  /** Gastos fijos del periodo, solo hasta hoy. */
-  gastos: number;
-  /** Margen − gastos fijos. */
-  beneficio: number;
-};
-
-/**
- * El pie de la tabla día a día o mes a mes: el margen del periodo, como las
- * tarjetas, y los gastos fijos y el beneficio hasta hoy con la misma cuenta
- * que el «Beneficio estimado» del Resumen (`beneficioEstimado`).
- *
- * No suma las filas: el gasto de cada día va redondeado al céntimo (100 € al
- * mes son 3,23 € al día) y treinta y un días sumarían 100,13 €. El pie da los
- * 100 € que de verdad tocan.
- */
-export function totalTramosMargen(
-  c: Pick<CifrasGerencia, "bruta" | "coste" | "margen">,
-  gastos: readonly GastoFijo[],
-  rango: { desde: Date; hasta: Date },
-  hoy: Date,
-): TotalTramos {
-  const b = beneficioEstimado(c.margen, gastos, rango, hoy);
-  return { ...totalMargen(c), gastos: b.gastos, beneficio: b.beneficio };
 }
