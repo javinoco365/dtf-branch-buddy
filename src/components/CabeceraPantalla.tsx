@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
  * puede pasar otro cuando la pantalla no está en el menú o necesita matiz.
  *
  * En el móvil los botones bajan debajo del título en vez de apretarse a su lado,
- * y en las subpantallas de Ajustes se ve encima de qué cuelgan, porque la
- * cabecera de arriba no tiene sitio para decirlo.
+ * y en las subpantallas de Ajustes sin enlace de vuelta se ve encima de qué
+ * cuelgan, porque la cabecera de arriba no tiene sitio para decirlo.
  */
 export function CabeceraPantalla({
   titulo,
@@ -75,7 +75,9 @@ export function CabeceraPantalla({
     >
       <div className="min-w-0 flex-1 space-y-1 sm:basis-72">
         {antes}
-        {miga && <p className="text-xs font-medium text-muted-foreground md:hidden">{miga}</p>}
+        {miga && !antes && (
+          <p className="text-xs font-medium text-muted-foreground md:hidden">{miga}</p>
+        )}
         <h1 id={id} className="flex items-center gap-2 text-2xl font-bold tracking-tight">
           {icono}
           <span className="min-w-0">

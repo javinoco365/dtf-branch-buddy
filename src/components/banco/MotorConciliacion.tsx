@@ -591,6 +591,18 @@ export function MotorConciliacion({
             </div>
           )}
 
+          {/* En el móvil la tabla va en tarjetas y su cabecera, con la casilla
+              de marcar todos, no se ve: aquí la misma casilla, con su texto. */}
+          {escribir && visibles.length > 0 && (
+            <label className="flex min-h-11 items-center gap-2 text-sm md:hidden">
+              <Checkbox
+                checked={todosVisiblesMarcados}
+                onCheckedChange={(v) => alternarVisibles(v === true)}
+              />
+              Marcar todos los que se ven
+            </label>
+          )}
+
           <Card>
             <CardContent className="p-0">
               <Table movil="tarjetas">

@@ -279,8 +279,9 @@ function PorLinea({ d }: { d: DatosGerencia }) {
           dos.
         </p>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
-        <Table>
+      {/* En el móvil, una tarjeta por línea: ocho columnas no caben a lo ancho. */}
+      <CardContent>
+        <Table movil="tarjetas">
           <TableHeader>
             <TableRow>
               <TableHead>Línea</TableHead>
