@@ -109,7 +109,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
 
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
-          titulo="IVA repercutido"
+          titulo="IVA de facturas"
           explicacion="g_iva_repercutido"
           valor={eur(iva.repercutido.iva)}
           frente={frente}
@@ -123,7 +123,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
           }
         />
         <TarjetaKpi
-          titulo="IVA soportado"
+          titulo="IVA de compras"
           explicacion="g_iva_soportado"
           valor={soportado ? eur(soportado.iva) : "—"}
           delta={null}
@@ -137,7 +137,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
           }
         />
         <TarjetaKpi
-          titulo="Resultado orientativo"
+          titulo="Saldo de IVA"
           explicacion="g_iva_resultado"
           valor={eur(Math.abs(resultado))}
           delta={null}
@@ -149,7 +149,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
           }
         />
         <TarjetaKpi
-          titulo="Vendido sin factura"
+          titulo="Pedidos sin factura"
           explicacion="g_sin_factura"
           valor={sinFactura ? String(sinFactura.pedidos) : "—"}
           delta={null}
@@ -276,7 +276,7 @@ export function Fiscal({ d }: { d: DatosGerencia }) {
                   <TableRow>
                     <TableHead>Tipo</TableHead>
                     <TableHead className="text-right">Base</TableHead>
-                    <TableHead className="text-right">Cuota</TableHead>
+                    <TableHead className="text-right">IVA</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

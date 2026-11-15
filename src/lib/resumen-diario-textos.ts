@@ -20,7 +20,7 @@ const pedidos = (n: number | undefined) => `${n ?? 0} ${n === 1 ? "pedido" : "pe
 export function textoAvisoResumen(a: AvisoResumen): string {
   switch (a.tipo) {
     case "margen_negativo":
-      return `Margen neto negativo (${eur(a.importe)}): se está vendiendo por debajo de lo que cuesta producir y enviar.`;
+      return `Margen negativo (${eur(a.importe)}): se está vendiendo por debajo de lo que cuesta producir y enviar.`;
     case "maquina_llena":
       return `La máquina ha ido al ${porcentaje(a.porcentaje)} de su capacidad: no cabe más sin alargar la jornada.`;
     case "cola_larga":
@@ -36,7 +36,7 @@ export function textoAvisoResumen(a: AvisoResumen): string {
     case "envios_estimados":
       return `${pedidos(a.cantidad)} con envío sin coste real apuntado: se estiman a ${eur(a.importe)} cada uno.`;
     case "sin_fecha_realizado":
-      return `${pedidos(a.cantidad)} enviados sin fecha de realizado: no cuentan en los metros realizados.`;
+      return `${pedidos(a.cantidad)} enviados sin fecha de realizado: no cuentan en los metros impresos.`;
   }
 }
 

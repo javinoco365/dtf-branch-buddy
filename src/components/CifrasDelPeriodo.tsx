@@ -45,7 +45,7 @@ export function CifrasDelPeriodo({
         pie={
           cuenta?.margenPct != null ? (
             <span className="text-muted-foreground">
-              {numero(cuenta.margenPct, 1)}&nbsp;% de las ventas netas
+              {numero(cuenta.margenPct, 1)}&nbsp;% de la facturación bruta
             </span>
           ) : undefined
         }

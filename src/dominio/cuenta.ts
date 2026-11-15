@@ -102,8 +102,9 @@ export type Concepto = {
 export const CONCEPTOS: readonly Concepto[] = [
   {
     clave: "ventas_con_iva",
-    nombre: "Ventas con IVA",
-    definicion: "Lo que pagan los clientes por sus pedidos, con IVA y envío.",
+    nombre: "Total con IVA",
+    definicion:
+      "Lo que pagan los clientes por sus pedidos, con IVA y envío, antes de restar devoluciones.",
     signo: "·",
     bloque: "resultados",
     conIva: true,
@@ -118,16 +119,16 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "portes_cobrados",
-    nombre: "Portes cobrados",
-    definicion: "Lo que pagan los clientes por el envío, sin IVA.",
+    nombre: "Envíos cobrados",
+    definicion: "Lo que pagan los clientes por el envío, sin IVA. Se lo pagamos a la agencia.",
     signo: "−",
     bloque: "resultados",
     conIva: false,
   },
   {
     clave: "ventas",
-    nombre: "Ventas",
-    definicion: "Lo que facturamos por nuestro trabajo: sin IVA y sin el envío.",
+    nombre: "Subtotal sin IVA",
+    definicion: "Lo cobrado por nuestro trabajo, sin IVA ni envío, antes de restar devoluciones.",
     signo: "=",
     bloque: "resultados",
     conIva: false,
@@ -143,8 +144,9 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "ventas_netas",
-    nombre: "Ventas netas",
-    definicion: "Ventas menos devoluciones.",
+    nombre: "Facturación bruta",
+    definicion:
+      "Lo vendido sin IVA ni envío y con las devoluciones ya restadas: lo que es de la empresa.",
     signo: "=",
     bloque: "resultados",
     conIva: false,
@@ -154,24 +156,24 @@ export const CONCEPTOS: readonly Concepto[] = [
     clave: "coste_produccion",
     nombre: "Coste de producción",
     definicion:
-      "Lo que cuesta fabricar: metros de DTF, lo que cobra la subcontrata del UV y la ropa.",
+      "Lo que cuesta fabricar: el DTF por metros, lo que cobra la subcontrata del UV y la ropa.",
     signo: "−",
     bloque: "resultados",
     conIva: false,
   },
   {
     clave: "resultado_portes",
-    nombre: "Resultado de los envíos",
+    nombre: "Saldo de envíos",
     definicion:
-      "Portes cobrados menos lo que cobra la agencia: lo que se gana o se pierde enviando.",
+      "Envíos cobrados menos lo que cobra la agencia: lo que se gana o se pierde enviando.",
     signo: "+",
     bloque: "resultados",
     conIva: false,
   },
   {
     clave: "margen_bruto",
-    nombre: "Margen bruto",
-    definicion: "Lo que queda de las ventas tras fabricar y enviar.",
+    nombre: "Margen",
+    definicion: "Lo que queda de la facturación bruta tras fabricar y enviar.",
     signo: "=",
     bloque: "resultados",
     conIva: false,
@@ -179,7 +181,7 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "gastos_estructura",
-    nombre: "Gastos de estructura",
+    nombre: "Gastos generales",
     definicion:
       "Lo que cuesta tener la empresa abierta: alquiler, sueldos, cuotas, compras, amortizaciones y mermas.",
     signo: "−",
@@ -188,8 +190,8 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "beneficio_antes_impuestos",
-    nombre: "Beneficio antes de impuestos",
-    definicion: "Lo que gana la empresa antes del Impuesto sobre Sociedades.",
+    nombre: "Beneficio",
+    definicion: "Lo que gana la empresa antes de pagar el Impuesto de Sociedades.",
     signo: "=",
     bloque: "resultados",
     conIva: false,
@@ -197,7 +199,7 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "sociedades",
-    nombre: "Impuesto sobre Sociedades",
+    nombre: "Impuesto de Sociedades",
     definicion:
       "Estimado sobre lo que tiene factura o ticket; el de verdad lo calcula la gestoría.",
     signo: "−",
@@ -206,8 +208,8 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "beneficio_neto",
-    nombre: "Beneficio neto",
-    definicion: "Lo que queda para la empresa después de todo, impuestos incluidos.",
+    nombre: "Beneficio tras impuestos",
+    definicion: "Lo que le queda a la empresa después de todo, impuestos incluidos.",
     signo: "=",
     bloque: "resultados",
     conIva: false,
@@ -223,7 +225,7 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "pendiente_cobro",
-    nombre: "Pendiente de cobro",
+    nombre: "Por cobrar",
     definicion: "Lo que nos deben hoy los clientes, con IVA.",
     signo: "·",
     bloque: "dinero",
@@ -231,7 +233,7 @@ export const CONCEPTOS: readonly Concepto[] = [
   },
   {
     clave: "pendiente_pago",
-    nombre: "Pendiente de pago",
+    nombre: "Por pagar",
     definicion: "Lo que debemos hoy a proveedores, con IVA.",
     signo: "·",
     bloque: "dinero",
@@ -256,16 +258,16 @@ export const DATOS: Record<ClaveDato, { nombre: string; definicion: string }> = 
     definicion: "Cuántos pedidos cuentan: sin cancelados ni los de la web sin pagar.",
   },
   metros: {
-    nombre: "Metros de DTF",
-    definicion: "Metros de DTF impresos y vendidos.",
+    nombre: "Metros vendidos",
+    definicion: "Metros de DTF de los pedidos del periodo; los de UV van aparte.",
   },
   metros_uv: {
-    nombre: "Metros de DTF UV",
+    nombre: "Metros UV vendidos",
     definicion: "Metros de DTF UV vendidos: aparte, no se suman a los de DTF.",
   },
   ticket_medio: {
-    nombre: "Ticket medio",
-    definicion: "Lo que se vende de media en cada pedido, sin IVA.",
+    nombre: "Ticket medio sin IVA",
+    definicion: "Lo que se factura de media en cada pedido, sin IVA ni envío.",
   },
   cancelados: {
     nombre: "Cancelados",

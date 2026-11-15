@@ -97,7 +97,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
 
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <TarjetaKpi
-          titulo="Enviados"
+          titulo="Presupuestos enviados"
           explicacion="g_presupuestos_enviados"
           valor={String(e.enviados.n)}
           frente={frente}
@@ -106,7 +106,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Por {eur(e.enviados.importe)}</span>}
         />
         <TarjetaKpi
-          titulo="Aceptados"
+          titulo="Presupuestos aceptados"
           explicacion="g_presupuestos_aceptados"
           valor={String(e.aceptados.n)}
           frente={frente}
@@ -115,7 +115,7 @@ export function Comercial({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Por {eur(e.aceptados.importe)}</span>}
         />
         <TarjetaKpi
-          titulo="Conversión"
+          titulo="% aceptados"
           explicacion="g_conversion"
           valor={e.conversion === null ? "—" : `${numero(e.conversion, 1)}\u00A0%`}
           frente={frente}

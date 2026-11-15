@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-15-nombres-sencillos",
+    fecha: "2026-11-15",
+    tipo: "mejora",
+    titulo: "Cifras con nombres más sencillos",
+    resumen:
+      "Cada cifra se llama igual en todas las pantallas, como en la Facturación de la tienda.",
+    puntos: [
+      "«Ventas netas» ahora es «Facturación bruta», y hay un solo «Margen».",
+      "«Beneficio», «Por cobrar», «Por pagar» y «Envíos cobrados», sin jerga.",
+      "Cuando importa, el nombre dice si lleva IVA o no.",
+    ],
+  },
+  {
     id: "2026-11-15-facturacion-tienda-como-antes",
     fecha: "2026-11-15",
     tipo: "mejora",

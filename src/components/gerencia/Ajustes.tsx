@@ -159,7 +159,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
               className="w-32"
             />
           </Campo>
-          <Campo etiqueta="Ventas al mes (€)">
+          <Campo etiqueta="Ventas al mes con IVA (€)">
             <Input
               inputMode="decimal"
               placeholder="Ej. 15000"
@@ -187,7 +187,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
               <TableRow>
                 <TableHead>Desde</TableHead>
                 <TableHead className="text-right">Metros</TableHead>
-                <TableHead className="text-right">Ventas</TableHead>
+                <TableHead className="text-right">Ventas con IVA</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
             </TableHeader>

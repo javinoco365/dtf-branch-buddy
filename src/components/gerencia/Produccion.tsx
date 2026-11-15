@@ -299,7 +299,7 @@ export function Produccion({ d }: { d: DatosGerencia }) {
                   <TableRow>
                     <TableHead>Tiempo</TableHead>
                     <TableHead className="text-right">Envíos</TableHead>
-                    <TableHead className="text-right">Peso</TableHead>
+                    <TableHead className="text-right">% del total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

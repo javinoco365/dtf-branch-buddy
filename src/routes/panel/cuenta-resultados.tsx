@@ -113,7 +113,7 @@ function CuentaResultados() {
 
   return (
     <div className="space-y-6">
-      <CabeceraPantalla subtitulo="De lo que pagan los clientes a lo que le queda a la empresa. Sin IVA, salvo las ventas con IVA y el bloque de dinero. El ⓘ de cada fila dice qué es y cómo se calcula." />
+      <CabeceraPantalla subtitulo="De lo que pagan los clientes a lo que le queda a la empresa. Sin IVA, salvo el total con IVA y el bloque de dinero. El ⓘ de cada fila dice qué es y cómo se calcula." />
 
       <FiltrosPlegables resumen={resumenFiltros}>
         <Card>
@@ -405,7 +405,7 @@ function TablaPeriodo({
           <TableHead className="text-right">Periodo</TableHead>
           {frente && <TableHead className="text-right">{frente}</TableHead>}
           {frente && <TableHead className="text-right">Variación</TableHead>}
-          <TableHead className="text-right">% s/ventas netas</TableHead>
+          <TableHead className="text-right">% de la bruta</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
