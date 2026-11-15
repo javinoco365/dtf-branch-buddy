@@ -33,6 +33,8 @@ export type DocumentoDeLista = {
   id: string;
   tipo: "ordinaria" | "simplificada";
   referencia: string;
+  /** Total con IVA del documento: si ya no cuadra con lo que pagó el cliente, hay que corregirlo. */
+  total?: number | null;
 };
 
 /** Las filas de cada pedido, por su `pedido_id`, en el orden en que llegaron. */
@@ -87,6 +89,7 @@ type DocumentoLeido = DocumentoPedido & {
   ejercicio: number;
   numero: number;
   sustituye_a_id: string | null;
+  total?: number | string | null;
 };
 
 /**
@@ -101,7 +104,7 @@ async function documentosDePedidos(
   const { data: lista, error } = await leerPorIds<DocumentoLeido>(ids, (trozo, a, b) =>
     tabla(supabase, "facturas")
       .select(
-        "id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id",
+        "id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id, total",
       )
       .in("pedido_id", trozo)
       .neq("estado", "borrador")
@@ -127,6 +130,7 @@ async function documentosDePedidos(
         id: d.id,
         tipo: d.tipo,
         referencia: referenciaFactura(d.serie, d.ejercicio, d.numero),
+        total: d.total == null ? null : Number(d.total),
       });
     }
   }
@@ -305,7 +309,7 @@ const CAMPOS_CON_RELACIONES = [
   // La rectificativa que corrige cada documento, aunque no lleve el pedido:
   // `facturas!rectifica_a_id` desde una factura son las que la rectifican
   // (comprobado en el banco con PostgREST 12).
-  "_docs:facturas!pedido_id(id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id, _rect:facturas!rectifica_a_id(id))",
+  "_docs:facturas!pedido_id(id, pedido_id, tipo, serie, ejercicio, numero, estado, rectifica_a_id, sustituye_a_id, total, _rect:facturas!rectifica_a_id(id))",
 ].join(", ");
 
 type FilaConRelaciones = FechaPedido &
@@ -432,5 +436,10 @@ function documentoDeLista(
   const rectificados = docs.filter((d) => (d._rect ?? []).length > 0).map((d) => d.id);
   const d = documentoDelPedido(docs, rectificados);
   if (!d || d.tipo === "rectificativa") return null;
-  return { id: d.id, tipo: d.tipo, referencia: referenciaFactura(d.serie, d.ejercicio, d.numero) };
+  return {
+    id: d.id,
+    tipo: d.tipo,
+    referencia: referenciaFactura(d.serie, d.ejercicio, d.numero),
+    total: d.total == null ? null : Number(d.total),
+  };
 }

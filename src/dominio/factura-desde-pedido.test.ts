@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { lineasDesdePedido, receptorDesdePedido } from "./factura-desde-pedido";
+import {
+  documentoDescuadrado,
+  lineasDeDevoluciones,
+  lineasDesdePedido,
+  receptorDesdePedido,
+  totalDevuelto,
+} from "./factura-desde-pedido";
+import { calcularTotales } from "./importes";
 
 describe("receptorDesdePedido", () => {
   it("sin ficha, usa el NIF congelado en el pedido", () => {
@@ -144,5 +151,97 @@ describe("lineasDesdePedido", () => {
     expect(
       lineasDesdePedido([{ descripcion: "DTF", cantidad: 1, precio_unitario: 10 }], -3),
     ).toHaveLength(1);
+  });
+});
+
+describe("lineasDeDevoluciones", () => {
+  const conIva = (base: number) => [
+    { descripcion: "Metro DTF", cantidad: 1, unidad: "m", precio_unitario: base, iva_rate: 21 },
+  ];
+  const total = (lineas: Parameters<typeof calcularTotales>[0]) => calcularTotales(lineas).total;
+
+  it("DCUL-158: 15,72 € con 7,25 € devueltos sale por 8,47 € (base 7,00 €)", () => {
+    const lineas = conIva(12.99);
+    const negativas = lineasDeDevoluciones(lineas, [
+      { importe: 7.25, woo_refund_id: 803, fecha: "2026-11-13T13:19:52Z" },
+    ]);
+    expect(negativas).toEqual([
+      {
+        descripcion: "Devolución del 13/11/2026",
+        cantidad: 1,
+        unidad: "ud",
+        precio_unitario: -5.99,
+        iva_rate: 21,
+      },
+    ]);
+    const t = calcularTotales([...lineas, ...negativas]);
+    expect(t.base_imponible).toBe(7);
+    expect(t.total).toBe(8.47);
+  });
+
+  it("DCUL-132: 228,69 € con 101,64 € devueltos sale por 127,05 €, al céntimo", () => {
+    const lineas = conIva(189);
+    const negativas = lineasDeDevoluciones(lineas, [{ importe: "101.64", woo_refund_id: 749 }]);
+    expect(total(lineas)).toBe(228.69);
+    expect(total([...lineas, ...negativas])).toBe(127.05);
+  });
+
+  it("con importes que no salen redondos al pasar a base, queda como mucho a un céntimo", () => {
+    for (const devuelto of [0.01, 0.07, 1.13, 3.33, 9.99, 33.33, 99.99]) {
+      const lineas = conIva(123.45);
+      const negativas = lineasDeDevoluciones(lineas, [{ importe: devuelto, woo_refund_id: 1 }]);
+      const objetivo = Math.round((total(lineas) - devuelto) * 100) / 100;
+      expect(Math.abs(total([...lineas, ...negativas]) - objetivo)).toBeLessThanOrEqual(0.0100001);
+    }
+  });
+
+  it("si el total con IVA es alcanzable, cuadra exacto", () => {
+    // 149,37 − 3,33 = 146,04 no lo da ninguna base al 21 %; 146,03 sí.
+    const lineas = conIva(123.45);
+    const negativas = lineasDeDevoluciones(lineas, [{ importe: 3.34, woo_refund_id: 1 }]);
+    expect(total([...lineas, ...negativas])).toBe(146.03);
+  });
+
+  it("con dos tipos de IVA reparte la devolución y cuadra el total", () => {
+    const lineas = [
+      { descripcion: "Metro DTF", cantidad: 10, unidad: "m", precio_unitario: 7, iva_rate: 21 },
+      { descripcion: "Libro", cantidad: 1, unidad: "ud", precio_unitario: 20, iva_rate: 4 },
+    ];
+    const negativas = lineasDeDevoluciones(lineas, [{ importe: 20, woo_refund_id: 5 }]);
+    expect(negativas.map((l) => l.iva_rate)).toEqual([21, 4]);
+    expect(negativas.every((l) => l.descripcion.startsWith("Devolución"))).toBe(true);
+    expect(total([...lineas, ...negativas])).toBe(Math.round((total(lineas) - 20) * 100) / 100);
+  });
+
+  it("una rebaja lleva su motivo; una rebaja quitada (0 €) no genera línea", () => {
+    const negativas = lineasDeDevoluciones(conIva(100), [
+      { importe: 5.99, motivo: "Rebaja: recogió en el local", woo_refund_id: null },
+      { importe: 0, motivo: "Rebaja quitada: error", woo_refund_id: null },
+    ]);
+    expect(negativas).toHaveLength(1);
+    expect(negativas[0].descripcion).toBe("Rebaja: recogió en el local");
+  });
+
+  it("sin devoluciones no añade nada", () => {
+    expect(lineasDeDevoluciones(conIva(10), [])).toEqual([]);
+    expect(lineasDeDevoluciones(conIva(10), null)).toEqual([]);
+  });
+
+  it("totalDevuelto suma reembolsos y rebajas", () => {
+    expect(totalDevuelto([{ importe: 7.25 }, { importe: "1.10" }, { importe: null }])).toBe(8.35);
+  });
+});
+
+describe("documentoDescuadrado", () => {
+  it("una factura de 228,69 € con 101,64 € devueltos después no cuadra", () => {
+    expect(documentoDescuadrado(228.69, 228.69, 101.64)).toBe(true);
+  });
+  it("la factura nueva, ya con la devolución, cuadra (aunque sea a un céntimo)", () => {
+    expect(documentoDescuadrado(127.05, 228.69, 101.64)).toBe(false);
+    expect(documentoDescuadrado(127.06, 228.69, 101.64)).toBe(false);
+  });
+  it("sin devoluciones o sin documento, nada que corregir", () => {
+    expect(documentoDescuadrado(100, 100, 0)).toBe(false);
+    expect(documentoDescuadrado(null, 100, 5)).toBe(false);
   });
 });

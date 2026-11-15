@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-15-facturas-con-devoluciones",
+    fecha: "2026-11-15",
+    tipo: "mejora",
+    titulo: "Facturas y tickets con las devoluciones",
+    resumen: "El documento de un pedido devuelto en parte suma lo que pagó el cliente.",
+    puntos: [
+      "Salen las líneas del pedido y, debajo, la devolución en negativo.",
+      "Si devolviste después de facturar, el pedido avisa con «Corregir».",
+      "Te guía: rectificativa que lo anula y documento nuevo por lo pagado.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-15-devuelto-en-pedidos",
     fecha: "2026-11-15",
     tipo: "mejora",

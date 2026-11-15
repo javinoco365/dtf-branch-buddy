@@ -18,7 +18,13 @@ import { CACHE_PDF, rutaPdfGuardada, rutaPdfTienda, rutaPdfVersion } from "@/lib
 // importación circular que tiró el panel entero en producción («This page
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
-import { lineasDesdePedido, receptorDesdePedido } from "@/dominio/factura-desde-pedido";
+import {
+  lineasDeDevoluciones,
+  lineasDesdePedido,
+  receptorDesdePedido,
+  totalDevuelto,
+  type DevolucionParaDocumento,
+} from "@/dominio/factura-desde-pedido";
 import { diaEnEspana } from "@/dominio/fecha-documento";
 import {
   diaDelPedido,
@@ -559,13 +565,15 @@ type DocumentoLeido = {
   estado: string | null;
   rectifica_a_id: string | null;
   pedido_id: string | null;
+  /** Total con IVA del documento, para ver si sigue cuadrando con el pedido. */
+  total?: number | string | null;
 };
 
 /** Los documentos de unos pedidos, con las rectificativas que los corrigen. */
 async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
   if (pedidoIds.length === 0) return { docs: [] as DocumentoLeido[], rectificados: [] as string[] };
   const { data: docs, error } = await tabla(sb, "facturas")
-    .select("id, serie, ejercicio, numero, tipo, estado, rectifica_a_id, pedido_id")
+    .select("id, serie, ejercicio, numero, tipo, estado, rectifica_a_id, pedido_id, total")
     .in("pedido_id", pedidoIds);
   if (error) throw new Error(error.message);
   const ids = (docs ?? []).map((d: DocumentoLeido) => d.id);
@@ -613,7 +621,7 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
   const { docs, rectificados } = await leerDocumentosDePedidos(sb, [pedidoId]);
   const vigente = documentoVigente(docs, rectificados);
 
-  const [{ data: items }, clienteRes] = await Promise.all([
+  const [{ data: items }, clienteRes, devolucionesRes] = await Promise.all([
     sb
       .from("pedido_items")
       .select("descripcion, cantidad, unidad, precio_unitario, iva_rate")
@@ -626,7 +634,16 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
           .eq("id", pedido.cliente_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    tabla(sb, "pedido_devoluciones")
+      .select("importe, motivo, woo_refund_id, fecha")
+      .eq("pedido_id", pedidoId)
+      .order("fecha"),
   ]);
+  if (devolucionesRes.error) {
+    throw new Error(
+      `No se han podido leer las devoluciones del pedido: ${devolucionesRes.error.message}`,
+    );
+  }
 
   const receptor = receptorDesdePedido(
     clienteRes.data,
@@ -638,9 +655,16 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
   const tipoFiscal = esTipoFiscal(clienteRes.data?.tipo_fiscal)
     ? clienteRes.data.tipo_fiscal
     : null;
-  const lineas = lineasDesdePedido(items ?? [], Number(pedido.envio || 0));
+  // Las del pedido y, debajo, una en negativo por cada devolución (reembolso
+  // de la web o rebaja): el documento suma lo que el cliente pagó al final.
+  const lineasPedido = lineasDesdePedido(items ?? [], Number(pedido.envio || 0));
+  const devoluciones = (devolucionesRes.data ?? []) as DevolucionParaDocumento[];
+  const lineas = [...lineasPedido, ...lineasDeDevoluciones(lineasPedido, devoluciones)];
+  const devuelto = totalDevuelto(devoluciones);
+  /** Devuelto entero (o más): no queda nada que documentar. */
+  const devueltoEntero = devuelto > 0 && calcularTotales(lineas).total <= 0;
 
-  return { pedido, vigente, receptor, lineas, tipoFiscal };
+  return { pedido, vigente, receptor, lineas, tipoFiscal, devuelto, devueltoEntero };
 }
 
 /**
@@ -662,13 +686,19 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
     const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
     const supabaseAdmin = adminComoUsuario(context.userId);
 
-    const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
-      supabaseAdmin,
-      data.pedido_id,
-      context.userId,
-    );
+    const { pedido, vigente, receptor, lineas, tipoFiscal, devuelto, devueltoEntero } =
+      await leerPedidoParaDocumento(supabaseAdmin, data.pedido_id, context.userId);
 
     if (vigente) {
+      // ¿Sigue cuadrando? Si al cliente se le devolvió algo después de emitir
+      // el documento (o se rebajó el importe), el documento suma de más y hay
+      // que corregirlo: rectificativa que lo anula y documento nuevo.
+      const real = calcularTotales(lineas).total;
+      const facturado = vigente.total == null ? null : Number(vigente.total);
+      const descuadre =
+        facturado != null && Number.isFinite(facturado) && Math.abs(facturado - real) >= 0.01
+          ? { facturado, real, devuelto, devuelto_entero: devueltoEntero, lineas }
+          : null;
       return {
         ya_facturado: true as const,
         factura: {
@@ -676,11 +706,15 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
           tipo: vigente.tipo,
           referencia: referenciaFactura(vigente.serie, vigente.ejercicio, vigente.numero),
         },
+        descuadre,
       };
     }
 
     if (lineas.length === 0) {
       throw new Error("Este pedido no tiene líneas: no hay nada que documentar.");
+    }
+    if (devueltoEntero) {
+      throw new Error("Este pedido está devuelto entero: no hay nada que facturar.");
     }
 
     const limites = await leerLimitesTicket(supabaseAdmin, pedido.empresa_id ?? null);
@@ -1151,11 +1185,8 @@ async function emitirEnBloque(
   for (const id of enOrden) {
     let numero = id;
     try {
-      const { pedido, vigente, receptor, lineas, tipoFiscal } = await leerPedidoParaDocumento(
-        sb,
-        id,
-        userId,
-      );
+      const { pedido, vigente, receptor, lineas, tipoFiscal, devueltoEntero } =
+        await leerPedidoParaDocumento(sb, id, userId);
       numero = pedido.numero ?? id;
       if (vigente) {
         omitidos.push({ pedido: numero, motivo: "ya tiene documento" });
@@ -1163,6 +1194,10 @@ async function emitirEnBloque(
       }
       if (lineas.length === 0) {
         omitidos.push({ pedido: numero, motivo: "no tiene líneas" });
+        continue;
+      }
+      if (devueltoEntero) {
+        omitidos.push({ pedido: numero, motivo: "está devuelto entero" });
         continue;
       }
       if (documento === "ticket") {
