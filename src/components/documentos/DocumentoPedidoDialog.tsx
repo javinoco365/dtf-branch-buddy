@@ -40,12 +40,23 @@ import {
   type LineaEmision,
 } from "@/dominio/factura-editable";
 import { VistaPreviaFactura, type EmisorVista } from "./VistaPreviaFactura";
+import {
+  CorregirDocumento,
+  type Descuadre,
+  type PasoCorreccion,
+  type ResultadoCorreccion,
+} from "./CorregirDocumento";
+
+/** El ticket o la factura que ya tiene el pedido. */
+export type DocumentoEmitido = { id: string; tipo: string; referencia: string };
 
 /** Lo que devuelve la preparación: el documento que ya hay, o lo necesario para emitir. */
 export type DocumentoPreparado =
   | {
       ya_facturado: true;
-      factura: { id: string; tipo: string; referencia: string };
+      factura: DocumentoEmitido;
+      /** El documento ya no cuadra (devolución después de emitirlo): se corrige guiado. */
+      descuadre?: Descuadre | null;
     }
   | {
       ya_facturado: false;
@@ -109,6 +120,8 @@ export function DocumentoPedidoDialog({
   emitir,
   abrirPdf,
   alEmitir,
+  corregir,
+  reintentarEmision,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -123,6 +136,18 @@ export function DocumentoPedidoDialog({
    */
   abrirPdf: (id: string) => Promise<string | null>;
   alEmitir: () => void;
+  /**
+   * Corrige un documento que ya no cuadra: rectificativa que lo anula y
+   * documento nuevo del mismo tipo (CorregirDocumento). Sin esto, el diálogo
+   * solo dice que el pedido ya tiene documento.
+   */
+  corregir?: (
+    documento: DocumentoEmitido,
+    descuadre: Descuadre,
+    alAvanzar: (paso: PasoCorreccion, rectificativa?: string) => void,
+  ) => Promise<ResultadoCorreccion>;
+  /** Solo el documento nuevo (si la rectificativa ya se emitió). */
+  reintentarEmision?: (tipo: string) => Promise<{ id: string; referencia: string }>;
 }) {
   const qc = useQueryClient();
   const [notas, setNotas] = useState("");
@@ -164,7 +189,36 @@ export function DocumentoPedidoDialog({
     setMetodoPago(data.metodo_pago ?? "");
   }, [data]);
 
-  const preparado = data && !data.ya_facturado ? data : null;
+  // El documento que no cuadra, congelado al abrir: tras la rectificativa la
+  // preparación ya no lo trae (el pedido se queda sin documento) y el
+  // asistente no puede desaparecer a mitad de camino.
+  const [aCorregir, setACorregir] = useState<{
+    factura: DocumentoEmitido;
+    descuadre: Descuadre;
+  } | null>(null);
+  useEffect(() => {
+    if (!open) setACorregir(null);
+  }, [open]);
+  useEffect(() => {
+    if (aCorregir || !data?.ya_facturado || !data.descuadre) return;
+    setACorregir({ factura: data.factura, descuadre: data.descuadre });
+  }, [data, aCorregir]);
+  const corrigiendo = !!(aCorregir && corregir && reintentarEmision);
+  // Corrigiendo, el formulario de emitir no se enseña aunque los datos se
+  // refresquen tras la rectificativa: lo emite el asistente.
+  const preparado = data && !data.ya_facturado && !corrigiendo ? data : null;
+  // Si se corrigió algo, al cerrar se refresca lo leído (lista, Facturas,
+  // pendientes, Gerencia) y se avisa a quien abrió el diálogo. No antes: el
+  // aviso cierra el diálogo y el resultado tiene que verse.
+  const corregido = useRef(false);
+  const cambiarAbierto = (abierto: boolean) => {
+    if (!abierto && corregido.current) {
+      corregido.current = false;
+      void invalidarTrasGuardar(qc);
+      alEmitir();
+    }
+    onOpenChange(abierto);
+  };
   const totales = preparado ? calcularTotales(preparado.lineas) : null;
 
   // Lo editado en la vista previa: las líneas que ya son válidas cuentan para
@@ -281,7 +335,7 @@ export function DocumentoPedidoDialog({
   const principal = decision?.documento === "ticket" ? "ticket" : "factura";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={cambiarAbierto}>
       <DialogContent
         className={
           vistaPrevia && preparado
@@ -327,25 +381,59 @@ export function DocumentoPedidoDialog({
           </>
         ) : (
           <>
-            <DialogHeader>
-              <DialogTitle>Ticket o factura · pedido {numeroPedido}</DialogTitle>
-              <DialogDescription>
-                Las líneas salen del pedido. La aplicación propone qué documento toca; revísalo y
-                emite. La factura se revisa y se puede editar antes de emitirla.
-              </DialogDescription>
-            </DialogHeader>
+            {corrigiendo ? (
+              <DialogHeader>
+                <DialogTitle>Corregir el documento · pedido {numeroPedido}</DialogTitle>
+                <DialogDescription>
+                  Hubo una devolución después de emitirlo. Te guiamos paso a paso.
+                </DialogDescription>
+              </DialogHeader>
+            ) : (
+              <DialogHeader>
+                <DialogTitle>Ticket o factura · pedido {numeroPedido}</DialogTitle>
+                <DialogDescription>
+                  Las líneas salen del pedido. La aplicación propone qué documento toca; revísalo y
+                  emite. La factura se revisa y se puede editar antes de emitirla.
+                </DialogDescription>
+              </DialogHeader>
+            )}
 
-            {isLoading && (
+            {isLoading && !corrigiendo && (
               <p className="py-6 text-center text-sm text-muted-foreground">Preparando…</p>
             )}
 
-            {error && (
+            {error && !corrigiendo && (
               <p className="py-6 text-center text-sm text-destructive">
                 {mensajeDeError(error, "No se pudo preparar el documento")}
               </p>
             )}
 
-            {data && data.ya_facturado && (
+            {corrigiendo && aCorregir && corregir && reintentarEmision && (
+              <CorregirDocumento
+                referencia={aCorregir.factura.referencia}
+                tipo={aCorregir.factura.tipo}
+                descuadre={aCorregir.descuadre}
+                corregir={async (alAvanzar) => {
+                  try {
+                    return await corregir(aCorregir.factura, aCorregir.descuadre, alAvanzar);
+                  } finally {
+                    // Pase lo que pase, algo puede haber cambiado: se refresca al cerrar.
+                    corregido.current = true;
+                  }
+                }}
+                reintentarEmision={async () => {
+                  try {
+                    return await reintentarEmision(aCorregir.factura.tipo);
+                  } finally {
+                    corregido.current = true;
+                  }
+                }}
+                abrirPdf={abrirPdf}
+                onTerminar={() => cambiarAbierto(false)}
+              />
+            )}
+
+            {data && data.ya_facturado && !corrigiendo && (
               <div className="py-6 text-center space-y-2">
                 <FileText className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="text-sm">
@@ -506,46 +594,49 @@ export function DocumentoPedidoDialog({
               </div>
             )}
 
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancelar
-              </Button>
-              {preparado && decision && (
-                <>
-                  {principal === "factura" && puedeTicket && (
-                    <Button variant="outline" onClick={emitirComoTicket} disabled={emitiendo}>
-                      Emitir ticket
-                    </Button>
-                  )}
-                  {principal === "ticket" && (
-                    <Button
-                      variant="outline"
-                      onClick={emitirComoFactura}
-                      disabled={emitiendo || !puedeFactura}
-                    >
-                      Emitir factura
-                    </Button>
-                  )}
-                  {principal === "ticket" ? (
-                    <Button onClick={emitirComoTicket} disabled={emitiendo}>
-                      {emitiendo ? "Emitiendo…" : "Emitir ticket"}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={emitirComoFactura}
-                      disabled={
-                        emitiendo ||
-                        !puedeFactura ||
-                        decision.documento === "preguntar_tipo" ||
-                        (decision.documento === "pedir_datos" && nif.trim() === "")
-                      }
-                    >
-                      {emitiendo ? "Emitiendo…" : "Emitir factura"}
-                    </Button>
-                  )}
-                </>
-              )}
-            </DialogFooter>
+            {/* Corrigiendo, el asistente lleva sus propios botones. */}
+            {!corrigiendo && (
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  Cancelar
+                </Button>
+                {preparado && decision && (
+                  <>
+                    {principal === "factura" && puedeTicket && (
+                      <Button variant="outline" onClick={emitirComoTicket} disabled={emitiendo}>
+                        Emitir ticket
+                      </Button>
+                    )}
+                    {principal === "ticket" && (
+                      <Button
+                        variant="outline"
+                        onClick={emitirComoFactura}
+                        disabled={emitiendo || !puedeFactura}
+                      >
+                        Emitir factura
+                      </Button>
+                    )}
+                    {principal === "ticket" ? (
+                      <Button onClick={emitirComoTicket} disabled={emitiendo}>
+                        {emitiendo ? "Emitiendo…" : "Emitir ticket"}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={emitirComoFactura}
+                        disabled={
+                          emitiendo ||
+                          !puedeFactura ||
+                          decision.documento === "preguntar_tipo" ||
+                          (decision.documento === "pedir_datos" && nif.trim() === "")
+                        }
+                      >
+                        {emitiendo ? "Emitiendo…" : "Emitir factura"}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </DialogFooter>
+            )}
           </>
         )}
       </DialogContent>

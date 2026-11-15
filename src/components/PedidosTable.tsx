@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Download,
@@ -134,6 +135,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SiPuede } from "@/components/SiPuede";
+import { documentoDescuadrado } from "@/dominio/factura-desde-pedido";
 import { usePermisos } from "@/hooks/use-permisos";
 import { avisarError } from "@/lib/errores";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
@@ -1256,6 +1258,44 @@ function numeroVisible(pedido: PedidoFila) {
  * Es el mismo PDF que se descarga desde Facturas (si no estaba guardado, el
  * servidor lo genera y lo guarda antes, si quien lo abre puede escribir).
  */
+/**
+ * El ticket o la factura ya no cuadra: al cliente se le devolvió dinero (o se
+ * rebajó el importe) después de emitirlo. Abre el asistente que lo corrige
+ * (rectificativa y documento nuevo, CorregirDocumento). Solo para quien
+ * puede escribir: un visor no corrige nada.
+ */
+function AvisoCorregirDocumento({
+  pedido,
+  onCorregir,
+}: {
+  pedido: PedidoFila;
+  onCorregir: () => void;
+}) {
+  if (!pedido.documento) return null;
+  if (
+    !documentoDescuadrado(
+      pedido.documento.total,
+      pedido.total,
+      devolucionesTotal(pedido.devoluciones),
+    )
+  ) {
+    return null;
+  }
+  return (
+    <SiPuede accion="escribir">
+      <button
+        type="button"
+        onClick={onCorregir}
+        title="Se devolvió dinero después de emitirlo: hay que corregirlo"
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[11px] font-semibold leading-5 text-amber-800 hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-amber-400/50 dark:bg-amber-400/15 dark:text-amber-200"
+      >
+        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+        Corregir {pedido.documento.tipo === "simplificada" ? "ticket" : "factura"}
+      </button>
+    </SiPuede>
+  );
+}
+
 function BotonDocumento({ documento }: { documento: DocumentoDeLista }) {
   // Cualquier nivel lo abre; si no estaba guardado, lo guarda quien escribe.
   const abrirFn = useServerFn(abrirFacturaPDF);
@@ -1353,6 +1393,7 @@ const FilaPedido = memo(function FilaPedido({
           )}
           <div className="flex flex-wrap items-center gap-x-1.5">
             {pedido.documento && <BotonDocumento documento={pedido.documento} />}
+            <AvisoCorregirDocumento pedido={pedido} onCorregir={onFacturar} />
             <HoraPedido pedido={pedido} horaCorte={horaCorte} />
           </div>
         </TableCell>
@@ -1531,6 +1572,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
           <RealizadoEn tabla="pedidos" pedido={pedido} />
           <EtiquetaOrigen web={pedido.origen === "woocommerce"} />
           {pedido.documento && <BotonDocumento documento={pedido.documento} />}
+          <AvisoCorregirDocumento pedido={pedido} onCorregir={onFacturar} />
           {onCobros && !cancelado && (
             <button
               type="button"
