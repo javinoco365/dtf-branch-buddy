@@ -272,7 +272,17 @@ function DelPeriodo() {
   function descargar() {
     const nombreTienda = new Map((tiendas ?? []).map((t) => [t.id, t.nombre]));
     const filas: (string | number)[][] = [
-      ["Fecha", "Tienda", "Estado", "Metros DTF", "Metros UV", "Base", "IVA", "Envío", "Total"],
+      [
+        "Fecha",
+        "Tienda",
+        "Estado",
+        "Metros vendidos",
+        "Metros UV vendidos",
+        "Base sin IVA (con envío)",
+        "IVA",
+        "Envío",
+        "Total",
+      ],
       // El día del pedido, el de su ticket y el de la lista de pedidos. Con
       // la línea elegida: de un pedido mixto, solo su parte.
       ...pedidosDeLaLinea.map((p) => [
@@ -300,7 +310,7 @@ function DelPeriodo() {
             El periodo
           </h2>
           <p className="text-sm text-muted-foreground">
-            Tiendas y textil, sin IVA salvo el dinero
+            Tiendas y textil, sin IVA salvo lo cobrado y lo que está por cobrar
             {linea !== "todo" ? ` · solo ${ETIQUETA_FILTRO_LINEA[linea]}` : ""}. Los productos y la
             descarga, solo de las tiendas.{" "}
             <Link to="/panel/cuenta-resultados" className="text-primary hover:underline">
@@ -363,7 +373,7 @@ function DelPeriodo() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {grafica.por === "dia" ? "Ventas netas por día" : "Ventas netas por mes"}
+                {grafica.por === "dia" ? "Facturación bruta por día" : "Facturación bruta por mes"}
               </CardTitle>
               <CardDescription>
                 Sin IVA, tiendas y textil. Cada devolución resta en su día.
@@ -382,7 +392,11 @@ function DelPeriodo() {
                 <Skeleton className="h-full w-full" />
               ) : (
                 <ConGrafica>
-                  <IngresosPorTramo datos={grafica.datos} nombre="Ventas netas" etiquetaConColor />
+                  <IngresosPorTramo
+                    datos={grafica.datos}
+                    nombre="Facturación bruta"
+                    etiquetaConColor
+                  />
                 </ConGrafica>
               )}
             </CardContent>

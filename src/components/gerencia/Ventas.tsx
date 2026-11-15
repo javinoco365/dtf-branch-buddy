@@ -226,8 +226,8 @@ function TablaDesglose({
                 <TableHead className="text-right">Pedidos</TableHead>
                 <TableHead className="text-right">Vendido</TableHead>
                 <TableHead className="text-right">Metros</TableHead>
-                <TableHead className="text-right">Ticket</TableHead>
-                <TableHead className="text-right">Peso</TableHead>
+                <TableHead className="text-right">Ticket medio</TableHead>
+                <TableHead className="text-right">% del total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

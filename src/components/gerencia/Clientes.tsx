@@ -90,7 +90,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Compraron {eur(r.vendidoNuevos)}</span>}
         />
         <TarjetaKpi
-          titulo="Recurrentes"
+          titulo="Repiten"
           explicacion="g_clientes_recurrentes"
           valor={String(r.recurrentes)}
           frente={frente}
@@ -99,7 +99,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Compraron {eur(r.vendidoRecurrentes)}</span>}
         />
         <TarjetaKpi
-          titulo={`El ${PARTE_PARETO}\u00A0% de las ventas`}
+          titulo={`El ${PARTE_PARETO}\u00A0% de lo vendido`}
           explicacion="g_pareto"
           valor={
             r.pareto
@@ -137,7 +137,7 @@ export function Clientes({ d }: { d: DatosGerencia }) {
                   <TableHead>Canal</TableHead>
                   <TableHead className="text-right">Pedidos</TableHead>
                   <TableHead className="text-right">Vendido</TableHead>
-                  <TableHead className="text-right">Peso</TableHead>
+                  <TableHead className="text-right">% del total</TableHead>
                   <TableHead className="text-right">Acumulado</TableHead>
                 </TableRow>
               </TableHeader>

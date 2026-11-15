@@ -67,15 +67,15 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
           pie={<VerDetalle destino={destinoCobros(d.filtro, d.seleccion)} texto="Ver cobros" />}
         />
         <TarjetaKpi
-          titulo="Pendiente de cobro"
+          titulo="Por cobrar"
           explicacion="g_pendiente"
           valor={d.pendientesDisponibles ? eur(pendienteHoy) : "—"}
           delta={null}
           icon={ICONO.pendienteCobro}
-          pie={<VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver pendientes" />}
+          pie={<VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver lo que se debe" />}
         />
         <TarjetaKpi
-          titulo="Días medios de cobro"
+          titulo="Días en cobrar"
           explicacion="g_dias_cobro"
           valor={dias === null ? "—" : `${numero(dias, 1)} días`}
           frente={frente}
@@ -96,10 +96,10 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Lo que se debe, por antigüedad</CardTitle>
+            <CardTitle className="text-base">Por cobrar, por antigüedad</CardTitle>
             <p className="text-xs text-muted-foreground">
               A día de hoy, por los días desde el pedido.{" "}
-              <VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver pendientes" />
+              <VerDetalle destino={destinoPendientes(d.filtro)} texto="Ver lo que se debe" />
             </p>
           </CardHeader>
           <CardContent>
@@ -161,7 +161,7 @@ export function Tesoreria({ d }: { d: DatosGerencia }) {
                     <TableHead>Método</TableHead>
                     <TableHead className="text-right">Cobros</TableHead>
                     <TableHead className="text-right">Cobrado</TableHead>
-                    <TableHead className="text-right">Peso</TableHead>
+                    <TableHead className="text-right">% del total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -277,7 +277,7 @@ function PagosProveedores({ hoy }: { hoy: Date }) {
           <Truck className="h-4 w-4 text-muted-foreground" />
           Pagos pendientes a proveedores
           <Explicacion
-            titulo="Pagos pendientes a proveedores"
+            titulo="Por pagar a proveedores"
             definicion={DEFINICIONES.g_pagos_proveedores}
           />
         </CardTitle>

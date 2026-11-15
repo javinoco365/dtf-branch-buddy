@@ -143,7 +143,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
           pie={<span className="text-muted-foreground">Ticket medio {eur(c.ticket)}</span>}
         />
         <TarjetaKpi
-          titulo="Margen textil"
+          titulo="Margen sin envíos"
           explicacion="g_margen"
           valor={eur(c.margen)}
           frente={frente}
@@ -188,7 +188,7 @@ export function Textil({ d }: { d: DatosGerencia }) {
                     <TableHead>Marca</TableHead>
                     <TableHead className="text-right">Pedidos</TableHead>
                     <TableHead className="text-right">Vendido</TableHead>
-                    <TableHead className="text-right">Peso</TableHead>
+                    <TableHead className="text-right">% del total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

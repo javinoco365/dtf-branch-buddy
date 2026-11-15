@@ -257,7 +257,7 @@ export function ContenidoResumenDiario({
       {actual.data && !actual.data.conRealizado && (
         <Nota>
           Esta parte aún no está activada. Avisa a Javier. Hasta entonces no se sabe qué día se
-          realizó cada pedido, así que los metros realizados salen a cero.
+          realizó cada pedido, así que los metros impresos salen a cero.
         </Nota>
       )}
 

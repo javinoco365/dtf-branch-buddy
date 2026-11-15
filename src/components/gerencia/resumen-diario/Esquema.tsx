@@ -63,12 +63,12 @@ export function Esquema({
           explicacion="rd_pedidos"
           pie={
             <span className="text-muted-foreground">
-              {metros(t.pedido.metros)} pedidos · ticket medio {eur(t.pedido.ticket)}
+              {metros(t.pedido.metros)} vendidos · ticket medio {eur(t.pedido.ticket)}
             </span>
           }
         />
         <TarjetaKpi
-          titulo="Metros realizados"
+          titulo="Metros impresos"
           valor={metros(t.realizado.metrosImpresos)}
           delta={v(t.realizado.metrosImpresos, a?.realizado.metrosImpresos)}
           frente={comparar}
@@ -76,19 +76,20 @@ export function Esquema({
           explicacion="rd_metros_realizados"
           pie={
             <span className="text-muted-foreground">
-              {t.realizado.pedidos} {t.realizado.pedidos === 1 ? "pedido hecho" : "pedidos hechos"}{" "}
-              · en cola {metros(t.cola.metros)}
+              {t.realizado.pedidos}{" "}
+              {t.realizado.pedidos === 1 ? "pedido terminado" : "pedidos terminados"} · en cola{" "}
+              {metros(t.cola.metros)}
             </span>
           }
         />
         <TarjetaKpi
-          titulo="Facturado"
+          titulo="Con factura o ticket"
           valor={eur(t.facturado)}
           delta={v(t.facturado, a?.facturado)}
           frente={comparar}
           icon={ICONO.ventas}
           explicacion="rd_facturado"
-          pie={<span className="text-muted-foreground">Base imponible, sin IVA</span>}
+          pie={<span className="text-muted-foreground">Sin IVA</span>}
         />
         <TarjetaKpi
           titulo="Cobrado"
@@ -99,12 +100,12 @@ export function Esquema({
           explicacion="rd_cobrado"
           pie={
             <span className="text-muted-foreground">
-              De lo pedido, falta por cobrar {eur(t.pedido.pendiente)}
+              Vendido sin cobrar: {eur(t.pedido.pendiente)}
             </span>
           }
         />
         <TarjetaKpi
-          titulo="Margen neto"
+          titulo="Margen"
           valor={eur(t.pedido.margenConEnvios)}
           delta={v(t.pedido.margenConEnvios, a?.pedido.margenConEnvios)}
           frente={comparar}
@@ -213,7 +214,7 @@ function Maquina({ r, metrosHora }: { r: Resumen; metrosHora: number }) {
   );
 }
 
-/** El margen neto menos los gastos fijos, y el objetivo del periodo. */
+/** El margen menos los gastos fijos, y el objetivo del periodo. */
 function Resultado({ r }: { r: Resumen }) {
   const o = r.objetivo;
   return (
@@ -222,13 +223,13 @@ function Resultado({ r }: { r: Resumen }) {
         <CardTitle className="text-base">Resultado</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <Linea etiqueta="Margen neto" valor={eur(r.total.pedido.margenConEnvios)} />
+        <Linea etiqueta="Margen" valor={eur(r.total.pedido.margenConEnvios)} />
         <Linea
-          etiqueta="Gastos fijos del periodo"
+          etiqueta="Gastos fijos"
           valor={r.gastosFijos == null ? "—" : `−${eur(r.gastosFijos)}`}
         />
         <Linea
-          etiqueta="Beneficio"
+          etiqueta="Beneficio estimado"
           valor={r.beneficio == null ? "—" : eur(r.beneficio)}
           fuerte
           negativo={(r.beneficio ?? 0) < 0}
@@ -318,12 +319,12 @@ const filaNegocio = (n: CifrasNegocio) => [
 
 const COLUMNAS = [
   "Pedidos",
-  "Metros pedidos",
-  "Metros hechos",
-  "Facturado",
+  "Metros vendidos",
+  "Metros impresos",
+  "Con factura o ticket",
   "Cobrado",
-  "Margen neto",
-  "Sin envíos",
+  "Margen",
+  "Margen sin envíos",
 ];
 
 function TablaNegocios({ r }: { r: Resumen }) {

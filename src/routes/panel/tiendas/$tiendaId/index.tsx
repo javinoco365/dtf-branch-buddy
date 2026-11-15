@@ -114,8 +114,8 @@ function Dashboard() {
         tienda={nombreTienda}
         subtitulo={
           <>
-            El mes en curso, sin IVA salvo el dinero, frente al mismo trozo del mes anterior; y los
-            totales de la tienda.
+            El mes en curso, sin IVA salvo lo cobrado y lo que está por cobrar, frente al mismo
+            trozo del mes anterior; y los totales de la tienda.
             {linea !== "todo"
               ? ` El mes en curso, solo ${ETIQUETA_FILTRO_LINEA[linea]}; los totales, de toda la tienda.`
               : ""}

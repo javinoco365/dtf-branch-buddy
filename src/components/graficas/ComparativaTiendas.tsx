@@ -33,7 +33,7 @@ export function ComparativaTiendas({
           tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
         />
         <Tooltip {...BOCADILLO} formatter={(v: number) => eur(v)} />
-        <Bar dataKey="total" name="Total cobrado" radius={[6, 6, 0, 0]}>
+        <Bar dataKey="total" name="Cobrado con propinas" radius={[6, 6, 0, 0]}>
           {datos.map((_, i) => (
             <Cell key={i} fill={colores[i % colores.length]} />
           ))}

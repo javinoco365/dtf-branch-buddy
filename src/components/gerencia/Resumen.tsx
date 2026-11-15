@@ -209,7 +209,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           error={lectura.error}
           onReintentar={lectura.reintentar}
           reintentando={lectura.reintentando}
-          que="las ventas netas y el margen"
+          que="la facturación bruta y el margen"
         />
       )}
       <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
@@ -269,7 +269,7 @@ export function Resumen({ d }: { d: DatosGerencia }) {
           delta={variacion(c.metros, p.metros)}
         />
         <TarjetaKpi
-          titulo="€ por metro"
+          titulo="Precio por metro"
           explicacion="g_euro_metro"
           valor={c.metros > 0 ? eur(c.euroMetro) : "—"}
           frente={frente}
@@ -339,10 +339,10 @@ function PorLinea({ d }: { d: DatosGerencia }) {
               <TableHead className="text-right">Pedidos</TableHead>
               <TableHead className="text-right">Vendido</TableHead>
               <TableHead className="text-right">Facturación bruta</TableHead>
-              <TableHead className="text-right">Metros</TableHead>
-              <TableHead className="text-right">€/m</TableHead>
-              <TableHead className="text-right">Coste</TableHead>
-              <TableHead className="text-right">Margen</TableHead>
+              <TableHead className="text-right">Metros vendidos</TableHead>
+              <TableHead className="text-right">Precio/metro</TableHead>
+              <TableHead className="text-right">Coste de producción</TableHead>
+              <TableHead className="text-right">Margen sin envíos</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -412,17 +412,16 @@ function BeneficioYObjetivos({
   if (!hayGastos && !hayObjetivo) {
     return (
       <Nota>
-        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio antes de
-        impuestos y cómo vas frente al objetivo.{" "}
-        <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
+        Pon los gastos fijos y los objetivos del mes en Ajustes y aquí verás el beneficio y cómo vas
+        frente al objetivo. <VerDetalle destino={DESTINO_AJUSTES} texto="Ir a Ajustes" />
       </Nota>
     );
   }
   if (!sinFiltros) {
     return (
       <Nota>
-        El beneficio antes de impuestos y los objetivos son de toda la empresa: se ven con «Todas
-        las tiendas» y «Todos los canales».
+        El beneficio y los objetivos son de toda la empresa: se ven con «Todas las tiendas» y «Todos
+        los canales».
       </Nota>
     );
   }

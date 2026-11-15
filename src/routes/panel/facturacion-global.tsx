@@ -210,12 +210,12 @@ function FacturacionGlobal() {
         "Pedidos",
         "Cobros",
         "Metros DTF",
-        "Base",
+        "Sin IVA",
         "IVA",
         "Envíos",
         "Cobrado",
         "Propina",
-        "Total",
+        "Con propinas",
       ],
       ...filas.map((f) => [
         f.nombre,
@@ -408,7 +408,7 @@ function FacturacionGlobal() {
         <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaTotal
-              titulo="Total cobrado"
+              titulo="Cobrado con propinas"
               explicacion="total_cobrado"
               subtitulo="Con IVA, envíos y propinas"
               valor={eur(totales.total)}
@@ -418,7 +418,7 @@ function FacturacionGlobal() {
               frente={frente}
             />
             <TarjetaTotal
-              titulo="Base imponible"
+              titulo="Cobrado sin IVA"
               explicacion="base_cobrada"
               subtitulo={`${totales.pedidos} ${totales.pedidos === 1 ? "pedido" : "pedidos"} · ${totales.cobros} ${totales.cobros === 1 ? "cobro" : "cobros"}`}
               valor={eur(totales.base)}
@@ -428,7 +428,7 @@ function FacturacionGlobal() {
               frente={frente}
             />
             <TarjetaTotal
-              titulo="IVA de lo cobrado"
+              titulo="IVA cobrado"
               explicacion="iva_cobrado"
               subtitulo={`${numero(ivaPct, 1)}\u00A0% sobre la base`}
               valor={eur(totales.iva)}
@@ -462,12 +462,12 @@ function FacturacionGlobal() {
                       <TableHead>Tienda</TableHead>
                       <TableHead className="text-right tabular-nums">Pedidos</TableHead>
                       <TableHead className="text-right tabular-nums">Metros DTF</TableHead>
-                      <TableHead className="text-right tabular-nums">Base</TableHead>
+                      <TableHead className="text-right tabular-nums">Sin IVA</TableHead>
                       <TableHead className="text-right tabular-nums">IVA</TableHead>
-                      <TableHead className="text-right tabular-nums">Envíos</TableHead>
+                      <TableHead className="text-right tabular-nums">Envíos cobrados</TableHead>
                       <TableHead className="text-right tabular-nums">Cobrado</TableHead>
                       <TableHead className="text-right tabular-nums">Propina</TableHead>
-                      <TableHead className="text-right tabular-nums">Total</TableHead>
+                      <TableHead className="text-right tabular-nums">Con propinas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -531,7 +531,7 @@ function FacturacionGlobal() {
                       <TableHead className="text-right tabular-nums">Cobros</TableHead>
                       <TableHead className="text-right tabular-nums">Cobrado</TableHead>
                       <TableHead className="text-right tabular-nums">Propina</TableHead>
-                      <TableHead className="text-right tabular-nums">Total</TableHead>
+                      <TableHead className="text-right tabular-nums">Con propinas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

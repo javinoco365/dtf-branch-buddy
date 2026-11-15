@@ -93,12 +93,12 @@ export const DEFINICIONES = {
   base_cobrada: {
     que: "La parte sin IVA de lo cobrado.",
     calculo: "Cada cobro se reparte entre base e IVA en la misma proporción que su pedido.",
-    fuente: "Los mismos cobros que el total cobrado.",
+    fuente: "Los mismos cobros que «Cobrado con propinas».",
   },
   iva_cobrado: {
     que: "El IVA de lo cobrado.",
     calculo: "Cada cobro se reparte entre base e IVA en la misma proporción que su pedido.",
-    fuente: "Los mismos cobros que el total cobrado. Para el modelo 303 manda lo facturado.",
+    fuente: "Los mismos cobros que «Cobrado con propinas». Para el modelo 303 manda lo facturado.",
   },
   propinas: {
     que: "Lo que se dejó de más sobre el importe de los pedidos.",
@@ -126,7 +126,7 @@ export const DEFINICIONES = {
       "Todos los pedidos de tiendas y textil con algo por cobrar. No depende del periodo elegido: es la foto de hoy.",
   },
   g_margen: {
-    que: "Lo que queda de lo vendido después de lo que cuesta producirlo.",
+    que: "Lo que queda de la facturación bruta tras fabricar, sin contar los envíos.",
     calculo:
       "Facturación bruta − coste. En DTF, metros × coste por metro congelado en cada pedido. En DTF UV, metros de UV × lo que cobra la subcontrata por metro (congelado en cada pedido, 15 € por defecto). El envío no entra ni en la bruta ni en el coste: se cobra al cliente y se paga a la agencia por lo mismo. En textil, lo que costó la ropa que salió del almacén para el pedido, al coste medio del momento; un pedido textil que aún no ha salido del almacén va sin coste. No incluye gastos fijos: eso es el beneficio estimado.",
     fuente: GERENCIA_PEDIDOS,
@@ -139,7 +139,7 @@ export const DEFINICIONES = {
       "Pedidos de tiendas y textil del periodo y los gastos fijos de Gerencia › Ajustes. Solo sin filtros de tienda ni canal: los gastos fijos son de toda la empresa. Sin impuestos sobre beneficios.",
   },
   g_objetivo_vendido: {
-    que: "Cuánto se lleva vendido frente al objetivo del periodo.",
+    que: "Cuánto se lleva vendido (con IVA y envío) frente al objetivo del periodo.",
     calculo:
       "Vendido ÷ objetivo de ventas. El objetivo, que se pone al mes, se reparte por días: el periodo de una quincena tiene la mitad del objetivo del mes. «A este ritmo» compara con lo que tocaría llevar hoy si se vendiera lo mismo cada día.",
     fuente:
@@ -168,7 +168,7 @@ export const DEFINICIONES = {
     fuente: GERENCIA_PEDIDOS,
   },
   g_euro_metro: {
-    que: "A cuánto se vende de media el metro, sin IVA.",
+    que: "A cuánto se vende de media el metro, sin IVA ni envío.",
     calculo:
       "Facturación bruta (ya sin el envío) de los pedidos que llevan metros ÷ sus metros. Incluye lo que vaya en esos pedidos además del metro (diseño); el envío no.",
     fuente: GERENCIA_PEDIDOS,
@@ -324,9 +324,9 @@ export const DEFINICIONES = {
       "Las facturas de compra subidas al CRM (Facturas de compra y Textil › Compras). Con el textil elegido, solo las de textil. Lo que no se suba no está, así que el IVA soportado real puede ser mayor.",
   },
   g_iva_resultado: {
-    que: "Por dónde va el IVA del periodo con lo que sabe el CRM.",
+    que: "IVA de facturas menos IVA de compras: lo que tocaría pagar o compensar. Orientativo.",
     calculo:
-      "IVA repercutido − IVA soportado registrado. Es orientativo: el modelo 303 lo presenta la gestoría con todos los gastos.",
+      "IVA de facturas − IVA de compras registradas. Es orientativo: el modelo 303 lo presenta la gestoría con todos los gastos.",
     fuente: "Facturas emitidas y compras registradas del periodo.",
   },
   g_sin_factura: {
@@ -462,15 +462,15 @@ export const DEFINICIONES = {
     fuente: "Cobros de las tiendas (incluidos los de la web) y del textil.",
   },
   rd_margen_neto: {
-    que: "Lo que queda de lo vendido después de producir y de enviar.",
+    que: "Lo que queda de la facturación bruta tras fabricar y enviar.",
     calculo:
-      "Facturación bruta (sin IVA ni envío) − coste de producción (metros × coste por metro congelado en el pedido; en textil, la ropa que salió del almacén) + envío cobrado − lo que cobra la agencia. Si un pedido con envío no tiene apuntado el coste real del envío, se estima con el de Ajustes del Resumen. No resta los gastos fijos: eso es el beneficio.",
+      "Facturación bruta (sin IVA ni envío) − coste de producción (metros × coste por metro congelado en el pedido; en textil, la ropa que salió del almacén) + envío cobrado − lo que cobra la agencia. Si un pedido con envío no tiene apuntado el coste real del envío, se estima con el de Ajustes del Resumen. No resta los gastos fijos: eso es el beneficio estimado.",
     fuente: RESUMEN_PEDIDOS,
   },
   rd_margen_sin_envios: {
-    que: "El margen de imprimir y vender, sin contar los envíos.",
+    que: "Lo que queda de la facturación bruta tras fabricar, sin contar los envíos.",
     calculo:
-      "Facturación bruta (sin IVA ni envío) − coste de producción. La diferencia con el margen neto es lo que se gana o se pierde con los envíos.",
+      "Facturación bruta (sin IVA ni envío) − coste de producción. La diferencia con el margen es el saldo de envíos.",
     fuente: RESUMEN_PEDIDOS,
   },
   rd_capacidad: {
@@ -548,7 +548,7 @@ const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
     fuente: CUENTA_PEDIDOS,
   },
   ventas: {
-    calculo: "Ventas con IVA − IVA − portes cobrados.",
+    calculo: "Total con IVA − IVA − envíos cobrados.",
     fuente: CUENTA_PEDIDOS,
   },
   devoluciones: {
@@ -557,7 +557,7 @@ const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
     fuente: "Reembolsos de WooCommerce, que llegan al sincronizar la tienda. El textil no tiene.",
   },
   ventas_netas: {
-    calculo: "Ventas − devoluciones.",
+    calculo: "Subtotal sin IVA − devoluciones.",
     fuente: CUENTA_PEDIDOS,
   },
   coste_produccion: {
@@ -567,11 +567,11 @@ const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
   },
   resultado_portes: {
     calculo:
-      "Portes cobrados − lo que cobra la agencia. Si un pedido con envío no tiene apuntado lo que costó, se estima con el coste de envío de Ajustes del Resumen diario, y se avisa.",
+      "Envíos cobrados − envíos pagados (lo que cobra la agencia). Si un pedido con envío no tiene apuntado lo que costó, se estima con el coste de envío de Ajustes del Resumen diario, y se avisa.",
     fuente: CUENTA_PEDIDOS,
   },
   margen_bruto: {
-    calculo: "Ventas netas − coste de producción + resultado de los envíos.",
+    calculo: "Facturación bruta − coste de producción + saldo de envíos.",
     fuente: CUENTA_PEDIDOS,
   },
   gastos_estructura: {
@@ -581,16 +581,16 @@ const CALCULO_CUENTA: Record<ClaveConcepto, Omit<Definicion, "que">> = {
       "Gerencia › Ajustes, Facturas de compra y el almacén textil. Solo con todas las tiendas y todas las líneas: los gastos son de toda la empresa.",
   },
   beneficio_antes_impuestos: {
-    calculo: "Margen bruto − gastos de estructura.",
+    calculo: "Margen − gastos generales.",
     fuente: "Toda la empresa: solo con todas las tiendas y todas las líneas.",
   },
   sociedades: {
     calculo:
-      "Beneficio antes de impuestos × el tipo de Gerencia › Ajustes, solo si hay beneficio. Es una estimación: el impuesto va por año entero y lo calcula la gestoría.",
+      "Beneficio × el tipo de Gerencia › Ajustes, solo si hay beneficio. Es una estimación: el impuesto va por año entero y lo calcula la gestoría.",
     fuente: "Gerencia › Ajustes.",
   },
   beneficio_neto: {
-    calculo: "Beneficio antes de impuestos − Impuesto sobre Sociedades estimado.",
+    calculo: "Beneficio − Impuesto de Sociedades estimado.",
     fuente: "Toda la empresa: solo con todas las tiendas y todas las líneas.",
   },
   cobrado: {
@@ -630,7 +630,7 @@ const CALCULO_DATO: Record<ClaveDato, Omit<Definicion, "que">> = {
     fuente: CUENTA_PEDIDOS,
   },
   ticket_medio: {
-    calculo: "Ventas netas ÷ pedidos.",
+    calculo: "Facturación bruta ÷ pedidos.",
     fuente: CUENTA_PEDIDOS,
   },
   cancelados: {

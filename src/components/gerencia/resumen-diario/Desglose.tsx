@@ -92,21 +92,21 @@ export function Desglose({
         <Seccion titulo="Dinero">
           <div className="space-y-2 text-sm">
             <Linea etiqueta="Vendido (con IVA)" valor={eur(t.pedido.vendido)} />
-            <Linea etiqueta="Facturado (base)" valor={eur(t.facturado)} />
+            <Linea etiqueta="Con factura o ticket (sin IVA)" valor={eur(t.facturado)} />
             <Linea etiqueta="Cobrado" valor={eur(t.cobrado)} />
             <Linea
-              etiqueta="De lo pedido, por cobrar"
+              etiqueta="Vendido sin cobrar"
               valor={eur(t.pedido.pendiente)}
               negativo={t.pedido.pendiente > 0}
             />
             <Linea
-              etiqueta="Hechos sin cobrar"
+              etiqueta="Impresos sin cobrar"
               valor={`${t.realizado.sinCobrar} · ${eur(t.realizado.importeSinCobrar)}`}
               negativo={t.realizado.sinCobrar > 0}
             />
             <Linea etiqueta="Ticket medio" valor={eur(t.pedido.ticket)} />
             <Linea
-              etiqueta="Precio medio del metro de DTF"
+              etiqueta="Precio por metro de DTF"
               valor={t.pedido.euroMetro == null ? "—" : eur(t.pedido.euroMetro)}
               nota="sin IVA ni envío"
             />
@@ -141,9 +141,9 @@ export function Desglose({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Margen neto = facturación bruta (sin IVA ni envío) − producción (metros × coste por metro
-        congelado en el pedido; en textil, la ropa que salió del almacén) + envíos cobrados − coste
-        de los envíos. Un envío sin coste real apuntado se estima a{" "}
+        Margen = facturación bruta (sin IVA ni envío) − coste de producción (metros × coste por
+        metro congelado en el pedido; en textil, la ropa que salió del almacén) + envíos cobrados −
+        envíos pagados. Un envío sin coste real apuntado se estima a{" "}
         {eur(ajustes.coste_envio_defecto)}. Los gastos fijos no están en el margen: se restan en el
         beneficio.
       </p>
@@ -172,11 +172,11 @@ type FilaComparada = {
 
 const FILAS: FilaComparada[] = [
   { etiqueta: "Pedidos", valor: (m) => String(m.pedidos) },
-  { etiqueta: "Metros de DTF", valor: (m) => metros(m.metros) },
-  { etiqueta: "Metros de DTF UV (aparte)", valor: (m) => metros(m.metrosUv) },
+  { etiqueta: "Metros vendidos", valor: (m) => metros(m.metros) },
+  { etiqueta: "Metros UV vendidos (aparte)", valor: (m) => metros(m.metrosUv) },
   { etiqueta: "Vendido (con IVA)", valor: (m) => eur(m.vendido) },
   { etiqueta: "Facturación bruta (sin IVA ni envío)", valor: (m) => eur(m.bruta) },
-  { etiqueta: "− Producción", valor: (m) => resta(produccionPropia(m)) },
+  { etiqueta: "− Coste de producción", valor: (m) => resta(produccionPropia(m)) },
   { etiqueta: "− Subcontrata DTF UV", valor: (m) => resta(m.costeSubcontrata) },
   {
     etiqueta: "Margen sin envíos",
@@ -187,17 +187,17 @@ const FILAS: FilaComparada[] = [
   },
   { etiqueta: "+ Envíos cobrados", valor: (m) => eur(m.enviosCobrados) },
   {
-    etiqueta: "− Coste de los envíos",
+    etiqueta: "− Envíos pagados",
     valor: (m) =>
       `${resta(m.costeEnvios)}${m.enviosEstimados ? ` (${m.enviosEstimados} ${m.enviosEstimados === 1 ? "estimado" : "estimados"})` : ""}`,
   },
   {
-    etiqueta: "Resultado de los envíos",
+    etiqueta: "Saldo de envíos",
     valor: (m) => eurConSigno(m.resultadoEnvios),
     negativo: (m) => m.resultadoEnvios < 0,
   },
   {
-    etiqueta: "Margen neto",
+    etiqueta: "Margen",
     valor: (m) => eur(m.margenConEnvios),
     fuerte: true,
     negativo: (m) => m.margenConEnvios < 0,
@@ -244,27 +244,27 @@ function PedidoRealizado({ t }: { t: CifrasNegocio }) {
 const DETALLE: { titulo: string; valor: (n: CifrasNegocio) => string; rojo?: boolean }[] = [
   { titulo: "Pedidos", valor: (n) => String(n.pedido.pedidos) },
   { titulo: "Cancelados", valor: (n) => String(n.pedido.cancelados) },
-  { titulo: "Metros pedidos", valor: (n) => metros(n.pedido.metros) },
-  { titulo: "Metros DTF UV", valor: (n) => metros(n.pedido.metrosUv) },
-  { titulo: "Metros hechos", valor: (n) => metros(n.realizado.metrosImpresos) },
+  { titulo: "Metros vendidos", valor: (n) => metros(n.pedido.metros) },
+  { titulo: "Metros UV vendidos", valor: (n) => metros(n.pedido.metrosUv) },
+  { titulo: "Metros impresos", valor: (n) => metros(n.realizado.metrosImpresos) },
   { titulo: "Vendido", valor: (n) => eur(n.pedido.vendido) },
   { titulo: "Bruta", valor: (n) => eur(n.pedido.bruta) },
   {
-    titulo: "Producción",
+    titulo: "Coste de producción",
     valor: (n) => eur(produccionPropia(n.pedido)),
   },
   { titulo: "Subcontrata UV", valor: (n) => eur(n.pedido.costeSubcontrata) },
   { titulo: "Margen sin envíos", valor: (n) => eur(n.pedido.margenSinEnvios), rojo: true },
-  { titulo: "Envíos", valor: (n) => eurConSigno(n.pedido.resultadoEnvios), rojo: true },
-  { titulo: "Margen neto", valor: (n) => eur(n.pedido.margenConEnvios), rojo: true },
-  { titulo: "Margen neto hecho", valor: (n) => eur(n.realizado.margenConEnvios), rojo: true },
+  { titulo: "Saldo de envíos", valor: (n) => eurConSigno(n.pedido.resultadoEnvios), rojo: true },
+  { titulo: "Margen", valor: (n) => eur(n.pedido.margenConEnvios), rojo: true },
+  { titulo: "Margen de lo impreso", valor: (n) => eur(n.realizado.margenConEnvios), rojo: true },
   {
-    titulo: "€/m de DTF",
+    titulo: "Precio/metro DTF",
     valor: (n) => (n.pedido.euroMetro == null ? "—" : eur(n.pedido.euroMetro)),
   },
-  { titulo: "Facturado", valor: (n) => eur(n.facturado) },
+  { titulo: "Con factura o ticket", valor: (n) => eur(n.facturado) },
   { titulo: "Cobrado", valor: (n) => eur(n.cobrado) },
-  { titulo: "Por cobrar", valor: (n) => eur(n.pedido.pendiente) },
+  { titulo: "Vendido sin cobrar", valor: (n) => eur(n.pedido.pendiente) },
   { titulo: "En cola", valor: (n) => metros(n.cola.metros) },
 ];
 
@@ -334,11 +334,11 @@ function DiaADia({ r }: { r: Resumen }) {
         <TableRow>
           <TableHead>Día</TableHead>
           <TableHead className="text-right">Pedidos</TableHead>
-          <TableHead className="text-right">Metros pedidos</TableHead>
-          <TableHead className="text-right">Metros hechos</TableHead>
+          <TableHead className="text-right">Metros vendidos</TableHead>
+          <TableHead className="text-right">Metros impresos</TableHead>
           <TableHead className="text-right">Vendido</TableHead>
           <TableHead className="text-right">Cobrado</TableHead>
-          <TableHead className="text-right">Margen neto</TableHead>
+          <TableHead className="text-right">Margen</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

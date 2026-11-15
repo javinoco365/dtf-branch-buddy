@@ -362,8 +362,8 @@ function frases(d: DatosInformeSocios): string[] {
     );
   }
   out.push(
-    `El margen neto, después de producir y enviar, fue de ${eur(t.pedido.margenConEnvios)}` +
-      (x.margenNeto != null ? ` (${porcentaje(x.margenNeto)} de lo facturado sin IVA)` : "") +
+    `El margen, después de producir y enviar, fue de ${eur(t.pedido.margenConEnvios)}` +
+      (x.margenNeto != null ? ` (${porcentaje(x.margenNeto)} de la facturación bruta)` : "") +
       `. Se cobraron ${eur(t.cobrado)} y de lo vendido quedan ${eur(t.pedido.pendiente)} por cobrar.`,
   );
   if (r.beneficio != null) {
@@ -409,7 +409,7 @@ function cifrasClave(c: Lienzo) {
       v: v(t.pedido.pedidos, a?.pedido.pedidos),
     },
     {
-      etiqueta: "Metros pedidos",
+      etiqueta: "Metros vendidos",
       valor: metros(t.pedido.metros),
       pie:
         t.pedido.fueraDeHora === 1
@@ -419,7 +419,7 @@ function cifrasClave(c: Lienzo) {
       v: v(t.pedido.metros, a?.pedido.metros),
     },
     {
-      etiqueta: "Metros realizados",
+      etiqueta: "Metros impresos",
       valor: metros(t.realizado.metrosImpresos),
       pie: `${plural(t.realizado.pedidos, "pedido terminado", "pedidos terminados")}`,
       color: CIELO,
@@ -434,7 +434,7 @@ function cifrasClave(c: Lienzo) {
       sinVariacion: true,
     },
     {
-      etiqueta: "Facturado",
+      etiqueta: "Con factura o ticket",
       valor: eur(t.facturado),
       pie: "Tickets y facturas, sin IVA",
       color: NARANJA,
@@ -443,15 +443,17 @@ function cifrasClave(c: Lienzo) {
     {
       etiqueta: "Cobrado",
       valor: eur(t.cobrado),
-      pie: `Por cobrar de lo vendido: ${eur(t.pedido.pendiente)}`,
+      pie: `Vendido sin cobrar: ${eur(t.pedido.pendiente)}`,
       color: NARANJA,
       v: v(t.cobrado, a?.cobrado),
     },
     {
-      etiqueta: "Margen neto",
+      etiqueta: "Margen",
       valor: eur(t.pedido.margenConEnvios),
       pie:
-        x.margenNeto != null ? `${porcentaje(x.margenNeto)} de la facturación` : "Sin facturación",
+        x.margenNeto != null
+          ? `${porcentaje(x.margenNeto)} de la facturación bruta`
+          : "Sin facturación bruta",
       color: VERDE,
       v: v(t.pedido.margenConEnvios, a?.pedido.margenConEnvios),
       rojo: t.pedido.margenConEnvios < 0,
@@ -482,7 +484,7 @@ function porNegocio(c: Lienzo) {
   const r = d.resumen;
   if (r.negocios.length === 0) return;
   c.sitio(14 + r.negocios.length * 12, "Resumen");
-  c.seccion("Cada negocio", "Vendido con IVA y margen neto del periodo");
+  c.seccion("Cada negocio", "Vendido con IVA y margen del periodo");
   const maximo = Math.max(1, ...r.negocios.map((n) => Math.abs(n.pedido.vendido)));
   const xBarra = M + 46;
   const wBarra = ANCHO - 46 - 30;
@@ -516,7 +518,7 @@ function porNegocio(c: Lienzo) {
   c.texto("Vendido", xBarra + 5.5, c.y - 0.4);
   c.relleno(VERDE);
   doc.rect(xBarra + 22, c.y - 2, 4, 1.8, "F");
-  c.texto("Margen neto (rojo si pierde)", xBarra + 27.5, c.y - 0.4);
+  c.texto("Margen (rojo si pierde)", xBarra + 27.5, c.y - 0.4);
   c.y += 7;
 }
 
@@ -578,22 +580,16 @@ function avisosYResultado(c: Lienzo) {
   c.letra("titular", 11, MARINO);
   c.texto("RESULTADO DEL PERIODO", x + 5, y0 + 7.5);
   c.y = y0 + 14;
-  fila(c, "Margen neto", eur(r.total.pedido.margenConEnvios), x + 5, wCol - 10, {
+  fila(c, "Margen", eur(r.total.pedido.margenConEnvios), x + 5, wCol - 10, {
     rojo: r.total.pedido.margenConEnvios < 0,
   });
-  fila(
-    c,
-    "Gastos fijos del periodo",
-    r.gastosFijos == null ? "—" : `−${eur(r.gastosFijos)}`,
-    x + 5,
-    wCol - 10,
-  );
+  fila(c, "Gastos fijos", r.gastosFijos == null ? "—" : `−${eur(r.gastosFijos)}`, x + 5, wCol - 10);
   doc.setDrawColor(...LINEA);
   doc.line(x + 5, c.y - 3.4, x + wCol - 5, c.y - 3.4);
   c.letra("titular", 13, beneficio != null && beneficio < 0 ? ROJO : VERDE);
   c.texto(beneficio == null ? "—" : eur(beneficio), x + wCol - 5, c.y + 1, "right");
   c.letra("negrita", 8.5, TINTA);
-  c.texto(beneficio != null && beneficio < 0 ? "Pérdida" : "Beneficio", x + 5, c.y + 0.6);
+  c.texto(beneficio != null && beneficio < 0 ? "Pérdida" : "Beneficio estimado", x + 5, c.y + 0.6);
   c.y += 8;
   const objetivo = (etiqueta: string, avance: number, texto: string) => {
     c.letra("texto", 7, GRIS);
@@ -637,9 +633,9 @@ type Concepto = {
 
 const CONCEPTOS: Concepto[] = [
   { etiqueta: "Pedidos", valor: (m) => m.pedidos, formato: (n) => String(n) },
-  { etiqueta: "Metros de DTF", valor: (m) => m.metros, formato: metros },
+  { etiqueta: "Metros vendidos", valor: (m) => m.metros, formato: metros },
   {
-    etiqueta: "Metros de DTF UV (aparte)",
+    etiqueta: "Metros UV vendidos (aparte)",
     valor: (m) => m.metrosUv,
     formato: metros,
     soloConUv: true,
@@ -656,9 +652,9 @@ const CONCEPTOS: Concepto[] = [
     soloConUv: true,
   },
   { etiqueta: "= Margen sin envíos", valor: (m) => m.margenSinEnvios, tipo: "suma" },
-  { etiqueta: "+ Envíos cobrados al cliente", valor: (m) => m.enviosCobrados },
-  { etiqueta: "− Coste de los envíos", valor: (m) => menos(m.costeEnvios) },
-  { etiqueta: "= Margen neto", valor: (m) => m.margenConEnvios, tipo: "resultado" },
+  { etiqueta: "+ Envíos cobrados", valor: (m) => m.enviosCobrados },
+  { etiqueta: "− Envíos pagados", valor: (m) => menos(m.costeEnvios) },
+  { etiqueta: "= Margen", valor: (m) => m.margenConEnvios, tipo: "resultado" },
 ];
 
 async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
@@ -690,14 +686,14 @@ async function cuentaDelPeriodo(c: Lienzo, autoTable: AutoTable) {
   const estimados = t.pedido.enviosEstimados;
   cuerpo.push(
     [
-      "− Gastos fijos del periodo",
+      "− Gastos fijos",
       r.gastosFijos == null ? "—" : eur(menos(r.gastosFijos)),
       "",
       d.anterior?.gastosFijos == null ? "—" : eur(menos(d.anterior.gastosFijos)),
       "",
     ],
     [
-      "= Beneficio",
+      "= Beneficio estimado",
       r.beneficio == null ? "—" : eur(r.beneficio),
       "",
       d.anterior?.beneficio == null ? "—" : eur(d.anterior.beneficio),
@@ -838,9 +834,9 @@ function maquinaYCobros(c: Lienzo) {
   c.texto("De lo vendido en el periodo, la parte ya cobrada", x + 5, y0 + 19.5);
   c.y = y0 + 26;
   fila(c, "Vendido (con IVA)", eur(t.pedido.vendido), x + 5, w, { fuerte: true });
-  fila(c, "Facturado (sin IVA)", eur(t.facturado), x + 5, w);
-  fila(c, "Cobrado en el periodo", eur(t.cobrado), x + 5, w);
-  fila(c, "De lo vendido, por cobrar", eur(t.pedido.pendiente), x + 5, w, {
+  fila(c, "Con factura o ticket (sin IVA)", eur(t.facturado), x + 5, w);
+  fila(c, "Cobrado", eur(t.cobrado), x + 5, w);
+  fila(c, "Vendido sin cobrar", eur(t.pedido.pendiente), x + 5, w, {
     rojo: t.pedido.pendiente > 0,
   });
   fila(
@@ -877,7 +873,7 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
   c.sitio(alto + 14, "Evolución");
   c.seccion(
     serie.por === "mes" ? "Mes a mes" : "Día a día",
-    "Metros pedidos y realizados · vendido con IVA",
+    "Metros vendidos e impresos · vendido con IVA",
   );
   const y0 = c.y;
   const xEje = M + 12;
@@ -931,8 +927,8 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
     c.letra("texto", 6.5, GRIS);
     c.texto(texto, x + 5.5, yl - 0.2);
   };
-  leyenda(xEje, SUAVE, "Metros pedidos");
-  leyenda(xEje + 32, CIELO, "Metros realizados");
+  leyenda(xEje, SUAVE, "Metros vendidos");
+  leyenda(xEje + 32, CIELO, "Metros impresos");
   leyenda(xEje + 68, NARANJA, `Vendido (máximo ${eur(maxV)})`);
   c.y = yl + 6;
 
@@ -946,11 +942,11 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
       [
         serie.por === "mes" ? "Mes" : "Día",
         "Pedidos",
-        "Metros pedidos",
-        "Metros hechos",
+        "Metros vendidos",
+        "Metros impresos",
         "Vendido",
         "Cobrado",
-        "Margen neto",
+        "Margen",
       ],
     ],
     body: serie.tramos.map((t) => [
@@ -1283,7 +1279,7 @@ function almacen(c: Lienzo, autoTable: AutoTable) {
     {
       etiqueta: "Mermas y ajustes del periodo",
       valor: eur(k.perdidas),
-      pie: "En Resultados (A), no en el Beneficio",
+      pie: "En Resultados (A), no en el beneficio estimado",
       color: NARANJA,
       v: null,
       rojo: k.perdidas > 0,
@@ -1429,7 +1425,7 @@ function ficha(c: Lienzo, n: CifrasNegocio, x: number, y: number, w: number, h: 
   const tres: [string, string, boolean][] = [
     ["Vendido", eur(n.pedido.vendido), false],
     ["Cobrado", eur(n.cobrado), false],
-    ["Margen neto", eur(n.pedido.margenConEnvios), n.pedido.margenConEnvios < 0],
+    ["Margen", eur(n.pedido.margenConEnvios), n.pedido.margenConEnvios < 0],
   ];
   const wc = (w - 8) / 3;
   tres.forEach(([et, val, rojo], i) => {
@@ -1444,19 +1440,19 @@ function ficha(c: Lienzo, n: CifrasNegocio, x: number, y: number, w: number, h: 
   const ww = w - 8;
   fila(
     c,
-    "Metros pedidos · hechos",
+    "Metros vendidos · impresos",
     `${metros(n.pedido.metros)} · ${metros(n.realizado.metrosImpresos)}`,
     x + 4,
     ww,
   );
-  fila(c, "Facturado (sin IVA)", eur(n.facturado), x + 4, ww);
+  fila(c, "Con factura o ticket (sin IVA)", eur(n.facturado), x + 4, ww);
   fila(c, "Margen sin envíos", eur(n.pedido.margenSinEnvios), x + 4, ww, {
     rojo: n.pedido.margenSinEnvios < 0,
     nota: x2.margenSinEnvios != null ? porcentaje(x2.margenSinEnvios) : undefined,
   });
   fila(
     c,
-    "Resultado de los envíos",
+    "Saldo de envíos",
     `${signo(n.pedido.resultadoEnvios)}${eur(Math.abs(n.pedido.resultadoEnvios))}`,
     x + 4,
     ww,
@@ -1498,14 +1494,14 @@ function comoLeer(c: Lienzo) {
       "Pedido y realizado",
       "«Pedido» es lo que entró en el periodo; «realizado», lo que se terminó (pasó a enviado) en él, fuera del día que fuera su pedido. Un pedido que entra después de la hora de corte se hace al día siguiente.",
     ],
-    ["Margen neto", DEFINICIONES.rd_margen_neto.calculo],
+    ["Margen", DEFINICIONES.rd_margen_neto.calculo],
     ["Margen sin envíos", DEFINICIONES.rd_margen_sin_envios.calculo],
-    ["Facturado", DEFINICIONES.rd_facturado.calculo],
+    ["Con factura o ticket", DEFINICIONES.rd_facturado.calculo],
     ["Cobrado", DEFINICIONES.rd_cobrado.calculo],
     ["Uso de la máquina", DEFINICIONES.rd_capacidad.calculo],
     [
-      "Beneficio",
-      "Margen neto menos los gastos fijos que tocan al periodo (alquiler, sueldos, cuotas…), repartidos por días. Antes de impuestos.",
+      "Beneficio estimado",
+      "El margen menos los gastos fijos que tocan al periodo (alquiler, sueldos, cuotas…), repartidos por días. Antes de impuestos.",
     ],
   ];
   const wCol = (ANCHO - 8) / 2;
