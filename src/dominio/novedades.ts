@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-15-devuelto-en-pedidos",
+    fecha: "2026-11-15",
+    tipo: "mejora",
+    titulo: "Las devoluciones de la web, a la vista",
+    resumen: "Un pedido con reembolso en WooCommerce lleva la etiqueta «Devuelto».",
+    puntos: [
+      "Sale junto al cliente, con el importe devuelto, también en pedidos cancelados.",
+      "Lo cobrado ya descontaba el reembolso; ahora además se ve.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-15-nombres-sencillos",
     fecha: "2026-11-15",
     tipo: "mejora",

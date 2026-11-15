@@ -61,6 +61,7 @@ import { lineasDelPedido, type LineasDelPedido } from "@/dominio/linea-producto"
 import { cn } from "@/lib/utils";
 import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
 import { EtiquetaPideFactura } from "@/components/EtiquetaPideFactura";
+import { EtiquetaDevuelto } from "@/components/EtiquetaDevuelto";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { HORA_CORTE_POR_DEFECTO } from "@/dominio/realizado";
 import { HoraPedido, RealizadoEn } from "@/components/pedidos/Realizado";
@@ -82,6 +83,7 @@ import {
 import { abrirFacturaPDF } from "@/lib/facturas.functions";
 import type { Cobro } from "@/lib/cobros.functions";
 import {
+  devolucionesDelPedido,
   devolucionesTotal,
   resumenCobros,
   type DevolucionDePedido,
@@ -1371,6 +1373,7 @@ const FilaPedido = memo(function FilaPedido({
             {/* Junto a «1.er pedido», en la caja del cliente: es algo del
                 cliente, no del número de pedido. */}
             {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
+            <EtiquetaDevuelto devoluciones={pedido.devoluciones} className="shrink-0 leading-5" />
           </div>
           {pedido.cliente_email && (
             <div className="text-xs text-muted-foreground truncate" title={pedido.cliente_email}>
@@ -1523,6 +1526,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
               tarjeta, y un botón no puede ir dentro de otro. */}
           <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
           {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
+          <EtiquetaDevuelto devoluciones={pedido.devoluciones} className="shrink-0 leading-5" />
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
           <RealizadoEn tabla="pedidos" pedido={pedido} />
           <EtiquetaOrigen web={pedido.origen === "woocommerce"} />
@@ -1772,6 +1776,11 @@ function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
         {pedido.necesita_factura && (
           <div className="mt-1">
             <EtiquetaPideFactura conTexto />
+          </div>
+        )}
+        {devolucionesDelPedido(pedido.devoluciones).reembolsado > 0 && (
+          <div className="mt-1">
+            <EtiquetaDevuelto devoluciones={pedido.devoluciones} conTexto />
           </div>
         )}
         {pedido.cliente_email && (
