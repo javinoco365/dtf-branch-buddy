@@ -36,6 +36,27 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-15-facturacion-tienda-como-antes",
+    fecha: "2026-11-15",
+    tipo: "mejora",
+    titulo: "Facturación de la tienda, como estaba",
+    resumen: "La pantalla Facturación de cada tienda vuelve a su versión anterior.",
+    puntos: [
+      "Arriba: Vendido, Facturación bruta, Cobrado, Pedidos y Ticket medio.",
+      "Abajo: Bruta, Envíos cobrados, IVA y Total, y el botón «Exportar CSV».",
+      "Vendido lleva IVA y envío; los pedidos de la web sin pagar cuentan, como antes.",
+    ],
+  },
+  {
+    id: "2026-11-15-quiere-factura-en-cliente",
+    fecha: "2026-11-15",
+    tipo: "arreglo",
+    titulo: "«Quiere factura», junto al cliente",
+    resumen: "La etiqueta ya no tapa el número de pedido.",
+    puntos: ["Sale en la caja del cliente, al lado de «1.er pedido», en ordenador y en móvil."],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-14-importe-real",
     fecha: "2026-11-14",
     tipo: "nuevo",
