@@ -24,19 +24,26 @@ import { lineasDelPedido } from "@/dominio/linea-producto";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
 import { cobrosDeTiendas, totalizar } from "@/dominio/facturacion";
 import { agruparPorRangos, topPorMetros, variacion } from "@/dominio/kpis";
-import type { Cuenta } from "@/dominio/cuenta";
 import { diaDelPedido } from "@/dominio/dia-pedido";
 import { PERIODOS_CUADRO, tramosGrafica, tramosHastaHoy } from "@/dominio/periodos";
 import { SelectorPeriodo } from "@/components/filtros/SelectorPeriodo";
-import { TarjetaConcepto, TarjetaDato } from "@/components/TarjetaKpi";
-import { useCuentaResultados } from "@/lib/cuenta";
-import { concepto, pctIva } from "@/dominio/cuenta";
+import { TarjetaKpi } from "@/components/TarjetaKpi";
 import type { LucideIcon } from "lucide-react";
-import { Download, Receipt } from "lucide-react";
+import {
+  Download,
+  Euro,
+  Receipt,
+  Percent,
+  Truck,
+  Wallet,
+  Ruler,
+  ShoppingCart,
+  XCircle,
+  ClipboardList,
+  Undo2,
+} from "lucide-react";
 import { ConGrafica, IngresosPorTramo, TopProductosMetros } from "@/components/graficas/perezosas";
 import { ErrorCarga } from "@/components/ErrorCarga";
-import { CabeceraPantalla } from "@/components/CabeceraPantalla";
-import { ICONO_CONCEPTO } from "@/components/iconos";
 
 export const Route = createFileRoute("/panel/tiendas/$tiendaId/facturacion")({
   head: () => ({ meta: [{ title: "Facturación · DTF Culture" }] }),
@@ -84,6 +91,8 @@ function FacturacionTienda() {
     () => cifrasPorLinea(consultaAnterior.data ?? []),
     [consultaAnterior.data],
   );
+  const k = lineas.dtf;
+  const kPrev = lineasPrev.dtf;
   const uv = lineas.uv;
   const uvPrev = lineasPrev.uv;
   // Lo cobrado de los pedidos de DTF UV va con el UV, no con el DTF.
@@ -94,6 +103,8 @@ function FacturacionTienda() {
     totalizar(
       cobrosDeTiendas(cobros, tiendaId).filter((c) => (soloUv?.has(c.pedido_id) ?? false) === deUv),
     ).cobrado;
+  const cobrado = cobradoDe(consultaCobros.data?.cobros ?? [], false);
+  const cobradoPrev = cobradoDe(consultaCobrosAnt.data?.cobros ?? [], false);
   const cobradoUv = cobradoDe(consultaCobros.data?.cobros ?? [], true);
 
   const grafica = useMemo(() => {
@@ -109,32 +120,8 @@ function FacturacionTienda() {
     [consultaLineas.data],
   );
 
-  // Las cifras de dinero, con la cuenta de resultados (cuenta.ts): las
-  // mismas que en Inicio y en la Cuenta de resultados, por línea.
-  const previo = comparacion?.previo ?? null;
-  const lecturaDtf = useCuentaResultados({
-    rango: { desde, hasta },
-    previo,
-    filtro: { tienda: tiendaId, linea: "dtf" },
-    soloTienda: true,
-    gastos: false,
-  });
-  const lecturaUv = useCuentaResultados({
-    rango: { desde, hasta },
-    previo,
-    filtro: { tienda: tiendaId, linea: "uv" },
-    soloTienda: true,
-    gastos: false,
-    dinero: false,
-  });
-  const c = lecturaDtf.cuenta;
-  const cPrev = lecturaDtf.previa;
-  const cUv = lecturaUv.cuenta;
-  const cUvPrev = lecturaUv.previa;
-  // El IVA se cobra sobre la base entera: las ventas más los portes.
-  const ivaPct = c
-    ? pctIva(c.iva.valor ?? 0, (c.ventas.valor ?? 0) + (c.portes_cobrados.valor ?? 0))
-    : null;
+  // El IVA se cobra sobre la base entera: la bruta más el envío.
+  const pctIva = k.base === 0 ? 0 : (k.iva / k.base) * 100;
 
   // Mientras llegan las del periodo nuevo se ven las del anterior: se avisa,
   // se atenúan y no se exportan.
@@ -144,17 +131,7 @@ function FacturacionTienda() {
     consultaCobros.isPlaceholderData ||
     consultaCobrosAnt.isPlaceholderData;
   const cargando = consultaPedidos.isPending;
-  const error = consultaPedidos.error ?? lecturaDtf.error;
-  const reintentar = () => {
-    if (consultaPedidos.error) void consultaPedidos.refetch();
-    if (lecturaDtf.error) lecturaDtf.reintentar();
-  };
-  // Un dato de la cuenta frente al periodo anterior.
-  const deltaDe = (dato: (c: Cuenta) => number | null) => {
-    const a = c ? dato(c) : null;
-    const b = cPrev ? dato(cPrev) : null;
-    return a === null || b === null ? null : variacion(a, b);
-  };
+  const error = consultaPedidos.error;
   const sinDatos = !cargando && !error && pedidos.length === 0;
 
   function exportar() {
@@ -184,36 +161,27 @@ function FacturacionTienda() {
   return (
     <div className="space-y-6">
       {/* Barra de herramientas */}
-      <CabeceraPantalla
-        tienda={tienda?.nombre}
-        subtitulo={`Vista contable filtrada a ${tienda?.nombre ?? "esta tienda"}`}
-        acciones={
-          <>
-            <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold">Facturación</h2>
+          <p className="text-sm text-muted-foreground">
+            Vista contable filtrada a {tienda?.nombre ?? "esta tienda"}
+          </p>
+        </div>
 
-            <Button
-              onClick={exportar}
-              size="sm"
-              variant="outline"
-              disabled={pedidos.length === 0 || deAntes}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Descargar Excel
-            </Button>
-          </>
-        }
-      />
+        <div className="flex flex-wrap items-center gap-2">
+          <SelectorPeriodo periodo={periodo} tipos={PERIODOS_CUADRO} conComparar />
+
+          <Button onClick={exportar} size="sm" disabled={pedidos.length === 0 || deAntes}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+        </div>
+      </div>
 
       <AvisoActualizando activo={deAntes} />
 
-      {error && (
-        <ErrorCarga
-          error={error}
-          onReintentar={reintentar}
-          reintentando={consultaPedidos.isRefetching || lecturaDtf.reintentando}
-          que="la facturación"
-        />
-      )}
+      {error && <ErrorCarga error={error} que="la facturación" />}
 
       {cargando && (
         <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
@@ -234,62 +202,71 @@ function FacturacionTienda() {
       {!cargando && !error && !sinDatos && (
         <div {...propsDatosDeAntes(deAntes, "space-y-6")}>
           <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-            <TarjetaConcepto
-              clave="ventas_netas"
-              cifra={c?.ventas_netas ?? null}
-              previa={cPrev?.ventas_netas}
+            <TarjetaKpi
+              titulo="Vendido"
+              explicacion="vendido"
+              valor={eur(k.total)}
               frente={comparacion?.etiqueta}
+              delta={variacion(k.total, kPrev.total)}
+              icon={Euro}
             />
-            <TarjetaConcepto
-              clave="margen_bruto"
-              cifra={c?.margen_bruto ?? null}
-              previa={cPrev?.margen_bruto}
+            <TarjetaKpi
+              titulo="Facturación bruta"
+              explicacion="bruta"
+              valor={eur(k.bruta)}
               frente={comparacion?.etiqueta}
-              pie={
-                c?.margenPct != null ? (
-                  <span className="text-muted-foreground">
-                    {numero(c.margenPct, 1)}&nbsp;% de las ventas netas
-                  </span>
-                ) : undefined
-              }
+              delta={variacion(k.bruta, kPrev.bruta)}
+              icon={Receipt}
             />
-            <TarjetaConcepto
-              clave="cobrado"
-              cifra={c?.cobrado ?? null}
-              previa={cPrev?.cobrado}
+            <TarjetaKpi
+              titulo="Cobrado"
+              explicacion="cobrado"
+              valor={cobrosDisponibles ? eur(cobrado) : "—"}
               frente={comparacion?.etiqueta}
-              estado={lecturaDtf.estadoDinero.cobrado}
-              onReintentar={lecturaDtf.reintentar}
-              reintentando={lecturaDtf.reintentando}
+              delta={cobrosDisponibles ? variacion(cobrado, cobradoPrev) : null}
+              icon={Wallet}
             />
-            <TarjetaDato
-              clave="pedidos"
-              valor={c ? numero(c.pedidos, 0) : "…"}
+            <TarjetaKpi
+              titulo="Pedidos"
+              explicacion="pedidos"
+              valor={String(k.pedidos)}
               frente={comparacion?.etiqueta}
-              delta={deltaDe((x) => x.pedidos)}
+              delta={variacion(k.pedidos, kPrev.pedidos)}
+              icon={ClipboardList}
             />
-            <TarjetaDato
-              clave="ticket_medio"
-              valor={c ? (c.ticketMedio === null ? "—" : eur(c.ticketMedio)) : "…"}
+            <TarjetaKpi
+              titulo="Ticket medio"
+              explicacion="ticket"
+              valor={eur(k.ticket)}
               frente={comparacion?.etiqueta}
-              delta={deltaDe((x) => x.ticketMedio)}
+              delta={variacion(k.ticket, kPrev.ticket)}
+              icon={ShoppingCart}
             />
-            <TarjetaDato
-              clave="metros"
-              valor={c ? metros(c.metros) : "…"}
+            <TarjetaKpi
+              titulo="Metros vendidos"
+              explicacion="metros"
+              valor={metros(k.metros)}
               frente={comparacion?.etiqueta}
-              delta={deltaDe((x) => x.metros)}
+              delta={variacion(k.metros, kPrev.metros)}
+              icon={Ruler}
             />
-            <TarjetaConcepto
-              clave="devoluciones"
-              cifra={c?.devoluciones ?? null}
-              previa={cPrev?.devoluciones}
-            />
-            <TarjetaDato
-              clave="cancelados"
-              valor={c ? numero(c.cancelados, 0) : "…"}
+            <TarjetaKpi
+              titulo="Devoluciones"
+              explicacion="devoluciones"
+              valor={eur(k.devuelto)}
               frente={comparacion?.etiqueta}
-              delta={deltaDe((x) => x.cancelados)}
+              delta={variacion(k.devuelto, kPrev.devuelto)}
+              icon={Undo2}
+              deltaInverso
+            />
+            <TarjetaKpi
+              titulo="Cancelados"
+              explicacion="cancelados"
+              valor={String(k.cancelados)}
+              frente={comparacion?.etiqueta}
+              delta={variacion(k.cancelados, kPrev.cancelados)}
+              icon={XCircle}
+              color="destructive"
               deltaInverso
             />
           </div>
@@ -297,77 +274,78 @@ function FacturacionTienda() {
           {/* Desglose de facturación */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Bloque
-              titulo={concepto("ventas").nombre}
-              subtitulo={concepto("ventas").definicion}
-              valor={c ? eur(c.ventas.valor) : "…"}
-              icon={ICONO_CONCEPTO.ventas}
+              titulo="Bruta"
+              subtitulo="Lo vendido sin IVA y sin el envío"
+              valor={eur(k.bruta)}
+              icon={Receipt}
               tono="primary"
             />
             <Bloque
-              titulo={concepto("portes_cobrados").nombre}
-              subtitulo={concepto("portes_cobrados").definicion}
-              valor={c ? eur(c.portes_cobrados.valor) : "…"}
-              icon={ICONO_CONCEPTO.portes_cobrados}
+              titulo="Envíos cobrados"
+              subtitulo="Portes sin IVA, aparte de la bruta"
+              valor={eur(k.envios)}
+              icon={Truck}
               tono="warn"
             />
             <Bloque
-              titulo={concepto("iva").nombre}
-              subtitulo={
-                ivaPct === null
-                  ? concepto("iva").definicion
-                  : `${numero(ivaPct, 1)}\u00A0% sobre las ventas más los portes`
-              }
-              valor={c ? eur(c.iva.valor) : "…"}
-              icon={ICONO_CONCEPTO.iva}
+              titulo="IVA"
+              subtitulo={`${numero(pctIva, 1)}% sobre la base (bruta + envíos)`}
+              valor={eur(k.iva)}
+              icon={Percent}
               tono="info"
             />
             <Bloque
-              titulo={concepto("ventas_con_iva").nombre}
-              subtitulo="Ventas + portes + IVA"
-              valor={c ? eur(c.ventas_con_iva.valor) : "…"}
-              icon={ICONO_CONCEPTO.ventas_con_iva}
+              titulo="Total"
+              subtitulo="Bruta + envíos + IVA"
+              valor={eur(k.total)}
+              icon={Wallet}
               tono="success"
             />
           </div>
 
           {/* DTF UV: aparte, no es venta de DTF */}
           {(uv.pedidos > 0 || uvPrev.pedidos > 0 || cobradoUv > 0) && (
-            <Card className="border-linea-uv-borde">
+            <Card className="border-violet-500/30">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <EtiquetaUv />
                   Ventas de DTF UV
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Subcontratado: no cuenta en las cifras ni en los metros de arriba. Su margen bruto
-                  son sus ventas netas menos lo que cobra la subcontrata.
+                  Subcontratado: no cuenta en lo vendido, la facturación ni los metros de arriba. La
+                  ganancia es la facturación bruta menos lo que cobra la subcontrata; el envío se
+                  paga por lo mismo que se cobra.
                 </p>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-                  <TarjetaConcepto
-                    clave="ventas_netas"
-                    cifra={cUv?.ventas_netas ?? null}
-                    previa={cUvPrev?.ventas_netas}
+                  <TarjetaKpi
+                    titulo="Vendido UV"
+                    valor={eur(uv.total)}
                     frente={comparacion?.etiqueta}
+                    delta={variacion(uv.total, uvPrev.total)}
+                    icon={Euro}
                   />
-                  <TarjetaConcepto
-                    clave="ventas"
-                    cifra={cUv?.ventas ?? null}
-                    previa={cUvPrev?.ventas}
+                  <TarjetaKpi
+                    titulo="Facturación bruta UV"
+                    valor={eur(uv.bruta)}
                     frente={comparacion?.etiqueta}
+                    delta={variacion(uv.bruta, uvPrev.bruta)}
+                    icon={Receipt}
                   />
-                  <TarjetaDato
-                    clave="metros_uv"
+                  <TarjetaKpi
+                    titulo="Metros UV"
                     valor={metros(uv.metrosUv)}
                     frente={comparacion?.etiqueta}
                     delta={variacion(uv.metrosUv, uvPrev.metrosUv)}
+                    icon={Ruler}
                   />
-                  <TarjetaConcepto
-                    clave="margen_bruto"
-                    cifra={cUv?.margen_bruto ?? null}
-                    previa={cUvPrev?.margen_bruto}
+                  <TarjetaKpi
+                    titulo="Ganancia UV"
+                    valor={eur(uv.ganancia)}
                     frente={comparacion?.etiqueta}
+                    delta={variacion(uv.ganancia, uvPrev.ganancia)}
+                    icon={Wallet}
                   />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">

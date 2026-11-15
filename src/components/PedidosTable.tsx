@@ -1340,7 +1340,6 @@ const FilaPedido = memo(function FilaPedido({
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="font-mono text-sm truncate">{numeroLabel}</div>
             <EtiquetaLineasPedido pedido={pedido} />
-            {pedido.necesita_factura && <EtiquetaPideFactura />}
           </div>
           {mostrarTienda && (
             <div
@@ -1369,6 +1368,9 @@ const FilaPedido = memo(function FilaPedido({
               {pedido.cliente_nombre ?? "—"}
             </div>
             <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
+            {/* Junto a «1.er pedido», en la caja del cliente: es algo del
+                cliente, no del número de pedido. */}
+            {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
           </div>
           {pedido.cliente_email && (
             <div className="text-xs text-muted-foreground truncate" title={pedido.cliente_email}>
@@ -1495,7 +1497,6 @@ const TarjetaPedido = memo(function TarjetaPedido({
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-mono">{numeroVisible(pedido)}</span>
               <EtiquetaLineasPedido pedido={pedido} />
-              {pedido.necesita_factura && <EtiquetaPideFactura />}
               <HoraPedido pedido={pedido} horaCorte={horaCorte} />
               {mostrarTienda && pedido.tienda_nombre && (
                 <span className="truncate">· {pedido.tienda_nombre}</span>
@@ -1521,6 +1522,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
           {/* Aquí y no junto al nombre: el nombre va dentro del botón de la
               tarjeta, y un botón no puede ir dentro de otro. */}
           <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
+          {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
           <RealizadoEn tabla="pedidos" pedido={pedido} />
           <EtiquetaOrigen web={pedido.origen === "woocommerce"} />
