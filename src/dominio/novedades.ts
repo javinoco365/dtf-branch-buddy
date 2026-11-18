@@ -36,6 +36,18 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-18-recargo-aparte-del-iva",
+    fecha: "2026-11-18",
+    tipo: "mejora",
+    titulo: "El R.E, aparte del IVA",
+    resumen: "En el pedido salen el IVA y el recargo de equivalencia por separado.",
+    puntos: [
+      "Un pedido con R.E enseña, por ejemplo, IVA 2,73 € y R.E 0,67 €.",
+      "Los pedidos antiguos con R.E se marcan con «Recuperar recargo», en Ajustes.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-18-recargo-equivalencia",
     fecha: "2026-11-18",
     tipo: "nuevo",

@@ -4,7 +4,7 @@ import { importesPedidoWoo } from "./pedido-woo";
 import { calcularTotales } from "./importes";
 
 const cuadra = (d: ReturnType<typeof desglosePedido>) =>
-  expect(d.productos + d.envio + d.iva).toBeCloseTo(d.total, 2);
+  expect(d.productos + d.envio + d.iva + d.recargo).toBeCloseTo(d.total, 2);
 
 describe("desglosePedido", () => {
   it("un pedido de WooCommerce: el subtotal ya lleva el envío y no se cuenta dos veces", () => {
@@ -12,7 +12,14 @@ describe("desglosePedido", () => {
     const woo = importesPedidoWoo({ total: "133.10", total_tax: "23.10", shipping_total: "10.00" });
     expect(woo.subtotal).toBe(110);
     const d = desglosePedido(woo);
-    expect(d).toEqual({ productos: 100, envio: 10, iva: 23.1, total: 133.1 });
+    expect(d).toEqual({ productos: 100, envio: 10, iva: 23.1, recargo: 0, total: 133.1 });
+    cuadra(d);
+  });
+
+  it("DCUL-172-2026: con recargo, IVA 2,73 y R.E 0,67 por separado", () => {
+    const woo = importesPedidoWoo({ total: "16.39", total_tax: "3.40", shipping_total: "5.99" });
+    const d = desglosePedido({ ...woo, recargo: 0.67 });
+    expect(d).toEqual({ productos: 7, envio: 5.99, iva: 2.73, recargo: 0.67, total: 16.39 });
     cuadra(d);
   });
 
@@ -33,13 +40,13 @@ describe("desglosePedido", () => {
   it("un pedido manual antiguo, con el envío fuera del subtotal", () => {
     // total = subtotal + IVA + envío.
     const d = desglosePedido({ subtotal: 100, iva: 21, envio: 10, total: 131 });
-    expect(d).toEqual({ productos: 100, envio: 10, iva: 21, total: 131 });
+    expect(d).toEqual({ productos: 100, envio: 10, iva: 21, recargo: 0, total: 131 });
     cuadra(d);
   });
 
   it("sin envío, los productos son el subtotal", () => {
     const d = desglosePedido({ subtotal: "82.64", iva: "17.36", envio: 0, total: "100" });
-    expect(d).toEqual({ productos: 82.64, envio: 0, iva: 17.36, total: 100 });
+    expect(d).toEqual({ productos: 82.64, envio: 0, iva: 17.36, recargo: 0, total: 100 });
     cuadra(d);
   });
 
@@ -54,6 +61,7 @@ describe("desglosePedido", () => {
       productos: 0,
       envio: 0,
       iva: 0,
+      recargo: 0,
       total: 0,
     });
   });

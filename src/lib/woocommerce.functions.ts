@@ -27,11 +27,13 @@ import {
   nifPedidoWoo,
   pidioFacturaWoo,
   pidioRecargoWoo,
+  recargoPedidoWoo,
   nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
   filasDevolucionWoo,
   type FilaDevolucionWoo,
+  type ImpuestoPedidoWoo,
   type ReembolsoDetalleWoo,
   pedidosDesaparecidos,
   totalReembolsado,
@@ -759,6 +761,10 @@ async function guardarPedidosWoo(
       // El recargo de equivalencia: la web lo cobra como un impuesto más
       // (`tax_lines`, «R.E» al 5,2 %). Se reescribe en cada sincronización.
       recargo_equivalencia: pidioRecargoWoo(o),
+      // Cuánto fue de recargo. Va también dentro de `iva` (el total_tax de
+      // WooCommerce), que sigue siendo todos los impuestos: así la base
+      // (total − iva) no cambia en ningún informe.
+      recargo: recargoPedidoWoo(o),
       direccion_facturacion: facturacion,
       // Woo manda `shipping` vacío cuando el envío es igual que la
       // facturación. Guardar un objeto de huecos sería peor que no guardar
@@ -808,7 +814,9 @@ async function guardarPedidosWoo(
   // Sin la del DTF UV (20261110100000), los metros de UV vuelven a sumarse
   // a metros_total, como antes de separarlos.
   // Sin la de «Quiero factura» (20261117100000), igual con necesita_factura.
-  // Sin la del recargo de equivalencia (20261120100000), igual.
+  // Sin la del recargo de equivalencia (20261120100000) o la de su importe
+  // (20261121100000), igual. recargo_equivalencia va antes que recargo: el
+  // mensaje de la primera también contiene «recargo».
   const opcionales = [
     "realizado_en",
     "cliente_nif",
@@ -817,6 +825,7 @@ async function guardarPedidosWoo(
     "metros_uv",
     "necesita_factura",
     "recargo_equivalencia",
+    "recargo",
   ];
   let filasAGuardar: Record<string, unknown>[] = filasPedidos;
   for (let intento = 0; intento < opcionales.length && res.error; intento++) {
@@ -1732,6 +1741,105 @@ export const recuperarEnviosWoo = createServerFn({ method: "POST" })
     return {
       revisados: pedidos.length,
       actualizados,
+      siguiente: pedidos.length === 100 ? pedidos[pedidos.length - 1].woo_order_id : null,
+    };
+  });
+
+/**
+ * Recupera el recargo de equivalencia de los pedidos de WooCommerce
+ * sincronizados antes de que se leyera (18-11-2026): esos se quedaron sin la
+ * etiqueta «R.E» y con el recargo mezclado en el IVA. La sincronización ya lo
+ * pone cuando vuelve a traer un pedido, pero un pedido que no cambia en la web
+ * no vuelve.
+ *
+ * Pide a WooCommerce solo los impuestos (`tax_lines`) de cien pedidos cada
+ * vez; la pantalla la repite con `desde` hasta que `siguiente` vuelve nulo.
+ * Solo escribe donde cambia algo, y pone lo que dice WooCommerce: repetirlo no
+ * estropea nada. No toca líneas, importes ni documentos ya emitidos.
+ */
+export const recuperarRecargosWoo = createServerFn({ method: "POST" })
+  .middleware([exigeEscribir])
+  .inputValidator((d) =>
+    z
+      .object({
+        tienda_id: z.string().uuid(),
+        /** El último woo_order_id revisado: se sigue a partir de ahí. */
+        desde: z.number().int().nonnegative().default(0),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { adminComoUsuario } = await import("@/integrations/supabase/client.server");
+    const supabaseAdmin = adminComoUsuario(context.userId);
+
+    // La misma comprobación que la sincronización: de la tienda o administrador.
+    if (!(await esMiembroTienda(supabaseAdmin, context.userId, data.tienda_id))) {
+      throw new Error("Sin acceso a esta tienda");
+    }
+
+    const { data: tienda } = await supabaseAdmin
+      .from("tiendas")
+      .select("woo_url")
+      .eq("id", data.tienda_id)
+      .maybeSingle();
+    if (!tienda?.woo_url) throw new Error("Esta tienda no tiene URL de WooCommerce");
+    const creds = await leerCredencialesWoo(supabaseAdmin, data.tienda_id);
+    if (!creds) throw new Error("Esta tienda no tiene credenciales de WooCommerce guardadas");
+
+    const { data: filas, error } = await tabla(supabaseAdmin, "pedidos")
+      .select("id, numero, woo_order_id, recargo_equivalencia, recargo")
+      .eq("tienda_id", data.tienda_id)
+      .not("woo_order_id", "is", null)
+      .gt("woo_order_id", data.desde)
+      .order("woo_order_id")
+      .limit(100);
+    if (error) {
+      throw new Error(
+        /recargo/.test(error.message)
+          ? "Falta aplicar la migración del recargo de equivalencia en la base de datos"
+          : error.message,
+      );
+    }
+    const pedidos = (filas ?? []) as {
+      id: string;
+      numero: string | null;
+      woo_order_id: number;
+      recargo_equivalencia: boolean | null;
+      recargo: number | string | null;
+    }[];
+    if (pedidos.length === 0) {
+      return { revisados: 0, actualizados: 0, con_recargo: [] as string[], siguiente: null };
+    }
+
+    const base = tienda.woo_url.replace(/\/$/, "");
+    const ids = pedidos.map((p) => p.woo_order_id).join(",");
+    const r = await fetch(
+      `${base}/wp-json/wc/v3/orders?include=${ids}&per_page=100&status=any&_fields=id,tax_lines`,
+      { headers: { Authorization: autorizacionWoo(creds), Accept: "application/json" } },
+    );
+    if (!r.ok) throw new Error(`WooCommerce respondió ${r.status}`);
+    const ordenes = (await r.json()) as { id: number; tax_lines?: ImpuestoPedidoWoo[] | null }[];
+    const recargoDe = new Map(ordenes.map((o) => [Number(o.id), recargoPedidoWoo(o)]));
+
+    let actualizados = 0;
+    const conRecargo: string[] = [];
+    for (const p of pedidos) {
+      // Un pedido que ya no está en WooCommerce se deja como está.
+      if (!recargoDe.has(Number(p.woo_order_id))) continue;
+      const recargo = recargoDe.get(Number(p.woo_order_id)) ?? 0;
+      const lleva = recargo !== 0;
+      if (lleva) conRecargo.push(p.numero ?? String(p.woo_order_id));
+      if (p.recargo_equivalencia === lleva && Number(p.recargo ?? 0) === recargo) continue;
+      const { error: uErr } = await tabla(supabaseAdmin, "pedidos")
+        .update({ recargo_equivalencia: lleva, recargo })
+        .eq("id", p.id);
+      if (uErr) throw new Error(uErr.message);
+      actualizados++;
+    }
+    return {
+      revisados: pedidos.length,
+      actualizados,
+      con_recargo: conRecargo,
       siguiente: pedidos.length === 100 ? pedidos[pedidos.length - 1].woo_order_id : null,
     };
   });
