@@ -1,8 +1,8 @@
 import { useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { format } from "date-fns";
 import { Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -194,7 +194,7 @@ export function GastosFijos({
   const guardar = useServerFn(guardarGastoFijo);
   const borrar = useServerFn(borrarGastoFijo);
   const refrescar = useRefrescar();
-  const hoy = format(new Date(), "yyyy-MM-dd");
+  const hoy = diaEnEspana(new Date());
   const vacio: Formulario = {
     id: undefined,
     concepto: "",
@@ -203,7 +203,7 @@ export function GastosFijos({
     importe: "",
     iva: "21",
     irpf: "0",
-    desde: format(new Date(), "yyyy-MM-01"),
+    desde: `${diaEnEspana(new Date()).slice(0, 7)}-01`,
     hasta: "",
     notas: "",
     justificante: true,

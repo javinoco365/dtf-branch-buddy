@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { z } from "zod";
 import { ivaDePedidoValido } from "@/dominio/pedido-formulario";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -236,7 +237,8 @@ export const createPedidoManual = createServerFn({ method: "POST" })
     const porLinea = lineasDeUnPedido(data.items, totales.iva_total);
     const total = totales.total;
 
-    const numero = `MAN-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(
+    // El día de Madrid: el servidor va en UTC y de noche ponía el día anterior.
+    const numero = `MAN-${diaEnEspana(new Date()).replace(/-/g, "")}-${Math.floor(
       Math.random() * 9000 + 1000,
     )}`;
 

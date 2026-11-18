@@ -1,5 +1,5 @@
 import type { jsPDF } from "jspdf";
-import { eur, fechaCorta, metros, numero, numeroJusto } from "@/lib/format";
+import { eur, fechaCorta, fechaHora, metros, numero, numeroJusto } from "@/lib/format";
 import { LETRA, registrarFuentesPdf } from "@/lib/fuentes-pdf";
 import {
   etiquetaGasto,
@@ -320,13 +320,9 @@ function portada(c: Lienzo) {
   c.letra("texto", 7.5, SUAVE);
   if (d.empresa.cif) c.texto(`CIF ${d.empresa.cif}`, W - M, 20.5, "right");
   const f = d.generado;
-  const dd = (n: number) => String(n).padStart(2, "0");
-  c.texto(
-    `Emitido el ${dd(f.getDate())}/${dd(f.getMonth() + 1)}/${f.getFullYear()} a las ${dd(f.getHours())}:${dd(f.getMinutes())}`,
-    W - M,
-    25.5,
-    "right",
-  );
+  // En hora de Madrid, la saque quien la saque: «18/11/2026, 16:05».
+  const [diaEmision, horaEmision] = fechaHora(f).split(", ");
+  c.texto(`Emitido el ${diaEmision} a las ${horaEmision}`, W - M, 25.5, "right");
   c.texto("Datos reales del CRM, sin retoques", W - M, 30.5, "right");
   c.y = 57;
 }

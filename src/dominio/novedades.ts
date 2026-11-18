@@ -36,6 +36,14 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-18-hora-de-madrid",
+    fecha: "2026-11-18",
+    tipo: "arreglo",
+    titulo: "Siempre la hora de Madrid",
+    resumen: "Fechas y horas salen en hora de Madrid, en cualquier aparato y en los PDF.",
+    puntos: ["El informe de socios dice a qué hora de Madrid se emitió."],
+  },
+  {
     id: "2026-11-18-ticket-aunque-tenga-nif",
     fecha: "2026-11-18",
     tipo: "mejora",

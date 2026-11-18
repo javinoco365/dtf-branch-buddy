@@ -38,6 +38,7 @@ export default defineConfig({
       "src/lib/paginar.test.ts",
       "src/lib/pedidos-lista.test.ts",
       "src/lib/cache.test.ts",
+      "src/lib/format.test.ts",
     ],
     reporters: "dot",
   },
