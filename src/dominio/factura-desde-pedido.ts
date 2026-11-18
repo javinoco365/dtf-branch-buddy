@@ -35,6 +35,7 @@
  */
 
 import { calcularTotales, recargoDeIva, redondear } from "./importes";
+import { nombreProvincia } from "./provincias-es";
 import { diaEnEspana } from "./fecha-documento";
 
 const IVA_GENERAL = 21;
@@ -119,6 +120,40 @@ export function receptorDesdePedido(
   };
 }
 
+/**
+ * La dirección del receptor en una línea, entera: calle y número, código
+ * postal, ciudad y provincia, y el país si no es España. Es la que se imprime
+ * en la factura (decisión de Javier, 18-11-2026): antes salía solo la calle.
+ *
+ * «Avenida Monegros 40. Escalera 1. 4ºC, 22004 Huesca (Huesca)». La provincia
+ * de WooCommerce viene en código («HU») y aquí sale con su nombre. Si la calle
+ * ya trae el código postal, se deja como está para no repetirlo. Nula si no
+ * hay nada.
+ */
+export function direccionCompleta(r: {
+  direccion?: string | null;
+  codigo_postal?: string | null;
+  ciudad?: string | null;
+  provincia?: string | null;
+  pais?: string | null;
+}): string | null {
+  const calle = r.direccion?.trim() || "";
+  const cp = r.codigo_postal?.trim() || "";
+  if (calle && cp && calle.includes(cp)) return calle;
+  const ciudad = r.ciudad?.trim() || "";
+  const provincia = r.provincia?.trim() ? nombreProvincia(r.provincia.trim()) : "";
+  const pais = r.pais?.trim() || "";
+  const esEspana = !pais || ["ES", "ESP", "ESPAÑA", "ESPANA", "SPAIN"].includes(pais.toUpperCase());
+  const localidad = [
+    [cp, ciudad].filter(Boolean).join(" "),
+    provincia ? (ciudad || cp ? `(${provincia})` : provincia) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const partes = [calle, localidad, esEspana ? "" : pais].filter(Boolean);
+  return partes.length > 0 ? partes.join(", ") : null;
+}
+
 /** Una línea del pedido, lo mínimo que hace falta para facturarla. */
 export type ItemPedido = {
   descripcion: string;
@@ -183,6 +218,48 @@ export function lineasDesdePedido(
   }
 
   return lineas;
+}
+
+// ---------------------------------------------------------------------------
+// Descuentos de la web: una línea en negativo
+// ---------------------------------------------------------------------------
+
+/**
+ * La línea en negativo del descuento (un cupón de la web) de un pedido de
+ * WooCommerce. WooCommerce guarda cada línea a su precio antes del descuento,
+ * y el descuento se queda fuera: la factura sumaba de más (DCUL-130-2026:
+ * líneas por 285,37 € de base y el cliente pagó 256,83 €). Si la base de las
+ * líneas pasa de lo que cobró la web (`basePedido`, total menos impuestos), la
+ * diferencia va en una línea «Descuento», al tipo de IVA (y con el recargo)
+ * de la parte que más pesa. Así el documento suma lo que pagó el cliente.
+ *
+ * Si las líneas no pasan de lo cobrado, nada: un cargo de más no se inventa.
+ */
+export function lineasDescuentoPedido(
+  lineas: readonly LineaFactura[],
+  basePedido: number | string | null | undefined,
+): LineaFactura[] {
+  if (basePedido === null || basePedido === undefined || basePedido === "") return [];
+  const cobrado = Number(basePedido);
+  if (!Number.isFinite(cobrado) || cobrado <= 0 || lineas.length === 0) return [];
+  const totales = calcularTotales(lineas);
+  const descuento = redondear(totales.base_imponible - cobrado);
+  if (descuento < 0.01) return [];
+  const principal = [...totales.desglose_iva].sort((a, b) => b.base - a.base)[0];
+  if (!principal || principal.base <= 0) return [];
+  const recargo =
+    lineas.find((l) => l.iva_rate === principal.tipo && (l.recargo_rate ?? 0) > 0)?.recargo_rate ??
+    0;
+  return [
+    {
+      descripcion: "Descuento",
+      cantidad: 1,
+      unidad: "ud",
+      precio_unitario: -descuento,
+      iva_rate: principal.tipo,
+      ...(recargo > 0 ? { recargo_rate: recargo } : {}),
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------

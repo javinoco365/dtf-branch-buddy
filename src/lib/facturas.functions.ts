@@ -19,7 +19,9 @@ import { CACHE_PDF, rutaPdfGuardada, rutaPdfTienda, rutaPdfVersion } from "@/lib
 // didn't load»). Son módulos puros y pequeños: no hay nada que ganar
 // cargándolos a demanda.
 import {
+  direccionCompleta,
   lineasDeDevoluciones,
+  lineasDescuentoPedido,
   lineasDesdePedido,
   receptorDesdePedido,
   totalDevuelto,
@@ -628,7 +630,7 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
   const { data: pedido, error: pErr } = await conNifDelPedido((nif) =>
     tabla(sb, "pedidos")
       .select(
-        `id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, notas, fecha_pedido, origen${nif}`,
+        `id, numero, empresa_id, tienda_id, cliente_id, cliente_nombre, cliente_email, direccion_facturacion, envio, subtotal, notas, fecha_pedido, origen${nif}`,
       )
       .eq("id", pedidoId)
       .maybeSingle(),
@@ -663,21 +665,31 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
     );
   }
 
-  const receptor = receptorDesdePedido(
+  const receptorBase = receptorDesdePedido(
     clienteRes.data,
     pedido.direccion_facturacion,
     pedido.cliente_nombre,
     pedido.cliente_email,
     pedido.cliente_nif ?? null,
   );
+  // En la factura, la dirección entera: calle, código postal, ciudad y
+  // provincia (antes salía solo la calle).
+  const receptor = { ...receptorBase, direccion: direccionCompleta(receptorBase) };
   const tipoFiscal = esTipoFiscal(clienteRes.data?.tipo_fiscal)
     ? clienteRes.data.tipo_fiscal
     : null;
   // Las del pedido y, debajo, una en negativo por cada devolución (reembolso
   // de la web o rebaja): el documento suma lo que el cliente pagó al final.
-  const lineasPedido = lineasDesdePedido(items ?? [], Number(pedido.envio || 0), {
+  const lineasDelPedido = lineasDesdePedido(items ?? [], Number(pedido.envio || 0), {
     recargo: pedido.recargo_equivalencia === true,
   });
+  // El cupón de la web: WooCommerce guarda las líneas a precio sin descuento.
+  // Una línea «Descuento» lleva el documento a lo que se cobró. Solo en los de
+  // WooCommerce: en uno manual, las líneas son lo que vale.
+  const lineasPedido =
+    pedido.origen === "woocommerce"
+      ? [...lineasDelPedido, ...lineasDescuentoPedido(lineasDelPedido, pedido.subtotal)]
+      : lineasDelPedido;
   const devoluciones = (devolucionesRes.data ?? []) as DevolucionParaDocumento[];
   const lineas = [...lineasPedido, ...lineasDeDevoluciones(lineasPedido, devoluciones)];
   const devuelto = totalDevuelto(devoluciones);

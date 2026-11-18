@@ -36,6 +36,28 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-18-facturas-cantidades-y-cupones",
+    fecha: "2026-11-18",
+    tipo: "arreglo",
+    titulo: "Facturas con cupón y decimales",
+    resumen: "La factura suma lo que pagó el cliente, con su descuento y sus metros exactos.",
+    puntos: [
+      "Una cantidad como 40,767 m ya no se lee como 40.767 m.",
+      "Si la web aplicó un cupón, la factura lleva una línea «Descuento».",
+      "La dirección sale entera: calle, código postal, ciudad y provincia.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
+    id: "2026-11-18-ticket-sin-datos",
+    fecha: "2026-11-18",
+    tipo: "mejora",
+    titulo: "Ticket sin datos del cliente",
+    resumen: "El ticket sale sin nombre ni notas; «Añadir datos del cliente» los enseña.",
+    puntos: ["En el móvil ya se puede escribir en el ticket o la factura al primer toque."],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-18-recargo-aparte-del-iva",
     fecha: "2026-11-18",
     tipo: "mejora",

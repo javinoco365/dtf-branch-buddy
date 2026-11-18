@@ -1707,13 +1707,16 @@ function MenuAcciones({
   // Ver el tracking y los cobros, cualquiera; lo demás, según el nivel.
   const { escribir, borrar } = usePermisos();
   return (
-    <DropdownMenu>
+    // Cada opción abre un diálogo. Sin modal, y sin devolver el foco al botón
+    // al cerrarse, el menú no se queda con el foco encima del diálogo: en el
+    // móvil, el primer toque en un campo del diálogo se perdía.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button aria-label="Más acciones" variant="ghost" size="icon" className="h-8 w-8">
           <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
         {escribir && <DropdownMenuItem onClick={onEditar}>Editar</DropdownMenuItem>}
         <DropdownMenuItem onClick={onTracking}>Seguimiento</DropdownMenuItem>
         {onCobros && <DropdownMenuItem onClick={onCobros}>Cobros</DropdownMenuItem>}

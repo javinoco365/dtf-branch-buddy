@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  direccionCompleta,
+  lineasDescuentoPedido,
   documentoDescuadrado,
   lineasDeDevoluciones,
   lineasDesdePedido,
@@ -281,5 +283,82 @@ describe("documentoDescuadrado", () => {
   it("sin devoluciones o sin documento, nada que corregir", () => {
     expect(documentoDescuadrado(100, 100, 0)).toBe(false);
     expect(documentoDescuadrado(null, 100, 5)).toBe(false);
+  });
+});
+
+describe("lineasDescuentoPedido", () => {
+  const linea = {
+    descripcion: "DTI por Metros",
+    cantidad: 40.767,
+    unidad: "m",
+    precio_unitario: 7,
+    iva_rate: 21,
+  };
+
+  it("DCUL-130-2026: con el cupón, la factura suma lo que pagó el cliente (310,76 €)", () => {
+    const descuento = lineasDescuentoPedido([linea], 256.83);
+    expect(descuento).toEqual([
+      {
+        descripcion: "Descuento",
+        cantidad: 1,
+        unidad: "ud",
+        precio_unitario: -28.54,
+        iva_rate: 21,
+      },
+    ]);
+    const t = calcularTotales([linea, ...descuento]);
+    expect(t.base_imponible).toBe(256.83);
+    expect(t.iva_total).toBe(53.93);
+    expect(t.total).toBe(310.76);
+  });
+
+  it("sin descuento, o si la web cobró más que las líneas, nada", () => {
+    expect(lineasDescuentoPedido([linea], 285.37)).toEqual([]);
+    expect(lineasDescuentoPedido([linea], 300)).toEqual([]);
+    expect(lineasDescuentoPedido([linea], null)).toEqual([]);
+    expect(lineasDescuentoPedido([], 10)).toEqual([]);
+  });
+
+  it("con recargo de equivalencia, el descuento también lo lleva", () => {
+    const conRe = { ...linea, cantidad: 10, recargo_rate: 5.2 };
+    const d = lineasDescuentoPedido([conRe], 63);
+    expect(d[0]).toMatchObject({ precio_unitario: -7, iva_rate: 21, recargo_rate: 5.2 });
+  });
+});
+
+describe("direccionCompleta", () => {
+  it("calle, código postal, ciudad y provincia, en una línea", () => {
+    expect(
+      direccionCompleta({
+        direccion: "Avenida Monegros 40. Escalera 1. 4ºC",
+        codigo_postal: "22004",
+        ciudad: "Huesca",
+        provincia: "HU",
+        pais: "ES",
+      }),
+    ).toBe("Avenida Monegros 40. Escalera 1. 4ºC, 22004 Huesca (Huesca)");
+  });
+
+  it("el país solo si no es España; sin calle, lo demás", () => {
+    expect(
+      direccionCompleta({
+        direccion: "Rua 1",
+        codigo_postal: "1000",
+        ciudad: "Lisboa",
+        pais: "PT",
+      }),
+    ).toBe("Rua 1, 1000 Lisboa, PT");
+    expect(direccionCompleta({ codigo_postal: "21450", ciudad: "Cartaya" })).toBe("21450 Cartaya");
+    expect(direccionCompleta({})).toBeNull();
+  });
+
+  it("si la calle ya trae el código postal, no lo repite", () => {
+    expect(
+      direccionCompleta({
+        direccion: "C/ Mayor 1, 21450 Cartaya",
+        codigo_postal: "21450",
+        ciudad: "Cartaya",
+      }),
+    ).toBe("C/ Mayor 1, 21450 Cartaya");
   });
 });
