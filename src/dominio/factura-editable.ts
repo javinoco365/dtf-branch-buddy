@@ -10,6 +10,7 @@
  * factura se guarda con lo escrito, no con lo que tenía el pedido.
  */
 import { recargoDeIva } from "./importes";
+import { escribirNumero, leerNumeroEscrito } from "./numeros";
 
 /** Una línea tal como está en el formulario. */
 export type LineaEditable = {
@@ -33,7 +34,7 @@ export type LineaEmision = {
 
 /** Pasa una línea del pedido al formulario: los números, con coma decimal. */
 export function lineaAEditable(l: LineaEmision): LineaEditable {
-  const texto = (n: number) => String(n).replace(".", ",");
+  const texto = escribirNumero;
   return {
     descripcion: l.descripcion,
     cantidad: texto(l.cantidad),
@@ -57,30 +58,9 @@ export function lineaVacia(iva = 21): LineaEditable {
 export type ResultadoLineas =
   { ok: true; lineas: LineaEmision[] } | { ok: false; errores: string[] };
 
-/**
- * Un número escrito en el formulario, en formato español: la coma es siempre
- * el decimal y el punto, los miles. «40,767» son 40,767 metros (no 40.767):
- * es como el formulario escribe las cantidades del pedido. Un número solo con
- * puntos es de miles si va en grupos de tres («1.200», «12.500.000») y, si
- * no, el punto es el decimal («7.5»). Nulo si no es un número.
- *
- * No sirve el lector de factura-compra: allí «40,767» con tres decimales se
- * lee como miles, y una línea de 40,767 m salía por 40.767 m (285.369 €).
- */
-export function numeroEscrito(texto: string): number | null {
-  const limpio = texto.replace(/[\s€]/g, "");
-  if (!/^-?[\d.,]+$/.test(limpio) || !/\d/.test(limpio)) return null;
-  let normalizado: string;
-  if (limpio.includes(",")) {
-    if ((limpio.match(/,/g) ?? []).length > 1) return null;
-    normalizado = limpio.replace(/\./g, "").replace(",", ".");
-  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(limpio)) {
-    normalizado = limpio.replace(/\./g, "");
-  } else {
-    if ((limpio.match(/\./g) ?? []).length > 1) return null;
-    normalizado = limpio;
-  }
-  const n = Number(normalizado);
+/** Lo escrito en un campo, como número (ver leerNumeroEscrito); nulo si no lo es. */
+function numeroEscrito(texto: string): number | null {
+  const n = leerNumeroEscrito(texto);
   return Number.isFinite(n) ? n : null;
 }
 

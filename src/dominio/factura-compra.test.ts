@@ -1,3 +1,4 @@
+import { eur } from "@/lib/format";
 import { describe, expect, it } from "vitest";
 import { aFecha, aNumero, normalizarCompra, revisarCompra } from "./factura-compra";
 
@@ -413,7 +414,10 @@ describe("líneas partidas por talla y factura o proforma", () => {
       ],
     });
     expect(revisarCompra(c)).toEqual([
-      { linea: null, mensaje: "Línea 1 del papel: las tallas suman 18 y la línea dice 18.01." },
+      {
+        linea: null,
+        mensaje: `Línea 1 del papel: las tallas suman ${eur(18)} y la línea dice ${eur(18.01)}.`,
+      },
     ]);
   });
 

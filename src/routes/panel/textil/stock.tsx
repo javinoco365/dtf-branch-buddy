@@ -57,7 +57,14 @@ import {
 } from "@/lib/escaner-textil.functions";
 import { AVISO_MIGRACION_ESCANER } from "@/lib/escaner-textil";
 import { toast } from "sonner";
-import { eur as fmtEUR, eurConSigno, eurUnitario, fechaHora, numero } from "@/lib/format";
+import {
+  eur as fmtEUR,
+  eurConSigno,
+  eurUnitario,
+  fechaHora,
+  numero,
+  numeroJusto,
+} from "@/lib/format";
 import { comprasParaDevolucion } from "@/dominio/proformas";
 import { totalesMovimientosStock, totalesStock } from "@/dominio/sumatorios-textil";
 import { aVarianteCatalogo, etiquetaVariante, utilizable } from "@/dominio/stock-textil";
@@ -828,7 +835,7 @@ function OtroMovimientoDialog({
           <DialogDescription>
             {item.nombre}
             {item.color ? ` · ${item.color}` : ""}
-            {item.talla ? ` · ${item.talla}` : ""} — ahora hay {item.cantidad}
+            {item.talla ? ` · ${item.talla}` : ""} — ahora hay {numeroJusto(item.cantidad)}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -979,8 +986,9 @@ function FusionarDialog({
         <DialogHeader>
           <DialogTitle>Fusionar con…</DialogTitle>
           <DialogDescription>
-            {etiquetaVariante(origen)} está repetida. Al fusionarla, sus {origen.cantidad} unidades
-            y su historial pasan a la variante buena, y esta queda desactivada. No se deshace.
+            {etiquetaVariante(origen)} está repetida. Al fusionarla, sus{" "}
+            {numeroJusto(origen.cantidad)} unidades y su historial pasan a la variante buena, y esta
+            queda desactivada. No se deshace.
           </DialogDescription>
         </DialogHeader>
         {candidatas.length === 0 ? (
@@ -998,7 +1006,7 @@ function FusionarDialog({
                 {candidatas.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {etiquetaVariante(c)}
-                    {c.sku ? ` · ${c.sku}` : ""} ({c.cantidad} uds)
+                    {c.sku ? ` · ${c.sku}` : ""} ({numeroJusto(c.cantidad)} uds)
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1160,7 +1168,7 @@ function HistorialDialog({ item, onClose }: any) {
           <p className="text-sm text-muted-foreground">
             {item.nombre}
             {item.color ? ` · ${item.color}` : ""}
-            {item.talla ? ` · ${item.talla}` : ""} — saldo actual {item.cantidad}
+            {item.talla ? ` · ${item.talla}` : ""} — saldo actual {numeroJusto(item.cantidad)}
           </p>
         )}
         {isLoading ? (
@@ -1212,7 +1220,7 @@ function HistorialDialog({ item, onClose }: any) {
                         }`}
                       >
                         {Number(m.cantidad) > 0 ? "+" : ""}
-                        {m.cantidad}
+                        {numeroJusto(Number(m.cantidad))}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {fmtEUR(Number(m.coste_unitario))}

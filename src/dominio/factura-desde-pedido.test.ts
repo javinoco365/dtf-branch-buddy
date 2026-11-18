@@ -94,6 +94,47 @@ describe("receptorDesdePedido", () => {
   });
 });
 
+describe("receptorDesdePedido: ficha sin dirección", () => {
+  const pedido = {
+    nombre: "Guakala",
+    direccion: "Calle Mayor 3",
+    codigo_postal: "28001",
+    ciudad: "Madrid",
+    provincia: "M",
+    pais: "ES",
+    email: "hola@guakala.es",
+  };
+
+  it("DCUL-168-2026: la ficha sin dirección usa la del pedido", () => {
+    const r = receptorDesdePedido(
+      { nombre: "GUAKALACREATIVELAB", nif: "Y2476751X" },
+      pedido,
+      null,
+      null,
+    );
+    expect(r).toMatchObject({
+      nombre: "GUAKALACREATIVELAB",
+      nif: "Y2476751X",
+      direccion: "Calle Mayor 3",
+      codigo_postal: "28001",
+      ciudad: "Madrid",
+      email: "hola@guakala.es",
+    });
+  });
+
+  it("la ficha con dirección manda entera, sin mezclar con la del pedido", () => {
+    const r = receptorDesdePedido(
+      { nombre: "Cliente", direccion: "Av. Sol 1", ciudad: "Huelva" },
+      pedido,
+      null,
+      null,
+    );
+    expect(r.direccion).toBe("Av. Sol 1");
+    expect(r.ciudad).toBe("Huelva");
+    expect(r.codigo_postal).toBeNull();
+  });
+});
+
 describe("lineasDesdePedido", () => {
   it("recorta las líneas del pedido tal cual, con su tipo de IVA", () => {
     expect(

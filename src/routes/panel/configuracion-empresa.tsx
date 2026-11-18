@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { eurUnitarioFijo } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -359,12 +360,13 @@ function EmpresaPage() {
               <div className="text-sm text-muted-foreground border-t pt-3">
                 Coste total estimado:{" "}
                 <span className="font-semibold text-foreground">
-                  {(
+                  {eurUnitarioFijo(
                     (Number(f.coste_consumibles_metro) || 0) +
-                    (Number(f.coste_packaging_metro) || 0) +
-                    (Number(f.coste_electricidad_metro) || 0)
-                  ).toFixed(3)}{" "}
-                  €/m
+                      (Number(f.coste_packaging_metro) || 0) +
+                      (Number(f.coste_electricidad_metro) || 0),
+                    3,
+                  )}
+                  /m
                 </span>
               </div>
               {data && "coste_uv_metro" in data && (

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -95,7 +96,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
   const [f, setF] = useState(vacio);
   const [borrando, setBorrando] = useState<Objetivo | null>(null);
 
-  const numeroONulo = (t: string) => (t.trim() === "" ? null : Number(t.replace(",", ".")));
+  const numeroONulo = (t: string) => (t.trim() === "" ? null : leerNumeroEscrito(t));
 
   const mutGuardar = useMutation({
     mutationFn: () =>
@@ -207,7 +208,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
                         setF({
                           id: o.id,
                           mes: o.desde.slice(0, 7),
-                          metros: o.metros != null ? String(o.metros) : "",
+                          metros: o.metros != null ? escribirNumero(Number(o.metros)) : "",
                           vendido: o.vendido != null ? String(o.vendido) : "",
                         })
                       }

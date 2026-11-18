@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  conRecargo,
-  lineaAEditable,
-  lineaVacia,
-  lineasParaEmitir,
-  numeroEscrito,
-} from "./factura-editable";
+import { conRecargo, lineaAEditable, lineaVacia, lineasParaEmitir } from "./factura-editable";
 
 describe("lineasParaEmitir", () => {
   it("convierte los números escritos con coma y miles", () => {
@@ -114,28 +108,7 @@ describe("conRecargo", () => {
   });
 });
 
-describe("numeroEscrito", () => {
-  it("la coma es el decimal: 40,767 m son cuarenta metros, no cuarenta mil", () => {
-    expect(numeroEscrito("40,767")).toBe(40.767);
-    expect(numeroEscrito("7,5")).toBe(7.5);
-    expect(numeroEscrito("1.234,56")).toBe(1234.56);
-    expect(numeroEscrito("-5,99")).toBe(-5.99);
-    expect(numeroEscrito(" 12,50 € ")).toBe(12.5);
-  });
-
-  it("con solo puntos, miles si van de tres en tres; si no, decimal", () => {
-    expect(numeroEscrito("1.200")).toBe(1200);
-    expect(numeroEscrito("12.500.000")).toBe(12500000);
-    expect(numeroEscrito("7.5")).toBe(7.5);
-    expect(numeroEscrito("21")).toBe(21);
-  });
-
-  it("lo que no es un número, nulo", () => {
-    for (const t of ["", "abc", "1,2,3", "1.2.3", "-"]) {
-      expect([t, numeroEscrito(t)]).toEqual([t, null]);
-    }
-  });
-
+describe("cantidades con coma decimal", () => {
   it("DCUL-130-2026: la línea del pedido vuelve tal cual tras pasar por el formulario", () => {
     const linea = {
       descripcion: "DTI por Metros",

@@ -31,7 +31,7 @@ import {
   type SocioCaja,
 } from "@/lib/caja.functions";
 import { avisarError } from "@/lib/errores";
-import { leerNumeroEscrito } from "@/dominio/numeros";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { useCerrarSinPerder } from "@/hooks/use-cerrar-sin-perder";
 import { FormularioDialogo } from "@/components/FormularioDialogo";
 
@@ -82,7 +82,7 @@ export function CajaFormDialog({
       conceptoId: movimiento?.concepto_id ?? "",
       clienteId: movimiento?.cliente_id ?? SIN_CLIENTE,
       socioId: movimiento?.socio_id ?? SIN_SOCIO,
-      importe: movimiento ? String(movimiento.importe).replace(".", ",") : "",
+      importe: movimiento ? escribirNumero(Number(movimiento.importe)) : "",
       observaciones: movimiento?.observaciones ?? "",
     };
     setFecha(valores.fecha);

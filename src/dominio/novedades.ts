@@ -36,6 +36,19 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-18-ticket-aunque-tenga-nif",
+    fecha: "2026-11-18",
+    tipo: "mejora",
+    titulo: "Ticket aunque el cliente tenga NIF",
+    resumen: "Tener NIF o NIE ya no obliga a factura: si cabe en un ticket, se propone ticket.",
+    puntos: [
+      "Factura si lo pidió en la web, si lleva R.E o si pasa del límite del ticket.",
+      "Si la ficha del cliente no tiene dirección, la factura lleva la del pedido.",
+      "Cantidades e importes con coma decimal y punto de miles en toda la aplicación.",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-18-facturas-cantidades-y-cupones",
     fecha: "2026-11-18",
     tipo: "arreglo",

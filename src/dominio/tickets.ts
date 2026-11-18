@@ -5,11 +5,21 @@
  * Lógica pura: no importa nada de `routes/`, de Supabase ni hace ninguna
  * llamada de red, y se prueba sin base de datos.
  *
- * ## La regla (RD 1619/2012, art. 4)
+ * ## La regla (RD 1619/2012, art. 4, y decisión de Javier, 18-11-2026)
+ *
+ * Primero, lo que obliga a factura completa, quepa o no en un ticket:
+ *
+ * | Caso                                    | Documento        |
+ * | --------------------------------------- | ---------------- |
+ * | Marcó «Quiero factura» en la web        | factura          |
+ * | Lleva recargo de equivalencia (R.E)     | factura          |
+ *
+ * Tener NIF, NIE o CIF no obliga: un ticket vale mientras quepa en el límite
+ * (si el cliente quiere factura, marca la casilla en la web). Después, el
+ * límite:
  *
  * | Cliente       | Importe con IVA           | Documento                          |
  * | ------------- | ------------------------- | ---------------------------------- |
- * | Con NIF       | cualquiera                | factura completa                   |
  * | Particular    | hasta 3.000 €             | ticket                             |
  * | Particular    | más de 3.000 €            | factura: hay que pedir los datos   |
  * | Profesional   | hasta 400 €               | ticket                             |
@@ -17,6 +27,8 @@
  * | Sin indicar   | hasta 400 €               | ticket                             |
  * | Sin indicar   | de 400 € a 3.000 €        | preguntar si es particular         |
  * | Sin indicar   | más de 3.000 €            | factura: hay que pedir los datos   |
+ *
+ * Por encima del límite, con nombre y NIF ya dados, factura sin preguntar.
  *
  * Los dos límites son de la empresa (`empresas.limite_simplificada` y
  * `limite_simplificada_particular`), no números escritos aquí: si cambia la
@@ -26,11 +38,8 @@
  * encima del límite es la base (`ticket_receptor()`), con la misma regla: la
  * pantalla puede equivocarse o saltarse, la base no.
  *
- * ## Por qué con NIF va factura aunque quepa en un ticket
- *
- * Si el cliente ha dado sus datos fiscales es porque los quiere en el
- * documento, y la factura completa siempre vale. Un profesional que quiera
- * ticket de todas formas puede pedirlo: `cabeEnTicket()` dice si se puede.
+ * Siempre se puede emitir el otro documento a mano: `cabeEnTicket()` dice si
+ * un ticket cabe.
  */
 
 import { normalizarNif } from "./clientes";
@@ -75,9 +84,12 @@ export type ClienteDocumento = {
   recargo_equivalencia?: boolean | null;
 };
 
+/** Por qué toca factura completa. */
+export type MotivoFactura = "pide_factura" | "recargo" | "limite";
+
 export type DecisionDocumento =
-  /** Hay datos fiscales: factura completa. */
-  | { documento: "factura" }
+  /** Factura completa, con los datos del cliente ya dados. */
+  | { documento: "factura"; motivo?: MotivoFactura }
   /** Cabe en un ticket. */
   | { documento: "ticket"; limite: number }
   /**
@@ -125,24 +137,27 @@ export function decidirDocumento(
   limites: LimitesTicket = LIMITES_TICKET,
 ): DecisionDocumento {
   if (centimos(total) <= 0) return { documento: "sin_importe" };
-  if (tieneDatosFiscales(cliente)) return { documento: "factura" };
 
   const tipo = cliente?.tipo_fiscal ?? null;
+  const conDatos = tieneDatosFiscales(cliente);
   // Recargo de equivalencia: el ticket no puede llevarlo, así que factura.
   if (cliente?.recargo_equivalencia) {
-    return { documento: "pedir_datos", limite: limiteTicket(tipo, limites), motivo: "recargo" };
+    return conDatos
+      ? { documento: "factura", motivo: "recargo" }
+      : { documento: "pedir_datos", limite: limiteTicket(tipo, limites), motivo: "recargo" };
   }
   // Pidió factura en la web: ni ticket ni preguntar, aunque quepa.
   if (cliente?.pide_factura) {
-    return {
-      documento: "pedir_datos",
-      limite: limiteTicket(tipo, limites),
-      motivo: "pide_factura",
-    };
+    return conDatos
+      ? { documento: "factura", motivo: "pide_factura" }
+      : { documento: "pedir_datos", limite: limiteTicket(tipo, limites), motivo: "pide_factura" };
   }
+  // Tener NIF o NIE no obliga a factura: si cabe, ticket.
   if (cabeEnTicket(total, tipo, limites)) {
     return { documento: "ticket", limite: limiteTicket(tipo, limites) };
   }
+  // Pasa del límite: con los datos ya dados, factura sin más.
+  if (conDatos) return { documento: "factura", motivo: "limite" };
 
   // Sin saber quién es: si como particular cabría, se pregunta antes de pedir
   // datos que un particular no tiene por qué dar.
@@ -161,7 +176,11 @@ export function decidirDocumento(
 export function explicarDecision(d: DecisionDocumento): string {
   switch (d.documento) {
     case "factura":
-      return "El cliente tiene NIF: factura completa.";
+      if (d.motivo === "pide_factura")
+        return "El cliente pidió factura en la web: factura completa.";
+      if (d.motivo === "recargo") return "Lleva recargo de equivalencia: factura completa.";
+      if (d.motivo === "limite") return "Pasa del límite del ticket: factura completa.";
+      return "Factura completa.";
     case "ticket":
       return "Cabe en un ticket: no hacen falta datos del cliente.";
     case "pedir_datos":

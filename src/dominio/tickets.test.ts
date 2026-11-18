@@ -25,6 +25,7 @@ describe("decidirDocumento: «Quiero factura» en la web", () => {
   it("con datos, factura completa", () => {
     expect(decidirDocumento(12, { ...CON_NIF, pide_factura: true })).toEqual({
       documento: "factura",
+      motivo: "pide_factura",
     });
   });
 
@@ -63,9 +64,16 @@ describe("decidirDocumento: «Quiero factura» en la web", () => {
 });
 
 describe("decidirDocumento: la tabla del RD 1619/2012 art. 4", () => {
-  it("con nombre y NIF, factura completa sea cual sea el importe", () => {
-    expect(decidirDocumento(12, CON_NIF)).toEqual({ documento: "factura" });
-    expect(decidirDocumento(5000, CON_NIF)).toEqual({ documento: "factura" });
+  it("tener NIF o NIE no obliga a factura: si cabe, ticket (Javier, 18-11-2026)", () => {
+    expect(decidirDocumento(12, CON_NIF)).toEqual({ documento: "ticket", limite: 400 });
+    const conNie = { nombre: "GUAKALACREATIVELAB", nif: "Y2476751X", tipo_fiscal: null };
+    expect(decidirDocumento(54.78, conNie).documento).toBe("ticket");
+  });
+
+  it("con nombre y NIF, por encima del límite, factura sin preguntar", () => {
+    const d = decidirDocumento(5000, CON_NIF);
+    expect(d).toEqual({ documento: "factura", motivo: "limite" });
+    expect(explicarDecision(d)).toMatch(/límite del ticket/);
   });
 
   it("particular: ticket hasta 3000 €, datos por encima", () => {
@@ -213,8 +221,9 @@ describe("clasificarParaTickets", () => {
       p("e", 500, PROFESIONAL),
       p("f", 0),
     ]);
-    expect(r.tickets.map((x) => x.id)).toEqual(["a", "d"]);
-    expect(r.facturas.map((x) => x.id)).toEqual(["c"]);
+    // Con NIF y por poco importe, ticket: el NIF no obliga a factura.
+    expect(r.tickets.map((x) => x.id)).toEqual(["a", "c", "d"]);
+    expect(r.facturas.map((x) => x.id)).toEqual([]);
     expect(r.revisar.map((x) => [x.pedido.id, x.decision.documento])).toEqual([
       ["b", "preguntar_tipo"],
       ["e", "pedir_datos"],
