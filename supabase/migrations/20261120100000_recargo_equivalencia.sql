@@ -14,9 +14,11 @@
 --   2. facturas.recargo_total y facturas.desglose_recargo: el recargo
 --      congelado al emitir, aparte del IVA. Las facturas ya emitidas quedan
 --      con 0 y sin desglose: no se tocan.
---   3. factura_calcular(): cada línea puede llevar `recargo_rate`. El recargo
---      se calcula como el IVA, por tipo sobre la base sumada de ese tipo, y
---      suma al total. Sin `recargo_rate` el resultado es el de siempre.
+--   3. factura_calcular(): cada línea puede llevar `recargo_rate`. La cuota
+--      del recargo de cada tipo es la suma de lo de cada línea, redondeado
+--      línea a línea, como lo cobra la web: así la factura cuadra al céntimo
+--      con lo cobrado (decisión de Javier, 18-11-2026). Suma al total. Sin
+--      `recargo_rate` el resultado es el de siempre.
 --   4. emitir_factura(): guarda el recargo. Es la versión de 20261031200300
 --      (con rol_exigir_quien) sin más cambio que esas columnas.
 --   5. anular_factura(): la rectificativa lleva el mismo recargo en negativo.
@@ -56,7 +58,8 @@ COMMENT ON COLUMN public.facturas.desglose_recargo IS
 -- ---------------------------------------------------------------------------
 -- 3. El cálculo
 -- ---------------------------------------------------------------------------
--- La misma cuenta que calcularTotales() en src/dominio/importes.ts. Las
+-- La misma cuenta que calcularTotales() en src/dominio/importes.ts. El IVA,
+-- por tipo sobre la base sumada; el recargo, sumando el de cada línea. Las
 -- claves de cada línea son las de siempre; `recargo_rate` y `recargo` solo
 -- salen en las que lo llevan, así que el snapshot de una factura sin recargo
 -- no cambia.
@@ -97,7 +100,7 @@ LANGUAGE sql IMMUTABLE SET search_path = public AS $$
     SELECT
       recargo_rate AS tipo,
       round(sum(base), 2) AS base,
-      round(round(sum(base), 2) * recargo_rate / 100, 2) AS cuota
+      round(sum(recargo), 2) AS cuota
     FROM calculadas
     WHERE recargo_rate <> 0
     GROUP BY recargo_rate

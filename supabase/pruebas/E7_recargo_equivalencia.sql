@@ -5,7 +5,7 @@
 -- que poder repetirse) y todo va en una transacción que se deshace al final.
 --   1. las columnas existen y por defecto no hay recargo;
 --   2. sin recargo, el cálculo y la factura salen como siempre;
---   3. el pedido DCUL-172-2026: impresión 7,00 + envío 5,99 con IVA y R.E;
+--   3. el pedido DCUL-172-2026: 7,00 + envío 5,99 cuadra con lo cobrado, 16,39;
 --   4. un ticket de un pedido con recargo se rechaza;
 --   5. una factura sin recargo de ese pedido se rechaza;
 --   6. la anulación lleva el recargo en negativo;
@@ -68,15 +68,15 @@ SELECT CASE WHEN total = 12.10 AND recargo_total = 0 AND desglose_recargo IS NUL
             ELSE 'MAL   2b. factura sin recargo: total ' || total || ', recargo ' || recargo_total END
   FROM public.facturas WHERE id::TEXT = :'r2';
 
--- 3. DCUL-172-2026: el recargo va sobre la base sumada, como el IVA.
+-- 3. DCUL-172-2026: el recargo, línea a línea como la web (0,36 + 0,31).
 SELECT pg_temp.e7_emitir(current_setting('e7.re')::UUID,
   '[{"descripcion":"DTI por Metros","cantidad":1,"unidad":"m","precio_unitario":7,"iva_rate":21,"recargo_rate":5.2},
     {"descripcion":"Gastos de envío","cantidad":1,"unidad":"ud","precio_unitario":5.99,"iva_rate":21,"recargo_rate":5.2}]') AS r3 \gset
-SELECT CASE WHEN base_imponible = 12.99 AND iva_total = 2.73 AND recargo_total = 0.68
-             AND total = 16.40
-             AND desglose_recargo = '[{"tipo": 5.2, "base": 12.99, "cuota": 0.68}]'::JSONB
+SELECT CASE WHEN base_imponible = 12.99 AND iva_total = 2.73 AND recargo_total = 0.67
+             AND total = 16.39
+             AND desglose_recargo = '[{"tipo": 5.2, "base": 12.99, "cuota": 0.67}]'::JSONB
              AND (lineas_snapshot -> 0 ->> 'recargo')::NUMERIC = 0.36
-            THEN 'BIEN  3. factura con recargo: 12,99 + 2,73 + 0,68 = 16,40'
+            THEN 'BIEN  3. factura con recargo: 12,99 + 2,73 + 0,67 = 16,39, lo cobrado'
             ELSE 'MAL   3. factura con recargo: ' || COALESCE(:'r3', '') || ' total ' || COALESCE(total::TEXT, '-')
                  || ', recargo ' || COALESCE(recargo_total::TEXT, '-') END
   FROM (SELECT 1) uno
@@ -101,7 +101,7 @@ SELECT CASE WHEN :'r5' LIKE 'error:%no lo incluye%'
 
 -- 6. La anulación lleva el recargo en negativo.
 SELECT public.anular_factura('11111111-1111-4111-8111-111111111111', :'r3'::UUID) ->> 'id' AS r6 \gset
-SELECT CASE WHEN tipo = 'rectificativa' AND recargo_total = -0.68 AND total = -16.40
+SELECT CASE WHEN tipo = 'rectificativa' AND recargo_total = -0.67 AND total = -16.39
             THEN 'BIEN  6. la rectificativa anula también el recargo'
             ELSE 'MAL   6. rectificativa: total ' || total || ', recargo ' || recargo_total END
   FROM public.facturas WHERE id::TEXT = :'r6';

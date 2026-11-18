@@ -25,9 +25,11 @@
  * cuotas redondeadas línea a línea produce descuadres de céntimos frente a la
  * cuota real del tipo, y esos céntimos aparecen luego en el modelo 303.
  *
- * El recargo de equivalencia (clientes minoristas en ese régimen) se calcula
- * igual que el IVA: por tipo de recargo sobre la suma de las bases de ese
- * tipo. Va aparte del IVA, en su propio desglose, y suma al total.
+ * El recargo de equivalencia (clientes minoristas en ese régimen) va aparte
+ * del IVA, en su propio desglose, y suma al total. Su cuota es la suma de lo
+ * que lleva cada línea, redondeada línea a línea: es como lo cobra la web, y
+ * la factura tiene que cuadrar al céntimo con lo cobrado (decisión de Javier,
+ * 18-11-2026). En DCUL-172-2026: 0,36 + 0,31 = 0,67, no 12,99 × 5,2 % = 0,68.
  *
  * El redondeo es a la mitad hacia arriba en valor absoluto (2,675 → 2,68), que
  * es el criterio de la facturación española. `toFixed` de JavaScript no sirve:
@@ -181,8 +183,9 @@ export function calcularLinea(linea: LineaBruta): LineaCalculada {
  *
  * El desglose se agrupa por tipo impositivo y la cuota de cada tipo se calcula
  * sobre la base agregada de ese tipo, no sumando las cuotas de las líneas. El
- * recargo de equivalencia, igual, en su propio desglose. Es la misma cuenta
- * que hace la base al emitir (`factura_calcular`).
+ * recargo de equivalencia va en su propio desglose, con la cuota sumada línea
+ * a línea, como lo cobra la web. Es la misma cuenta que hace la base al
+ * emitir (`factura_calcular`).
  */
 export function calcularTotales(
   lineas: readonly LineaBruta[],
@@ -202,19 +205,23 @@ export function calcularTotales(
     basesPorTipo.set(tipoEnvio, redondear((basesPorTipo.get(tipoEnvio) ?? 0) + envio));
   }
 
-  // Bases acumuladas por tipo de recargo. Los gastos de envío de `opciones`
-  // no llevan recargo: el envío que lo lleva va como una línea más.
-  const basesPorRecargo = new Map<number, number>();
+  // Recargo por tipo: base sumada y cuota sumada de las líneas (cada una
+  // redondeada), como lo cobra la web. Los gastos de envío de `opciones` no
+  // llevan recargo: el envío que lo lleva va como una línea más.
+  const recargoPorTipo = new Map<number, { base: number; cuota: number }>();
   for (const l of calculadas) {
     if (l.recargo_rate === 0) continue;
-    basesPorRecargo.set(
-      l.recargo_rate,
-      redondear((basesPorRecargo.get(l.recargo_rate) ?? 0) + l.base),
-    );
+    const previo = recargoPorTipo.get(l.recargo_rate) ?? { base: 0, cuota: 0 };
+    recargoPorTipo.set(l.recargo_rate, {
+      base: redondear(previo.base + l.base),
+      cuota: redondear(previo.cuota + l.recargo),
+    });
   }
 
   const desglose_iva = desglosePorTipo(basesPorTipo);
-  const desglose_recargo = desglosePorTipo(basesPorRecargo);
+  const desglose_recargo: DesgloseIva[] = Array.from(recargoPorTipo.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([tipo, r]) => ({ tipo, base: r.base, cuota: r.cuota }));
 
   const base_imponible = redondear(desglose_iva.reduce((s, d) => s + d.base, 0));
   const iva_total = redondear(desglose_iva.reduce((s, d) => s + d.cuota, 0));

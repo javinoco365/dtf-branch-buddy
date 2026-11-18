@@ -502,30 +502,30 @@ describe("recargo de equivalencia", () => {
     expect(t.total).toBe(8.47);
   });
 
-  it("el pedido DCUL-172-2026: impresión y envío, con IVA y recargo sobre la base sumada", () => {
-    // La web cobró 16,39 € sumando el recargo línea a línea (0,36 + 0,31).
-    // Sobre la base sumada, como el IVA, el recargo es 12,99 × 5,2 % = 0,68.
+  it("el pedido DCUL-172-2026: cuadra al céntimo con lo cobrado, 16,39 €", () => {
+    // La web suma el recargo línea a línea: 0,36 + 0,31 = 0,67. Sobre la
+    // base sumada saldría 12,99 × 5,2 % = 0,68 y la factura no cuadraría.
     const t = calcularTotales([
       { cantidad: 1, precio_unitario: 7, iva_rate: 21, recargo_rate: 5.2 },
       { cantidad: 1, precio_unitario: 5.99, iva_rate: 21, recargo_rate: 5.2 },
     ]);
     expect(t.base_imponible).toBe(12.99);
     expect(t.iva_total).toBe(2.73);
-    expect(t.desglose_recargo).toEqual([{ tipo: 5.2, base: 12.99, cuota: 0.68 }]);
-    expect(t.recargo_total).toBe(0.68);
-    expect(t.total).toBe(16.4);
+    expect(t.desglose_recargo).toEqual([{ tipo: 5.2, base: 12.99, cuota: 0.67 }]);
+    expect(t.recargo_total).toBe(0.67);
+    expect(t.total).toBe(16.39);
   });
 
   it("el pie impreso lleva el recargo por tipo", () => {
     const pie = pieDocumentoEmitido({
       base_imponible: 12.99,
       iva_total: 2.73,
-      total: 16.4,
+      total: 16.39,
       desglose: [{ tipo: 21, base: 12.99, cuota: 2.73 }],
-      recargo_total: 0.68,
-      desglose_recargo: [{ tipo: 5.2, base: 12.99, cuota: 0.68 }],
+      recargo_total: 0.67,
+      desglose_recargo: [{ tipo: 5.2, base: 12.99, cuota: 0.67 }],
     });
-    expect(pie.recargo).toEqual([{ tipo: 5.2, cuota: 0.68 }]);
+    expect(pie.recargo).toEqual([{ tipo: 5.2, cuota: 0.67 }]);
   });
 });
 

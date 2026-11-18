@@ -167,8 +167,8 @@ describe("lineasDesdePedido con recargo de equivalencia", () => {
     ]);
     const t = calcularTotales(lineas);
     expect(t.iva_total).toBe(2.73);
-    expect(t.recargo_total).toBe(0.68);
-    expect(t.total).toBe(16.4);
+    expect(t.recargo_total).toBe(0.67);
+    expect(t.total).toBe(16.39);
   });
 
   it("sin recargo, las líneas no lo llevan", () => {
