@@ -41,6 +41,17 @@ describe("decidirDocumento: «Quiero factura» en la web", () => {
     expect(decidirDocumento(12, { ...SIN_DATOS, pide_factura: false }).documento).toBe("ticket");
   });
 
+  it("con recargo de equivalencia nunca va en ticket", () => {
+    expect(decidirDocumento(12, { ...SIN_DATOS, recargo_equivalencia: true })).toEqual({
+      documento: "pedir_datos",
+      limite: 400,
+      motivo: "recargo",
+    });
+    expect(decidirDocumento(12, { ...CON_NIF, recargo_equivalencia: true }).documento).toBe(
+      "factura",
+    );
+  });
+
   it("en bloque nunca va a ticket", () => {
     const c = clasificarParaTickets([
       { id: "a", numero: "1", total: 50, cliente: { ...SIN_DATOS, pide_factura: true } },

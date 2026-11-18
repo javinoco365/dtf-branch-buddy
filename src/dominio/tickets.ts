@@ -68,6 +68,11 @@ export type ClienteDocumento = {
   tipo_fiscal?: TipoFiscal | null;
   /** Marcó «Quiero factura» en la web: nunca ticket. */
   pide_factura?: boolean | null;
+  /**
+   * Está en recargo de equivalencia (la web se lo cobró): nunca ticket, una
+   * factura simplificada no puede llevar el recargo.
+   */
+  recargo_equivalencia?: boolean | null;
 };
 
 export type DecisionDocumento =
@@ -77,9 +82,10 @@ export type DecisionDocumento =
   | { documento: "ticket"; limite: number }
   /**
    * Faltan los datos para la factura que toca: porque no cabe en un ticket o
-   * porque el cliente pidió factura en la web (`motivo: "pide_factura"`).
+   * porque el cliente pidió factura en la web (`motivo: "pide_factura"`) o
+   * porque está en recargo de equivalencia (`motivo: "recargo"`).
    */
-  | { documento: "pedir_datos"; limite: number; motivo?: "pide_factura" }
+  | { documento: "pedir_datos"; limite: number; motivo?: "pide_factura" | "recargo" }
   /** Cabe en un ticket solo si el cliente es particular: hay que preguntarlo. */
   | { documento: "preguntar_tipo"; limite: number; limite_particular: number }
   /** Sin importe no hay nada que documentar. */
@@ -122,6 +128,10 @@ export function decidirDocumento(
   if (tieneDatosFiscales(cliente)) return { documento: "factura" };
 
   const tipo = cliente?.tipo_fiscal ?? null;
+  // Recargo de equivalencia: el ticket no puede llevarlo, así que factura.
+  if (cliente?.recargo_equivalencia) {
+    return { documento: "pedir_datos", limite: limiteTicket(tipo, limites), motivo: "recargo" };
+  }
   // Pidió factura en la web: ni ticket ni preguntar, aunque quepa.
   if (cliente?.pide_factura) {
     return {
@@ -155,6 +165,9 @@ export function explicarDecision(d: DecisionDocumento): string {
     case "ticket":
       return "Cabe en un ticket: no hacen falta datos del cliente.";
     case "pedir_datos":
+      if (d.motivo === "recargo") {
+        return "El cliente está en recargo de equivalencia: hace falta factura completa con nombre y NIF.";
+      }
       if (d.motivo === "pide_factura") {
         return "El cliente pidió factura en la web: hace falta factura completa con nombre y NIF.";
       }

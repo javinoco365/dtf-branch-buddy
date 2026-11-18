@@ -22,7 +22,7 @@ export function EtiquetaPideFactura({
       )}
     >
       <FileText className="h-3 w-3" aria-hidden="true" />
-      {conTexto ? "Quiere factura (lo marcó en la web)" : "Quiere factura"}
+      {conTexto ? "Factura (lo marcó en la web)" : "Factura"}
     </span>
   );
 }

@@ -7,6 +7,7 @@ import {
   lineaImpresa,
   lineasImpresas,
   pieDocumentoEmitido,
+  recargoDeIva,
   redondear,
   type LineaBruta,
 } from "./importes";
@@ -171,6 +172,8 @@ describe("calcularTotales", () => {
       base_imponible: 0,
       desglose_iva: [],
       iva_total: 0,
+      desglose_recargo: [],
+      recargo_total: 0,
       total: 0,
     });
   });
@@ -414,7 +417,7 @@ describe("pieDocumentoEmitido", () => {
         total: 15.72,
         desglose: [{ tipo: 21, base: 12.99, cuota: 2.73 }],
       }),
-    ).toEqual({ base: 12.99, iva: [{ tipo: 21, cuota: 2.73 }], total: 15.72 });
+    ).toEqual({ base: 12.99, iva: [{ tipo: 21, cuota: 2.73 }], recargo: [], total: 15.72 });
   });
 
   it("una cuota por cada tipo, en el orden del desglose", () => {
@@ -464,10 +467,65 @@ describe("pieDocumentoEmitido", () => {
 
   it("sin desglose, una sola cuota sin tipo con el IVA total", () => {
     const sinDesglose = { base_imponible: 100, iva_total: 21, total: 121 };
-    const esperado = { base: 100, iva: [{ tipo: null, cuota: 21 }], total: 121 };
+    const esperado = { base: 100, iva: [{ tipo: null, cuota: 21 }], recargo: [], total: 121 };
     expect(pieDocumentoEmitido(sinDesglose)).toEqual(esperado);
     expect(pieDocumentoEmitido({ ...sinDesglose, desglose: null })).toEqual(esperado);
     expect(pieDocumentoEmitido({ ...sinDesglose, desglose: [] })).toEqual(esperado);
+  });
+});
+
+describe("recargo de equivalencia", () => {
+  it("cada tipo de IVA con su recargo, y sin recargo los que no lo tienen", () => {
+    expect(recargoDeIva(21)).toBe(5.2);
+    expect(recargoDeIva(10)).toBe(1.4);
+    expect(recargoDeIva(4)).toBe(0.5);
+    expect(recargoDeIva(0)).toBe(0);
+  });
+
+  it("una línea con recargo lo suma a su total", () => {
+    expect(
+      calcularLinea({ cantidad: 1, precio_unitario: 7, iva_rate: 21, recargo_rate: 5.2 }),
+    ).toEqual({
+      base: 7,
+      iva_rate: 21,
+      cuota: 1.47,
+      recargo_rate: 5.2,
+      recargo: 0.36,
+      total: 8.83,
+    });
+  });
+
+  it("sin recargo, nada cambia: desglose vacío y total de siempre", () => {
+    const t = calcularTotales([{ cantidad: 1, precio_unitario: 7, iva_rate: 21 }]);
+    expect(t.desglose_recargo).toEqual([]);
+    expect(t.recargo_total).toBe(0);
+    expect(t.total).toBe(8.47);
+  });
+
+  it("el pedido DCUL-172-2026: cuadra al céntimo con lo cobrado, 16,39 €", () => {
+    // La web suma el recargo línea a línea: 0,36 + 0,31 = 0,67. Sobre la
+    // base sumada saldría 12,99 × 5,2 % = 0,68 y la factura no cuadraría.
+    const t = calcularTotales([
+      { cantidad: 1, precio_unitario: 7, iva_rate: 21, recargo_rate: 5.2 },
+      { cantidad: 1, precio_unitario: 5.99, iva_rate: 21, recargo_rate: 5.2 },
+    ]);
+    expect(t.base_imponible).toBe(12.99);
+    expect(t.iva_total).toBe(2.73);
+    expect(t.desglose_recargo).toEqual([{ tipo: 5.2, base: 12.99, cuota: 0.67 }]);
+    expect(t.recargo_total).toBe(0.67);
+    expect(t.total).toBe(16.39);
+  });
+
+  it("el pie impreso lleva el recargo por tipo", () => {
+    const pie = pieDocumentoEmitido({
+      base_imponible: 12.99,
+      iva_total: 2.73,
+      total: 16.39,
+      desglose: [{ tipo: 21, base: 12.99, cuota: 2.73 }],
+      recargo_total: 0.67,
+      desglose_recargo: [{ tipo: 5.2, base: 12.99, cuota: 0.67 }],
+    });
+    expect(pie.recargo).toEqual([{ tipo: 5.2, cuota: 0.67 }]);
   });
 });
 

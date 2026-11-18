@@ -34,7 +34,7 @@
  * del pedido.
  */
 
-import { calcularTotales, redondear } from "./importes";
+import { calcularTotales, recargoDeIva, redondear } from "./importes";
 import { diaEnEspana } from "./fecha-documento";
 
 const IVA_GENERAL = 21;
@@ -135,6 +135,8 @@ export type LineaFactura = {
   unidad: string;
   precio_unitario: number;
   iva_rate: number;
+  /** Recargo de equivalencia en porcentaje. Solo en los pedidos que lo llevan. */
+  recargo_rate?: number;
 };
 
 /**
@@ -142,27 +144,42 @@ export type LineaFactura = {
  *
  * El 21 % en una línea sin tipo es el mismo respaldo que usa el formulario
  * de pedido manual: pasa en pedidos de antes de que `iva_rate` existiera.
+ *
+ * Con `recargo` (el cliente está en recargo de equivalencia), cada línea
+ * lleva el recargo que va con su IVA, el envío incluido: es como lo cobra la
+ * web (decisión de Javier, 18-11-2026: la factura sigue lo cobrado).
  */
 export function lineasDesdePedido(
   items: readonly ItemPedido[],
   gastosEnvio: number,
+  opciones: { recargo?: boolean } = {},
 ): LineaFactura[] {
-  const lineas: LineaFactura[] = items.map((it) => ({
-    descripcion: it.descripcion,
-    cantidad: Number(it.cantidad),
-    unidad: it.unidad?.trim() || "m",
-    precio_unitario: Number(it.precio_unitario),
-    iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
-  }));
+  const conRecargo = (l: LineaFactura): LineaFactura => {
+    if (!opciones.recargo) return l;
+    const recargo = recargoDeIva(l.iva_rate);
+    return recargo > 0 ? { ...l, recargo_rate: recargo } : l;
+  };
+
+  const lineas: LineaFactura[] = items.map((it) =>
+    conRecargo({
+      descripcion: it.descripcion,
+      cantidad: Number(it.cantidad),
+      unidad: it.unidad?.trim() || "m",
+      precio_unitario: Number(it.precio_unitario),
+      iva_rate: it.iva_rate == null ? IVA_GENERAL : Number(it.iva_rate),
+    }),
+  );
 
   if (gastosEnvio > 0) {
-    lineas.push({
-      descripcion: "Gastos de envío",
-      cantidad: 1,
-      unidad: "ud",
-      precio_unitario: gastosEnvio,
-      iva_rate: IVA_GENERAL,
-    });
+    lineas.push(
+      conRecargo({
+        descripcion: "Gastos de envío",
+        cantidad: 1,
+        unidad: "ud",
+        precio_unitario: gastosEnvio,
+        iva_rate: IVA_GENERAL,
+      }),
+    );
   }
 
   return lineas;
@@ -217,6 +234,10 @@ function descripcionDevolucion(dev: DevolucionParaDocumento): string {
  * el total del documento es exactamente el de las líneas menos lo devuelto.
  *
  * Las devoluciones a 0 (una rebaja quitada) no generan línea.
+ *
+ * Si el pedido lleva recargo de equivalencia, lo devuelto también lo lleva:
+ * cada parte se pasa a base quitándole el IVA y el recargo de su tipo, y la
+ * línea en negativo lleva el mismo recargo.
  */
 export function lineasDeDevoluciones(
   lineas: readonly LineaFactura[],
@@ -228,8 +249,18 @@ export function lineasDeDevoluciones(
   if (devs.length === 0) return [];
 
   const totales = calcularTotales(lineas);
+  // El recargo que lleva cada tipo de IVA en este pedido (0 si no lleva).
+  const recargoDe = (tipo: number) =>
+    lineas.find((l) => l.iva_rate === tipo && (l.recargo_rate ?? 0) > 0)?.recargo_rate ?? 0;
   const porTipo = totales.desglose_iva
-    .map((t) => ({ tipo: t.tipo, bruto: redondear(t.base + t.cuota) }))
+    .map((t) => {
+      const recargo = recargoDe(t.tipo);
+      return {
+        tipo: t.tipo,
+        recargo,
+        bruto: redondear(t.base + t.cuota + redondear(t.base * (recargo / 100))),
+      };
+    })
     .filter((t) => t.bruto > 0);
   const brutoTotal = redondear(porTipo.reduce((s, t) => s + t.bruto, 0));
   if (brutoTotal <= 0) return [];
@@ -244,7 +275,7 @@ export function lineasDeDevoluciones(
           : redondear((importe * t.bruto) / brutoTotal);
       repartido = redondear(repartido + parte);
       if (parte <= 0) return;
-      const base = redondear(parte / (1 + t.tipo / 100));
+      const base = redondear(parte / (1 + (t.tipo + t.recargo) / 100));
       nuevas.push({
         descripcion:
           porTipo.length > 1
@@ -254,6 +285,7 @@ export function lineasDeDevoluciones(
         unidad: "ud",
         precio_unitario: -base,
         iva_rate: t.tipo,
+        ...(t.recargo > 0 ? { recargo_rate: t.recargo } : {}),
       });
     });
   }

@@ -351,3 +351,51 @@ export function pidioFacturaWoo(o: { meta_data?: readonly MetaPedidoWoo[] | null
   }
   return false;
 }
+
+/** Un impuesto cobrado en un pedido de WooCommerce (`tax_lines`). */
+export type ImpuestoPedidoWoo = {
+  rate_id?: number | string | null;
+  rate_code?: string | null;
+  label?: string | null;
+  rate_percent?: number | string | null;
+  tax_total?: number | string | null;
+  shipping_tax_total?: number | string | null;
+};
+
+/** Los tipos del recargo de equivalencia (5,2 con el 21 %, 1,4 con el 10 %, 0,5 con el 4 %). */
+const TIPOS_RECARGO = [5.2, 1.4, 0.5];
+
+/** «R.E», «RE», «R.E.», «Recargo de equivalencia»… en el nombre o el código del impuesto. */
+const NOMBRE_RECARGO = /recargo|equivalencia|(^|[^a-z])r\.?\s?e\.?($|[^a-z])/i;
+
+/**
+ * ¿Es este impuesto el recargo de equivalencia? En la tienda es una tarifa de
+ * la clase «RE General» que sale en el pedido como «R.E», al 5,2 %. Manda el
+ * tipo: ningún IVA español es del 5,2, del 1,4 ni del 0,5 %, y el IVA de esa
+ * misma clase (21 %) puede llevar «RE» en el nombre sin ser el recargo. Solo
+ * si WooCommerce no da el tipo se mira el nombre.
+ */
+export function esImpuestoRecargo(t: ImpuestoPedidoWoo | null | undefined): boolean {
+  if (!t) return false;
+  const crudo = t.rate_percent;
+  const tipo = crudo == null || crudo === "" ? NaN : Number(crudo);
+  if (Number.isFinite(tipo)) return TIPOS_RECARGO.some((r) => Math.abs(r - tipo) < 1e-6);
+  return (
+    NOMBRE_RECARGO.test(String(t.label ?? "")) || NOMBRE_RECARGO.test(String(t.rate_code ?? ""))
+  );
+}
+
+/**
+ * Si el pedido lleva recargo de equivalencia: el cliente está en ese régimen
+ * y la web se lo cobró como un impuesto más, al lado del IVA (decisión de
+ * Javier, 18-11-2026). Con él, el pedido no admite ticket y su factura lo
+ * lleva.
+ */
+export function pidioRecargoWoo(o: { tax_lines?: readonly ImpuestoPedidoWoo[] | null }): boolean {
+  const impuestos = Array.isArray(o.tax_lines) ? o.tax_lines : [];
+  return impuestos.some(
+    (t) =>
+      esImpuestoRecargo(t) &&
+      (Number(t.tax_total) || 0) + (Number(t.shipping_tax_total) || 0) !== 0,
+  );
+}

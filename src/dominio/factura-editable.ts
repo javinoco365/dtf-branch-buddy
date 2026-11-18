@@ -10,6 +10,7 @@
  * factura se guarda con lo escrito, no con lo que tenía el pedido.
  */
 import { aNumero } from "./factura-compra";
+import { recargoDeIva } from "./importes";
 
 /** Una línea tal como está en el formulario. */
 export type LineaEditable = {
@@ -27,6 +28,8 @@ export type LineaEmision = {
   unidad: string;
   precio_unitario: number;
   iva_rate: number;
+  /** Recargo de equivalencia en porcentaje, si el cliente lo lleva. */
+  recargo_rate?: number;
 };
 
 /** Pasa una línea del pedido al formulario: los números, con coma decimal. */
@@ -106,4 +109,19 @@ export function lineasParaEmitir(editables: readonly LineaEditable[]): Resultado
     errores.push("La factura necesita al menos una línea");
   }
   return errores.length > 0 ? { ok: false, errores } : { ok: true, lineas };
+}
+
+/**
+ * Pone a cada línea el recargo de equivalencia que va con su IVA (5,2 % con
+ * el 21 %), o se lo quita. El recargo no se escribe a mano: lo lleva el
+ * cliente, así que en la vista previa va en todas las líneas, también en las
+ * que se añaden o se cambian.
+ */
+export function conRecargo(lineas: readonly LineaEmision[], recargo: boolean): LineaEmision[] {
+  return lineas.map((l) => {
+    const resto: LineaEmision = { ...l };
+    delete resto.recargo_rate;
+    const tipo = recargo ? recargoDeIva(l.iva_rate) : 0;
+    return tipo > 0 ? { ...resto, recargo_rate: tipo } : resto;
+  });
 }

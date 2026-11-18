@@ -62,6 +62,7 @@ import { lineasDelPedido, type LineasDelPedido } from "@/dominio/linea-producto"
 import { cn } from "@/lib/utils";
 import { EtiquetaLineasPedido, EtiquetaUv } from "@/components/EtiquetaLinea";
 import { EtiquetaPideFactura } from "@/components/EtiquetaPideFactura";
+import { EtiquetaRecargo } from "@/components/EtiquetaRecargo";
 import { EtiquetaDevuelto } from "@/components/EtiquetaDevuelto";
 import { diaDelPedido, ordenarPedidos } from "@/dominio/dia-pedido";
 import { HORA_CORTE_POR_DEFECTO } from "@/dominio/realizado";
@@ -177,6 +178,8 @@ export type PedidoFila = {
   devoluciones?: DevolucionDePedido[];
   /** Marcó «Quiero factura» en la web: no se le hace ticket. */
   necesita_factura?: boolean | null;
+  /** La web le cobró recargo de equivalencia: factura con recargo, no ticket. */
+  recargo_equivalencia?: boolean | null;
   direccion_facturacion: Direccion | null;
   direccion_envio: Direccion | null;
   origen: string | null;
@@ -230,7 +233,7 @@ const FILTROS_PEDIDOS = {
   tienda: "todas",
   /** DTF, DTF UV o los dos: ver linea-producto.ts. */
   linea: "todas",
-  /** «Quiero factura» marcado en la web. */
+  /** «Quiero factura» marcado en la web, o recargo de equivalencia. */
   factura: "todos",
 };
 
@@ -455,6 +458,7 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
       if (f.linea === "uv" && !["uv", "mixto"].includes(lineasDelPedido(p))) return false;
       if (f.linea === "dtf" && lineasDelPedido(p) === "uv") return false;
       if (f.factura === "pide" && !p.necesita_factura) return false;
+      if (f.factura === "recargo" && !p.recargo_equivalencia) return false;
       if (f.cobro !== "todos") {
         // «Pendiente» incluye lo cobrado en parte: es lo que falta por cobrar.
         const e = cobroDe(p).estado;
@@ -684,13 +688,14 @@ export function PedidosTable({ tiendaId }: { tiendaId?: string }) {
           <Select value={f.factura} onValueChange={(factura) => cambiar({ factura })}>
             <SelectTrigger
               className="w-[170px] max-md:w-[calc(50%-0.25rem)]"
-              aria-label="Quiere factura"
+              aria-label="Factura o recargo de equivalencia"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Con o sin factura</SelectItem>
               <SelectItem value="pide">Quieren factura</SelectItem>
+              <SelectItem value="recargo">Con R.E</SelectItem>
             </SelectContent>
           </Select>
           <Select value={f.origen} onValueChange={(origen) => cambiar({ origen })}>
@@ -1414,6 +1419,7 @@ const FilaPedido = memo(function FilaPedido({
             {/* Junto a «1.er pedido», en la caja del cliente: es algo del
                 cliente, no del número de pedido. */}
             {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
+            {pedido.recargo_equivalencia && <EtiquetaRecargo className="shrink-0 leading-5" />}
             <EtiquetaDevuelto devoluciones={pedido.devoluciones} className="shrink-0 leading-5" />
           </div>
           {pedido.cliente_email && (
@@ -1567,6 +1573,7 @@ const TarjetaPedido = memo(function TarjetaPedido({
               tarjeta, y un botón no puede ir dentro de otro. */}
           <EtiquetaPrimerPedido origen="tienda" id={pedido.id} resumen={primerPedido} />
           {pedido.necesita_factura && <EtiquetaPideFactura className="shrink-0 leading-5" />}
+          {pedido.recargo_equivalencia && <EtiquetaRecargo className="shrink-0 leading-5" />}
           <EtiquetaDevuelto devoluciones={pedido.devoluciones} className="shrink-0 leading-5" />
           <SelectorEstado estado={pedido.estado} onEstadoChange={onEstadoChange} />
           <RealizadoEn tabla="pedidos" pedido={pedido} />
@@ -1818,6 +1825,11 @@ function DatosDelCliente({ pedido }: { pedido: PedidoFila }) {
         {pedido.necesita_factura && (
           <div className="mt-1">
             <EtiquetaPideFactura conTexto />
+          </div>
+        )}
+        {pedido.recargo_equivalencia && (
+          <div className="mt-1">
+            <EtiquetaRecargo conTexto />
           </div>
         )}
         {devolucionesDelPedido(pedido.devoluciones).reembolsado > 0 && (

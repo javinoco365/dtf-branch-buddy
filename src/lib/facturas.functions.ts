@@ -127,6 +127,13 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     .maybeSingle();
   const metodoPagoFactura = (pago?.metodo_pago as string | null | undefined)?.trim() || null;
 
+  // El recargo de equivalencia congelado al emitir (20261120100000). Aparte,
+  // como el método de pago: sin la migración las columnas no existen.
+  const { data: recargo } = await tabla(supabaseAdmin, "facturas")
+    .select("recargo_total, desglose_recargo")
+    .eq("id", factura.id)
+    .maybeSingle();
+
   const pdfData: FacturaPDFData = {
     desglose: Array.isArray(factura.desglose_iva)
       ? (factura.desglose_iva as { tipo: number; base: number; cuota: number }[]).map((r) => ({
@@ -166,6 +173,14 @@ async function leerDatosPdfFactura(supabaseAdmin: Sb, facturaId: string, userId:
     })),
     base_imponible: Number(factura.base_imponible ?? 0),
     iva_total: Number(factura.iva_total ?? 0),
+    recargo_total: Number(recargo?.recargo_total ?? 0),
+    desglose_recargo: Array.isArray(recargo?.desglose_recargo)
+      ? (recargo.desglose_recargo as { tipo: number; base: number; cuota: number }[]).map((r) => ({
+          tipo: Number(r.tipo),
+          base: Number(r.base),
+          cuota: Number(r.cuota),
+        }))
+      : null,
     total: Number(factura.total ?? 0),
     notas: factura.notas,
   };
@@ -422,6 +437,8 @@ const lineaSchema = z.object({
   unidad: z.string().default("ud"),
   precio_unitario: z.number(),
   iva_rate: z.number().min(0).max(100),
+  // Recargo de equivalencia (5,2 con el 21 %). Solo en pedidos que lo llevan.
+  recargo_rate: z.number().min(0).max(100).optional(),
 });
 
 const receptorSchema = z.object({
@@ -587,15 +604,16 @@ async function leerDocumentosDePedidos(sb: Sb, pedidoIds: string[]) {
 }
 
 /**
- * Lee pedidos con `cliente_nif` y `necesita_factura` si las columnas existen.
- * Sin la migración 20261104100000 (NIF) o la 20261117100000 («Quiero
- * factura») no existen, y la lectura falla entera: se repite sin ellas antes
- * que dejar sin poder facturar.
+ * Lee pedidos con `cliente_nif`, `necesita_factura` y `recargo_equivalencia`
+ * si las columnas existen. Sin la migración 20261104100000 (NIF), la
+ * 20261117100000 («Quiero factura») o la 20261120100000 (recargo de
+ * equivalencia) no existen, y la lectura falla entera: se repite sin ellas
+ * antes que dejar sin poder facturar.
  */
 async function conNifDelPedido(
   leer: (columnas: string) => PromiseLike<{ data: any; error: { message: string } | null }>,
 ): Promise<{ data: any; error: { message: string } | null }> {
-  let columnas = ["cliente_nif", "necesita_factura"];
+  let columnas = ["cliente_nif", "necesita_factura", "recargo_equivalencia"];
   let r = await leer(columnas.map((c) => `, ${c}`).join(""));
   while (r.error && columnas.some((c) => r.error!.message.includes(c))) {
     columnas = columnas.filter((c) => !r.error!.message.includes(c));
@@ -657,7 +675,9 @@ async function leerPedidoParaDocumento(sb: Sb, pedidoId: string, userId: string)
     : null;
   // Las del pedido y, debajo, una en negativo por cada devolución (reembolso
   // de la web o rebaja): el documento suma lo que el cliente pagó al final.
-  const lineasPedido = lineasDesdePedido(items ?? [], Number(pedido.envio || 0));
+  const lineasPedido = lineasDesdePedido(items ?? [], Number(pedido.envio || 0), {
+    recargo: pedido.recargo_equivalencia === true,
+  });
   const devoluciones = (devolucionesRes.data ?? []) as DevolucionParaDocumento[];
   const lineas = [...lineasPedido, ...lineasDeDevoluciones(lineasPedido, devoluciones)];
   const devuelto = totalDevuelto(devoluciones);
@@ -740,6 +760,7 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
       tipo_fiscal: tipoFiscal,
       limites,
       pide_factura: pedido.necesita_factura === true,
+      recargo_equivalencia: pedido.recargo_equivalencia === true,
       decision: decidirDocumento(
         total,
         {
@@ -747,6 +768,7 @@ export const prepararFacturaPedido = createServerFn({ method: "POST" })
           nif: receptor.nif,
           tipo_fiscal: tipoFiscal,
           pide_factura: pedido.necesita_factura === true,
+          recargo_equivalencia: pedido.recargo_equivalencia === true,
         },
         limites,
       ),
@@ -871,6 +893,7 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
       cliente_id: string | null;
       cliente_nombre: string | null;
       necesita_factura?: boolean;
+      recargo_equivalencia?: boolean;
     };
     const leerPedidos = (extra: string) =>
       leerTodas<Fila>((a, b) =>
@@ -886,9 +909,14 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
           .order("id")
           .range(a, b),
       );
-    // Sin la migración de «Quiero factura» (20261117100000) se lee sin ella.
-    let lectura = await leerPedidos(", necesita_factura");
-    if (lectura.error?.message.includes("necesita_factura")) lectura = await leerPedidos("");
+    // Sin la migración de «Quiero factura» (20261117100000) o la del recargo
+    // de equivalencia (20261120100000) se lee sin ellas.
+    let opcionales = ["necesita_factura", "recargo_equivalencia"];
+    let lectura = await leerPedidos(opcionales.map((c) => `, ${c}`).join(""));
+    while (lectura.error && opcionales.some((c) => lectura.error!.message.includes(c))) {
+      opcionales = opcionales.filter((c) => !lectura.error!.message.includes(c));
+      lectura = await leerPedidos(opcionales.map((c) => `, ${c}`).join(""));
+    }
     const { data: pedidos, error } = lectura;
     if (error) throw new Error(error.message);
     // Del más antiguo al más reciente, como se emitirán. Una vez cada uno: si
@@ -968,12 +996,14 @@ export const pedidosSinDocumento = createServerFn({ method: "POST" })
                 nif: ficha.nif,
                 tipo_fiscal: esTipoFiscal(ficha.tipo_fiscal) ? ficha.tipo_fiscal : null,
                 pide_factura: p.necesita_factura === true,
+                recargo_equivalencia: p.recargo_equivalencia === true,
               }
             : {
                 nombre: p.cliente_nombre,
                 nif: null,
                 tipo_fiscal: null,
                 pide_factura: p.necesita_factura === true,
+                recargo_equivalencia: p.recargo_equivalencia === true,
               },
         };
       });
@@ -1097,6 +1127,7 @@ export const pedidosParaFacturar = createServerFn({ method: "POST" })
             nif: receptor.nif,
             tipo_fiscal: tipoFiscal,
             pide_factura: p.necesita_factura === true,
+            recargo_equivalencia: p.recargo_equivalencia === true,
           },
           limites,
         );
@@ -1209,6 +1240,7 @@ async function emitirEnBloque(
             nif: receptor.nif,
             tipo_fiscal: tipoFiscal,
             pide_factura: pedido.necesita_factura === true,
+            recargo_equivalencia: pedido.recargo_equivalencia === true,
           },
           limites,
         );
@@ -1462,6 +1494,8 @@ function lineasDeSnapshot(snapshot: unknown) {
     unidad: String(l.unidad ?? "ud"),
     precio_unitario: Number(l.precio_unitario ?? 0),
     iva_rate: Number(l.iva_rate ?? 0),
+    // El recargo de equivalencia congelado, si la línea lo llevaba.
+    ...(Number(l.recargo_rate) > 0 ? { recargo_rate: Number(l.recargo_rate) } : {}),
   }));
 }
 
