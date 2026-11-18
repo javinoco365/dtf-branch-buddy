@@ -26,6 +26,7 @@ import {
   clientesInvitadosNuevos,
   nifPedidoWoo,
   pidioFacturaWoo,
+  pidioRecargoWoo,
   nifsDeClientes,
   estadoPagoPorDevolucion,
   fechaMasAntigua,
@@ -755,6 +756,9 @@ async function guardarPedidosWoo(
       // Se reescribe en cada sincronización: si el cliente la quita en la web,
       // aquí también se quita.
       necesita_factura: pidioFacturaWoo(o),
+      // El recargo de equivalencia: la web lo cobra como un impuesto más
+      // (`tax_lines`, «R.E» al 5,2 %). Se reescribe en cada sincronización.
+      recargo_equivalencia: pidioRecargoWoo(o),
       direccion_facturacion: facturacion,
       // Woo manda `shipping` vacío cuando el envío es igual que la
       // facturación. Guardar un objeto de huecos sería peor que no guardar
@@ -804,6 +808,7 @@ async function guardarPedidosWoo(
   // Sin la del DTF UV (20261110100000), los metros de UV vuelven a sumarse
   // a metros_total, como antes de separarlos.
   // Sin la de «Quiero factura» (20261117100000), igual con necesita_factura.
+  // Sin la del recargo de equivalencia (20261120100000), igual.
   const opcionales = [
     "realizado_en",
     "cliente_nif",
@@ -811,6 +816,7 @@ async function guardarPedidosWoo(
     "iva_uv",
     "metros_uv",
     "necesita_factura",
+    "recargo_equivalencia",
   ];
   let filasAGuardar: Record<string, unknown>[] = filasPedidos;
   for (let intento = 0; intento < opcionales.length && res.error; intento++) {

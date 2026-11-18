@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   pidioFacturaWoo,
+  pidioRecargoWoo,
+  esImpuestoRecargo,
   clientesInvitadosNuevos,
   nifPedidoWoo,
   nifsDeClientes,
@@ -215,6 +217,59 @@ describe("pidioFacturaWoo", () => {
     expect(pidioFacturaWoo({})).toBe(false);
     expect(pidioFacturaWoo({ meta_data: null })).toBe(false);
     expect(pidioFacturaWoo(con("1", "otra_clave"))).toBe(false);
+  });
+});
+
+describe("pidioRecargoWoo", () => {
+  // Como llega el pedido DCUL-172-2026: IVA y R.E de la clase «RE General».
+  const iva = {
+    rate_id: 7,
+    rate_code: "ES-IVA-1",
+    label: "IVA",
+    rate_percent: 21,
+    tax_total: "1.47",
+    shipping_tax_total: "1.26",
+  };
+  const re = {
+    rate_id: 8,
+    rate_code: "ES-R.E-2",
+    label: "R.E",
+    rate_percent: 5.2,
+    tax_total: "0.36",
+    shipping_tax_total: "0.31",
+  };
+
+  it("lo reconoce cuando la web cobró el recargo", () => {
+    expect(pidioRecargoWoo({ tax_lines: [iva, re] })).toBe(true);
+  });
+
+  it("sin recargo, no", () => {
+    expect(pidioRecargoWoo({ tax_lines: [iva] })).toBe(false);
+    expect(pidioRecargoWoo({ tax_lines: [] })).toBe(false);
+    expect(pidioRecargoWoo({})).toBe(false);
+    expect(pidioRecargoWoo({ tax_lines: null })).toBe(false);
+  });
+
+  it("un recargo a cero no cuenta", () => {
+    expect(
+      pidioRecargoWoo({ tax_lines: [iva, { ...re, tax_total: "0", shipping_tax_total: "0" }] }),
+    ).toBe(false);
+  });
+
+  it("manda el tipo: un IVA del 21 % con «RE» en el nombre no es el recargo", () => {
+    expect(esImpuestoRecargo({ label: "IVA RE", rate_percent: 21 })).toBe(false);
+    expect(esImpuestoRecargo({ label: "Impuesto", rate_percent: "5.2000" })).toBe(true);
+    expect(esImpuestoRecargo({ rate_percent: 1.4 })).toBe(true);
+    expect(esImpuestoRecargo({ rate_percent: 0.5 })).toBe(true);
+  });
+
+  it("sin tipo, por el nombre", () => {
+    for (const label of ["R.E", "RE", "R.E.", "R. E.", "Recargo de equivalencia"]) {
+      expect([label, esImpuestoRecargo({ label })]).toEqual([label, true]);
+    }
+    for (const label of ["IVA", "Tarifa", "Precio"]) {
+      expect([label, esImpuestoRecargo({ label })]).toEqual([label, false]);
+    }
   });
 });
 

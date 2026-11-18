@@ -25,6 +25,10 @@
  * cuotas redondeadas línea a línea produce descuadres de céntimos frente a la
  * cuota real del tipo, y esos céntimos aparecen luego en el modelo 303.
  *
+ * El recargo de equivalencia (clientes minoristas en ese régimen) se calcula
+ * igual que el IVA: por tipo de recargo sobre la suma de las bases de ese
+ * tipo. Va aparte del IVA, en su propio desglose, y suma al total.
+ *
  * El redondeo es a la mitad hacia arriba en valor absoluto (2,675 → 2,68), que
  * es el criterio de la facturación española. `toFixed` de JavaScript no sirve:
  * arrastra el error de la representación binaria y devuelve 2,67.
@@ -58,6 +62,11 @@ export type LineaBruta = {
   iva_rate: number;
   /** Descuento sobre la línea, en porcentaje. Opcional. */
   descuento_pct?: number;
+  /**
+   * Tipo del recargo de equivalencia en porcentaje (5,2 con el IVA del 21 %).
+   * Sin él, o a 0, la línea no lleva recargo.
+   */
+  recargo_rate?: number;
 };
 
 /** Una línea con sus importes ya calculados y redondeados. */
@@ -72,7 +81,11 @@ export type LineaCalculada = {
    * `Totales.desglose_iva`, calculada por tipo.
    */
   cuota: number;
-  /** base + cuota. */
+  /** Tipo del recargo de equivalencia aplicado (0 si no lleva). */
+  recargo_rate: number;
+  /** Cuota del recargo de la línea. Informativa, como `cuota`. */
+  recargo: number;
+  /** base + cuota + recargo. */
   total: number;
 };
 
@@ -93,7 +106,14 @@ export type Totales = {
   desglose_iva: DesgloseIva[];
   /** Suma de las cuotas del desglose. */
   iva_total: number;
-  /** base_imponible + iva_total. */
+  /**
+   * Desglose del recargo de equivalencia por tipo de recargo, de mayor a
+   * menor. Vacío si ninguna línea lo lleva.
+   */
+  desglose_recargo: DesgloseIva[];
+  /** Suma de las cuotas del desglose del recargo. */
+  recargo_total: number;
+  /** base_imponible + iva_total + recargo_total. */
   total: number;
 };
 
@@ -111,6 +131,24 @@ export type OpcionesTotales = {
 export const IVA_GENERAL = 21;
 
 /**
+ * El tipo del recargo de equivalencia que va con cada tipo de IVA (art. 161
+ * de la Ley del IVA): 5,2 % con el 21 %, 1,4 % con el 10 % y 0,5 % con el 4 %.
+ */
+export const RECARGO_POR_IVA: Readonly<Record<number, number>> = { 21: 5.2, 10: 1.4, 4: 0.5 };
+
+/** El recargo de equivalencia de un tipo de IVA. 0 si ese tipo no lo tiene. */
+export function recargoDeIva(ivaRate: number): number {
+  return RECARGO_POR_IVA[Number(ivaRate)] ?? 0;
+}
+
+/** Agrupa bases por tipo y calcula la cuota de cada tipo sobre su base sumada. */
+function desglosePorTipo(bases: Map<number, number>): DesgloseIva[] {
+  return Array.from(bases.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([tipo, base]) => ({ tipo, base, cuota: redondear(base * (tipo / 100)) }));
+}
+
+/**
  * Calcula los importes de una línea.
  *
  * La base se redondea a céntimos porque es un importe facturable por sí mismo:
@@ -125,15 +163,26 @@ export function calcularLinea(linea: LineaBruta): LineaCalculada {
   const bruto = cantidad * precio;
   const base = redondear(bruto * (1 - descuento / 100));
   const cuota = redondear(base * (tipo / 100));
+  const recargo_rate = Number(linea.recargo_rate) || 0;
+  const recargo = redondear(base * (recargo_rate / 100));
 
-  return { base, iva_rate: tipo, cuota, total: redondear(base + cuota) };
+  return {
+    base,
+    iva_rate: tipo,
+    cuota,
+    recargo_rate,
+    recargo,
+    total: redondear(base + cuota + recargo),
+  };
 }
 
 /**
  * Calcula los totales de un documento a partir de sus líneas.
  *
  * El desglose se agrupa por tipo impositivo y la cuota de cada tipo se calcula
- * sobre la base agregada de ese tipo, no sumando las cuotas de las líneas.
+ * sobre la base agregada de ese tipo, no sumando las cuotas de las líneas. El
+ * recargo de equivalencia, igual, en su propio desglose. Es la misma cuenta
+ * que hace la base al emitir (`factura_calcular`).
  */
 export function calcularTotales(
   lineas: readonly LineaBruta[],
@@ -153,18 +202,31 @@ export function calcularTotales(
     basesPorTipo.set(tipoEnvio, redondear((basesPorTipo.get(tipoEnvio) ?? 0) + envio));
   }
 
-  const desglose_iva: DesgloseIva[] = Array.from(basesPorTipo.entries())
-    .sort((a, b) => b[0] - a[0])
-    .map(([tipo, base]) => ({ tipo, base, cuota: redondear(base * (tipo / 100)) }));
+  // Bases acumuladas por tipo de recargo. Los gastos de envío de `opciones`
+  // no llevan recargo: el envío que lo lleva va como una línea más.
+  const basesPorRecargo = new Map<number, number>();
+  for (const l of calculadas) {
+    if (l.recargo_rate === 0) continue;
+    basesPorRecargo.set(
+      l.recargo_rate,
+      redondear((basesPorRecargo.get(l.recargo_rate) ?? 0) + l.base),
+    );
+  }
+
+  const desglose_iva = desglosePorTipo(basesPorTipo);
+  const desglose_recargo = desglosePorTipo(basesPorRecargo);
 
   const base_imponible = redondear(desglose_iva.reduce((s, d) => s + d.base, 0));
   const iva_total = redondear(desglose_iva.reduce((s, d) => s + d.cuota, 0));
+  const recargo_total = redondear(desglose_recargo.reduce((s, d) => s + d.cuota, 0));
 
   return {
     base_imponible,
     desglose_iva,
     iva_total,
-    total: redondear(base_imponible + iva_total),
+    desglose_recargo,
+    recargo_total,
+    total: redondear(base_imponible + iva_total + recargo_total),
   };
 }
 
@@ -308,6 +370,8 @@ export type PieImporte = {
   base: number;
   /** Una cuota por tipo impositivo, en el orden del desglose congelado. */
   iva: CuotaImpresa[];
+  /** Una cuota por tipo de recargo de equivalencia. Vacío si no lleva. */
+  recargo: CuotaImpresa[];
   total: number;
 };
 
@@ -321,20 +385,33 @@ export type PieImporte = {
  * El IVA va por tipo, como el desglose congelado, incluido un tipo del 0 %. Si
  * el documento no trae desglose (las facturas anteriores al motor de
  * facturación no lo tienen), sale una sola cuota, sin tipo: el IVA total.
+ *
+ * El recargo de equivalencia sale por tipo, de su desglose congelado. Si no
+ * hay desglose pero sí un recargo total, una sola cuota sin tipo.
  */
 export function pieDocumentoEmitido(doc: {
   base_imponible: number;
   iva_total: number;
   total: number;
   desglose?: readonly DesgloseIva[] | null;
+  recargo_total?: number | null;
+  desglose_recargo?: readonly DesgloseIva[] | null;
 }): PieImporte {
   const desglose = doc.desglose ?? [];
+  const desgloseRecargo = (doc.desglose_recargo ?? []).filter((r) => r.cuota !== 0);
+  const recargoTotal = Number(doc.recargo_total) || 0;
   return {
     base: doc.base_imponible,
     iva:
       desglose.length > 0
         ? desglose.map((r) => ({ tipo: r.tipo, cuota: r.cuota }))
         : [{ tipo: null, cuota: doc.iva_total }],
+    recargo:
+      desgloseRecargo.length > 0
+        ? desgloseRecargo.map((r) => ({ tipo: r.tipo, cuota: r.cuota }))
+        : recargoTotal !== 0
+          ? [{ tipo: null, cuota: recargoTotal }]
+          : [],
     total: doc.total,
   };
 }

@@ -36,6 +36,20 @@ export interface Novedad {
 /** Lo más nuevo arriba. Cada PR añade la suya al principio. */
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-11-18-recargo-equivalencia",
+    fecha: "2026-11-18",
+    tipo: "nuevo",
+    titulo: "Recargo de equivalencia (R.E)",
+    resumen:
+      "Si la web cobró recargo de equivalencia, el pedido lleva «R.E» y su factura lo suma sola.",
+    puntos: [
+      "La etiqueta «R.E» sale al lado de «Factura», y hay un filtro «Con R.E».",
+      "A esos pedidos no se les hace ticket: solo factura, con el 5,2 % debajo del IVA.",
+      "La etiqueta «Quiere factura» ahora pone solo «Factura».",
+    ],
+    enlace: { ruta: "/panel/pedidos", texto: "Ver pedidos" },
+  },
+  {
     id: "2026-11-15-facturas-con-devoluciones",
     fecha: "2026-11-15",
     tipo: "mejora",

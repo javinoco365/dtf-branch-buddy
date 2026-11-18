@@ -34,6 +34,7 @@ import {
   type TipoFiscal,
 } from "@/dominio/tickets";
 import {
+  conRecargo,
   lineaAEditable,
   lineasParaEmitir,
   type LineaEditable,
@@ -67,6 +68,7 @@ export type DocumentoPreparado =
         unidad: string;
         precio_unitario: number;
         iva_rate: number;
+        recargo_rate?: number;
       }[];
       total: number;
       tipo_fiscal: TipoFiscal | null;
@@ -75,6 +77,8 @@ export type DocumentoPreparado =
       limites: LimitesTicket;
       /** El cliente marcó «Quiero factura» en la web: no hay ticket. */
       pide_factura?: boolean;
+      /** La web le cobró recargo de equivalencia: no hay ticket y la factura lo lleva. */
+      recargo_equivalencia?: boolean;
       notas: string | null;
       /** La sociedad, para la vista previa de la factura (solo se enseña). */
       emisor?: EmisorVista;
@@ -220,19 +224,28 @@ export function DocumentoPedidoDialog({
     onOpenChange(abierto);
   };
   const totales = preparado ? calcularTotales(preparado.lineas) : null;
+  // Recargo de equivalencia: va solo, en todas las líneas, con el tipo que
+  // corresponde a su IVA. No se escribe a mano.
+  const recargo = preparado?.recargo_equivalencia === true;
 
   // Lo editado en la vista previa: las líneas que ya son válidas cuentan para
   // los totales mientras se escribe; para emitir tienen que serlo todas.
-  const revision = useMemo(() => lineasParaEmitir(lineasEd), [lineasEd]);
+  const revision = useMemo(() => {
+    const r = lineasParaEmitir(lineasEd);
+    return r.ok ? { ...r, lineas: conRecargo(r.lineas, recargo) } : r;
+  }, [lineasEd, recargo]);
   const totalesVista = useMemo(
     () =>
       calcularTotales(
-        lineasEd.flatMap((l) => {
-          const r = lineasParaEmitir([l]);
-          return r.ok ? r.lineas : [];
-        }),
+        conRecargo(
+          lineasEd.flatMap((l) => {
+            const r = lineasParaEmitir([l]);
+            return r.ok ? r.lineas : [];
+          }),
+          recargo,
+        ),
       ),
-    [lineasEd],
+    [lineasEd, recargo],
   );
   const erroresVista = [
     ...(nombre.trim() === "" ? ["Falta el nombre del cliente"] : []),
@@ -246,7 +259,13 @@ export function DocumentoPedidoDialog({
       preparado
         ? decidirDocumento(
             preparado.total,
-            { nombre, nif, tipo_fiscal: tipoFiscal, pide_factura: preparado.pide_factura },
+            {
+              nombre,
+              nif,
+              tipo_fiscal: tipoFiscal,
+              pide_factura: preparado.pide_factura,
+              recargo_equivalencia: preparado.recargo_equivalencia,
+            },
             preparado.limites,
           )
         : null,
@@ -257,10 +276,12 @@ export function DocumentoPedidoDialog({
   // del pedido al emitir. Aquí solo se enseña.
   const fecha = preparado?.fecha_pedido ?? diaEnEspana(new Date());
 
-  // Con «Quiero factura» marcado en la web no hay ticket (la base tampoco lo deja).
+  // Con «Quiero factura» marcado en la web o con recargo de equivalencia no
+  // hay ticket (la base tampoco lo deja).
   const puedeTicket =
     !!preparado &&
     !preparado.pide_factura &&
+    !preparado.recargo_equivalencia &&
     cabeEnTicket(preparado.total, tipoFiscal, preparado.limites);
   const puedeFactura = nombre.trim() !== "";
 
@@ -350,6 +371,8 @@ export function DocumentoPedidoDialog({
               <DialogDescription>
                 Así saldrá. Puedes cambiar el cliente, las líneas, el método de pago y las notas: se
                 emite con lo que haya aquí. El número se asigna al emitir.
+                {recargo &&
+                  " Lleva recargo de equivalencia: se suma solo a cada línea, con el tipo que va con su IVA."}
               </DialogDescription>
             </DialogHeader>
             <VistaPreviaFactura
@@ -494,7 +517,7 @@ export function DocumentoPedidoDialog({
                     </div>
                   )}
                   {decision.documento === "pedir_datos" &&
-                    (decision.motivo === "pide_factura" ? (
+                    (decision.motivo === "pide_factura" || decision.motivo === "recargo" ? (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Rellena abajo el nombre y el NIF del cliente.
                       </p>

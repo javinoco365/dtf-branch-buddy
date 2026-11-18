@@ -44,6 +44,10 @@ export type FacturaPDFData = {
   total: number;
   /** El desglose de IVA que se congeló al emitir. Se imprime tal cual, sin recalcular. */
   desglose?: DesgloseIva[] | null;
+  /** El recargo de equivalencia congelado al emitir. 0 o nada si no lleva. */
+  recargo_total?: number | null;
+  /** Su desglose por tipo de recargo, congelado al emitir. */
+  desglose_recargo?: DesgloseIva[] | null;
   notas?: string | null;
   /**
    * El logo de la tienda o de la marca, congelado en la factura.
@@ -268,7 +272,7 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
   const pago: string[] = d.metodo_pago
     ? (doc.splitTextToSize(d.metodo_pago, anchoIzq) as string[])
     : [];
-  const altoTot = 6 * (1 + lineasIva.length) + 12;
+  const altoTot = 6 * (1 + lineasIva.length + pie.recargo.length) + 12;
   const altoIzq =
     (pago.length ? 6 + pago.length * 4.6 + 4 : 0) + (notas.length ? 6 + notas.length * 4.2 : 0);
   let yFin = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
@@ -290,6 +294,13 @@ export async function generarFacturaPDF(d: FacturaPDFData): Promise<Blob> {
   filaTot("Base imponible", pie.base);
   for (const r of lineasIva)
     filaTot(r.tipo == null ? "IVA" : `IVA ${numeroJusto(r.tipo, 2)}\u00A0%`, r.cuota);
+  for (const r of pie.recargo)
+    filaTot(
+      r.tipo == null
+        ? "Recargo de equivalencia"
+        : `Recargo equiv. ${numeroJusto(r.tipo, 2)}\u00A0%`,
+      r.cuota,
+    );
   raya(principal, 0.6, xTot, yT - 2.5, W - M, yT - 2.5);
   yT += 4;
   letra(LETRA.texto, "bold", 11);

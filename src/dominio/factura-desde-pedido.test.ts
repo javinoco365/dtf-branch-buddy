@@ -154,6 +154,44 @@ describe("lineasDesdePedido", () => {
   });
 });
 
+describe("lineasDesdePedido con recargo de equivalencia", () => {
+  const items = [
+    { descripcion: "DTI por Metros", cantidad: 1, unidad: "m", precio_unitario: 7, iva_rate: 21 },
+  ];
+
+  it("DCUL-172-2026: impresión y envío llevan el 5,2 %, como lo cobró la web", () => {
+    const lineas = lineasDesdePedido(items, 5.99, { recargo: true });
+    expect(lineas.map((l) => [l.descripcion, l.recargo_rate])).toEqual([
+      ["DTI por Metros", 5.2],
+      ["Gastos de envío", 5.2],
+    ]);
+    const t = calcularTotales(lineas);
+    expect(t.iva_total).toBe(2.73);
+    expect(t.recargo_total).toBe(0.68);
+    expect(t.total).toBe(16.4);
+  });
+
+  it("sin recargo, las líneas no lo llevan", () => {
+    const lineas = lineasDesdePedido(items, 5.99);
+    expect(lineas.every((l) => l.recargo_rate === undefined)).toBe(true);
+  });
+
+  it("una línea al 0 % no lleva recargo", () => {
+    const lineas = lineasDesdePedido([{ ...items[0], iva_rate: 0 }], 0, { recargo: true });
+    expect(lineas[0].recargo_rate).toBeUndefined();
+  });
+
+  it("lo devuelto también lleva el recargo y el total cuadra", () => {
+    const lineas = lineasDesdePedido(items, 5.99, { recargo: true });
+    const negativas = lineasDeDevoluciones(lineas, [{ importe: 8.83, woo_refund_id: 1 }]);
+    expect(negativas[0].recargo_rate).toBe(5.2);
+    const objetivo = Math.round((calcularTotales(lineas).total - 8.83) * 100) / 100;
+    expect(
+      Math.abs(calcularTotales([...lineas, ...negativas]).total - objetivo),
+    ).toBeLessThanOrEqual(0.0100001);
+  });
+});
+
 describe("lineasDeDevoluciones", () => {
   const conIva = (base: number) => [
     { descripcion: "Metro DTF", cantidad: 1, unidad: "m", precio_unitario: base, iva_rate: 21 },

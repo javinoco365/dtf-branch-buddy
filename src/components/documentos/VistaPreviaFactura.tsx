@@ -2,7 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { eur } from "@/lib/format";
+import { eur, numeroJusto } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import { diaLegible } from "@/dominio/fecha-documento";
 import { aNumero } from "@/dominio/factura-compra";
@@ -249,6 +249,14 @@ export function VistaPreviaFactura({
             <div key={d.tipo} className="flex justify-between">
               <span className="text-neutral-600">
                 IVA {d.tipo} % sobre {eur(d.base)}
+              </span>
+              <span className="tabular-nums">{eur(d.cuota)}</span>
+            </div>
+          ))}
+          {totales.desglose_recargo.map((d) => (
+            <div key={`re-${d.tipo}`} className="flex justify-between">
+              <span className="text-neutral-600">
+                Recargo de equivalencia {numeroJusto(d.tipo, 2)} % sobre {eur(d.base)}
               </span>
               <span className="tabular-nums">{eur(d.cuota)}</span>
             </div>

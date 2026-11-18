@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lineaAEditable, lineaVacia, lineasParaEmitir } from "./factura-editable";
+import { conRecargo, lineaAEditable, lineaVacia, lineasParaEmitir } from "./factura-editable";
 
 describe("lineasParaEmitir", () => {
   it("convierte los números escritos con coma y miles", () => {
@@ -87,5 +87,23 @@ describe("lineaAEditable", () => {
       precio_unitario: "7",
       iva_rate: "21",
     });
+  });
+});
+
+describe("conRecargo", () => {
+  const linea = { descripcion: "DTF", cantidad: 1, unidad: "m", precio_unitario: 7, iva_rate: 21 };
+
+  it("pone el recargo que va con el IVA de cada línea", () => {
+    expect(
+      conRecargo([linea, { ...linea, iva_rate: 10 }, { ...linea, iva_rate: 0 }], true),
+    ).toEqual([
+      { ...linea, recargo_rate: 5.2 },
+      { ...linea, iva_rate: 10, recargo_rate: 1.4 },
+      { ...linea, iva_rate: 0 },
+    ]);
+  });
+
+  it("sin recargo, lo quita aunque la línea lo trajera", () => {
+    expect(conRecargo([{ ...linea, recargo_rate: 5.2 }], false)).toEqual([linea]);
   });
 });
