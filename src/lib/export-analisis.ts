@@ -6,7 +6,7 @@
  * por páginas: Supabase corta en 1000 filas sin avisar.
  */
 
-import { format } from "date-fns";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { supabase } from "@/integrations/supabase/client";
 import { faltaLaColumna, faltaLaTabla, tabla } from "@/lib/rpc";
 import { leerTodas } from "@/lib/paginar";
@@ -207,7 +207,7 @@ export async function exportarPedidosParaAnalisis({
     avisos,
   });
 
-  const nombre = `analisis-pedidos_${sanearNombre(alcance, 40)}_${format(new Date(), "yyyy-MM-dd")}.json`;
+  const nombre = `analisis-pedidos_${sanearNombre(alcance, 40)}_${diaEnEspana(new Date())}.json`;
   descargarBlob(
     nombre,
     new Blob([serializarExportAnalisis(e)], { type: "application/json;charset=utf-8" }),

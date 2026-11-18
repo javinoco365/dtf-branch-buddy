@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { diaEnEspana } from "@/dominio/fecha-documento";
 import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -89,7 +90,7 @@ function Objetivos({ objetivos }: { objetivos: Objetivo[] }) {
   const refrescar = useRefrescar();
   const vacio = {
     id: undefined as string | undefined,
-    mes: format(new Date(), "yyyy-MM"),
+    mes: diaEnEspana(new Date()).slice(0, 7),
     metros: "",
     vendido: "",
   };

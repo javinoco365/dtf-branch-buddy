@@ -5,6 +5,13 @@ export const eur = (n: number | null | undefined) =>
     minimumFractionDigits: 2,
   }).format(Number(n ?? 0));
 
+/**
+ * Las fechas y horas del CRM son siempre las de Madrid, se vean donde se vean:
+ * en un móvil con otra zona, o en el servidor (que va en UTC, una o dos horas
+ * por detrás) al generar un PDF.
+ */
+export const ZONA_CRM = "Europe/Madrid";
+
 export const fechaCorta = (d: string | Date | null | undefined) => {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
@@ -12,6 +19,7 @@ export const fechaCorta = (d: string | Date | null | undefined) => {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: ZONA_CRM,
   }).format(date);
 };
 
@@ -24,6 +32,7 @@ export const fechaLarga = (d: string | Date | null | undefined) => {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: ZONA_CRM,
   }).format(date);
 };
 
@@ -37,6 +46,7 @@ export const fechaHora = (d: string | Date | null | undefined) => {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: ZONA_CRM,
   }).format(date);
 };
 
