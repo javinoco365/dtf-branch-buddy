@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, ArrowLeft, FileText, Receipt } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FileText, Receipt, UserPlus } from "lucide-react";
 import { eur } from "@/lib/format";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError, mensajeDeError } from "@/lib/errores";
@@ -165,6 +165,9 @@ export function DocumentoPedidoDialog({
   const [vistaPrevia, setVistaPrevia] = useState(false);
   const [lineasEd, setLineasEd] = useState<LineaEditable[]>([]);
   const [metodoPago, setMetodoPago] = useState("");
+  // Un ticket sale sin datos del cliente ni notas (decisión de Javier,
+  // 18-11-2026). Con «Añadir datos del cliente» se enseñan y van en el ticket.
+  const [datosTicket, setDatosTicket] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: claveQuery,
@@ -180,6 +183,7 @@ export function DocumentoPedidoDialog({
     rellenado.current = false;
     setTipoElegido(null);
     setVistaPrevia(false);
+    setDatosTicket(false);
   }, [open]);
 
   useEffect(() => {
@@ -297,13 +301,15 @@ export function DocumentoPedidoDialog({
     const ventana = window.open("", "_blank");
     try {
       const deLaVista = documento === "factura" && revision.ok;
+      // Un ticket sin «Añadir datos del cliente» sale sin nombre ni notas.
+      const sinDatos = documento === "ticket" && !datosTicket;
       const r = await emitir({
         documento,
-        nombre: nombre.trim(),
+        nombre: sinDatos ? "" : nombre.trim(),
         nif: nif.trim(),
         direccion: direccion.trim(),
         tipo_fiscal: tipoFiscal,
-        notas: notas.trim() || null,
+        notas: sinDatos ? null : notas.trim() || null,
         ...(deLaVista ? { lineas: revision.lineas, metodo_pago: metodoPago.trim() || null } : {}),
       });
       // Emitido: todo lo leído pasa a viejo (Gerencia › Fiscal, pedidos sin
@@ -358,6 +364,10 @@ export function DocumentoPedidoDialog({
   return (
     <Dialog open={open} onOpenChange={cambiarAbierto}>
       <DialogContent
+        // Sin foco automático en el primer campo: en el iPhone ese foco no abre
+        // el teclado y el primer toque en el campo no hacía nada (había que
+        // tocar dos veces para poder escribir).
+        onOpenAutoFocus={(e) => e.preventDefault()}
         className={
           vistaPrevia && preparado
             ? "max-w-4xl max-h-[95dvh] overflow-y-auto"
@@ -529,36 +539,47 @@ export function DocumentoPedidoDialog({
                     ))}
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Cliente {principal === "ticket" && "(opcional en un ticket)"}
-                  </Label>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <Input
-                      placeholder="Nombre o razón social"
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      aria-label="Nombre del cliente"
-                    />
-                    <Input
-                      placeholder="NIF"
-                      value={nif}
-                      onChange={(e) => setNif(e.target.value)}
-                      aria-label="NIF del cliente"
-                    />
-                  </div>
-                  <Input
-                    placeholder="Dirección"
-                    value={direccion}
-                    onChange={(e) => setDireccion(e.target.value)}
-                    aria-label="Dirección del cliente"
-                  />
-                  {principal === "ticket" && (
+                {principal === "ticket" && !datosTicket ? (
+                  <div className="space-y-1">
+                    <Button variant="outline" size="sm" onClick={() => setDatosTicket(true)}>
+                      <UserPlus className="mr-1 h-4 w-4" /> Añadir datos del cliente
+                    </Button>
                     <p className="text-xs text-muted-foreground">
-                      El ticket no lleva NIF. Si el cliente lo da, pasa a factura.
+                      El ticket sale sin nombre, dirección ni notas.
                     </p>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Cliente {principal === "ticket" && "(opcional en un ticket)"}
+                    </Label>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <Input
+                        placeholder="Nombre o razón social"
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                        aria-label="Nombre del cliente"
+                      />
+                      <Input
+                        placeholder="NIF"
+                        value={nif}
+                        onChange={(e) => setNif(e.target.value)}
+                        aria-label="NIF del cliente"
+                      />
+                    </div>
+                    <Input
+                      placeholder="Dirección"
+                      value={direccion}
+                      onChange={(e) => setDireccion(e.target.value)}
+                      aria-label="Dirección del cliente"
+                    />
+                    {principal === "ticket" && (
+                      <p className="text-xs text-muted-foreground">
+                        El ticket no lleva NIF. Si el cliente lo da, pasa a factura.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -568,10 +589,12 @@ export function DocumentoPedidoDialog({
                     </p>
                     <p className="text-xs text-muted-foreground">La del pedido: no se cambia.</p>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Notas</Label>
-                    <Input value={notas} onChange={(e) => setNotas(e.target.value)} />
-                  </div>
+                  {(principal !== "ticket" || datosTicket) && (
+                    <div className="space-y-1.5">
+                      <Label>Notas</Label>
+                      <Input value={notas} onChange={(e) => setNotas(e.target.value)} />
+                    </div>
+                  )}
                 </div>
 
                 <Table>
