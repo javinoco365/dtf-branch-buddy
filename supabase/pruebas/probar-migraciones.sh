@@ -179,6 +179,7 @@ seccion "Devoluciones por el día del reembolso" E4c_devoluciones_por_fecha.sql
 seccion "Pendientes de cobro sin cancelados" E5_pendientes_sin_cancelados.sql
 seccion "Ajustar el importe real de un pedido" E6_pedido_ajuste_importe.sql
 seccion "Recargo de equivalencia: pedido y factura" E7_recargo_equivalencia.sql
+seccion "Recargo de equivalencia del pedido, aparte del IVA" E8_pedido_recargo.sql
 seccion "Seguridad: vistas, funciones SECURITY DEFINER y privilegios" C22_seguridad.sql \
   'BIEN|MAL|PENDIENTE|ERROR|LINE [0-9]'
 

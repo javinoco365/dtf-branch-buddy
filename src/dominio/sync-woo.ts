@@ -392,10 +392,19 @@ export function esImpuestoRecargo(t: ImpuestoPedidoWoo | null | undefined): bool
  * lleva.
  */
 export function pidioRecargoWoo(o: { tax_lines?: readonly ImpuestoPedidoWoo[] | null }): boolean {
+  return recargoPedidoWoo(o) !== 0;
+}
+
+/**
+ * Cuánto recargo de equivalencia cobró la web en el pedido: lo de los
+ * artículos y lo del envío de cada impuesto «R.E». 0 si no lleva. Es la
+ * parte del IVA de WooCommerce (`total_tax`) que no es IVA: en DCUL-172-2026,
+ * 0,36 + 0,31 = 0,67 de 3,40.
+ */
+export function recargoPedidoWoo(o: { tax_lines?: readonly ImpuestoPedidoWoo[] | null }): number {
   const impuestos = Array.isArray(o.tax_lines) ? o.tax_lines : [];
-  return impuestos.some(
-    (t) =>
-      esImpuestoRecargo(t) &&
-      (Number(t.tax_total) || 0) + (Number(t.shipping_tax_total) || 0) !== 0,
-  );
+  const total = impuestos
+    .filter(esImpuestoRecargo)
+    .reduce((s, t) => s + (Number(t.tax_total) || 0) + (Number(t.shipping_tax_total) || 0), 0);
+  return Math.round(total * 100) / 100;
 }

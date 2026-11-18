@@ -37,6 +37,7 @@ import {
   diagnosticoLineasWoo,
   recuperarEnviosWoo,
   recuperarFechasReembolsosWoo,
+  recuperarRecargosWoo,
 } from "@/lib/woocommerce.functions";
 import { eur, fechaHora, metros as fmtMetros, numero } from "@/lib/format";
 import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
@@ -329,6 +330,7 @@ function Ajustes() {
 
           <DiagnosticoLineas tiendaId={tiendaId} />
 
+          {escribir && <RecuperarRecargos tiendaId={tiendaId} />}
           {escribir && <RecuperarEnvios tiendaId={tiendaId} />}
           {escribir && <RecuperarFechasReembolsos tiendaId={tiendaId} />}
 
@@ -1227,6 +1229,82 @@ function RecuperarEnvios({ tiendaId }: { tiendaId: string }) {
           <span className="text-sm text-muted-foreground">
             {progreso.revisados} pedido(s) revisados · {progreso.actualizados} con envío
           </span>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * El recargo de equivalencia de los pedidos sincronizados antes de que se
+ * leyera: la etiqueta «R.E» y el recargo aparte del IVA. Se pide a WooCommerce
+ * de cien en cien hasta acabar; repetirlo no cambia nada.
+ */
+function RecuperarRecargos({ tiendaId }: { tiendaId: string }) {
+  const qc = useQueryClient();
+  const recuperar = useServerFn(recuperarRecargosWoo);
+  const [progreso, setProgreso] = useState<{
+    revisados: number;
+    actualizados: number;
+    conRecargo: string[];
+  } | null>(null);
+  const [trabajando, setTrabajando] = useState(false);
+
+  async function lanzar() {
+    setTrabajando(true);
+    let revisados = 0;
+    let actualizados = 0;
+    const conRecargo: string[] = [];
+    let desde = 0;
+    setProgreso({ revisados, actualizados, conRecargo: [] });
+    try {
+      for (;;) {
+        const r = await recuperar({ data: { tienda_id: tiendaId, desde } });
+        revisados += r.revisados;
+        actualizados += r.actualizados;
+        conRecargo.push(...r.con_recargo);
+        setProgreso({ revisados, actualizados, conRecargo: [...conRecargo] });
+        if (r.siguiente === null) break;
+        desde = r.siguiente;
+      }
+      toast.success(
+        conRecargo.length
+          ? `${conRecargo.length} pedido(s) con recargo de equivalencia`
+          : "Ningún pedido lleva recargo de equivalencia",
+      );
+    } catch (e) {
+      avisarError(e, "No se ha podido consultar WooCommerce");
+    } finally {
+      // También si se cortó a medias: lo ya recuperado tiene que verse.
+      void invalidarTrasGuardar(qc);
+      setTrabajando(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Recargo de equivalencia de los pedidos antiguos</CardTitle>
+        <CardDescription>
+          Revisa en WooCommerce todos los pedidos de esta tienda y marca con «R.E» los que pagaron
+          recargo de equivalencia, con el recargo aparte del IVA. Los pedidos nuevos ya llegan
+          marcados. No toca líneas ni facturas emitidas; repetirlo no cambia nada.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={lanzar} disabled={trabajando}>
+            {trabajando ? "Revisando…" : "Recuperar recargo"}
+          </Button>
+          {progreso && (
+            <span className="text-sm text-muted-foreground">
+              {progreso.revisados} pedido(s) revisados · {progreso.conRecargo.length} con R.E ·{" "}
+              {progreso.actualizados} actualizados
+            </span>
+          )}
+        </div>
+        {progreso && progreso.conRecargo.length > 0 && (
+          <p className="text-xs text-muted-foreground">Con R.E: {progreso.conRecargo.join(", ")}</p>
         )}
       </CardContent>
     </Card>

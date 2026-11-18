@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   pidioFacturaWoo,
   pidioRecargoWoo,
+  recargoPedidoWoo,
   esImpuestoRecargo,
   clientesInvitadosNuevos,
   nifPedidoWoo,
@@ -254,6 +255,12 @@ describe("pidioRecargoWoo", () => {
     expect(
       pidioRecargoWoo({ tax_lines: [iva, { ...re, tax_total: "0", shipping_tax_total: "0" }] }),
     ).toBe(false);
+  });
+
+  it("cuánto recargo cobró: artículos y envío", () => {
+    expect(recargoPedidoWoo({ tax_lines: [iva, re] })).toBe(0.67);
+    expect(recargoPedidoWoo({ tax_lines: [iva] })).toBe(0);
+    expect(recargoPedidoWoo({})).toBe(0);
   });
 
   it("manda el tipo: un IVA del 21 % con «RE» en el nombre no es el recargo", () => {

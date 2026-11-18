@@ -180,6 +180,8 @@ export type PedidoFila = {
   necesita_factura?: boolean | null;
   /** La web le cobró recargo de equivalencia: factura con recargo, no ticket. */
   recargo_equivalencia?: boolean | null;
+  /** Cuánto recargo de equivalencia cobró la web. Va dentro de `iva`. */
+  recargo?: number | string | null;
   direccion_facturacion: Direccion | null;
   direccion_envio: Direccion | null;
   origen: string | null;
@@ -1761,7 +1763,9 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
       </Table>
       {/* Se suman de izquierda a derecha. El subtotal guardado ya lleva el
           envío: enseñarlo junto al envío lo contaba dos veces. */}
-      <div className="grid grid-cols-4 gap-4 pt-2 text-sm max-md:grid-cols-2 max-md:gap-2">
+      <div
+        className={`grid gap-4 pt-2 text-sm max-md:grid-cols-2 max-md:gap-2 ${desglose.recargo !== 0 ? "grid-cols-5" : "grid-cols-4"}`}
+      >
         <div>
           <span className="text-muted-foreground">Productos (sin IVA):</span>{" "}
           <span className="font-medium">{eur(desglose.productos)}</span>
@@ -1774,6 +1778,14 @@ function DetallePedido({ pedido }: { pedido: PedidoFila }) {
           <span className="text-muted-foreground">IVA:</span>{" "}
           <span className="font-medium">{eur(desglose.iva)}</span>
         </div>
+        {desglose.recargo !== 0 && (
+          <div>
+            <span className="text-muted-foreground" title="Recargo de equivalencia">
+              R.E:
+            </span>{" "}
+            <span className="font-medium">{eur(desglose.recargo)}</span>
+          </div>
+        )}
         <div>
           <span className="text-muted-foreground">Total:</span>{" "}
           <span className="font-semibold">{eur(pedido.total)}</span>
