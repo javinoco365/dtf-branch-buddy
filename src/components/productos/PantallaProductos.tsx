@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Search, Pencil, Ruler, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { eur } from "@/lib/format";
+import { eur, numeroJusto } from "@/lib/format";
 import { ConfirmarBorrado } from "@/components/ConfirmarBorrado";
 import { faltaLaColumna, tabla } from "@/lib/rpc";
 import { EtiquetaUv } from "@/components/EtiquetaLinea";
@@ -306,7 +306,9 @@ export function PantallaProductos({ tiendaId }: { tiendaId?: string }) {
                       {eur(p.precio_unitario)}
                       <span className="text-xs text-muted-foreground">/{p.unidad}</span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{p.iva_rate}%</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {numeroJusto(p.iva_rate, 2)}&nbsp;%
+                    </TableCell>
                     <TableCell className="text-center">
                       <Switch
                         checked={p.activo}

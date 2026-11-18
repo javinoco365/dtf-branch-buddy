@@ -8,9 +8,10 @@
  * ## De dónde sale el receptor
  *
  * La ficha de cliente es la fuente fiscal buena: si el pedido tiene un
- * cliente vinculado con nombre, ese cliente manda entero. Solo se cae a la
- * dirección del pedido cuando no hay cliente vinculado —un pedido de
- * invitado, o uno manual sin ficha—.
+ * cliente vinculado con nombre, su nombre y su NIF mandan. La dirección, la
+ * de la ficha si la tiene; si la ficha no tiene dirección, la de facturación
+ * del pedido (antes salía vacía). Sin cliente vinculado —un pedido de
+ * invitado, o uno manual sin ficha— todo sale de la dirección del pedido.
  *
  * El NIF tiene además su copia en el pedido (`pedidos.cliente_nif`, el que
  * trajo WooCommerce en `_billing_nif`). Se usa cuando la ficha no tiene NIF o
@@ -94,20 +95,29 @@ export function receptorDesdePedido(
   nifCongelado: string | null = null,
 ): ReceptorFactura {
   const nifPedido = nifCongelado?.trim() || null;
+  const d = direccion ?? {};
   if (cliente?.nombre?.trim()) {
+    // La dirección de la ficha si la tiene; si no, entera la del pedido (no
+    // mezcladas: una calle de la ficha con la ciudad del pedido no existe).
+    const fichaConDireccion = [
+      cliente.direccion,
+      cliente.codigo_postal,
+      cliente.ciudad,
+      cliente.provincia,
+    ].some((v) => !!v?.trim());
+    const dir = fichaConDireccion ? cliente : d;
     return {
       nombre: cliente.nombre.trim(),
       nif: cliente.nif?.trim() || nifPedido,
-      direccion: cliente.direccion?.trim() || null,
-      codigo_postal: cliente.codigo_postal?.trim() || null,
-      ciudad: cliente.ciudad?.trim() || null,
-      provincia: cliente.provincia?.trim() || null,
-      pais: cliente.pais?.trim() || null,
-      email: cliente.email?.trim() || null,
+      direccion: dir.direccion?.trim() || null,
+      codigo_postal: dir.codigo_postal?.trim() || null,
+      ciudad: dir.ciudad?.trim() || null,
+      provincia: dir.provincia?.trim() || null,
+      pais: dir.pais?.trim() || null,
+      email: cliente.email?.trim() || d.email?.trim() || null,
     };
   }
 
-  const d = direccion ?? {};
   return {
     nombre: d.empresa?.trim() || d.nombre?.trim() || clienteNombreCongelado?.trim() || "",
     nif: nifPedido,

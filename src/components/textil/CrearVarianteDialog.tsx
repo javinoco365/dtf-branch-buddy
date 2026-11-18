@@ -24,7 +24,7 @@ import { claveTexto, eanValido } from "@/dominio/normalizar-textil";
 import { precioRecomendado, type Recomendacion } from "@/dominio/precio-recomendado";
 import { productoQueChoca } from "@/dominio/stock-textil";
 import type { NuevaVariante, ProductoTextil, VarianteCatalogo } from "@/dominio/tipos-textil";
-import { leerNumeroEscrito } from "@/dominio/numeros";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 
 /** Una línea de factura para la que se crea una variante. */
 export type LineaParaCrear = {
@@ -89,8 +89,8 @@ const deVariante = (p: NuevaVariante): VarianteForm => ({
   talla: p.talla ?? "",
   ean: p.ean ?? "",
   sku: p.sku ?? "",
-  precio_venta: p.precio_venta > 0 ? String(p.precio_venta) : "",
-  cantidad_minima: p.cantidad_minima > 0 ? String(p.cantidad_minima) : "",
+  precio_venta: p.precio_venta > 0 ? escribirNumero(p.precio_venta) : "",
+  cantidad_minima: p.cantidad_minima > 0 ? escribirNumero(p.cantidad_minima) : "",
 });
 
 const nulo = (t: string) => (t.trim() === "" ? null : t.trim());

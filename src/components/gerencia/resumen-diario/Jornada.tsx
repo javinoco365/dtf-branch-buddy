@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { CamposSegunNivel } from "@/components/CamposSegunNivel";
 import { usePermisos } from "@/hooks/use-permisos";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +15,7 @@ import { Campo } from "../comun";
 import { avisarError } from "@/lib/errores";
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
-const decimal = (t: string) => Number(t.replace(",", "."));
+const decimal = (t: string) => leerNumeroEscrito(t);
 
 /**
  * La jornada de la máquina, la hora de corte y el coste del envío, dentro del
@@ -43,11 +44,11 @@ export function Jornada({
     setAbierto(o);
     if (o) {
       setF({
-        metros_hora: String(ajustes.metros_hora).replace(".", ","),
+        metros_hora: escribirNumero(ajustes.metros_hora),
         jornada_inicio: ajustes.jornada_inicio,
         jornada_fin: ajustes.jornada_fin,
         hora_corte: ajustes.hora_corte,
-        coste_envio_defecto: String(ajustes.coste_envio_defecto).replace(".", ","),
+        coste_envio_defecto: escribirNumero(ajustes.coste_envio_defecto),
       });
     }
   };

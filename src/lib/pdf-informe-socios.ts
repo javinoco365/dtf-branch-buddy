@@ -1,5 +1,5 @@
 import type { jsPDF } from "jspdf";
-import { eur, fechaCorta, metros, numero } from "@/lib/format";
+import { eur, fechaCorta, metros, numero, numeroJusto } from "@/lib/format";
 import { LETRA, registrarFuentesPdf } from "@/lib/fuentes-pdf";
 import {
   etiquetaGasto,
@@ -403,7 +403,7 @@ function cifrasClave(c: Lienzo) {
   const tarjetas: Tarjeta[] = [
     {
       etiqueta: "Pedidos",
-      valor: String(t.pedido.pedidos),
+      valor: numeroJusto(t.pedido.pedidos),
       pie: `Ticket medio ${eur(t.pedido.ticket)}`,
       color: MARINO,
       v: v(t.pedido.pedidos, a?.pedido.pedidos),
@@ -632,7 +632,7 @@ type Concepto = {
 };
 
 const CONCEPTOS: Concepto[] = [
-  { etiqueta: "Pedidos", valor: (m) => m.pedidos, formato: (n) => String(n) },
+  { etiqueta: "Pedidos", valor: (m) => m.pedidos, formato: (n) => numeroJusto(n) },
   { etiqueta: "Metros vendidos", valor: (m) => m.metros, formato: metros },
   {
     etiqueta: "Metros UV vendidos (aparte)",
@@ -815,11 +815,11 @@ function maquinaYCobros(c: Lienzo) {
   fila(c, "Metros impresos", metros(t.realizado.metrosImpresos), M + 5, w, { fuerte: true });
   fila(c, "Capacidad de la máquina", metros(r.capacidad.metros), M + 5, w);
   fila(c, "En cola al cerrar", `${t.cola.pedidos} · ${metros(t.cola.metros)}`, M + 5, w);
-  fila(c, "Fuera de hora", String(t.pedido.fueraDeHora), M + 5, w, {
+  fila(c, "Fuera de hora", numeroJusto(t.pedido.fueraDeHora), M + 5, w, {
     nota: `desde las ${d.jornada.hora_corte}`,
   });
   fila(c, "Del pedido a terminado", horas(t.realizado.horasMedias), M + 5, w, { nota: "media" });
-  fila(c, "Cancelados", String(t.pedido.cancelados), M + 5, w);
+  fila(c, "Cancelados", numeroJusto(t.pedido.cancelados), M + 5, w);
 
   // Cobros
   const x = M + wCol + 6;
@@ -953,7 +953,7 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
       serie.por === "mes"
         ? `${MESES[Number(t.dia.slice(5, 7)) - 1]} ${t.dia.slice(0, 4)}`
         : `${["dom", "lun", "mar", "mié", "jue", "vie", "sáb"][new Date(`${t.dia}T12:00:00Z`).getUTCDay()]} ${t.dia.slice(8, 10)}/${t.dia.slice(5, 7)}`,
-      String(t.pedidos),
+      numeroJusto(t.pedidos),
       metros(t.metrosPedidos),
       metros(t.metrosImpresos),
       eur(t.vendido),
@@ -963,7 +963,7 @@ function evolucion(c: Lienzo, autoTable: AutoTable) {
     foot: [
       [
         "Total",
-        String(d.resumen.total.pedido.pedidos),
+        numeroJusto(d.resumen.total.pedido.pedidos),
         metros(d.resumen.total.pedido.metros),
         metros(d.resumen.total.realizado.metrosImpresos),
         eur(d.resumen.total.pedido.vendido),

@@ -39,7 +39,7 @@ import {
   recuperarFechasReembolsosWoo,
   recuperarRecargosWoo,
 } from "@/lib/woocommerce.functions";
-import { eur, fechaHora, metros as fmtMetros, numero } from "@/lib/format";
+import { eur, fechaHora, metros as fmtMetros, numero, numeroJusto } from "@/lib/format";
 import { seguirConOtraTanda, type ContinuacionWoo } from "@/dominio/cursor-woo";
 import {
   SUMA_SYNC_WOO_VACIA,
@@ -1430,7 +1430,7 @@ function DiagnosticoLineas({ tiendaId }: { tiendaId: string }) {
             <div className="flex flex-wrap gap-x-6 gap-y-1">
               <span className="font-medium">{l.nombre}</span>
               <span>
-                <span className="text-muted-foreground">cantidad:</span> {l.cantidad}
+                <span className="text-muted-foreground">cantidad:</span> {numeroJusto(l.cantidad)}
               </span>
               <span>
                 <span className="text-muted-foreground">subtotal:</span> {eur(l.subtotal)}

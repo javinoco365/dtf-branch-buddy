@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigeEscribir } from "./permisos-middleware";
@@ -40,7 +41,7 @@ const formularioExtracto = (d: unknown) => {
   const numero = (k: string) => {
     const v = texto(k);
     if (v === null) return null;
-    const n = Number(v.replace(",", "."));
+    const n = leerNumeroEscrito(v);
     if (!Number.isFinite(n)) throw new Error(`${k.replace("_", " ")} no es un número`);
     return n;
   };

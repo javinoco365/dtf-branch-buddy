@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Explicacion } from "@/components/Explicacion";
-import { eur, metros, numero } from "@/lib/format";
+import { eur, metros, numero, numeroJusto } from "@/lib/format";
 import { DEFINICIONES } from "@/dominio/definiciones";
 import { agruparPorRangos, variacion } from "@/dominio/kpis";
 import { totalizar } from "@/dominio/facturacion";
@@ -513,13 +513,13 @@ function TarjetaObjetivo({
           <Explicacion titulo={titulo} definicion={DEFINICIONES[clave]} />
         </div>
         <div className="mt-2 text-xl font-bold tracking-tight tabular-nums md:mt-3 md:text-3xl">
-          {a.porcentaje.toLocaleString("es-ES")}&nbsp;%
+          {numeroJusto(a.porcentaje)}&nbsp;%
         </div>
         <Progress
           value={Math.min(100, a.porcentaje)}
           className="mt-3"
           indicadorClassName={COLOR_BARRA[tono]}
-          aria-label={`${titulo}: ${a.porcentaje.toLocaleString("es-ES")}\u00A0%`}
+          aria-label={`${titulo}: ${numeroJusto(a.porcentaje)}\u00A0%`}
         />
         <p className="mt-2 text-xs text-muted-foreground">
           {formato(conseguido)} de {formato(objetivo)}

@@ -21,6 +21,7 @@
  * de IA. Se prueba sin red y sin base de datos.
  */
 
+import { eur, eurUnitario, numeroJusto } from "@/lib/format";
 import { redondear } from "./importes";
 import { cifrasEan, eanValido, packDesdeTexto, tipoDeLinea } from "./normalizar-textil";
 import { TIPOS_DOCUMENTO_COMPRA } from "./tipos-textil";
@@ -341,20 +342,23 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
     if (l.cantidad_ajustada) {
       avisos.push({
         linea: i,
-        mensaje: `tenía cantidad ${l.cantidad_leida ?? 0}; queda como 1 × importe: compruébalo.`,
+        mensaje: `tenía cantidad ${numeroJusto(l.cantidad_leida ?? 0)}; queda como 1 × importe: compruébalo.`,
       });
     }
     if (!l.descripcion) {
       avisos.push({ linea: i, mensaje: "Línea sin descripción." });
     }
     if (l.cantidad <= 0) {
-      avisos.push({ linea: i, mensaje: `Cantidad ${l.cantidad}: tiene que ser mayor que cero.` });
+      avisos.push({
+        linea: i,
+        mensaje: `Cantidad ${numeroJusto(l.cantidad)}: tiene que ser mayor que cero.`,
+      });
     }
     const esperado = redondear(l.cantidad * l.precio_unitario);
     if (Math.abs(esperado - l.importe) > TOLERANCIA) {
       avisos.push({
         linea: i,
-        mensaje: `${l.cantidad} × ${l.precio_unitario} son ${esperado}, no ${l.importe}.`,
+        mensaje: `${numeroJusto(l.cantidad)} × ${eurUnitario(l.precio_unitario)} son ${eur(esperado)}, no ${eur(l.importe)}.`,
       });
     }
   });
@@ -363,7 +367,7 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
   if (c.lineas.length > 0 && Math.abs(suma - c.base) > TOLERANCIA) {
     avisos.push({
       linea: null,
-      mensaje: `Las líneas suman ${suma} y la base dice ${c.base}.`,
+      mensaje: `Las líneas suman ${eur(suma)} y la base dice ${eur(c.base)}.`,
     });
   }
 
@@ -395,7 +399,7 @@ export function revisarCompra(c: CompraLeida): Aviso[] {
     if (Math.abs(sumaGrupo - importes[0]) >= 0.005) {
       avisos.push({
         linea: null,
-        mensaje: `Línea ${g.linea_papel} del papel: las tallas suman ${sumaGrupo} y la línea dice ${importes[0]}.`,
+        mensaje: `Línea ${g.linea_papel} del papel: las tallas suman ${eur(sumaGrupo)} y la línea dice ${eur(importes[0])}.`,
       });
     }
   }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { escribirNumero, leerNumeroEscrito } from "@/dominio/numeros";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
@@ -54,7 +55,8 @@ function useRefrescar() {
   return () => qc.invalidateQueries({ queryKey: ["gerencia-ajustes"] });
 }
 
-const aNumero = (t: string) => Number(t.replace(",", "."));
+/** Lo escrito, como número: coma decimal y punto de miles (leerNumeroEscrito). Vacío, 0. */
+const aNumero = (t: string) => (t.trim() === "" ? 0 : leerNumeroEscrito(t));
 
 // ---------------------------------------------------------------------------
 // Datos fiscales de la empresa
@@ -70,9 +72,9 @@ export function DatosFiscales({
   const guardar = useServerFn(guardarAjustesGerencia);
   const refrescar = useRefrescar();
   const [f, setF] = useState({
-    tipo_is: String(ajustes.tipo_is),
-    cuota: ajustes.cuota_is_anterior == null ? "" : String(ajustes.cuota_is_anterior),
-    precio: String(ajustes.precio_metro),
+    tipo_is: escribirNumero(ajustes.tipo_is),
+    cuota: ajustes.cuota_is_anterior == null ? "" : escribirNumero(ajustes.cuota_is_anterior),
+    precio: escribirNumero(ajustes.precio_metro),
   });
   const mut = useMutation({
     mutationFn: () =>
@@ -257,8 +259,8 @@ export function GastosFijos({
     concepto: g.concepto,
     tipo: g.tipo ?? "otros",
     periodicidad: g.periodicidad ?? "mensual",
-    importe: String(g.importe_mensual),
-    iva: String(g.iva_pct ?? 0),
+    importe: escribirNumero(Number(g.importe_mensual ?? 0)),
+    iva: escribirNumero(Number(g.iva_pct ?? 0)),
     irpf: String(g.irpf_pct ?? 0),
     desde: g.desde,
     hasta: g.hasta ?? "",
@@ -271,7 +273,7 @@ export function GastosFijos({
   // Al elegir el tipo se proponen el IVA y el IRPF de costumbre.
   const elegirTipo = (tipo: string) => {
     const t = tipoGasto(tipo);
-    setF({ ...f, tipo, iva: String(t.iva), irpf: String(t.irpf) });
+    setF({ ...f, tipo, iva: escribirNumero(t.iva), irpf: escribirNumero(t.irpf) });
   };
   const periodicidad = (p: Periodicidad | null | undefined) =>
     PERIODICIDADES.find((x) => x.valor === (p ?? "mensual"))?.etiqueta ?? "Mensual";

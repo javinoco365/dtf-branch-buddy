@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AlertTriangle, ArrowLeft, FileText, Receipt, UserPlus } from "lucide-react";
-import { eur } from "@/lib/format";
+import { eur, numeroJusto } from "@/lib/format";
 import { invalidarTrasGuardar } from "@/lib/cache";
 import { avisarError, mensajeDeError } from "@/lib/errores";
 import { calcularTotales } from "@/dominio/importes";
@@ -575,7 +575,8 @@ export function DocumentoPedidoDialog({
                     />
                     {principal === "ticket" && (
                       <p className="text-xs text-muted-foreground">
-                        El ticket no lleva NIF. Si el cliente lo da, pasa a factura.
+                        El ticket no lleva NIF. Si el cliente quiere factura, pulsa «Emitir
+                        factura».
                       </p>
                     )}
                   </div>
@@ -611,13 +612,13 @@ export function DocumentoPedidoDialog({
                       <TableRow key={i}>
                         <TableCell>{l.descripcion}</TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {l.cantidad} {l.unidad}
+                          {numeroJusto(l.cantidad)} {l.unidad}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {eur(l.precio_unitario)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {l.iva_rate}&nbsp;%
+                          {numeroJusto(l.iva_rate, 2)}&nbsp;%
                         </TableCell>
                       </TableRow>
                     ))}

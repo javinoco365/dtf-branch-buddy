@@ -5,16 +5,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { eur, numeroJusto } from "@/lib/format";
 import { calcularTotales } from "@/dominio/importes";
 import { diaLegible } from "@/dominio/fecha-documento";
-import { aNumero } from "@/dominio/factura-compra";
+import { leerNumeroEscrito } from "@/dominio/numeros";
 import { lineaVacia, type LineaEditable } from "@/dominio/factura-editable";
 
 export type EmisorVista = { nombre: string; cif: string; direccion: string };
 
 /** El importe sin IVA de una línea, mientras se escribe. Vacío si aún no es un número. */
 function baseDeLinea(l: LineaEditable): number | null {
-  const cantidad = aNumero(l.cantidad);
-  const precio = aNumero(l.precio_unitario);
-  if (cantidad === null || precio === null) return null;
+  const cantidad = leerNumeroEscrito(l.cantidad);
+  const precio = leerNumeroEscrito(l.precio_unitario);
+  if (!Number.isFinite(cantidad) || !Number.isFinite(precio)) return null;
   return calcularTotales([{ cantidad, precio_unitario: precio, iva_rate: 0 }]).base_imponible;
 }
 
@@ -248,7 +248,7 @@ export function VistaPreviaFactura({
           {totales.desglose_iva.map((d) => (
             <div key={d.tipo} className="flex justify-between">
               <span className="text-neutral-600">
-                IVA {d.tipo} % sobre {eur(d.base)}
+                IVA {numeroJusto(d.tipo, 2)} % sobre {eur(d.base)}
               </span>
               <span className="tabular-nums">{eur(d.cuota)}</span>
             </div>
